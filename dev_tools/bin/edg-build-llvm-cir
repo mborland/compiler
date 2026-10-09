@@ -1,0 +1,85 @@
+#!/bin/bash -e
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Build and install the LLVM/Clang/MLIR toolchain (with ClangIR enabled) that
+# the EDG CIR back end (cir_src/) links against.  This script is run inside
+# the llvm-cir Docker image build (or inside edgcpp/dev-env with bind mounts,
+# which keeps the build incremental), using the image's clang and lld.
+#
+# Usage:
+#   edg-build-llvm-cir [--check] [--jobs N] <llvm-project-dir> <build-dir>
+#                      <install-prefix>
+#
+#   --check   After installing, run `ninja check-clang-cir` (CIR lit tests).
+#   --jobs N  Parallel compile jobs (default: all CPUs).
+#
+# The pinned llvm-project revision lives in cir_src/LLVM_REVISION.
+
+check=0
+jobs=""
+while [[ $# -gt 0 ]] ; do
+  case "$1" in
+    --check) check=1; shift ;;
+    --jobs) jobs="$2"; shift 2 ;;
+    --) shift; break ;;
+    -*) echo "unknown option: $1" >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
+
+if [[ $# -ne 3 ]] ; then
+  echo "usage: $0 [--check] [--jobs N] <llvm-project-dir> <build-dir>" \
+       "<install-prefix>" >&2
+  exit 2
+fi
+
+src_dir="$1"
+build_dir="$2"
+install_prefix="$3"
+
+if [[ ! -d "$src_dir/llvm" ]] ; then
+  echo "$src_dir does not look like an llvm-project checkout" >&2
+  exit 2
+fi
+
+jobs_args=()
+if [[ -n "$jobs" ]] ; then
+  jobs_args=(-j "$jobs")
+fi
+
+# -gline-tables-only keeps debug info small enough for the link jobs while
+# leaving usable backtraces; assertions are on so CIR verifier failures and
+# API misuse are caught at the pinned revision.
+cmake -G Ninja -S "$src_dir/llvm" -B "$build_dir" \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_C_FLAGS_RELWITHDEBINFO="-O2 -gline-tables-only" \
+  -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -gline-tables-only" \
+  -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_CXX_COMPILER=clang++ \
+  -DCMAKE_INSTALL_PREFIX="$install_prefix" \
+  -DLLVM_ENABLE_ASSERTIONS=ON \
+  -DLLVM_ENABLE_PROJECTS="clang;mlir" \
+  -DCLANG_ENABLE_CIR=ON \
+  -DLLVM_TARGETS_TO_BUILD="X86;AArch64" \
+  -DLLVM_OPTIMIZED_TABLEGEN=ON \
+  -DLLVM_USE_LINKER=lld \
+  -DLLVM_PARALLEL_LINK_JOBS=2 \
+  -DLLVM_INSTALL_UTILS=ON \
+  -DLLVM_ENABLE_ZLIB=OFF \
+  -DLLVM_ENABLE_ZSTD=OFF \
+  -DLLVM_ENABLE_LIBXML2=OFF \
+  -DLLVM_ENABLE_LIBEDIT=OFF \
+  -DLLVM_ENABLE_RTTI=OFF \
+  -DLLVM_INCLUDE_BENCHMARKS=OFF \
+  -DLLVM_INCLUDE_EXAMPLES=OFF
+
+ninja -C "$build_dir" "${jobs_args[@]}" install
+
+if [[ $check -eq 1 ]] ; then
+  # Lit failures must not hide the successful install, so report both.
+  ninja -C "$build_dir" "${jobs_args[@]}" check-clang-cir
+fi

@@ -1,0 +1,189 @@
+# EDG ClangIR back end — design (Phase R synthesis)
+
+Status: **v0.2** (gate R blockers R1–R8 addressed; see section 8). Owner: orchestrator. The binding
+requirements are in `cir_design_guidance.md` (repo root), and the approved
+plan is `~/.claude/plans/we-want-to-add-pure-snowflake.md`. The evidence
+for this document is in `research/`:
+
+| Document | Author | Contents |
+| --- | --- | --- |
+| `research/back_end_type_audit.md` | cir-config | `BACK_END_IS_*` use classification and the M0 edit list |
+| `research/test_plumbing.md` | cir-config | edgy/eccp wiring, the C corpus and the smoke list |
+| `research/writer_hooks.md` | cir-writer | Region lifecycle, hooks, mangling, `ecil_id`, needed flags, stack |
+| `research/il_to_ecil_map.md` | cir-writer | The C-subset IL→ECIL mapping, unsupported-construct detection, writer work stack |
+| `research/cir_api_inventory.md` | cir-lib | Public CIR API, module attributes, pipeline, link set, NYI list |
+| `research/cirgen_map.md` | cir-lib | Clang CIRGen components and our frame-stack emitter |
+
+The stream format is specified in `ecil_format.md`. Its normative contract
+is `cir_src/include/edg_cir/ecil_format.h`; the library API is
+`cir_src/include/edg_cir/edg_cir.h`.
+
+## 1. Requirement traceability (cir_design_guidance.md)
+
+| # | Requirement | How it is met |
+| --- | --- | --- |
+| 1 | Only non-lowered IL; keep C++ IL for C++ CIR | `cpfe-cir` sets `DO_IL_LOWERING=0` (with `#error`s). The writer reads the IL as the front end leaves it. Lowering-only facts (vtables, ctor variants, typeinfo, guards, cleanups) are built in `cir_src` from FE facts (section 5). |
+| 2 | Works with a write/read so the back end can be a second process | The ECIL stream is identical in-process and on file or pipe. `edg-cir` consumes files and stdin. The test config `_2p` requires byte-identical output in both modes. |
+| 3 | Fast builds; a CIR library behind a minimal shim; FE changes don't rebuild CIR | `cir_src` is a standalone CMake project. The FE includes only `cir_src/include/edg_cir/{ecil_format.h,edg_cir.h}` and links `libedg_cir.so` (dev) through an 8-function C API. `cir_src` includes nothing from `src/`; `edg-cir-check-isolation` enforces this. |
+| 4 | Optimized CIR library with debug info, even for debug FE builds | `cir_src` presets are `RelWithDebInfo` (`-O2 -g`). LLVM is built `-O2 -gline-tables-only` with assertions. The shared library has no ASan, so a debug ASan FE loads it unchanged. |
+| 5 | Own config header and source directory | `cir_src/config/cir_config.h`, with a tripwire against FE headers. Target and language facts arrive in the stream, never through FE macros. |
+| 6 | New streamable IL write/read; no `il_def.h` edits; no pointers; skippable supplementary data with presence bits; non-recursive traversal; act on packed data in place; prefer speed | ECIL (`ecil_format.md`): length-prefixed frames; little-endian fixed-width tags like MessagePack; post-order and bracketed encoding; heap work stacks on both sides; a zero-copy cursor; `supp` blobs and `EXT` records; feature and frame presence bits; an ID→mangled-name table (`NAME_BIND`) for the ODR stretch goal. The mechanism is in v0, but supp data is only produced and consumed from M5. |
+| 7 | Standard C++ first; GNU/MSVC later | v0 is C11 (M2). v1 is core C++ (M3). v2 adds virtuals, RTTI and EH (M4). GNU/MSVC extensions are deferred. Ignorable attributes and library builtins are still accepted in v0 (follow-up P2); other extensions produce an "unsupported in CIR back end" diagnostic (spec 8.11). |
+| 8 | Stream functions out at region discard; leave room for concurrency | Hook at `check_for_done_with_memory_region` (`writer_hooks.md` 1.2/1.8): stream, then free if the keep tests pass. The sink API (acquire/submit/finish/abort, with the buffer owned by the sink after submit) admits double buffering, threads, sockets and io_uring later; none are built now. |
+| 9 | `BACK_END_TYPE` enumeration, not a new `BACK_END_IS_*` | `src/back_end_type.h` (M0): `BACK_END_TYPE_{EXTERNAL,C_GEN,CP_GEN,CIR}`. `BACK_END_IS_*` are derived as `TRUE`/`FALSE`, because `il_def.h` still uses them. |
+
+## 2. Components and data flow
+
+```
+cpfe-cir (C++14 FE, any build type)            libedg_cir (C++17, -O2 -g)
+  parse ─► non-lowered IL                         lib/format:  frame splitter, cursor,
+  pop_scope ─► check_for_done_with_memory_region      validator, ID tables (LLVM-free)
+     └► ecil_hand_off_region ─► ecil_write.c      lib/cirgen:  EDG-CIRGen frame machine
+          heap work stack, decl+body buffers           (ModuleEmitter, TypeConverter,
+          └► sink.submit(frame) ───────────────►       FunctionEmitter, Expr/Const/Agg,
+  fe_wrapup: F_GLOBALS, F_NAMES, F_END                 BuiltinEmitter; ItaniumABI in M4)
+  error path: F_ABORT                             lib/driver:  C API, big-stack worker,
+  cir_be.c back_end(): finish session              runCIRToCIRPasses → lowerDirectly…
+                                                   → GlobalDCE → TargetMachine → .s/.o
+sinks: file | stdout/pipe | in-process (edg_cir_session_consume)
+tools: edg-cir (secondary process), ecil-dump, ecil-asm (LLVM-free)
+```
+
+## 3. Decisions (Phase R)
+
+| Topic | Decision | Evidence |
+| --- | --- | --- |
+| LLVM pin | `894bfff5ca9f…` (main, 2026-10-09), validated with `check-clang-cir` on the box | plan; cir-config |
+| Name mangling | `MANGLE_ALL_NAMES=0`, `NEED_NAME_MANGLING=1` explicit. The non-mutating getters (already in the `cpfe-cp` binary) are used and copied at once. C uses source or `asm` names; static locals use `<fn>.<var>` | `writer_hooks.md` 2 |
+| Needed flags | `MAINTAIN_NEEDED_FLAGS=0`: every region is freed at pop. Dead internal functions are removed by LLVM `GlobalDCE`, which the consumer always runs before codegen. REFS-driven lazy decode is an M5 optimization | `writer_hooks.md` 4 |
+| Entity IDs | An `ecil_id` slot in the IL entry prefix (`mem_tables.h`, CIR-gated, `static_assert` on size). It is reset by `clear_il_entry_prefix`, so recycled blocks cannot carry stale IDs | `writer_hooks.md` 3 |
+| Stream vs free | These are separate steps. Kept regions (constexpr, `do_not_free_memory_region`, debug keep) are streamed once; a bitmap indexed by `function_def_number` prevents re-streaming | `writer_hooks.md` 1 |
+| Late bodies | Re-check regions from `finish_function_processing_for_function_def` and from closure completion, using the `pch.c:1782` `depth_in_scope_stack` pattern (C++, M3) | `writer_hooks.md` 1.5 |
+| Abort | `ecil_abort()` is called from the `error.c:4973` `cancel_il_file` arm. cir-writer owns that hunk | `writer_hooks.md` 1.7 |
+| Keep switch | `--ecil_keep_regions` (and `--il_display`) keep regions in CIR mode, the CIR analogue of `skip_il_read` | `writer_hooks.md` 1.9 |
+| PCH, modules, multiple TUs | Rejected in v0 (`cmd_line` check, `#error` for `COMPILE_MULTIPLE_TRANSLATION_UNITS`) | `writer_hooks.md` 7 |
+| Initializers | The writer normalizes designators and repeats itself (C11 6.7.9 current object, on a work stack). It emits `C_AGG_*` (constant) or `AGG_INIT_*` (dynamic) brackets | `il_to_ecil_map.md` 2.2 |
+| Value categories | Explicit `LOAD`. Casts are classified by the writer. `TO_BOOL` handles raw conditions. Compound assignment is expanded by the writer with `DUP`. C comparisons get `CAST bool_to_int`, plus the writer peephole | `il_to_ecil_map.md` 0, 5 |
+| K&R definitions | `PARAM(l, t_abi, t_decl)`: the consumer narrows | `il_to_ecil_map.md` 1 |
+| ABI | Plain signatures with records by value. CIR `CallConvLowering` (x86-64 SysV only) does sret/byval/`va_arg`. Other triples give an "unsupported target" error | `cir_api_inventory.md` |
+| Module attributes | Mandatory: `cir.triple`, `cir.target_abi` (`""`), `dlti.dl_spec` via `cir::setMLIRDataLayout`. Also `cir.lang`, `cir.size_type_width`, `cir.int_type_width`, and `cir.record_layouts` when alignment differs | `cir_api_inventory.md` |
+| Records | `cir::StructType`/`UnionType` with explicit `Pad`/`BitField` members built from FE offsets. ECIL carries size, data size, align, offsets and the `empty_for_abi`/`unnamed` flags | `cir_api_inventory.md`, `cirgen_map.md` |
+| Builder | `EcilBuilder : cir::CIRBaseBuilderTy`, re-implementing the few private `CIRGenBuilderTy` helpers. `cir.ternary` is built with `OperationState`. `CIRCompat.h` isolates churn | `cirgen_map.md` |
+| Threading | MLIR threading disabled. The pipeline runs on a 256 MiB-stack worker thread. `report_fatal_error` is caught with a crash-recovery wrapper and becomes `EDG_CIR_ERROR_INTERNAL` | `cir_api_inventory.md` |
+| Link set | `clangCIR`, `clangCIRLoweringDirectToLLVM`, `CIRRegisterAllDialects`, `MLIRCIR`, `MLIRCIRTransforms` (+ clangAST/Basic/Lex/CodeGenUtils, MLIR, LLVM CodeGen/target X86). Static archives inside `libedg_cir.so` | `cir_api_inventory.md` |
+| Runtime library | CIR output links libstdc++/libsupc++/libgcc_s plus `edg_cir_rt`, never `edgrt` (which uses setjmp EH and its own `__dynamic_cast`) | plan; `test_plumbing.md` |
+| Supp presence | Signalled by the stream feature bit `SUPP`, the frame flag `HAS_SUPP` and the tag check C7–C9. The plan's per-record "flags bit 7" was dropped, because per-record flags operands vary by opcode. | gate R |
+| Unprototyped calls | `CALL`/`CALL_INDIRECT` carry the call-site function type. A non-matching or `no_proto` call becomes a bitcast to a zero-fixed-parameter variadic type, then an indirect call (clang x86-64 behavior; avoids CallConvLowering failures and asserts at the pin) | gate R C1 |
+| Falling off the end | C: return the uninitialized `__retval`; C++: trap + unreachable; `main`: return 0 | gate R C2 |
+| C99 inline | Every inline body is streamed. The final `inline_only` status is re-issued in `F_GLOBALS`, and the consumer drops the bodies of inline-only functions | gate R C3 |
+| Unsupported constructs | Drop the body, keep the declaration section, re-issue `DECL_FUNC(unsupported)`, warn. An error only if a definition references it and it is internal. `TY_OPAQUE` for types that cannot be expressed | gate R C4 |
+| Stack stress | Two-process: the FE runs with a large stack and writes `.ecil`; `edg-cir` reads it under a 256 KB limit. The writer is non-recursive by construction (call-graph cycle check plus a debug stack watermark) | `writer_hooks.md` 8 |
+
+## 4. Configuration of `cpfe-cir` (M1)
+
+The file is `cmake/macro-conf/default/cpfe-cir.cmakedef`. It must override
+the debug base after importing it.
+
+| Macro | Value | Why |
+| --- | --- | --- |
+| `BACK_END_TYPE` | `BACK_END_TYPE_CIR` | |
+| `DO_IL_LOWERING` / `DOING_SOURCE_ANALYSIS` | 0 / 0 | |
+| `IL_SHOULD_BE_WRITTEN_TO_FILE` | 0 | Overrides the debug base (1). `#error` if 1 together with CIR. |
+| `FREE_MEMORY_REGIONS_EARLY` | 1 | Must be explicit on macOS. `#error` if 0. |
+| `MAINTAIN_NEEDED_FLAGS` | 0 | Overrides the debug base. |
+| `NEED_NAME_MANGLING` / `MANGLE_ALL_NAMES` | 1 / 0 | |
+| `AUTOMATIC_TEMPLATE_INSTANTIATION` / `INSTANTIATE_TEMPLATES_EVERYWHERE_USED` | 0 / 1 | |
+| `ONE_INSTANTIATION_PER_OBJECT` | 0 | |
+| `COMPILE_MULTIPLE_TRANSLATION_UNITS` | 0 | |
+| `LOWER_DESIGNATED_INITIALIZERS` | 0 | |
+| `OVERWRITE_FREED_MEM_BLOCKS` | 1 (debug) | Poisons freed regions. |
+| Microsoft extensions | off | |
+| `IA64_ABI` | 1 | |
+| `COROUTINE_ENABLING_POSSIBLE` | 0 | Until coroutines are designed. |
+| `SCOPE_ORPHANED_LIST_PROCESSING_NEEDED` | TRUE (derived) | `ORPHAN_PROCESSING_NEEDED` forces it on, because `NEED_NAME_MANGLING=1`; `back_end_type_audit.md:276` is wrong here. |
+
+## 5. What the FE sends and what `cir_src` computes
+
+The split follows the plan ("FE sends vs consumer computes"). For v0 (C),
+the FE sends:
+- record layout (size, data size, alignment, field byte/bit offsets and
+  widths);
+- type sizes and alignments;
+- linkage, names, and constant values.
+
+`cir_src` builds CIR record types with padding, the bit-field storage units,
+`cir.record_layouts`, string-literal globals with unique names, and
+`main`'s implicit `return 0`.
+
+## 6. Milestones M0–M2 (owners)
+
+**M0 (cir-config):** the `BACK_END_TYPE` refactor, following
+`research/back_end_type_audit.md`. It is proved with
+`edg-macro-identity-check` (byte-identical preprocessed output and an
+identical `--dump_configuration` apart from the new line) and a box day
+suite against a baseline.
+
+**M1:**
+- **cir-config:** the `cpfe-cir` target and cmakedefs, CIR arms and
+  `#error`s, `--gen_c_file_name`, `EdgCir` linking, the `cir-env` base and
+  config skeleton, and the isolation check.
+- **cir-writer:** `ecil_write`/`ecil_sink`/`cir_be` emitting the preamble,
+  `F_HEADER`, an empty `F_GLOBALS` and `F_END`, plus `F_ABORT`; the
+  `--ecil_output` option.
+- **cir-lib:** the project, `lib/format`, `ecil-dump`, `ecil-asm`, the C
+  API, `edg-cir`, and an empty module emitted to `.o`.
+
+**M2:**
+- **cir-writer:** the full v0 writer and per-function streaming.
+- **cir-lib:** EDG-CIRGen v0 and the pipeline.
+- **cir-config:** `edg_x86_64_cir` and `_2p`, plus expectations.
+- **Gates:** the curated smoke list passes, the C corpus has no crashes, the
+  stress and RSS reports are done, and the default configs are unchanged.
+
+## 7. Follow-ups from gate R (owners; due by the M2 gate unless noted)
+
+| # | Item | Owner |
+| --- | --- | --- |
+| P1 | Threading and reentrancy rules are now in `edg_cir.h`. MLIR verify/erase runs at finish on the worker, never per function on the caller's thread. Diagnostics are queued to the calling thread. The FE callback must not reach `error()` → `ecil_abort()` → consume. | cir-lib, cir-writer |
+| P2 | GNU baseline for the corpus: (a) a list of ignorable attributes (`noinline`, `noipa`, `noclone`, `used`, `unused`, `cold`, `hot`, `always_inline`, …); (b) a generic library-builtin rule (`__builtin_X` → call `X` when the FE marks X as a library builtin) instead of a hand-written list; report the pass rate both with and without GNU-flagged tests | cir-writer (writer), cir-config (corpus split) |
+| P3 | `long double`: a single encoding, `FBITS`. The writer diagnoses constants it cannot convert exactly on its host; Linux x86-64 goldens are authoritative | cir-writer |
+| P4 | The `F_GLOBALS` walker skips static locals (already defined in `F_REGION`) and never calls `get_variable_initializer` on them; orphan lists include them | cir-writer |
+| P5 | Clear `function_def_table[n].scope`/`.memory_region` in a CIR arm of `free_memory_region`; matters from M3 | cir-writer |
+| P6 | Deterministic emission order (spec rule 7); `_2p` byte-identity enforces it | cir-writer |
+| P7 | Alignment is derived by the consumer (spec 8 preamble); packed-record tests in M2 | cir-lib |
+| P8 | `HDR_TYPE_ROLE(va_list)` is allowed in any declaration section; the `__va_list_tag` record has exactly 4 fields | cir-writer, cir-lib |
+| P9 | Lazy decode (M5): emit shared definitions (string literals, …) in `F_DECLS` so `F_REGION` frames stay skippable | M5 |
+| P10 | C regions with local struct types are kept (`contains_local_class_type`) but still streamed. The RSS report says the in-process MLIR module stays resident. GlobalDCE is added explicitly at -O0 | cir-writer, cir-lib |
+| F7 | `ecil_abort()` is idempotent and a no-op after `F_END`/finish. The `cir_be.c` diagnostic callback queues messages and reports them through EDG `error()` only after the API call returns | cir-writer |
+| C9 | The `referenced`-based skip from `writer_hooks.md` §4 mitigation (2) applies to variables at `F_GLOBALS` only, never to functions | cir-writer |
+
+## 8. Errata to the research documents (the spec wins)
+
+`ecil_format.md` and `ecil_format.h` are normative. Corrections:
+
+| Ref | Research text | Correction |
+| --- | --- | --- |
+| a | `cirgen_map.md:313-335`: bracketed `CASE_BEGIN/CASE_END` | Inline `CASE_*` markers. The consumer emits empty-region marker `cir.case` ops and statements follow in the enclosing region (spec 8.4) |
+| b | `cirgen_map.md:246`: `LAND_END`/`LOR_END` push `bool_to_int` | They push **bool**; the writer emits the cast (spec 8.9) |
+| c | `il_to_ecil_map.md:302`: no record for `&x` | `<x> ADDR` |
+| d | `il_to_ecil_map.md:316`: `VA_START` pops ap and the last parameter | `VA_START` pops only `ap` |
+| e | `il_to_ecil_map.md:131,278`: `LOCAL_VAR` in the declaration section | `LOCAL` sits in the body at the point of declaration and may appear between expression records (spec 8.3) |
+| f | `ecil_format.md` v0.1: "parameter types are the ABI (promoted) types" | Declared types for prototyped functions; promoted types only for a K&R `no_proto` definition (spec 8.2) |
+| g | `ecil_format.md` v0.1: `VAR_INIT` only in declaration sections | `C_*` records may feed `VAR_INIT` in declaration sections and `INIT_CONST` in bodies (spec 8.10) |
+| h | `cir_api_inventory.md:142`: put `static_local` on `get_global` for static locals | Not for unguarded C statics: the verifier requires a guard. The flag is informational (spec 8.2) |
+| i | `cirgen_map.md:186`, `cir_api_inventory.md:140,476`: "K&R unprototyped calls: NYI → diagnose" | Supported through the variadic-bitcast rule (spec 8.8) |
+| j | `il_to_ecil_map.md:210` / `ecil_format.md` v0.1: falling off a non-void C function is unreachable | See spec 8.3: C returns the uninitialized value |
+| k | `il_to_ecil_map.md:208`: C99 inline-only definitions are declaration only, decided at pop | Always streamed, with the final status in `F_GLOBALS` (spec 8.2) |
+| l | `il_to_ecil_map.md:368-371`: on an unsupported construct, discard the frame buffer | Discard only the function's body records (spec 8.11) |
+| m | `il_to_ecil_map.md:151`: x87/quad constants as hex text | `FBITS` only (spec 8.6) |
+| n | Opcode names in the research docs (`DISCARD`, `TOBOOL`, `PTR_STRIDE`, `BFIELD`, `COND_END`, `CALL G n`, `K_AGGR`, `STR_LIT`, …) | Use the names and arities in `ecil_format.h`: `DROP`, `TO_BOOL`, `PTR_STRIDE`; `FIELD` covers bit-fields; `WHILE_BODY`/`DO_END`/`FOR_STEP`; `CALL(g,t_call,n,flags)`; `C_AGG_*`; string literals are `DECL_VAR(string_literal)` + `C_STRING` + `VAR_INIT` |
+
+## 9. Open items carried into M1–M2
+
+- The worked example in `ecil_format.md` section 10 is regenerated with
+  `ecil-asm` in M1.
+- `type_info::name` and other `edg_cir_rt` gaps only matter for C++ (M3).
+- Function attributes (`nounwind` for C, `noinline` at -O0, `uwtable`,
+  frame pointer) are absent from the spike's LLVM IR. They are not needed
+  for correctness. cir-lib adds `nounwind` for C functions in M2, and the
+  rest later.

@@ -1,0 +1,541 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Prove that a configuration-macro refactor changes no compiled code.
+
+Three subcommands:
+
+  configure  Configure each preset in a source tree with
+             CMAKE_EXPORT_COMPILE_COMMANDS=ON so compile_commands.json exists.
+  capture    For each preset, re-run every compile command in its
+             compile_commands.json with -E -P (and SOURCE_DATE_EPOCH=0 so
+             __DATE__/__TIME__ in version.h are stable) into an output tree,
+             and optionally build cpfe/cpfe-cp/cdisp and record
+             --dump_configuration for each.  This covers the src/ targets and
+             util/ (which compiles without USE_CMAKE_DEFINES and so exercises
+             the legacy defines.h path).
+  compare    Diff two capture trees.  Preprocessed output must be identical;
+             --dump_configuration may differ only by the allowed new #define
+             lines and ignored banner lines.
+
+Run capture inside the same image and with the source tree at the same path
+(e.g. /edg/workspace) for both trees: __FILE__ and -I paths are part of the
+preprocessed output.  Typical use (inside edgcpp/dev-env):
+
+  edg-macro-identity-check configure --src /edg/workspace
+  edg-macro-identity-check capture --src /edg/workspace --out /out/before \\
+                                   --binaries --build-jobs 4
+  # ... apply the change, rebuild or reconfigure ...
+  edg-macro-identity-check capture --src /edg/workspace --out /out/after \\
+                                   --binaries --build-jobs 4
+  edg-macro-identity-check compare /out/before /out/after
+'''
+
+import argparse
+import concurrent.futures
+import difflib
+import gzip
+import hashlib
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+DEFAULT_PRESETS = (
+  'linux-gcc-debug',
+  'linux-gcc-release',
+  'linux-clang-debug',
+  'linux-i686-gcc-debug'
+)
+
+DEFAULT_BINARY_TARGETS = ('cpfe', 'cpfe-cp', 'cdisp')
+
+# Compile command flags that take a separate argument and must be dropped.
+_DROP_WITH_ARG = ('-o', '-MF', '-MT', '-MQ')
+# Compile command flags that stand alone and must be dropped.
+_DROP_ALONE = ('-c', '-MD', '-MMD', '-MP', '-M', '-MM')
+_DEBUG_FLAG = re.compile(r'^-g(gdb|dwarf[-\d]*)?\d?$')
+
+# Lines of --dump_configuration output that are allowed to differ.  The
+# banner carries the build date and time.
+DEFAULT_IGNORE_DUMP_REGEX = r'(?i)(build date|built on|\d\d:\d\d:\d\d)'
+
+# #define lines allowed to appear only in the "after" dump.
+DEFAULT_ALLOWED_NEW_DEFINES = ('BACK_END_TYPE',)
+
+# How many diff lines to print per differing file.
+_DIFF_LINE_LIMIT = 40
+
+def _eprint(message: str) -> None:
+  print(message, file = sys.stderr, flush = True)
+
+def _load_preset_binary_dirs(src_dir: Path) -> Dict[str, Path]:
+  '''Return {preset name: binary directory} from CMakePresets.json.'''
+  with open(src_dir / 'CMakePresets.json', 'r') as file_handle:
+    presets = json.load(file_handle)
+
+  binary_dirs: Dict[str, Path] = {}
+  by_name = {p['name']: p for p in presets['configurePresets']}
+
+  def resolve(name: str) -> Optional[str]:
+    preset = by_name[name]
+    if 'binaryDir' in preset:
+      return preset['binaryDir']
+    for parent in preset.get('inherits', []):
+      found = resolve(parent)
+      if found is not None:
+        return found
+    return None
+
+  for name in by_name:
+    binary_dir = resolve(name)
+    if binary_dir is not None:
+      binary_dirs[name] = Path(
+        binary_dir.replace('${sourceDir}', str(src_dir))
+      )
+  return binary_dirs
+
+def _target_of_output(output_path: str) -> str:
+  '''Return the CMake target name from an object path, or "unknown".
+
+  Object files live in <dir>/CMakeFiles/<target>.dir/....
+  '''
+  match = re.search(r'CMakeFiles/([^/]+)\.dir/', output_path)
+  return match.group(1) if match else 'unknown'
+
+def _preprocess_args(command: str) -> Tuple[List[str], Optional[str]]:
+  '''Return (argv, object path) for a -E -P rerun of a compile command.'''
+  argv = shlex.split(command)
+  result: List[str] = []
+  output_path: Optional[str] = None
+  skip_next = False
+  for index, arg in enumerate(argv):
+    if skip_next:
+      skip_next = False
+      continue
+    if arg in _DROP_WITH_ARG:
+      if arg == '-o' and index + 1 < len(argv):
+        output_path = argv[index + 1]
+      skip_next = True
+      continue
+    if arg in _DROP_ALONE or _DEBUG_FLAG.match(arg):
+      # -g3 would make -E list every #define, which defeats the point.
+      continue
+    result.append(arg)
+  result.extend(['-E', '-P'])
+  return result, output_path
+
+def _sha256(data: bytes) -> str:
+  return hashlib.sha256(data).hexdigest()
+
+def _preprocess_one(entry: Dict[str, str], out_root: Path,
+                    src_dir: Path) -> Tuple[str, Optional[str], str]:
+  '''Preprocess one compile_commands entry.
+
+  Returns (relative output name, sha256 or None on failure, message).
+  '''
+  command = entry.get('command')
+  if command is None:
+    command = ' '.join(shlex.quote(a) for a in entry['arguments'])
+  argv, output_path = _preprocess_args(command)
+  target = _target_of_output(output_path or '')
+  source = Path(entry['file'])
+  try:
+    rel_source = source.relative_to(src_dir)
+  except ValueError:
+    rel_source = Path(source.name)
+  rel_name = f"{target}/{rel_source.as_posix()}.i.gz"
+
+  env = dict(os.environ)
+  env['SOURCE_DATE_EPOCH'] = '0'
+  proc = subprocess.run(
+    argv,
+    cwd = entry['directory'],
+    env = env,
+    stdout = subprocess.PIPE,
+    stderr = subprocess.PIPE
+  )
+  if proc.returncode != 0:
+    return rel_name, None, proc.stderr.decode(errors = 'replace')
+
+  dest = out_root / rel_name
+  dest.parent.mkdir(parents = True, exist_ok = True)
+  with gzip.GzipFile(dest, 'wb', mtime = 0) as gz_handle:
+    gz_handle.write(proc.stdout)
+
+  # The final macro table (informational; see cmd_compare).
+  defs_argv = [a for a in argv if a != '-P'] + ['-dM']
+  defs_proc = subprocess.run(
+    defs_argv,
+    cwd = entry['directory'],
+    env = env,
+    stdout = subprocess.PIPE,
+    stderr = subprocess.PIPE
+  )
+  if defs_proc.returncode == 0:
+    defs_lines = sorted(
+      line for line in defs_proc.stdout.decode(errors = 'replace').splitlines()
+      if not line.startswith('#define __')
+    )
+    defs_name = rel_name[:-len('.i.gz')] + '.defs.gz'
+    with gzip.GzipFile(out_root / defs_name, 'wb', mtime = 0) as gz_handle:
+      gz_handle.write('\n'.join(defs_lines).encode())
+  return rel_name, _sha256(proc.stdout), ''
+
+def _find_binary(binary_dir: Path, target: str) -> Optional[Path]:
+  for candidate in binary_dir.rglob(target):
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+      return candidate
+  return None
+
+def _capture_dumps(binary_dir: Path, preset_out: Path, targets: List[str],
+                   build_jobs: int) -> Dict[str, str]:
+  '''Build the targets and record --dump_configuration for each.'''
+  subprocess.run(
+    [
+      'cmake', '--build', str(binary_dir), '--target', *targets,
+      '-j', str(build_jobs)
+    ],
+    check = True
+  )
+  index: Dict[str, str] = {}
+  dump_dir = preset_out / 'dump'
+  dump_dir.mkdir(parents = True, exist_ok = True)
+  for target in targets:
+    binary = _find_binary(binary_dir, target)
+    if binary is None:
+      _eprint(f"warning: no built binary found for target {target}")
+      continue
+    proc = subprocess.run(
+      [str(binary), '--dump_configuration'],
+      stdout = subprocess.PIPE,
+      stderr = subprocess.STDOUT
+    )
+    dest = dump_dir / f"{target}.txt"
+    dest.write_bytes(proc.stdout)
+    index[f"dump/{target}.txt"] = _sha256(proc.stdout)
+  return index
+
+def _copy_generated_defines(binary_dir: Path,
+                            preset_out: Path) -> Dict[str, str]:
+  '''Copy the generated headers so the macro sets can be diffed.'''
+  index: Dict[str, str] = {}
+  headers = [
+    *binary_dir.rglob('cmake_defines*.h'),
+    *binary_dir.rglob('err_codes.h'),
+    *binary_dir.rglob('err_data.h')
+  ]
+  for header in sorted(headers):
+    rel = header.relative_to(binary_dir)
+    dest = preset_out / 'generated' / rel
+    dest.parent.mkdir(parents = True, exist_ok = True)
+    shutil.copy2(header, dest)
+    index[f"generated/{rel.as_posix()}"] = _sha256(header.read_bytes())
+  return index
+
+def cmd_configure(args: argparse.Namespace) -> int:
+  src_dir = Path(args.src).resolve()
+  binary_dirs = _load_preset_binary_dirs(src_dir)
+  for preset in args.presets:
+    binary_dir = binary_dirs[preset]
+    if (binary_dir / 'compile_commands.json').exists() and not args.force:
+      print(f"{preset}: compile_commands.json already present")
+      continue
+    print(f"{preset}: configuring", flush = True)
+    subprocess.run(
+      [
+        'cmake', '--preset', preset, '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
+      ],
+      cwd = src_dir,
+      check = True
+    )
+  return 0
+
+def cmd_capture(args: argparse.Namespace) -> int:
+  src_dir = Path(args.src).resolve()
+  out_dir = Path(args.out).resolve()
+  binary_dirs = _load_preset_binary_dirs(src_dir)
+  failures = 0
+
+  for preset in args.presets:
+    binary_dir = binary_dirs[preset]
+    commands_file = binary_dir / 'compile_commands.json'
+    if not commands_file.exists():
+      _eprint(f"{preset}: {commands_file} is missing; run configure first")
+      failures += 1
+      continue
+
+    preset_out = out_dir / preset
+    if preset_out.exists():
+      shutil.rmtree(preset_out)
+    preset_out.mkdir(parents = True)
+
+    # Generated headers (err_codes.h, err_data.h) must exist before any
+    # translation unit can be preprocessed.
+    subprocess.run(
+      [
+        'cmake', '--build', str(binary_dir), '--target', 'error-info',
+        '-j', str(args.build_jobs)
+      ],
+      check = True
+    )
+
+    with open(commands_file, 'r') as file_handle:
+      entries = json.load(file_handle)
+
+    index: Dict[str, str] = {}
+    print(f"{preset}: preprocessing {len(entries)} translation units",
+          flush = True)
+    with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+      futures = [
+        pool.submit(_preprocess_one, entry, preset_out, src_dir)
+        for entry in entries
+      ]
+      for future in futures:
+        name, digest, message = future.result()
+        if digest is None:
+          _eprint(f"{preset}: preprocessing failed for {name}:\n{message}")
+          failures += 1
+        else:
+          index[name] = digest
+
+    index.update(_copy_generated_defines(binary_dir, preset_out))
+    if args.binaries:
+      index.update(
+        _capture_dumps(
+          binary_dir, preset_out, args.targets, args.build_jobs
+        )
+      )
+
+    with open(preset_out / 'index.json', 'w') as file_handle:
+      json.dump(index, file_handle, indent = 1, sort_keys = True)
+    print(f"{preset}: captured {len(index)} files", flush = True)
+
+  return 1 if failures else 0
+
+def _read_text(path: Path) -> str:
+  if path.suffix == '.gz':
+    with gzip.open(path, 'rb') as gz_handle:
+      return gz_handle.read().decode(errors = 'replace')
+  return path.read_text(errors = 'replace')
+
+# Integers that only record a source line number: assertion_failed("f.c", N
+# and similar __LINE__ expansions, which shift when lines are added above.
+_LINE_NUMBER_REGEX = re.compile(r'(\.[ch]p{0,2}", )\d+')
+
+def _normalize_line_numbers(text: str) -> str:
+  return _LINE_NUMBER_REGEX.sub(r'\1N', text)
+
+def _print_diff(name: str, before: str, after: str) -> None:
+  diff = list(difflib.unified_diff(
+    before.splitlines(), after.splitlines(),
+    fromfile = f"before/{name}", tofile = f"after/{name}", lineterm = '',
+    n = 1
+  ))
+  for line in diff[:_DIFF_LINE_LIMIT]:
+    print(f"    {line}")
+  if len(diff) > _DIFF_LINE_LIMIT:
+    print(f"    ... {len(diff) - _DIFF_LINE_LIMIT} more diff lines")
+
+def _dump_lines(text: str, ignore: 're.Pattern[str]') -> List[str]:
+  return [line for line in text.splitlines() if not ignore.search(line)]
+
+def _compare_dump(name: str, before: str, after: str,
+                  ignore: 're.Pattern[str]',
+                  allowed_new: List[str]) -> bool:
+  '''Return True if the dumps match modulo the allowed differences.'''
+  before_lines = _dump_lines(before, ignore)
+  after_lines = _dump_lines(after, ignore)
+  allowed = re.compile(
+    r'^#define (?:' + '|'.join(re.escape(n) for n in allowed_new) + r')\b'
+  ) if allowed_new else None
+  filtered_after = [
+    line for line in after_lines
+    if allowed is None or not allowed.match(line)
+  ]
+  if before_lines == filtered_after:
+    return True
+  _print_diff(name, '\n'.join(before_lines), '\n'.join(after_lines))
+  return False
+
+def _report_macro_table_changes(preset: str, before_dir: Path,
+                                after_dir: Path) -> None:
+  '''Print (informationally) how the final -dM macro tables differ.'''
+  changed: Dict[str, int] = {}
+  for before_file in sorted(before_dir.rglob('*.defs.gz')):
+    rel = before_file.relative_to(before_dir)
+    after_file = after_dir / rel
+    if not after_file.exists():
+      continue
+    before_lines = set(_read_text(before_file).splitlines())
+    after_lines = set(_read_text(after_file).splitlines())
+    for line in before_lines ^ after_lines:
+      parts = line.split(' ', 2)
+      name = parts[1] if len(parts) > 1 else line
+      changed[name] = changed.get(name, 0) + 1
+  if changed:
+    names = ', '.join(sorted(changed)[:30])
+    more = '' if len(changed) <= 30 else f" (+{len(changed) - 30} more)"
+    print(f"{preset}: info: {len(changed)} macro(s) differ in the final "
+          f"macro tables: {names}{more}")
+
+def cmd_compare(args: argparse.Namespace) -> int:
+  before_root = Path(args.before).resolve()
+  after_root = Path(args.after).resolve()
+  ignore = re.compile(args.ignore_dump_regex)
+  allowed_new = list(args.allow_new_define)
+  failures = 0
+  checked = 0
+
+  presets = sorted(
+    {p.name for p in before_root.iterdir() if p.is_dir()} |
+    {p.name for p in after_root.iterdir() if p.is_dir()}
+  )
+  for preset in presets:
+    before_dir = before_root / preset
+    after_dir = after_root / preset
+    if not before_dir.is_dir() or not after_dir.is_dir():
+      print(f"{preset}: present in only one tree")
+      failures += 1
+      continue
+    with open(before_dir / 'index.json', 'r') as file_handle:
+      before_index = json.load(file_handle)
+    with open(after_dir / 'index.json', 'r') as file_handle:
+      after_index = json.load(file_handle)
+
+    for name in sorted(set(before_index) - set(after_index)):
+      print(f"{preset}: only in before: {name}")
+      failures += 1
+    for name in sorted(set(after_index) - set(before_index)):
+      print(f"{preset}: only in after: {name}")
+      failures += 1
+
+    for name in sorted(set(before_index) & set(after_index)):
+      checked += 1
+      if before_index[name] == after_index[name]:
+        continue
+      before_text = _read_text(before_dir / name)
+      after_text = _read_text(after_dir / name)
+      if args.normalize_line_numbers and name.endswith('.i.gz'):
+        before_text = _normalize_line_numbers(before_text)
+        after_text = _normalize_line_numbers(after_text)
+        if args.allow_added_line:
+          allowed_added = re.compile(args.allow_added_line)
+          after_text = '\n'.join(
+            line for line in after_text.splitlines()
+            if not allowed_added.search(line)
+          )
+          before_text = '\n'.join(before_text.splitlines())
+        if before_text == after_text:
+          continue
+      if name.startswith('dump/'):
+        if _compare_dump(f"{preset}/{name}", before_text, after_text,
+                         ignore, allowed_new):
+          continue
+        print(f"{preset}: dump differs beyond allowed changes: {name}")
+      elif name.startswith('generated/'):
+        # The generated macro header may legitimately change in M0 only if
+        # the user intends it to; report as a difference.
+        print(f"{preset}: generated header differs: {name}")
+        _print_diff(f"{preset}/{name}", before_text, after_text)
+      else:
+        print(f"{preset}: preprocessed output differs: {name}")
+        _print_diff(f"{preset}/{name}", before_text, after_text)
+      failures += 1
+
+    _report_macro_table_changes(preset, before_dir, after_dir)
+
+  verdict = 'IDENTICAL' if failures == 0 else 'DIFFERENT'
+  print(f"{verdict}: {checked} files compared across {len(presets)} presets, "
+        f"{failures} problem(s)")
+  return 1 if failures else 0
+
+def _add_common_preset_argument(parser: argparse.ArgumentParser) -> None:
+  parser.add_argument(
+    '--presets',
+    nargs = '+',
+    default = list(DEFAULT_PRESETS),
+    help = 'CMake configure presets to process'
+  )
+
+def parse_args() -> argparse.Namespace:
+  parser = argparse.ArgumentParser(
+    description = 'Prove that a macro-configuration refactor changes no '
+                  'compiled code.'
+  )
+  subparsers = parser.add_subparsers(dest = 'command', required = True)
+
+  configure = subparsers.add_parser(
+    'configure', help = 'configure presets with compile_commands.json'
+  )
+  configure.add_argument('--src', default = '.', help = 'source tree')
+  configure.add_argument(
+    '--force', action = 'store_true', help = 'reconfigure even if present'
+  )
+  _add_common_preset_argument(configure)
+  configure.set_defaults(func = cmd_configure)
+
+  capture = subparsers.add_parser(
+    'capture', help = 'preprocess every TU and dump configurations'
+  )
+  capture.add_argument('--src', default = '.', help = 'source tree')
+  capture.add_argument('--out', required = True, help = 'output tree')
+  capture.add_argument(
+    '--jobs', type = int, default = os.cpu_count() or 1,
+    help = 'parallel preprocessing jobs'
+  )
+  capture.add_argument(
+    '--binaries', action = 'store_true',
+    help = 'also build the binary targets and record --dump_configuration'
+  )
+  capture.add_argument(
+    '--build-jobs', type = int, default = 4,
+    help = 'parallel jobs for building the binaries'
+  )
+  capture.add_argument(
+    '--targets', nargs = '+', default = list(DEFAULT_BINARY_TARGETS),
+    help = 'binary targets to build and dump'
+  )
+  _add_common_preset_argument(capture)
+  capture.set_defaults(func = cmd_capture)
+
+  compare = subparsers.add_parser('compare', help = 'diff two capture trees')
+  compare.add_argument('before', help = 'baseline capture tree')
+  compare.add_argument('after', help = 'new capture tree')
+  compare.add_argument(
+    '--allow-new-define', nargs = '*',
+    default = list(DEFAULT_ALLOWED_NEW_DEFINES),
+    help = '#define names allowed to appear only in the "after" dumps'
+  )
+  compare.add_argument(
+    '--ignore-dump-regex', default = DEFAULT_IGNORE_DUMP_REGEX,
+    help = 'dump lines matching this regex are ignored'
+  )
+  compare.add_argument(
+    '--normalize-line-numbers', action = 'store_true',
+    help = 'treat "file.c", <line> integers as equal in preprocessed output'
+  )
+  compare.add_argument(
+    '--allow-added-line', default = '',
+    help = 'with --normalize-line-numbers, "after" preprocessed lines '
+           'matching this regex are ignored (e.g. a new dump statement)'
+  )
+  compare.set_defaults(func = cmd_compare)
+
+  return parser.parse_args()
+
+def main() -> None:
+  args = parse_args()
+  sys.exit(args.func(args))
+
+main()

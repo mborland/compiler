@@ -1,0 +1,27 @@
+struct P { int x, y; };
+struct Q { char name[8]; struct P p; double d; int *ptr; };
+int tent;
+int tent;
+int zero_init = 0;
+int arr[5] = {1, 2};
+int arr2[] = {1, 2, 3};
+char str[] = "hello";
+const char *ps = "world";
+struct P pp = { .y = 2, .x = 1 };
+struct Q q = { "ab", {3, 4}, 1.5, &arr[1] };
+int *pa = arr + 2;
+int (*fp)(int) = 0;
+static int st = 7;
+extern int ext;
+int *pext = &ext;
+char *cp = (char*)&q + 3;
+double dd = 3.0 * 2;
+float ff = 1.0f;
+long double ld = 1.5L;
+_Bool bb = 1;
+enum E { A, B = 5, C };
+enum E ee = C;
+struct F { int n; int data[]; };
+struct F fl = { 1 };
+union U { int i; float f; } un = { .f = 1.0f };
+int f2(int x) { static int cnt = 5; static int *sp = &cnt; return x + cnt; }

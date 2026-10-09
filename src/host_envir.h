@@ -507,15 +507,28 @@ internal testing and as a demo of a possible deployment of the front end.
 #endif /* ifndef EDG_FRONT_END_DAEMON */
 
 /*
-Is the C-generating back end being used as the back end?
-See also C_GEN_BE_GENERATES_ANSI_C et al. in targ_def.h.
-Note that this means we're using the C-generating back end,
-but not necessarily in the current program -- e.g., it can
-be TRUE in the standalone IL display program.
+BACK_END_TYPE and the BACK_END_IS_C_GEN_BE and BACK_END_IS_CP_GEN_BE macros
+are defined (with their defaults and consistency checks) in back_end_type.h,
+which basics.h includes.  BACK_END_IS_C_GEN_BE is TRUE if the C-generating
+back end is being used as the back end (see also C_GEN_BE_GENERATES_ANSI_C et
+al. in targ_def.h), and BACK_END_IS_CP_GEN_BE is TRUE if the C++-generating
+back end is.  Note that this means we're using that back end, but not
+necessarily in the current program -- e.g., it can be TRUE in the standalone
+IL display program.
 */
-#ifndef BACK_END_IS_C_GEN_BE
-#define BACK_END_IS_C_GEN_BE TRUE  /* You can change this. */
-#endif /* ifndef BACK_END_IS_C_GEN_BE */
+
+/* Repeat the consistency checks of back_end_type.h here, in case a
+   configuration defined one of the macros in terms of another macro that was
+   not yet defined when back_end_type.h was processed. */
+#if BACK_END_IS_C_GEN_BE && BACK_END_IS_CP_GEN_BE
+ #error -- BACK_END_IS_C_GEN_BE and BACK_END_IS_CP_GEN_BE cannot both be TRUE.
+#endif /* BACK_END_IS_C_GEN_BE && BACK_END_IS_CP_GEN_BE */
+#if (BACK_END_IS_C_GEN_BE != 0) != (BACK_END_TYPE == BACK_END_TYPE_C_GEN)
+ #error -- BACK_END_IS_C_GEN_BE disagrees with BACK_END_TYPE.
+#endif /* (BACK_END_IS_C_GEN_BE != 0) != (BACK_END_TYPE == ...) */
+#if (BACK_END_IS_CP_GEN_BE != 0) != (BACK_END_TYPE == BACK_END_TYPE_CP_GEN)
+ #error -- BACK_END_IS_CP_GEN_BE disagrees with BACK_END_TYPE.
+#endif /* (BACK_END_IS_CP_GEN_BE != 0) != (BACK_END_TYPE == ...) */
 
 /*
 This switch controls whether a post-pass is done after IL lowering to ensure
@@ -530,20 +543,6 @@ also require such an ordering.)
 #if BACK_END_IS_C_GEN_BE && !ENSURE_LOWERED_TYPE_LIST_ORDERING
  #error BACK_END_IS_C_GEN_BE requires ENSURE_LOWERED_TYPE_LIST_ORDERING
 #endif /* BACK_END_IS_C_GEN_BE && !ENSURE_LOWERED_TYPE_LIST_ORDERING */
-
-/*
-Is the C++-generating back end being used as the back end?
-Note that this means we're using the C++-generating back end,
-but not necessarily in the current program -- e.g., it can
-be TRUE in the standalone IL display program.
-*/
-#ifndef BACK_END_IS_CP_GEN_BE
-#define BACK_END_IS_CP_GEN_BE FALSE  /* You can change this. */
-#endif /* ifndef BACK_END_IS_CP_GEN_BE */
-
-#if BACK_END_IS_C_GEN_BE && BACK_END_IS_CP_GEN_BE
- #error -- BACK_END_IS_C_GEN_BE and BACK_END_IS_CP_GEN_BE cannot both be TRUE.
-#endif /* BACK_END_IS_C_GEN_BE && BACK_END_IS_CP_GEN_BE */
 
 #if BACK_END_IS_CP_GEN_BE && COMPILE_MULTIPLE_TRANSLATION_UNITS
  #error -- COMPILE_MULTIPLE_TRANSLATION_UNITS cannot be used with the \
@@ -691,6 +690,9 @@ with a C back end.
 #if BACK_END_IS_C_GEN_BE && !DO_IL_LOWERING
  #error -- IL lowering must be done for the C-generating back end.
 #endif /* BACK_END_IS_C_GEN_BE && !DO_IL_LOWERING */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR && DO_IL_LOWERING
+ #error -- IL lowering must not be done for the CIR back end.
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR && DO_IL_LOWERING */
 #ifndef ALLOW_CPPCLI_AND_CPPCX_WITH_LOWERING
 #define ALLOW_CPPCLI_AND_CPPCX_WITH_LOWERING FALSE
 #endif /* ALLOW_CPPCLI_AND_CPPCX_WITH_LOWERING */

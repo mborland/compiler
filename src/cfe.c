@@ -41,20 +41,21 @@ Open-sourced in September of 2026.
 #include "mem_manage.h"
 #endif /* MAKE_FRONT_END_CALLABLE */
 
-#if BACK_END_IS_C_GEN_BE
+#if BACK_END_TYPE == BACK_END_TYPE_C_GEN
 #include "c_gen_be.h"
-#endif /* BACK_END_IS_C_GEN_BE */
-#if BACK_END_IS_CP_GEN_BE
+#endif /* BACK_END_TYPE == BACK_END_TYPE_C_GEN */
+#if BACK_END_TYPE == BACK_END_TYPE_CP_GEN
 #include "cp_gen_be.h"
-#endif /* BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CP_GEN */
 #if BACK_END_SHOULD_BE_CALLED && \
-    !BACK_END_IS_C_GEN_BE && !BACK_END_IS_CP_GEN_BE
+    (BACK_END_TYPE == BACK_END_TYPE_EXTERNAL || \
+     BACK_END_TYPE == BACK_END_TYPE_CIR)
 /*
 Provide a declaration for a non-EDG-supplied back end (not in the "edg"
 namespace).
 */
 extern void back_end(void);
-#endif /* BACK_END_SHOULD_BE_CALLED && !BACK_END_IS_C_GEN_BE && !... */
+#endif /* BACK_END_SHOULD_BE_CALLED && (BACK_END_TYPE == ... */
 
 /*
 Note that the EDG namespace is not opened here.  Instead we do a
@@ -96,14 +97,14 @@ MAKE_FRONT_END_CALLABLE is TRUE.
 #endif /* DEBUG */
   /* Do early (before command-line processing) initialization. */
   fe_early_init();
-#if BACK_END_SHOULD_BE_CALLED && BACK_END_IS_CP_GEN_BE && \
+#if BACK_END_SHOULD_BE_CALLED && BACK_END_TYPE == BACK_END_TYPE_CP_GEN && \
     MAKE_FRONT_END_CALLABLE
   /* When using the C++-generating back end with the front end as a library,
      ensure that early initialization of the back end occurs.  This in turn
      ensures that the back end can be cleaned up properly in fe_cleanup (even
      if it wasn't invoked during this compilation). */
   cp_gen_be_early_init();
-#endif /* BACK_END_SHOULD_BE_CALLED && BACK_END_IS_CP_GEN_BE && ... */
+#endif /* BACK_END_SHOULD_BE_CALLED && BACK_END_TYPE == ... */
   /* Get the execution starting time.  Do this unconditionally because the
      timing command line option will not have been processed yet.  This must
      be done after the early initialization done above. */

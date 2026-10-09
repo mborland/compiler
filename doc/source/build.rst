@@ -213,18 +213,22 @@ form suitable for addition to the ``src/defines.h`` file.
 
 .. _macro-defaults:
 
-``lang_feat.h``, ``host_envir.h``, ``targ_def.h``, and ``target.h``
--------------------------------------------------------------------
+``back_end_type.h``, ``lang_feat.h``, ``host_envir.h``, ``targ_def.h``, and ``target.h``
+----------------------------------------------------------------------------------------
 
 A typical ``src/defines.h`` file will not explicitly set all the configuration
 macros available in the front end.  Instead, most macros are just left to their
-default values.  These defaults are specified in four header files.  Perhaps
+default values.  These defaults are specified in five header files.  Perhaps
 more importantly, these header files are also the place where all the
 configuration macros are documented (in comments preceding the directives
 determining the default values).  The header files are as follows:
 
 .. list-table::
 
+   * - | ``src/back_end_type.h``
+     - | Selection of the back end (``BACK_END_TYPE``) and the macros derived
+         from it (``BACK_END_IS_C_GEN_BE`` and ``BACK_END_IS_CP_GEN_BE``).  It
+         is included by ``basics.h`` and so precedes the other headers.
    * - | ``src/lang_feat.h``
      - | Configuration macros controlling language features.  Some macros
          control a single language feature detail, whereas others control whole
@@ -336,6 +340,14 @@ Optional Components
    * - | ``DO_IL_LOWERING``
      - | TRUE if IL lowering (rewriting C++-specific constructs in the
          intermediate language in C form) should be done.
+   * - | ``BACK_END_TYPE``
+     - | The back end that is used: ``BACK_END_TYPE_C_GEN`` (1),
+         ``BACK_END_TYPE_CP_GEN`` (2), ``BACK_END_TYPE_CIR`` (3), or
+         ``BACK_END_TYPE_EXTERNAL`` (4, a back end supplied by the user).  If
+         it is not set, it is inferred from ``BACK_END_IS_C_GEN_BE`` and
+         ``BACK_END_IS_CP_GEN_BE`` (neither set means the C-generating back
+         end); if it is set, those two macros are derived from it and, if
+         also set, must agree with it.  0 is not a valid value.
    * - | ``BACK_END_IS_C_GEN_BE``
      - | TRUE if the C-generating back end should be used.  If FALSE, some
          other back end must be supplied or ``BACK_END_SHOULD_BE_CALLED`` must

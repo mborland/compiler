@@ -75,6 +75,12 @@ the appendix.
 
 ## Proposed `src/back_end_type.h`
 
+> M0 as implemented differs from this listing: `BACK_END_TYPE_EXTERNAL` is 4 (0 is
+> invalid and `#error`s), the header comment says it is included inside the
+> `edg` namespace and must contain macros only, `host_envir.h` repeats the two
+> IS/TYPE consistency checks, and a CIR-with-`DO_IL_LOWERING` `#error` follows
+> the `DO_IL_LOWERING` default. The file `src/back_end_type.h` is authoritative.
+
 ```c
 /*
 Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
@@ -101,9 +107,11 @@ the test in lang_feat.h).
 
 /*
 The values of BACK_END_TYPE.  These numbers are permanent: they appear in
---dump_configuration output and in //require: lines of tests.
+--dump_configuration output and in //require: lines of tests.  0 is not a
+valid value on purpose: an undefined identifier evaluates to 0 in #if, so a
+misspelled BACK_END_TYPE_* name would otherwise silently select a back end.
 */
-#define BACK_END_TYPE_EXTERNAL 0  /* A user-supplied back_end(). */
+#define BACK_END_TYPE_EXTERNAL 4  /* A user-supplied back_end(). */
 #define BACK_END_TYPE_C_GEN 1     /* The C-generating back end. */
 #define BACK_END_TYPE_CP_GEN 2    /* The C++-generating back end. */
 #define BACK_END_TYPE_CIR 3       /* The ClangIR (CIR) back end. */
@@ -141,6 +149,10 @@ New-style configurations set only BACK_END_TYPE.  Derive the legacy macros
 using the same TRUE/FALSE tokens the old defaults used.  If a configuration
 also sets one of them, it must agree.
 */
+#if BACK_END_TYPE == 0
+ #error -- BACK_END_TYPE is 0; this usually means that it was set to a \
+           misspelled or undefined BACK_END_TYPE_* name.
+#endif /* BACK_END_TYPE == 0 */
 #if BACK_END_TYPE != BACK_END_TYPE_EXTERNAL && \
     BACK_END_TYPE != BACK_END_TYPE_C_GEN && \
     BACK_END_TYPE != BACK_END_TYPE_CP_GEN && \
@@ -273,7 +285,7 @@ CIR is "neither C gen nor CP gen", with `DO_IL_LOWERING=0`. So CIR inherits the
 | `host_envir.h:1527-1539` | `BACKING_EXPR_FOR_NONTYPE_TEMPL_ARG` | CP TRUE | FALSE (default) |
 | `host_envir.h:1555` | `GENERATE_SOURCE_SEQUENCE_LISTS` | CP TRUE | **explicit** FALSE in cmakedef |
 | `host_envir.h:1635-1646` | SSI `#error`s | - | n/a (SSI off) |
-| `host_envir.h:1854-1872` | `SCOPE_ORPHANED_LIST_PROCESSING_NEEDED` | C TRUE | FALSE (writer walks scopes itself) |
+| `host_envir.h:1854-1872` | `SCOPE_ORPHANED_LIST_PROCESSING_NEEDED` | `ORPHAN_PROCESSING_NEEDED \|\| C gen` => TRUE | TRUE (derived through `ORPHAN_PROCESSING_NEEDED`; corrected per design.md v0.2, the earlier "FALSE" was wrong) |
 | `host_envir.h:1886-1946` | `MINIMAL_INLINING` (C TRUE), `INCLUDE_UNRECOGNIZED_PRAGMAS_IN_IL`, `RECORD_HIDDEN_NAMES_IN_IL`, `RECORD_TEMPLATE_STRINGS`, `RECORD_UNRECOGNIZED_ATTRIBUTES` (all CP TRUE) | FALSE (defaults; source-fidelity features) |
 | `host_envir.h:3905` | `MODULE_ID_NEEDED` | standalone C-gen utility only | no change (`NEED_NAME_MANGLING=1` already makes it TRUE) |
 | `targ_def.h:526-528,581-583` | `LOWER_VARIABLE_LENGTH_ARRAYS`, `LOWER_CLASS_RVALUE_ADJUST` | TRUE for C | FALSE (default) |

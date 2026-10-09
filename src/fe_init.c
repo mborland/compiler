@@ -159,12 +159,12 @@ END_EDG_NAMESPACE  /* Conditionally close the "edg" namespace. */
 #include "il_read.h"
 #endif /* BACK_END_SHOULD_BE_CALLED */
 #endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
-#if BACK_END_IS_C_GEN_BE
+#if BACK_END_TYPE == BACK_END_TYPE_C_GEN
 #include "c_gen_be.h"
-#endif /* BACK_END_IS_C_GEN_BE */
-#if BACK_END_IS_CP_GEN_BE
+#endif /* BACK_END_TYPE == BACK_END_TYPE_C_GEN */
+#if BACK_END_TYPE == BACK_END_TYPE_CP_GEN
 #include "cp_gen_be.h"
-#endif /* BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CP_GEN */
 
 #if NEED_NAME_MANGLING
 #include "lower_il.h"

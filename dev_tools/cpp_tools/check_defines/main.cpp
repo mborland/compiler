@@ -101,7 +101,12 @@ void check_file(const char* path,
   string macro_name;
   static set<string> reported;
   while ((macro_name = get_next_macro_name(fp, false)).size() > 0) {
-    if (config_output.find(macro_name) == config_output.end() &&
+    /* back_end_type.h defines its own include guard and the BACK_END_TYPE_*
+       enumerators; they are not configuration macros. */
+    bool is_enumerator = (macro_name == "BACK_END_TYPE_H" ||
+                          macro_name.compare(0, 14, "BACK_END_TYPE_") == 0);
+    if (!is_enumerator &&
+        config_output.find(macro_name) == config_output.end() &&
         exceptions.find(macro_name) == exceptions.end()) {
       if (reported.find(macro_name) == reported.end()) {
         printf("%s: %s not found.\n", filename, macro_name.c_str());
@@ -128,6 +133,7 @@ int main(int argc,
   populate_set(config_output, argv[1], true);
   populate_set(exceptions, argv[2], false);
 
+  check_file(argv[3], "back_end_type.h", config_output, exceptions);
   check_file(argv[3], "lang_feat.h", config_output, exceptions);
   check_file(argv[3], "host_envir.h", config_output, exceptions);
   check_file(argv[3], "targ_def.h", config_output, exceptions);

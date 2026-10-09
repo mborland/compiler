@@ -1,5 +1,21 @@
 Version 7.1
 
+10/9/26
+New BACK_END_TYPE configuration macro
+
+The back end used by a configuration is now identified by a single macro,
+BACK_END_TYPE, whose value is one of BACK_END_TYPE_C_GEN (1),
+BACK_END_TYPE_CP_GEN (2), BACK_END_TYPE_CIR (3, reserved) or
+BACK_END_TYPE_EXTERNAL (4, a user-supplied back end); 0 is not valid.  The
+macros BACK_END_IS_C_GEN_BE and BACK_END_IS_CP_GEN_BE remain, and existing
+configurations that set them (or neither, which selects the C-generating back
+end) work unchanged: their defaults are now supplied by the new header
+back_end_type.h, which also derives BACK_END_TYPE from them.  A configuration
+may instead set BACK_END_TYPE, in which case the other two macros are derived;
+an inconsistent combination is a configuration error.  The
+--dump_configuration output has a new BACK_END_TYPE line.  There is no change
+in the behavior of the front end.
+
 10/9/26  [GH #27]
 Clearer diagnostic when auto is deduced from an incomplete type
 

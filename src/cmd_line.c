@@ -6700,6 +6700,11 @@ file.
 #else /* !defined(BACK_END_SHOULD_BE_CALLED) */
   comment_undefined_macro_name(BACK_END_SHOULD_BE_CALLED);
 #endif /* defined(BACK_END_SHOULD_BE_CALLED) */
+#if defined(BACK_END_TYPE)
+  define_numeric_valued_macro(BACK_END_TYPE);
+#else /* !defined(BACK_END_TYPE) */
+  comment_undefined_macro_name(BACK_END_TYPE);
+#endif /* defined(BACK_END_TYPE) */
 #if defined(BITS_IN_AN_INTEGER_VALUE)
 #if INTEGER_VALUE_REPR_IS_A_HOST_INTEGER
   define_numeric_valued_macro(BITS_IN_AN_INTEGER_VALUE);

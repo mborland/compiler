@@ -223,6 +223,12 @@ typedef a_byte	a_byte_boolean;
 #endif /* USE_BOOL_FOR_BOOLEAN_IN_CPLUSPLUS */
 
 /*
+Select the back end (BACK_END_TYPE) and derive the BACK_END_IS_* macros.  This
+must follow the definitions of TRUE and FALSE and precede lang_feat.h.
+*/
+#include "back_end_type.h"
+
+/*
 TRUE if the front end is to be called as a subroutine of another
 program, or as a library.  When this is TRUE, the front end has
 no main program of its own and exits via a return to the caller.

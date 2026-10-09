@@ -49,9 +49,9 @@ fe_wrapup.c - End of front end processing.
 #if MAINTAIN_NEEDED_FLAGS || DO_IL_LOWERING
 #include "il_walk.h"
 #endif /* MAINTAIN_NEEDED_FLAGS || DO_IL_LOWERING */
-#if BACK_END_IS_CP_GEN_BE
+#if BACK_END_TYPE == BACK_END_TYPE_CP_GEN
 #include "cp_gen_be.h"
-#endif /* BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CP_GEN */
 #if MICROSOFT_EXTENSIONS_ALLOWED
 #include "ms_metadata.h"
 #endif /* MICROSOFT_EXTENSIONS_ALLOWED */
@@ -899,9 +899,9 @@ memory used by the compilation.
   cmd_line_cleanup();
   macro_cleanup();
   templates_cleanup();
-#if BACK_END_IS_CP_GEN_BE
+#if BACK_END_TYPE == BACK_END_TYPE_CP_GEN
   cp_gen_be_cleanup();
-#endif /* BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CP_GEN */
 #if IL_SHOULD_BE_WRITTEN_TO_FILE
   close_il_output_file();
 #endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */

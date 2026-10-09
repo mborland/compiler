@@ -64,6 +64,10 @@ The source files are:
 
    * - | ``attribute.h``
      - | Declarations related to ``attribute.c`` (scanning of attributes).
+   * - | ``back_end_type.h``
+     - | Selection of the back end (``BACK_END_TYPE``) and definition of the
+         ``BACK_END_IS_C_GEN_BE`` and ``BACK_END_IS_CP_GEN_BE`` macros.
+         Included by ``basics.h``.
    * - | ``basics.h``
      - | Basic declarations for every compilation.
    * - | ``builtin_defs.h``

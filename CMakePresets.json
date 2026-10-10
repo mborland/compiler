@@ -32,6 +32,18 @@
       }
     },
     {
+      "name": "macos-arm-clang-debug-cir",
+      "inherits": "macos-arm-clang-debug",
+      "displayName": "MacOS ARM (Clang) with the CIR back end (writer only) - DEBUG",
+      "description": "cpfe-cir without libedg_cir (needs no LLVM); used for the writer loop on the Mac",
+      "binaryDir": "${sourceDir}/build/clang-cir",
+      "cacheVariables": {
+        "EDG_BUILD_CIR": "ON",
+        "EDG_CIR_LINK_LIBRARY": "OFF",
+        "EDG_BUILD_LIB": "OFF"
+      }
+    },
+    {
       "name": "macos-arm-clang-release",
       "inherits": "macos-arm-common",
       "displayName": "MacOS ARM (Clang) Build Config - RELEASE",
@@ -187,6 +199,17 @@
       }
     },
     {
+      "name": "linux-gcc-debug-cir",
+      "inherits": "linux-gcc-debug",
+      "displayName": "Linux (GCC) with the CIR back end - DEBUG",
+      "description": "Linux GCC build including cpfe-cir linked with libedg_cir (build it with the linux-cir-relwithdebinfo preset of cir_src first)",
+      "binaryDir": "${sourceDir}/build/gcc-cir",
+      "cacheVariables": {
+        "EDG_BUILD_CIR": "ON",
+        "EDG_BUILD_LIB": "OFF"
+      }
+    },
+    {
       "name": "linux-i686-gcc-debug",
       "inherits": "linux-common",
       "displayName": "Linux i686 (GCC) Build Config - DEBUG",
@@ -264,6 +287,17 @@
       "environment": {
         "CC": "gcc",
         "CXX": "g++"
+      }
+    },
+    {
+      "name": "linux-gcc-release-cir",
+      "inherits": "linux-gcc-debuggable-release",
+      "displayName": "Linux (GCC) with the CIR back end - optimized, no ASan, library linked",
+      "description": "cpfe-cir without AddressSanitizer and not statically linked, for memory and timing measurements (edg-cir-rss); needs the cir_src library in build/cir",
+      "binaryDir": "${sourceDir}/build/gcc-release-cir",
+      "cacheVariables": {
+        "EDG_BUILD_CIR": "ON",
+        "EDG_BUILD_LIB": "OFF"
       }
     },
     {

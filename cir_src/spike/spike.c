@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception */
 int g = 5;
 int f(int a, int b) { return a < b ? a + b : 0; }
 int main(void) {

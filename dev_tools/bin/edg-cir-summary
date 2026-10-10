@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Summarize an edgy run of a CIR configuration: the M2 progress metric.
+
+Every executed test is put in one bucket, using the test's recorded status and
+the output of its commands (the .rt.tar.gz files of the run):
+
+  PASS         the test passed
+  FE_CRASH     the front end crashed or failed an assertion (signal exit,
+               ABORT, CATASTROPHE, "Assertion failed", "internal error", ...)
+  LIB_CRASH    the CIR library crashed or hit an internal error ("CIR back
+               end: ... internal", EDG_CIR_ERROR_INTERNAL, stack overflow)
+  LIB_ERROR    the CIR back end reported an error that is not "unsupported"
+               (a malformed stream, the MLIR verifier, a failed pass, ...)
+  UNSUPPORTED  the CIR back end diagnosed an unsupported construct
+  FE_DIAG      the front end itself reported an error (not from the CIR back
+               end) in a test that should compile
+  ASM_ERROR    the assembler (or compiler driver) rejected the generated code
+  LINK_ERROR   the link failed (undefined reference, ...)
+  RUN_FAIL     it compiled and linked, but the program failed (wrong exit
+               status or output, or a signal)
+  TIMEOUT      the test was killed after a timeout
+  OTHER        none of the above (look at --list OTHER)
+
+The M2 gate needs the smoke list to be 100% PASS and FE_CRASH and LIB_CRASH to
+be 0 over the corpus.
+
+Usage:
+  edg-cir-summary [RUN_DIR [CONFIG]] [--top N] [--list BUCKET]
+                  [--compare OTHER_RUN_DIR] [--json FILE]
+
+RUN_DIR is tests/runs/<timestamp> (default: the newest one); CONFIG is a
+directory in it (default: every config whose name contains "cir").
+'''
+
+import argparse
+import json
+import re
+import sys
+import tarfile
+
+from collections import Counter, defaultdict
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+BUCKETS = (
+  'PASS', 'FE_CRASH', 'LIB_CRASH', 'LIB_ERROR', 'UNSUPPORTED', 'FE_DIAG',
+  'ASM_ERROR', 'LINK_ERROR', 'RUN_FAIL', 'TIMEOUT', 'OTHER'
+)
+
+_CRASH_REGEX = re.compile(
+  r'Assertion failed|assertion failed at|internal error|Segmentation fault|'
+  r'core dumped|Aborted|AddressSanitizer|LeakSanitizer|SIGSEGV|SIGABRT|'
+  r'terminate called|[Ss]tack overflow'
+)
+_LIB_INTERNAL_REGEX = re.compile(
+  r'CIR back end:.*(internal|EDG_CIR_ERROR_INTERNAL|crash|stack)|'
+  r'edg-cir: .*internal|PLEASE submit a bug report|LLVM ERROR|'
+  r'UNREACHABLE executed',
+  re.IGNORECASE
+)
+_UNSUPPORTED_REGEX = re.compile(
+  r'unsupported|not supported|does not support|not yet implemented|NYI|'
+  r'not implemented|cannot express|cannot be (represented|translated)',
+  re.IGNORECASE
+)
+_SECONDARY_REGEX = re.compile(r'F_ABORT')
+_LINK_REGEX = re.compile(
+  r'undefined reference|linker command failed|ld: |cannot find -l|'
+  r'multiple definition',
+)
+_LINK_DETAIL_REGEX = re.compile(
+  r'undefined reference|multiple definition|cannot find -l'
+)
+_ASM_REGEX = re.compile(
+  r'Assembler messages|unknown pseudo-op|junk at end of line|'
+  r'error: unknown (directive|instruction)|invalid instruction mnemonic|'
+  r'invalid operand for instruction|returned an exit status'
+)
+_CIR_LINE_REGEX = re.compile(r'(CIR back end|edg-cir|ecil-dump)\b')
+_ERROR_LINE_REGEX = re.compile(r'(?i)\b(error|catastrophic error)\b')
+
+
+class TestResult:
+  def __init__(self, path: str, status: str, bucket: str,
+               message: str) -> None:
+    self.ref_fail = False
+    self.path = path
+    self.status = status
+    self.bucket = bucket
+    self.message = message
+
+
+def _normalize_message(line: str) -> str:
+  '''Make an error line comparable across tests.'''
+  line = line.strip()
+  line = re.sub(r'"[^"]*\.(c|cpp|C|i|s)", line \d+: ', '', line)
+  line = re.sub(r'(Test_name|test)\.\w+(:\d+)*:?', '', line)
+  line = re.sub(r'"[A-Za-z_][A-Za-z_0-9:]*"', '"<id>"', line)
+  line = re.sub(r"'[A-Za-z_][A-Za-z_0-9:]*'", "'<id>'", line)
+  line = re.sub(r'0x[0-9a-fA-F]+', '0xN', line)
+  line = re.sub(r'\b\d+\b', 'N', line)
+  line = re.sub(r'\s+', ' ', line)
+  return line[:160]
+
+
+def _first_matching_line(text: str,
+                         regex: 're.Pattern[str]') -> Optional[str]:
+  for line in text.splitlines():
+    if regex.search(line):
+      return line
+  return None
+
+
+def _read_case_outputs(tar_file: tarfile.TarFile) -> List[Tuple[int, str]]:
+  '''Return [(command index, output text)] for case 1 (the usual case).'''
+  outputs = []
+  for member in tar_file.getmembers():
+    match = re.match(r'cases/(\d+)/(\d+)/output\.txt$', member.name)
+    if match and match.group(1) == '1':
+      extracted = tar_file.extractfile(member)
+      assert extracted is not None
+      outputs.append((int(match.group(2)),
+                      extracted.read().decode('utf-8', errors = 'replace')))
+  return sorted(outputs)
+
+
+def classify(status: str, compile_output: str,
+             run_output: str) -> Tuple[str, str]:
+  '''Return (bucket, representative message) for a non-passing test.'''
+  base = status.split('--')[0]
+  # The "front end aborted the stream" report only follows a front-end error,
+  # which is what matters.
+  compile_output = '\n'.join(
+    line for line in compile_output.splitlines()
+    if not _SECONDARY_REGEX.search(line)
+  )
+  all_text = compile_output + '\n' + run_output
+
+  def message_of(text: str, regex: 're.Pattern[str]') -> str:
+    line = _first_matching_line(text, regex)
+    return _normalize_message(line) if line else base
+
+  if base == 'PASS':
+    return 'PASS', ''
+  if 'TIMEOUT' in base or 'KILLED' in base:
+    return 'TIMEOUT', base
+  if _LIB_INTERNAL_REGEX.search(all_text):
+    return 'LIB_CRASH', message_of(all_text, _LIB_INTERNAL_REGEX)
+  if base in ('ABORT', 'CATASTROPHE') or _CRASH_REGEX.search(compile_output):
+    crash_line = _first_matching_line(compile_output, _CRASH_REGEX)
+    if _CIR_LINE_REGEX.search(compile_output):
+      # The process died (or aborted) while the CIR library was running.
+      detail = _normalize_message(crash_line) if crash_line else \
+        f"{base} after: " + message_of(compile_output, _CIR_LINE_REGEX)
+      return 'LIB_CRASH', detail
+    return 'FE_CRASH', message_of(compile_output, _CRASH_REGEX)
+  if 'CIR back end' in compile_output and _UNSUPPORTED_REGEX.search(
+      compile_output):
+    cir_lines = [l for l in compile_output.splitlines()
+                 if 'CIR back end' in l and _UNSUPPORTED_REGEX.search(l)]
+    return 'UNSUPPORTED', _normalize_message(cir_lines[0]) if cir_lines \
+      else base
+  if _LINK_REGEX.search(compile_output):
+    return 'LINK_ERROR', message_of(compile_output, _LINK_DETAIL_REGEX)
+  if base == 'BADC' or _ASM_REGEX.search(compile_output):
+    return 'ASM_ERROR', message_of(compile_output, _ASM_REGEX)
+  if 'CIR back end' in compile_output:
+    line = _first_matching_line(compile_output, _CIR_LINE_REGEX) or ''
+    return 'LIB_ERROR', _normalize_message(line)
+  if 'COMPILE' in base or _ERROR_LINE_REGEX.search(compile_output):
+    return 'FE_DIAG', message_of(compile_output, _ERROR_LINE_REGEX)
+  if base.startswith('RUNTIME') or base == 'FAIL':
+    return 'RUN_FAIL', message_of(run_output, _ERROR_LINE_REGEX)
+  return 'OTHER', base
+
+
+def load_config_results(config_dir: Path) -> List[TestResult]:
+  results = []
+  for tar_path in sorted(config_dir.rglob('*.rt.tar.gz')):
+    with tarfile.open(tar_path, 'r:gz') as tar_file:
+      extracted = tar_file.extractfile('metadata.json')
+      assert extracted is not None
+      metadata = json.load(extracted)
+      outputs = dict(_read_case_outputs(tar_file))
+    test_path = metadata.get('path', str(tar_path))
+    for case in metadata.get('cases', []):
+      status = case['status']['result']
+      compile_output = outputs.get(1, '')
+      run_output = outputs.get(2, '')
+      bucket, message = classify(status, compile_output, run_output)
+      results.append(TestResult(test_path, status, bucket, message))
+  return results
+
+
+def print_summary(config: str, results: List[TestResult], top: int) -> None:
+  total = len(results)
+  counts = Counter(r.bucket for r in results)
+  print(f"=== {config}: {total} test cases")
+  for bucket in BUCKETS:
+    if counts[bucket] or bucket in ('PASS', 'FE_CRASH', 'LIB_CRASH'):
+      percent = 100.0 * counts[bucket] / total if total else 0.0
+      print(f"  {bucket:<12} {counts[bucket]:>6}  {percent:5.1f}%")
+
+  by_dir: Dict[str, Counter] = defaultdict(Counter)
+  for result in results:
+    parts = result.path.split('/')
+    key = '/'.join(parts[:-1][:4]) if len(parts) > 1 else '.'
+    by_dir[key][result.bucket] += 1
+  if len(by_dir) > 1:
+    print('  by directory (pass/total):')
+    for key in sorted(by_dir):
+      sub = by_dir[key]
+      print(f"    {key:<40} {sub['PASS']:>5}/{sum(sub.values()):<5}")
+
+  for bucket in BUCKETS:
+    if bucket == 'PASS' or not counts[bucket]:
+      continue
+    messages = Counter(r.message for r in results if r.bucket == bucket)
+    print(f"  top messages, {bucket}:")
+    for message, count in messages.most_common(top):
+      print(f"    {count:>5}  {message}")
+
+  gate = counts['FE_CRASH'] + counts['LIB_CRASH']
+  print(f"  gate: crashes/assertions = {gate} (must be 0); "
+        f"pass rate = {counts['PASS']}/{total}")
+  ref_fails = [r for r in results if r.ref_fail and r.bucket != 'PASS']
+  if any(r.ref_fail for r in results) or ref_fails:
+    comparable = total - len(ref_fails)
+    print(f"  reference: {len(ref_fails)} of the failing tests also fail in "
+          f"the reference configuration; excluding them, "
+          f"{counts['PASS']}/{comparable} pass "
+          f"({100.0 * counts['PASS'] / comparable if comparable else 0:.1f}%)")
+    ref_counts = Counter(r.bucket for r in ref_fails)
+    print('  also failing in the reference, by bucket: ' +
+          ', '.join(f"{b} {ref_counts[b]}" for b in BUCKETS
+                    if ref_counts[b]))
+
+
+def load_reference_failures(reference_dir: Path) -> set:
+  '''Return the test paths that do not PASS in a reference configuration.
+
+  reference_dir is a tests/expectations/<config> directory, whose <suite>.log
+  files list the tests whose status is not a plain pass.  Paths are returned
+  as "<suite>/<path>", like the run's metadata.
+  '''
+  failing = set()
+  for log_file in reference_dir.glob('*.log'):
+    suite = log_file.stem
+    for line in log_file.read_text(errors = 'replace').splitlines():
+      parts = line.split(':')
+      if len(parts) >= 4 and not parts[3].startswith('PASS'):
+        failing.add(f"{suite}/{parts[0]}")
+  return failing
+
+
+def newest_run(runs_dir: Path) -> Path:
+  candidates = [p for p in runs_dir.iterdir() if p.is_dir()]
+  if not candidates:
+    sys.exit(f"no runs in {runs_dir}")
+  return max(candidates, key = lambda p: p.stat().st_mtime)
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(description = 'Summarize a CIR edgy run.')
+  parser.add_argument('run_dir', nargs = '?', default = None)
+  parser.add_argument('config', nargs = '?', default = None)
+  parser.add_argument('--top', type = int, default = 8,
+                      help = 'messages to show per bucket')
+  parser.add_argument('--list', dest = 'list_bucket', default = None,
+                      help = 'list the tests in this bucket')
+  parser.add_argument('--compare', default = None,
+                      help = 'another run directory: show tests whose bucket '
+                             'changed')
+  parser.add_argument('--reference', default = 'tests/expectations/edg_x86_64',
+                      help = 'expectations directory of the reference config '
+                             '(failures there are expected: they are '
+                             'counted separately); "" to disable')
+  parser.add_argument('--json', dest = 'json_file', default = None,
+                      help = 'also write the results to this file')
+  args = parser.parse_args()
+
+  run_dir = Path(args.run_dir) if args.run_dir else newest_run(
+    Path('tests/runs')
+  )
+  configs = (
+    [args.config] if args.config else
+    sorted(p.name for p in run_dir.iterdir()
+           if p.is_dir() and 'cir' in p.name)
+  )
+  reference = set()
+  if args.reference and Path(args.reference).is_dir():
+    reference = load_reference_failures(Path(args.reference))
+  all_results: Dict[str, List[TestResult]] = {}
+  for config in configs:
+    results = load_config_results(run_dir / config)
+    for result in results:
+      result.ref_fail = result.path in reference
+    all_results[config] = results
+    print_summary(config, results, args.top)
+    if args.list_bucket:
+      print(f"  tests in {args.list_bucket}:")
+      for result in results:
+        if result.bucket == args.list_bucket:
+          print(f"    {result.path}  [{result.status}] {result.message}")
+    if args.compare:
+      before = {
+        r.path: r.bucket
+        for r in load_config_results(Path(args.compare) / config)
+      }
+      print(f"  changes since {args.compare}:")
+      for result in results:
+        old = before.get(result.path)
+        if old is not None and old != result.bucket:
+          print(f"    {result.path}: {old} -> {result.bucket}")
+
+  if args.json_file:
+    with open(args.json_file, 'w') as file_handle:
+      json.dump(
+        {
+          config: [vars(r) for r in results]
+          for config, results in all_results.items()
+        },
+        file_handle,
+        indent = 1
+      )
+
+
+main()

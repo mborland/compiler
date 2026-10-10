@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# The crash-recovery tests (EDG_CIR_TEST_CRASH) longjmp out of the worker, so
+# objects live there are intentionally not destroyed.
+leak:RunSafely

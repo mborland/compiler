@@ -1,0 +1,8 @@
+; expect: format truncated stream
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame DECLS len=0x100
+  TY_VOID 1

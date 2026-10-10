@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Stack stress test of the two-process CIR path with front-end-made streams.
+
+Generates four deeply nested C inputs, writes an ECIL stream for each with
+cpfe-cir under a very large stack (`ulimit -s 2097152`, 2 GB: the front end
+may recurse deeply on its own; an ASan-built front end cannot run with
+`ulimit -s unlimited`), then runs edg-cir on the stream under `ulimit -s <KB>` (256 by default).
+edg-cir must not recurse on the stream's nesting, so it has to succeed even
+though the front end needed a huge stack.
+
+  1. plus     a single expression with a 50000-term `+` chain
+  2. elseif   a 20000-rung `else if` ladder
+  3. init     a 5000-deep nested struct initializer
+  4. blocks   2000 nested blocks
+
+Run inside the cir-env image from the repository root:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-stress
+'''
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  exports = {}
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  return exports
+
+
+def gen_plus(depth: int) -> str:
+  terms = ' + '.join(['1'] * depth)
+  return f"int g;\nint f(int a) {{ return a + {terms}; }}\n" \
+         "int main(void) { return f(0) != %d; }\n" % (depth + 0)
+
+
+def gen_elseif(depth: int) -> str:
+  lines = ['int f(int a) {', '  int r = 0;']
+  lines.append('  if (a == 0) r = 1;')
+  for index in range(1, depth):
+    lines.append(f"  else if (a == {index}) r = {index + 1};")
+  lines.append('  else r = -1;')
+  lines.append('  return r;')
+  lines.append('}')
+  lines.append('int main(void) { return f(3) != 4; }')
+  return '\n'.join(lines) + '\n'
+
+
+def gen_init(depth: int) -> str:
+  lines = ['struct S0 { int x; };']
+  for index in range(1, depth):
+    lines.append(f"struct S{index} {{ struct S{index - 1} m; }};")
+  braces_open = '{' * depth
+  braces_close = '}' * depth
+  lines.append(f"struct S{depth - 1} v = {braces_open} 7 {braces_close};")
+  lines.append('int main(void) { return v.m' + '.m' * (depth - 2) +
+               '.x != 7; }')
+  return '\n'.join(lines) + '\n'
+
+
+def gen_blocks(depth: int) -> str:
+  lines = ['int f(void) {', '  int x = 0;']
+  for index in range(depth):
+    lines.append('  ' * (index + 1) + '{ x++;')
+  for index in range(depth, 0, -1):
+    lines.append('  ' * index + '}')
+  lines.append('  return x;')
+  lines.append('}')
+  lines.append('int main(void) { return f() != %d; }' % depth)
+  return '\n'.join(lines) + '\n'
+
+
+def run_shell(command: str, env: Dict[str, str], cwd: Path,
+              timeout: int) -> Tuple[int, str]:
+  try:
+    proc = subprocess.run(['/bin/bash', '-c', command], cwd = cwd, env = env,
+                          stdout = subprocess.PIPE, stderr = subprocess.STDOUT,
+                          text = True, timeout = timeout)
+  except subprocess.TimeoutExpired:
+    return 124, 'timeout'
+  return proc.returncode, proc.stdout
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(description = __doc__.split('\n')[0])
+  parser.add_argument('--root', default = '.')
+  parser.add_argument('--stack-kb', type = int, default = 256,
+                      help = 'stack limit (KB) for edg-cir')
+  parser.add_argument('--fe-stack-kb', type = int, default = 2097152,
+                      help = 'stack limit (KB) for the front end')
+  parser.add_argument('--scale', type = float, default = 1.0,
+                      help = 'multiply the nesting depths')
+  parser.add_argument('--keep', default = '',
+                      help = 'directory to keep the inputs and streams in')
+  parser.add_argument('--timeout', type = int, default = 900)
+  args = parser.parse_args()
+
+  root = Path(args.root).resolve()
+  cir_env = load_exports(root / 'build/gcc-cir/environment.sh')
+  cpfe_cir = cir_env['CPFE_CIR']
+  edg_cir = cir_env['EDG_CIR_TOOL']
+  env = dict(os.environ)
+  env.update(cir_env)
+  env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+  env['ECCP_LIBDIR'] = cir_env.get('EDG_CIR_RT_LIBDIR', '')
+  env['CPFE'] = cpfe_cir
+  eccp = str(root / 'util/eccp.sh')
+
+  cases = [
+    ('plus', gen_plus(int(50000 * args.scale))),
+    ('elseif', gen_elseif(int(20000 * args.scale))),
+    ('init', gen_init(int(5000 * args.scale))),
+    ('blocks', gen_blocks(int(2000 * args.scale)))
+  ]
+  work = Path(args.keep) if args.keep else Path(
+    tempfile.mkdtemp(prefix = 'edg-cir-stress.')
+  )
+  work.mkdir(parents = True, exist_ok = True)
+  failures = 0
+  fe_title = f"front end (stack {args.fe_stack_kb // 1024} MB)"
+  print(f"{'case':<8} {fe_title:<30} "
+        f"{'edg-cir (stack ' + str(args.stack_kb) + ' KB)':<30}")
+  try:
+    for name, source_text in cases:
+      source = work / f"{name}.c"
+      source.write_text(source_text)
+      stream = work / f"{name}.ecil"
+      stream.unlink(missing_ok = True)
+      fe_env = dict(env)
+      fe_env['EDG_CPFE_DEFAULT_OPTIONS'] = f"--ecil_output={stream}"
+      fe_rc, fe_out = run_shell(
+        f"ulimit -s {args.fe_stack_kb}; {eccp} -S --c11 {source.name}", fe_env, work,
+        args.timeout
+      )
+      fe_text = 'ok' if fe_rc == 0 and stream.exists() else f"FAIL rc={fe_rc}"
+      be_text = 'skipped'
+      if fe_rc == 0 and stream.exists():
+        be_rc, be_out = run_shell(
+          f"ulimit -s {args.stack_kb}; {edg_cir} --emit=asm "
+          f"-o {name}.s {stream.name}", env, work, args.timeout
+        )
+        if be_rc == 0:
+          asm_kb = (work / (name + '.s')).stat().st_size // 1024
+          be_text = f"ok ({asm_kb} KB asm)"
+        else:
+          failures += 1
+          first = be_out.strip().splitlines()[-1][:60] if be_out.strip() \
+            else ''
+          be_text = f"FAIL rc={be_rc} {first}"
+      else:
+        failures += 1
+        fe_text += ' ' + (fe_out.strip().splitlines() or [''])[-1][:60]
+      print(f"{name:<8} {fe_text:<30} {be_text:<30}")
+  finally:
+    if not args.keep:
+      shutil.rmtree(work, ignore_errors = True)
+  print('RESULT:', 'PASS' if failures == 0 else f"{failures} case(s) FAILED")
+  raise SystemExit(1 if failures else 0)
+
+
+main()

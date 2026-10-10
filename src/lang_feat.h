@@ -196,6 +196,10 @@ which can be modified by the "-x" command line option.
 #define DEFAULT_EXCEPTIONS_ENABLED TRUE
 #endif /* BACK_END_IS_CP_GEN_BE */
 #endif /* ifdef BACK_END_IS_CP_GEN_BE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+/* The CIR back end lowers exception handling itself (Itanium ABI). */
+#define DEFAULT_EXCEPTIONS_ENABLED TRUE
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #ifndef DEFAULT_EXCEPTIONS_ENABLED
 #define DEFAULT_EXCEPTIONS_ENABLED FALSE
 #endif /* ifndef DEFAULT_EXCEPTIONS_ENABLED */

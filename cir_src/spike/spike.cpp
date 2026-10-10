@@ -1,4 +1,11 @@
 /*
+Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+Exceptions.
+See https://edgcpp.org/LICENSE.txt for license information.
+SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+*/
+
+/*
 spike.cpp -- ClangIR toolchain spike for the EDG CIR back end.
 
 Builds, through the public C++ API only (no clang AST, no CIRGen), the CIR

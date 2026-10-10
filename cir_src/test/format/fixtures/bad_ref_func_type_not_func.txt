@@ -1,0 +1,12 @@
+; expect: format is not a function type
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  STR 2 "f"
+  DECL_FUNC 3 1 0 1 2
+frame END
+  END 2 0

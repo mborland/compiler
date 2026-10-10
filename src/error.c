@@ -23,6 +23,9 @@ error.c -- Error reporting routines.
 #include "err_data.h"
 #include "decls.h"
 #include "templates.h"
+#if BACK_END_TYPE == BACK_END_TYPE_CIR && !STANDALONE_UTILITY_PROGRAM
+#include "ecil_write.h"
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR && !STANDALONE_UTILITY_PROGRAM */
 #if !STANDALONE_UTILITY_PROGRAM
 #if IL_SHOULD_BE_WRITTEN_TO_FILE
 #include "il_write.h"
@@ -4972,6 +4975,11 @@ the program to be terminated, as does reaching the error limit.
      language file. */
   if (total_all_errors > 0) cancel_il_file();
 #endif /* IL_SHOULD_BE_WRITTEN_TO_FILE && !STANDALONE_UTILITY_PROGRAM */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR && !STANDALONE_UTILITY_PROGRAM
+  /* Functions streamed before the first error are already with the
+     consumer, so the stream must be explicitly invalidated (idempotent). */
+  if (total_all_errors > 0) ecil_abort();
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR && !STANDALONE_UTILITY_PROGRAM */
   /* Terminate the compilation for the more serious severities. */
   if (is_catastrophic_error_severity(dp->severity)) {
     /* Force out the last line of the raw listing file. */

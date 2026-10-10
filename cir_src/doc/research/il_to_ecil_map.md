@@ -1,5 +1,8 @@
 # IL to ECIL map, v0 (C subset)
 
+> Current behaviour of the implemented writer: see `../writer.md`; this research note records the design analysis and may differ in detail.
+
+
 Author: cir-writer (Phase R). Input for the orchestrator's format spec. Every
 claim is tagged: **V** = read in `src/il_def.h` or other source (file:line),
 **P** = observed in the non-lowered IL dump of the native debug
@@ -11,6 +14,25 @@ Opcode names are proposals in the plan's vocabulary. Notation:
 `OP a b` = opcode with operands; `[x y] -> [z]` = effect on the consumer's
 value stack; `T` = type id (G), `G` = global id, `L` = frame-local id,
 `S` = string id, `F` = flags. "Writer" = `ecil_write.c`, "consumer" = EDG-CIRGen.
+
+> **Superseded in part by `ecil_format.md` v0.3 and `ecil_format.h` (minor 3);
+> the spec wins (`design.md` section 8).** Opcode names used below that differ
+> from the header are mapped as follows: `DISCARD` -> `DROP`; `TOBOOL` ->
+> `TO_BOOL`; `BFIELD` -> `FIELD` (it yields a bit-field glvalue when the member
+> is a bit-field); `COND_END`/`WHILE_END` shapes -> `WHILE_BODY`, `DO_END`,
+> `FOR_STEP`; `CALL G n` -> `CALL(g, t_call, n, flags)`; `K_AGGR`/`K_REPEAT`
+> /`K_STRING`/`K_ADDR` -> `C_AGG_BEGIN/C_SEL/C_REPEAT/C_AGG_END`,
+> `C_STRING`, `C_ADDR`; `STR_LIT` -> `DECL_VAR(string_literal)` + `C_STRING` +
+> `VAR_INIT`; `GOTO L` -> `GOTO_STMT(l, 0)`; `BREAK/CONTINUE/RETURN` ->
+> `BREAK_STMT/CONTINUE_STMT/RETURN_STMT`; `MATERIALIZE_TEMP T` ->
+> `MATERIALIZE_TEMP(l, t)`; `INC|DEC` -> `INC_DEC(kind, flags)`. Errata
+> applied: (c) `&x` is `<x> ADDR`; (d) `VA_START` pops only `ap`; (e) `LOCAL`
+> sits in the body where the variable is declared (not in the declaration
+> section); (j) falling off a non-void C function returns the uninitialized
+> value; (k) every C99 inline body is streamed and the final `inline_only`
+> status is re-issued in `F_GLOBALS`; (l) on an unsupported construct only the
+> function's body records are discarded (declaration section kept, `DECL_FUNC`
+> re-issued with `unsupported`); (m) x87/quad constants are `FBITS` only.
 
 ## 0. Ground rules the probes established
 

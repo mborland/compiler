@@ -101,4 +101,23 @@ also sets one of them, it must agree.
 
 #endif /* ifndef BACK_END_TYPE */
 
+/*
+Derived macros for code that is common to several back ends.
+BACK_END_GENERATES_SOURCE is TRUE if the back end writes C or C++ source (and
+so has the --gen_c_*_version options and the generated-code target dialect).
+BACK_END_HAS_OUTPUT_FILE is TRUE if the back end writes an output file whose
+name the driver passes with --gen_c_file_name (and that uses the generated
+file line directive options): the generating back ends, and CIR.
+*/
+#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#define BACK_END_GENERATES_SOURCE TRUE
+#else /* !(BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE) */
+#define BACK_END_GENERATES_SOURCE FALSE
+#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#if BACK_END_GENERATES_SOURCE || BACK_END_TYPE == BACK_END_TYPE_CIR
+#define BACK_END_HAS_OUTPUT_FILE TRUE
+#else /* !(BACK_END_GENERATES_SOURCE || BACK_END_TYPE == BACK_END_TYPE_CIR) */
+#define BACK_END_HAS_OUTPUT_FILE FALSE
+#endif /* BACK_END_GENERATES_SOURCE || BACK_END_TYPE == BACK_END_TYPE_CIR */
+
 #endif /* ifndef BACK_END_TYPE_H */

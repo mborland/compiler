@@ -1,0 +1,60 @@
+#!/bin/sh
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Two-process version of the CIR front end, for the edg_x86_64_cir_2p test
+# configuration.  eccp runs this script in place of the front end.  It runs
+# cpfe-cir to write an ECIL stream to a temporary file, then edg-cir to turn
+# the stream into the assembly file that the front end would have written
+# itself (the --gen_c_file_name that eccp passes).  The assembly must be
+# byte-for-byte what the in-process front end writes.
+#
+# Environment:
+#   CPFE_CIR_BIN   the cpfe-cir to run (CPFE_CIR if unset)
+#   EDG_CIR_TOOL   the edg-cir tool
+#
+# Invocations that do not name a generated file (--version, --dump_config,
+# --preprocess_only, ...) go straight to cpfe-cir.
+
+fe=${CPFE_CIR_BIN:-$CPFE_CIR}
+if [ -z "$fe" ] || [ -z "$EDG_CIR_TOOL" ]; then
+  echo "cpfe-cir-2p: CPFE_CIR_BIN (or CPFE_CIR) and EDG_CIR_TOOL must be set" >&2
+  exit 99
+fi
+
+# Find --gen_c_file_name=<file>; keep the other arguments in order.
+out=
+count=$#
+while [ "$count" -gt 0 ]; do
+  arg=$1
+  shift
+  case "$arg" in
+    --gen_c_file_name=*) out=${arg#--gen_c_file_name=} ;;
+    *) set -- "$@" "$arg" ;;
+  esac
+  count=$((count - 1))
+done
+
+if [ -z "$out" ]; then
+  exec "$fe" "$@"
+fi
+
+stream=$(mktemp "${TMPDIR:-/tmp}/cpfe-cir-2p.XXXXXX") || exit 99
+trap 'rm -f "$stream"' EXIT
+
+"$fe" --ecil_output="$stream" "$@"
+status=$?
+if [ "$status" -ne 0 ]; then
+  exit "$status"
+fi
+
+"$EDG_CIR_TOOL" --emit=asm -o "$out" "$stream"
+status=$?
+if [ "$status" -ne 0 ]; then
+  # Report a failed back end like the front end does for a library error.
+  exit 2
+fi
+exit 0

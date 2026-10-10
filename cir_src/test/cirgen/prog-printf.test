@@ -1,0 +1,90 @@
+; A small whole program: array fill with a loop, a call to variadic printf
+; with a string literal, exit status from the computed sum.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe | %FileCheck %s
+; CHECK: sum=285 last=81
+
+frame DECLS
+  STR 10 "main"
+  STR 11 "printf"
+  STR 12 ".str"
+  TY_ARRAY 20 1 10 0
+  TY_ARRAY 21 4 16 0
+  TY_FUNC 22 1 0 []
+  TY_FUNC 23 1 1 [13]
+  DECL_FUNC 30 22 0 9 10
+  DECL_FUNC 31 23 0 0 11
+  DECL_VAR 32 21 1 11 1 12
+  C_STRING 21 bin8:"sum=%d last=%d\n"
+  VAR_INIT 32
+frame REGION
+  FUNC_BEGIN 30 0
+  LOCAL 1 20 nil 16 0
+  LOCAL 2 1 nil 4 0
+  LOCAL 3 1 nil 4 0
+  LREF 3
+  CONST_INT 1 0
+  STORE 0 0
+  FOR_BEGIN
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  FOR_COND true
+  LREF 2
+  LOAD 0
+  CONST_INT 1 10
+  CMP 0
+  FOR_STEP true
+  LREF 2
+  INC_DEC 0 1
+  DROP
+  FOR_BODY
+  LREF 1
+  ADDR
+  CAST 12 14
+  LREF 2
+  LOAD 0
+  PTR_STRIDE 0
+  DEREF
+  LREF 2
+  LOAD 0
+  LREF 2
+  LOAD 0
+  MUL 1
+  STORE 0 0
+  LREF 3
+  DUP
+  LOAD 0
+  LREF 1
+  ADDR
+  CAST 12 14
+  LREF 2
+  LOAD 0
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  FOR_END
+  GREF 32
+  ADDR
+  CAST 12 13
+  LREF 3
+  LOAD 0
+  LREF 1
+  ADDR
+  CAST 12 14
+  CONST_INT 1 9
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  CALL 31 23 3 1
+  DROP
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

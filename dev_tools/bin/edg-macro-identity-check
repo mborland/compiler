@@ -336,6 +336,23 @@ _LINE_NUMBER_REGEX = re.compile(r'(\.[ch]p{0,2}", )\d+')
 def _normalize_line_numbers(text: str) -> str:
   return _LINE_NUMBER_REGEX.sub(r'\1N', text)
 
+# --allow-cir-diagnostics: the CIR project added two diagnostics (ec_cir_error
+# and ec_cir_warning) to every configuration.  They add enumerators to
+# err_codes.h, and entries (and so table sizes) to err_data.h and error.c.
+_CIR_DIAGNOSTIC_LINE_REGEX = re.compile(
+  r'ec_cir_|CIR back end: %s|"cir_(error|warning)"'
+)
+_ERROR_TABLE_SIZE_REGEX = re.compile(
+  r'(error_tags\[|bin_search\(|NUMBER_OF_ERROR_TAGS |ec_last /\* = )\d+'
+)
+
+def _remove_cir_diagnostics(text: str) -> str:
+  lines = [
+    line for line in text.splitlines()
+    if not _CIR_DIAGNOSTIC_LINE_REGEX.search(line)
+  ]
+  return _ERROR_TABLE_SIZE_REGEX.sub(r'\1N', '\n'.join(lines))
+
 def _print_diff(name: str, before: str, after: str) -> None:
   diff = list(difflib.unified_diff(
     before.splitlines(), after.splitlines(),
@@ -359,11 +376,15 @@ def _compare_dump(name: str, before: str, after: str,
   allowed = re.compile(
     r'^#define (?:' + '|'.join(re.escape(n) for n in allowed_new) + r')\b'
   ) if allowed_new else None
+  filtered_before = [
+    line for line in before_lines
+    if allowed is None or not allowed.match(line)
+  ]
   filtered_after = [
     line for line in after_lines
     if allowed is None or not allowed.match(line)
   ]
-  if before_lines == filtered_after:
+  if filtered_before == filtered_after:
     return True
   _print_diff(name, '\n'.join(before_lines), '\n'.join(after_lines))
   return False
@@ -426,18 +447,24 @@ def cmd_compare(args: argparse.Namespace) -> int:
         continue
       before_text = _read_text(before_dir / name)
       after_text = _read_text(after_dir / name)
+      if args.allow_cir_diagnostics and (name.endswith('.i.gz') or
+                                         name.startswith('generated/')):
+        before_text = _remove_cir_diagnostics(before_text)
+        after_text = _remove_cir_diagnostics(after_text)
       if args.normalize_line_numbers and name.endswith('.i.gz'):
         before_text = _normalize_line_numbers(before_text)
         after_text = _normalize_line_numbers(after_text)
-        if args.allow_added_line:
-          allowed_added = re.compile(args.allow_added_line)
-          after_text = '\n'.join(
-            line for line in after_text.splitlines()
-            if not allowed_added.search(line)
-          )
-          before_text = '\n'.join(before_text.splitlines())
-        if before_text == after_text:
-          continue
+      if args.allow_added_line and name.endswith('.i.gz'):
+        allowed_added = re.compile(args.allow_added_line)
+        after_text = '\n'.join(
+          line for line in after_text.splitlines()
+          if not allowed_added.search(line)
+        )
+        before_text = '\n'.join(before_text.splitlines())
+      if ((args.normalize_line_numbers or args.allow_cir_diagnostics or
+           args.allow_added_line) and not name.startswith('dump/') and
+          before_text == after_text):
+        continue
       if name.startswith('dump/'):
         if _compare_dump(f"{preset}/{name}", before_text, after_text,
                          ignore, allowed_new):
@@ -529,6 +556,12 @@ def parse_args() -> argparse.Namespace:
     '--allow-added-line', default = '',
     help = 'with --normalize-line-numbers, "after" preprocessed lines '
            'matching this regex are ignored (e.g. a new dump statement)'
+  )
+  compare.add_argument(
+    '--allow-cir-diagnostics', action = 'store_true',
+    help = 'ignore the new ec_cir_error and '
+           'ec_cir_warning diagnostics (err_codes.h enumerators and the '
+           'error.c message and tag tables)'
   )
   compare.set_defaults(func = cmd_compare)
 

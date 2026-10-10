@@ -1,0 +1,44 @@
+; Unsupported policy (spec 8.11/F5).  The writer re-issued an external
+; function and an external variable as unsupported.  By default the consumer
+; fails and names both; with --keep-going they become declarations (with
+; warnings) and the rest of the module is usable.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck --check-prefix=DEFAULT %s
+; RUN: %edg-cir --keep-going --emit=obj -o %t.o %t.ecil 2>&1 | %FileCheck --check-prefix=KEEP %s
+; RUN: %edg-cir --keep-going --emit=cir %t.ecil 2>/dev/null | %FileCheck --check-prefix=CIR %s
+; RUN: gcc %S/Inputs/unsupported_ext.c %t.o -o %t.exe
+; RUN: %t.exe
+
+; DEFAULT: error [1003]: the definition of 'ext_fn' was dropped
+; DEFAULT: error [1003]: the definition of 'ext_var' was dropped
+; KEEP: warning [{{[0-9]+}}]: 'ext_fn' is only declared
+; KEEP: warning [{{[0-9]+}}]: 'ext_var' is only declared
+; CIR: cir.func private @ext_fn(!s32i) -> !s32i
+; CIR: cir.global {{.*}}@ext_var : !s32i
+
+frame DECLS
+  STR 10 "ext_fn"
+  STR 11 "ext_var"
+  STR 12 "main"
+  TY_FUNC 20 1 0 [1]
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 20 0 32 10
+  DECL_VAR 41 1 0 64 4 11
+  DECL_FUNC 42 21 0 9 12
+frame REGION
+  FUNC_BEGIN 42 0
+  GREF 41
+  LOAD 0
+  CALL 40 20 1 0
+  CONST_INT 1 42
+  CMP 4
+  TERN_BEGIN 1
+  CONST_INT 1 0
+  TERN_ELSE
+  CONST_INT 1 1
+  TERN_END
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

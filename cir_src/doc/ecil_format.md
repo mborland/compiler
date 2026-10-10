@@ -1,6 +1,6 @@
 # ECIL — EDG CIR IL stream format
 
-Status: **v0.3** (Phase R; it addresses gate R blockers R1–R8 and follow-ups F1–F6). Owner: the
+Status: **v0.6** (header minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
 orchestrator.
 
 - **Normative source.** The definitions live in
@@ -75,6 +75,11 @@ frame   := u32 payload_len | u8 kind | u8 flags | u16 reserved(=0) | payload
 | 3 | `LATE_NAMES` | ignorable | `NAME_BIND` records may appear |
 | 4–15 | — | ignorable | Reserved; 0 in v0 |
 | 16–31 | — | required | Reserved; 0 in v0 |
+
+A record whose feature bit is clear is a format error. That covers `LOC`
+without `LOCATIONS`, `REFS` without `REFS`, and `NAME_BIND` without
+`LATE_NAMES`. So is a frame with `HAS_SUPP` when the `SUPP` feature bit is
+clear.
 
 ## 4. Frames
 
@@ -177,6 +182,10 @@ and v0 readers skip them all (they are consumed from M5 onward).
     supplies the name later. Until then the consumer uses the placeholder
     `__ecil.<gid>`.
   - A definition still unnamed at `F_END` is a format error.
+  - **One G-id per symbol.** Two distinct G-ids must never bind the same
+    symbol name. The writer deduplicates by name; for example,
+    `__builtin_memcpy` sent as a library call reuses the G-id of `memcpy`.
+    A consumer that sees a duplicate reports a format error.
   - Label names (`LABEL`) are hints only. The consumer makes them unique
     within the function.
 - **Stretch goal (ODR).** Every non-internal entity ends up with its
@@ -212,9 +221,9 @@ records.
 | `RETRACT(g)` | Drops a streamed definition if it is unreferenced (C++). |
 | `EXT(kind, bin)` | An opaque extension, skipped if unknown. |
 | `REFS(array g)` | The G-ids this frame references (optional). |
-| `END(n_frames, status)` | Only in `F_END`. `status` 0 = ok. |
+| `END(n_frames, status)` | Only in `F_END`. `n_frames` is the number of frames before `F_END`, `F_HEADER` included. `status` 0 = ok. |
 | `HDR_TARGET(s triple, s\|nil target_abi, s\|nil datalayout, ptr_bits, reg_bits, flags)` | Flags: big-endian, char signed, cheap unaligned bit-field access. `target_abi` is `""` for plain x86-64 SysV. |
-| `HDR_LANG(lang, std, flags)` | `lang`: `elang_c` or `elang_cxx`; `std`: year (e.g. 2011). Flags: wrapv, exceptions, rtti, threadsafe statics. |
+| `HDR_LANG(lang, std, flags)` | `lang`: `elang_c` or `elang_cxx`; `std`: the `__STDC_VERSION__` or `__cplusplus` value the FE would predefine (e.g. 201112, 201703). Flags: wrapv, exceptions, rtti, threadsafe statics. |
 | `HDR_PRODUCER(s producer, s\|nil source_file)` | |
 | `HDR_TYPE_ROLE(role, t)` | Allowed in any declaration section. Roles: `size_t`, `ptrdiff_t`, `int`, `va_list`, `wchar_t`, `char`. On x86-64 `va_list` is an array of 1 `__va_list_tag` record with exactly 4 fields. |
 
@@ -237,6 +246,14 @@ Each G-id is introduced once.
 | `DECL_FUNC(g, t, linkage, flags{defined_here, inline, noreturn, is_main, inline_only, unsupported}, s\|nil)` | |
 | `DECL_VAR(g, t, linkage, flags{definition, const, tls, string_literal, static_local, tentative, unsupported}, align, s\|nil)` | |
 | `VAR_INIT(g)` | Pops one constant (built by the `C_*` records just before it) as the initializer. A definition with no `VAR_INIT` is zero-initialized. |
+
+**Layout rules the writer must follow** (needed to reproduce clang's CIR
+record layout; verified on 69 C records):
+- **Zero-width bit-fields.** A zero-width bit-field (`int : 0;`) is sent as
+  an unnamed `REC_FIELD` with `bit_width` 0 at its byte offset. It ends the
+  current bit-field storage unit.
+- **Zero-size members.** Zero-length arrays and zero-size record members
+  carry `empty_for_abi`.
 
 - **Re-issued declarations (R8).** A `DECL_FUNC`/`DECL_VAR` whose `g` is
   already known updates that entity's type, linkage, flags and (if non-nil)
@@ -408,7 +425,15 @@ it cannot convert exactly on its host, which can happen when host
 | `VA_ARG(t)` | prv ap → prv |
 | `VA_END` | prv ap → |
 | `VA_COPY` | prv dst, prv src → |
-| `BUILTIN(id, nargs, t\|nil)` | args… → result. v0 ids: `expect`, `unreachable`, `trap`. Library builtins (`__builtin_memcpy`, `__builtin_printf`, `__builtin_abort`, …) are sent as ordinary `CALL`s to the library function. |
+| `BUILTIN(id, nargs, t\|nil)` | args… → result. v0 ids: `expect`, `unreachable`, `trap`, plus (minor 5) `alloca`, `bswap`, `clz`, `ctz`, `popcount`, `parity`, `ffs`, `clrsb`, and `add`/`sub`/`mul_overflow`, which take operands of any integer types and a result pointer (C23/GCC semantics). Signatures are in `an_ecil_builtin`. `__builtin_c23_va_start(ap, …)` is sent as `VA_START`. Minor 6 adds:
+- **`is_fp_class(x, mask)`** → bool, with a constant mask of
+  `ECIL_FP_CLASS_*` bits (LLVM FPClassTest). The writer expands `isnan`,
+  `isinf`, `isfinite`, `isnormal`, `issignaling` and `fpclassify` onto it,
+  using `TERN` for `fpclassify`.
+- **`signbit(x)`** → bool.
+- **`CMP` kinds `one` and `uno`.** `isless`/`isgreater`/`islessequal`/
+  `isgreaterequal` use the ordered `lt`/`gt`/`le`/`ge`, `islessgreater`
+  uses `one`, and `isunordered` uses `uno`. Library builtins (`__builtin_memcpy`, `__builtin_printf`, `__builtin_abort`, …) are sent as ordinary `CALL`s to the library function. |
 
 **Call-site type.** `t_call` is the function type at the call site, taken
 from the callee expression's type, not from the callee declaration. The
@@ -423,6 +448,8 @@ consumer's rule:
   makes CallConvLowering classify the call from its operands and set `%al`.
   It never sends a `no_proto` callee type to the pass, which would fail or
   assert at the pin.
+
+A non-void `CALL` always pushes its result, whether or not `result_unused` is set; the writer emits `DROP` when the value is unused. `result_unused` is only a hint.
 
 Arguments arrive already default-promoted and cast. Record arguments and
 results are record prvalues; CallConvLowering applies the SysV ABI.

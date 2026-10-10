@@ -1,0 +1,229 @@
+; Global definitions and constant initializers (C_*): scalars, strings, string
+; literals, addresses (global_view offsets), records with padding, bit-field
+; packing, packed records, unions, nested aggregates, repeats, long double,
+; tentative definitions, weak/const.  gcc compiles Inputs/globals_check.c
+; against the object and checks every value and the layout.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %S/Inputs/globals_check.c %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK-DAG: cir.global external dso_local @g_i = #cir.int<5> : !s32i
+; CHECK-DAG: @g_str = #cir.const_array<"hello" : !cir.array<!s8i x 5>, trailing_zeros> : !cir.array<!s8i x 6>
+; CHECK-DAG: cir.global "private" constant internal {{.*}}@".str"
+; CHECK-DAG: #cir.global_offset<@g_arr, 8>
+; CHECK-DAG: @g_t = #cir.int<0>
+; CHECK-DAG: cir.global weak
+; CHECK-DAG: constant external {{.*}}@g_const
+
+frame DECLS
+  STR 10 "g_i"
+  STR 11 "g_str"
+  STR 12 ".str"
+  STR 13 "g_p"
+  STR 14 "g_arr"
+  STR 15 "g_ap"
+  STR 16 "g_s"
+  STR 17 "g_b"
+  STR 18 "g_pb"
+  STR 19 "g_u"
+  STR 20 "g_d"
+  STR 21 "g_f"
+  STR 22 "g_ld"
+  STR 23 "g_fp"
+  STR 24 "g_t"
+  STR 25 "g_rep"
+  STR 26 "g_n"
+  STR 27 "g_s2"
+  STR 28 "g_null"
+  STR 29 "g_const"
+  STR 30 "g_weak"
+  STR 31 "g_ip"
+  STR 32 "g_farr"
+  TY_RECORD_DECL 21 0 nil
+  TY_RECORD_BODY 21 12 12 4 0 3
+  REC_FIELD 4 0 nil nil nil 0
+  REC_FIELD 1 4 nil nil nil 0
+  REC_FIELD 6 8 nil nil nil 0
+  TY_RECORD_DECL 22 0 nil
+  TY_RECORD_BODY 22 16 16 8 0 4
+  REC_FIELD 1 0 0 3 nil 4
+  REC_FIELD 1 0 3 5 nil 4
+  REC_FIELD 8 1 0 20 nil 0
+  REC_FIELD 3 8 0 40 nil 4
+  TY_RECORD_DECL 23 0 nil
+  TY_RECORD_BODY 23 6 6 1 1 4
+  REC_FIELD 4 0 nil nil nil 0
+  REC_FIELD 1 1 0 4 nil 4
+  REC_FIELD 1 1 4 20 nil 4
+  REC_FIELD 6 4 nil nil nil 0
+  TY_ARRAY 24 4 8 0
+  TY_RECORD_DECL 25 1 nil
+  TY_RECORD_BODY 25 8 8 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 24 0 nil nil nil 0
+  TY_ARRAY 26 21 2 0
+  TY_RECORD_DECL 27 0 nil
+  TY_RECORD_BODY 27 28 28 4 0 2
+  REC_FIELD 26 0 nil nil nil 0
+  REC_FIELD 4 24 nil nil nil 0
+  TY_ARRAY 28 4 6 0
+  TY_ARRAY 29 1 4 0
+  TY_ARRAY 30 1 100 0
+  TY_ARRAY 31 4 10 0
+  TY_FUNC 32 1 0 [1]
+  TY_PTR 33 32
+  TY_ARRAY 34 33 2 0
+  STR 9 "twice"
+  DECL_FUNC 100 32 0 1 9
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CONST_INT 1 2
+  MUL 1
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 200 1 0 1 0 10
+  C_INT 1 5
+  VAR_INIT 200
+  DECL_VAR 201 28 0 1 0 11
+  C_STRING 28 bin8:"hello"
+  VAR_INIT 201
+  DECL_VAR 202 28 1 11 0 12
+  C_STRING 28 bin8:"world"
+  VAR_INIT 202
+  DECL_VAR 203 13 0 1 0 13
+  C_ADDR 13 202 0
+  VAR_INIT 203
+  DECL_VAR 204 29 0 1 0 14
+  C_AGG_BEGIN 29
+  C_SEL 0
+  C_INT 1 1
+  C_SEL 1
+  C_INT 1 2
+  C_SEL 2
+  C_INT 1 3
+  C_SEL 3
+  C_INT 1 4
+  C_AGG_END
+  VAR_INIT 204
+  DECL_VAR 205 14 0 1 0 15
+  C_ADDR 14 204 8
+  VAR_INIT 205
+  DECL_VAR 206 21 0 1 0 16
+  C_AGG_BEGIN 21
+  C_SEL 0
+  C_INT 4 1
+  C_SEL 1
+  C_INT 1 2
+  C_SEL 2
+  C_INT 6 3
+  C_AGG_END
+  VAR_INIT 206
+  DECL_VAR 207 22 0 1 0 17
+  C_AGG_BEGIN 22
+  C_SEL 0
+  C_INT 1 -2
+  C_SEL 1
+  C_INT 1 7
+  C_SEL 2
+  C_INT 8 12345
+  C_SEL 3
+  C_INT 3 123456789012
+  C_AGG_END
+  VAR_INIT 207
+  DECL_VAR 208 23 0 1 0 18
+  C_AGG_BEGIN 23
+  C_SEL 0
+  C_INT 4 9
+  C_SEL 1
+  C_INT 1 -3
+  C_SEL 2
+  C_INT 1 54321
+  C_SEL 3
+  C_INT 6 77
+  C_AGG_END
+  VAR_INIT 208
+  DECL_VAR 209 25 0 1 0 19
+  C_AGG_BEGIN 25
+  C_SEL 1
+  C_AGG_BEGIN 24
+  C_SEL 0
+  C_INT 4 1
+  C_SEL 7
+  C_INT 4 8
+  C_AGG_END
+  C_AGG_END
+  VAR_INIT 209
+  DECL_VAR 210 10 0 1 0 20
+  C_FLOAT 10 f64:0x3ff8000000000000
+  VAR_INIT 210
+  DECL_VAR 211 9 0 1 0 21
+  C_FLOAT 9 f32:0x40200000
+  VAR_INIT 211
+  DECL_VAR 212 16 0 1 0 22
+  C_FLOAT 16 fbits:10:0x4000d000000000000000
+  VAR_INIT 212
+  DECL_VAR 213 33 0 1 0 23
+  C_ADDR 33 100 0
+  VAR_INIT 213
+  DECL_VAR 214 1 0 33 0 24
+  DECL_VAR 215 30 0 1 0 25
+  C_AGG_BEGIN 30
+  C_REPEAT 10 10
+  C_INT 1 9
+  C_SEL 99
+  C_INT 1 7
+  C_AGG_END
+  VAR_INIT 215
+  DECL_VAR 216 27 0 1 0 26
+  C_AGG_BEGIN 27
+  C_SEL 0
+  C_AGG_BEGIN 26
+  C_SEL 0
+  C_AGG_BEGIN 21
+  C_SEL 0
+  C_INT 4 1
+  C_AGG_END
+  C_SEL 1
+  C_AGG_BEGIN 21
+  C_SEL 1
+  C_INT 1 6
+  C_SEL 2
+  C_INT 6 7
+  C_AGG_END
+  C_AGG_END
+  C_SEL 1
+  C_INT 4 122
+  C_AGG_END
+  VAR_INIT 216
+  DECL_VAR 217 31 0 1 0 27
+  C_STRING 31 bin8:"ab"
+  VAR_INIT 217
+  DECL_VAR 218 14 0 1 0 28
+  C_NULL 14
+  VAR_INIT 218
+  DECL_VAR 219 1 0 3 0 29
+  C_INT 1 42
+  VAR_INIT 219
+  DECL_VAR 220 1 5 1 0 30
+  C_INT 1 3
+  VAR_INIT 220
+  DECL_VAR 221 14 0 1 0 31
+  C_PTR 14 4096
+  VAR_INIT 221
+  DECL_VAR 222 34 0 1 0 32
+  C_AGG_BEGIN 34
+  C_SEL 0
+  C_ADDR 33 100 0
+  C_SEL 1
+  C_NULL 33
+  C_AGG_END
+  VAR_INIT 222
+frame END
+  END auto 0

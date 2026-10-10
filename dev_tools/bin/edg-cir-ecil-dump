@@ -1,0 +1,37 @@
+#!/bin/sh
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Test helper for //script: lines: run cpfe-cir on a source file, writing the
+# ECIL stream to a pipe, and print the textual dump of that stream.  The
+# arguments are the front end options followed by the source file, as eccp
+# would receive them (--ecil_output=- is added in front of them).  For example, in a test file:
+#
+#   //type:fp
+#   //require:BACK_END_TYPE 3
+#   //script:edg-cir-ecil-dump
+#
+# Environment (exported by the CMake build's environment.sh and the edgy
+# configuration): CPFE (the front end copy that edgy uses; CPFE_CIR if unset)
+# and ECIL_DUMP (the ecil-dump tool).  The exit status is the front end's if it
+# failed, else ecil-dump's.
+
+fe=${CPFE:-$CPFE_CIR}
+if [ -z "$fe" ] || [ -z "$ECIL_DUMP" ]; then
+  echo "edg-cir-ecil-dump: CPFE (or CPFE_CIR) and ECIL_DUMP must be set" >&2
+  exit 99
+fi
+
+status_file=$(mktemp "${TMPDIR:-/tmp}/ecil-fe-status.XXXXXX")
+( "$fe" --ecil_output=- "$@" ; echo $? > "$status_file" ) | "$ECIL_DUMP" -
+dump_status=$?
+fe_status=$(cat "$status_file")
+rm -f "$status_file"
+
+if [ "$fe_status" -ne 0 ]; then
+  exit "$fe_status"
+fi
+exit "$dump_status"

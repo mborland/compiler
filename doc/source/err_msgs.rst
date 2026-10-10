@@ -10451,3 +10451,9 @@ Error Messages
    - | ``bad_gcc_unroll_pragma_value``\ :
      | the argument of "#pragma GCC unroll" must be a non-negative integral
        constant less than 65535
+ * - ``3601``\ 
+   - | ``cir_error``\ :
+     | CIR back end: *xxxx*\ 
+ * - ``3602``\ 
+   - | ``cir_warning``\ :
+     | CIR back end: *xxxx*\ 

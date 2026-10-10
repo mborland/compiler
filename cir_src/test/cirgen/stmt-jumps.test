@@ -1,0 +1,235 @@
+; Statements: goto/label (into and out of blocks), while/do/for/if-else,
+; and the FUNC_END end_reachable table (void, C non-void, main).
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK: cir.func {{.*}}@into
+; CHECK: cir.goto "L{{[0-9]+}}"
+; CHECK: cir.label "L{{[0-9]+}}"
+; CHECK: cir.func {{.*}}@loops
+; CHECK: cir.while
+; CHECK: cir.do
+; CHECK: cir.func {{.*}}@voidret
+; CHECK: cir.func {{.*}}@falloff
+; CHECK-NOT: cir.unreachable
+; CHECK: cir.func {{.*}}@main
+; CHECK: cir.return
+
+frame DECLS
+  STR 10 "into"
+  STR 11 "loops"
+  STR 12 "voidret"
+  STR 13 "falloff"
+  STR 14 "main"
+  TY_FUNC 22 1 0 [1]
+  TY_FUNC 21 1 0 []
+  TY_FUNC 23 11 0 [14]
+  DECL_FUNC 40 22 0 1 10
+  DECL_FUNC 41 22 0 1 11
+  DECL_FUNC 42 23 0 1 12
+  DECL_FUNC 43 22 0 1 13
+  DECL_FUNC 44 21 0 9 14
+frame REGION
+; int into(int x) { int r = 0; if (x) goto L1; r = 1;
+;   { r += 10; L1: r += 100; }
+;   while (1) { { r += 1000; goto out; } }  out: return r; }
+  FUNC_BEGIN 40 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 1 nil 4 0
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  TO_BOOL
+  IF_BEGIN 0
+  GOTO_STMT 7 0
+  IF_END
+  LREF 2
+  CONST_INT 1 1
+  STORE 0 0
+  BLOCK_BEGIN
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 10
+  ADD 1
+  STORE 0 0
+  LABEL 7 nil
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 100
+  ADD 1
+  STORE 0 0
+  BLOCK_END
+  WHILE_BEGIN
+  CONST_INT 1 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 1000
+  ADD 1
+  STORE 0 0
+  GOTO_STMT 8 0
+  BLOCK_END
+  WHILE_END
+  LABEL 8 nil
+  LREF 2
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+; int loops(int n) { int s = 0, i = 0; while (i < n) { s += i; ++i; }
+;   do { s += 1000; --i; } while (i > 0);
+;   for (;;) { if (s > 5000) break; else s += 1; if (s < 0) continue; s += 1; }
+;   return s; }
+  FUNC_BEGIN 41 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 1 nil 4 0
+  LOCAL 3 1 nil 4 0
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  LREF 3
+  CONST_INT 1 0
+  STORE 0 0
+  WHILE_BEGIN
+  LREF 3
+  LOAD 0
+  LREF 1
+  LOAD 0
+  CMP 0
+  WHILE_BODY
+  LREF 2
+  DUP
+  LOAD 0
+  LREF 3
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  LREF 3
+  INC_DEC 0 1
+  DROP
+  WHILE_END
+  DO_BEGIN
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 1000
+  ADD 1
+  STORE 0 0
+  LREF 3
+  INC_DEC 1 1
+  DROP
+  DO_COND
+  LREF 3
+  LOAD 0
+  CONST_INT 1 0
+  CMP 2
+  DO_END
+  FOR_BEGIN
+  FOR_COND false
+  FOR_STEP false
+  FOR_BODY
+  LREF 2
+  LOAD 0
+  CONST_INT 1 5000
+  CMP 2
+  IF_BEGIN 1
+  BREAK_STMT
+  IF_ELSE
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  IF_END
+  LREF 2
+  LOAD 0
+  CONST_INT 1 0
+  CMP 0
+  IF_BEGIN 0
+  CONTINUE_STMT
+  IF_END
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  FOR_END
+  LREF 2
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+; void voidret(int *p) { *p = 5; }
+  FUNC_BEGIN 42 0
+  PARAM 1 14 14 nil 0
+  LREF 1
+  LOAD 0
+  DEREF
+  CONST_INT 1 5
+  STORE 0 0
+  FUNC_END 1
+; int falloff(int x) { }   (end reachable, value unused by the caller)
+  FUNC_BEGIN 43 0
+  PARAM 1 1 1 nil 0
+  FUNC_END 1
+  FUNC_BEGIN 44 0
+  LOCAL 1 1 nil 4 0
+  LREF 1
+  CONST_INT 1 0
+  STORE 0 0
+; into(0) == 1111, into(1) == 1100
+  CONST_INT 1 0
+  CALL 40 22 1 0
+  CONST_INT 1 1111
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 1
+  CALL 40 22 1 0
+  CONST_INT 1 1100
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+; loops(4): 0+1+2+3 = 6, +1000 per do pass (i=4 -> 0: 4 passes) = 4006;
+; the for loop adds 2 per pass (+1 in else, +1 after) until s > 5000:
+; 4006 -> 5002 after 498 passes, then break: 5002.
+  CONST_INT 1 4
+  CALL 41 22 1 0
+  CONST_INT 1 5002
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  LREF 1
+  ADDR
+  CALL 42 23 1 0
+  LREF 1
+  LOAD 0
+  CONST_INT 1 5
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  CALL 43 22 1 0
+  DROP
+  FUNC_END 1
+frame END
+  END auto 0

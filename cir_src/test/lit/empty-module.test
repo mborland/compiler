@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# The empty translation unit: every output kind of edg-cir.
+# RUN: %ecil-asm %S/Inputs/empty.txt -o %t.ecil
+# RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s --check-prefix=CIR
+# RUN: %edg-cir --emit=cir-lowered %t.ecil | %FileCheck %s --check-prefix=CIR
+# RUN: %edg-cir --emit=llvm %t.ecil | %FileCheck %s --check-prefix=LLVM
+# RUN: %edg-cir --emit=asm -O2 %t.ecil | %FileCheck %s --check-prefix=ASM
+# RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+# RUN: head -c 4 %t.o | %FileCheck %s --check-prefix=ELF
+# RUN: %edg-cir --emit=cir - < %t.ecil | %FileCheck %s --check-prefix=CIR
+
+# CIR: module attributes {
+# CIR-SAME: cir.int_type_width = 32
+# CIR-SAME: cir.lang = #cir.lang<c>
+# CIR-SAME: cir.size_type_width = 64
+# CIR-SAME: cir.target_abi = ""
+# CIR-SAME: cir.triple = "x86_64-unknown-linux-gnu"
+# CIR-SAME: dlti.dl_spec
+# LLVM: target triple = "x86_64-unknown-linux-gnu"
+# ASM: .file
+# ELF: ELF

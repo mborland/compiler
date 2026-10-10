@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# The pipeline runs on its own big-stack worker: a 256 KB main stack is fine.
+# RUN: %ecil-asm %S/Inputs/empty.txt -o %t.ecil
+# RUN: sh -c 'ulimit -s 256; %edg-cir --emit=obj -O2 -o %t.o %t.ecil'
+# RUN: head -c 4 %t.o | %FileCheck %s
+# CHECK: ELF

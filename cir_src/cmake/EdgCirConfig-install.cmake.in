@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# EdgCirConfig.cmake for an INSTALLED cir_src (<prefix>/lib/cmake/EdgCir).
+get_filename_component(_edg_cir_prefix
+  "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set(EdgCir_VERSION "@PROJECT_VERSION@")
+set(EdgCir_INCLUDE_DIR "${_edg_cir_prefix}/include")
+set(EdgCir_LIBRARY_DIR "${_edg_cir_prefix}/lib")
+set(EdgCir_BIN_DIR "${_edg_cir_prefix}/bin")
+if(NOT TARGET EdgCir::edg_cir)
+  add_library(EdgCir::edg_cir SHARED IMPORTED)
+  set_target_properties(EdgCir::edg_cir PROPERTIES
+    IMPORTED_LOCATION "${_edg_cir_prefix}/lib/libedg_cir.so"
+    IMPORTED_SONAME "libedg_cir.so.0"
+    INTERFACE_INCLUDE_DIRECTORIES "${EdgCir_INCLUDE_DIR}")
+  add_library(EdgCir::rt STATIC IMPORTED)
+  set_target_properties(EdgCir::rt PROPERTIES
+    IMPORTED_LOCATION "${_edg_cir_prefix}/lib/libedg_cir_rt.a")
+endif()
+unset(_edg_cir_prefix)
+set(EdgCir_FOUND TRUE)

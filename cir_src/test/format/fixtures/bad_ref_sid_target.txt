@@ -1,0 +1,8 @@
+; expect: format the triple names string id 9
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 9 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame END
+  END 1 0

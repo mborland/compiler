@@ -1,10 +1,25 @@
 # Writer hooks: verification of the per-function streaming design
 
+> Current behaviour of the implemented writer: see `../writer.md`; this research note records the design analysis and may differ in detail.
+
+
 Author: cir-writer (Phase R). Scope: research only, no `src/` edits.
 Everything below is checked against the tree at branch `cir`, HEAD `43e10b90fc`.
 "V" marks a fact read in the code (file:line), "P" a fact observed with the
 native debug `build/clang/bin/cpfe-cp --il_display` (non-lowered IL), "I" an
 inference or proposal that still needs confirming by the first prototype.
+
+> **Alignment with `design.md` v0.2 section 7 follow-ups (owned by cir-writer):**
+> P2 (ignorable GNU attributes and a generic `__builtin_X` -> `X` library rule
+> replace the hand-written builtin list), P3 (`long double` is `FBITS` only),
+> P4 (the `F_GLOBALS` walker skips static locals, which are defined in their
+> `F_REGION`, and never calls `get_variable_initializer` on them), P5 (a CIR
+> arm of `free_memory_region` clears `function_def_table[n].scope/.memory_region`),
+> P6 (deterministic emission: insertion-order tables, never pointer-keyed
+> iteration), P8 (`HDR_TYPE_ROLE(va_list)`), P10 (C regions with local struct
+> types are kept but still streamed), F7 (`ecil_abort()` idempotent), C9 (the
+> `referenced` skip applies to variables at `F_GLOBALS` only, never functions).
+> The stress test is two-process (section 8 here is normative).
 
 ## 0. Summary: what the plan gets right and what needs correcting
 

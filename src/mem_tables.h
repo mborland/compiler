@@ -140,6 +140,18 @@ typedef struct a_mem_block_header {
 Entry that precedes each IL entry and indicates some things about it.
 */
 typedef struct an_il_entry_prefix *an_il_entry_prefix_ptr;
+
+/*
+In the CIR configuration the ECIL writer keeps the id it assigned to an IL
+entity in the entity's prefix (a 32-bit field that fits in the padding
+that the prefix has on 64-bit hosts).  Other configurations are unchanged.
+*/
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+#define ECIL_ID_IN_PREFIX TRUE
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
+#define ECIL_ID_IN_PREFIX FALSE
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
 typedef struct an_il_entry_prefix {
 #if ENTRY_NUMBER_SHARES_BITS_IN_PREFIX
   /* Note that if you add bits here you must adjust NUM_OF_BIT_FIELDS_IN_PREFIX
@@ -226,6 +238,13 @@ typedef struct an_il_entry_prefix {
                            is not mistakenly on the stack, in which case it
                            has no prefix). */
 #endif /* EXPENSIVE_CHECKING */
+#if ECIL_ID_IN_PREFIX
+  uint32_t      ecil_id;
+			/* The id the ECIL writer assigned to this entity
+			   (0 if none): a global id for types, routines,
+			   variables and fields; a frame-local id for local
+			   variables and labels. */
+#endif /* ECIL_ID_IN_PREFIX */
 } an_il_entry_prefix;
 
 /*
@@ -279,6 +298,17 @@ IL entry prefix only if it exists.
 #else/* !(IL_SHOULD_BE_WRITTEN_TO_FILE && ALTERNATE_IL_FILE_FORMAT) */
 #define clear_il_entry_number(epp) /* Nothing */
 #endif /* IL_SHOULD_BE_WRITTEN_TO_FILE && ALTERNATE_IL_FILE_FORMAT */
+
+/*
+Macro used by clear_il_entry_prefix to clear the ECIL id in an IL entry
+prefix only if it exists.  Every IL allocation goes through
+clear_il_entry_prefix, so a recycled block never keeps a stale id.
+*/
+#if ECIL_ID_IN_PREFIX
+#define clear_ecil_id(epp) epp->ecil_id = 0;
+#else /* !ECIL_ID_IN_PREFIX */
+#define clear_ecil_id(epp) /* Nothing */
+#endif /* ECIL_ID_IN_PREFIX */
 
 /*
 Macro used by clear_il_entry_prefix to set the allocation sequence
@@ -336,6 +366,7 @@ depend on it being set properly.
   clear_keep_in_il_flag(epp);                                         \
   clear_entry_written_flag(epp);                                      \
   clear_il_entry_number(epp);                                         \
+  clear_ecil_id(epp)                                                  \
   init_alloc_seq_number(epp);                                         \
 }  /* clear_il_entry_prefix */
 
@@ -347,6 +378,17 @@ depend on it being set properly.
 #define SPACE_FOR_IL_ENTRY_PREFIX                                     \
  ((((sizeof(an_il_entry_prefix)-1)/HOST_IL_ENTRY_PREFIX_ALIGNMENT)+1)*       \
   HOST_IL_ENTRY_PREFIX_ALIGNMENT)
+
+#if ECIL_ID_IN_PREFIX
+/* The ecil_id field must not grow the prefix of a release build: it fits in
+   the padding that rounds the prefix up to the pointer alignment. */
+#if !EXPENSIVE_CHECKING && !MAINTAIN_ALLOCATION_SEQUENCE_NUMBER && \
+    !IL_SHOULD_BE_WRITTEN_TO_FILE
+static_assert(SPACE_FOR_IL_ENTRY_PREFIX == HOST_IL_ENTRY_PREFIX_ALIGNMENT,
+              "ecil_id must not enlarge the IL entry prefix");
+#endif /* !EXPENSIVE_CHECKING && ... */
+#endif /* ECIL_ID_IN_PREFIX */
+
 /* Macros to allow reference to the IL entry prefix that precedes
    the IL entry at ptr.  The usual macro, il_entry_prefix_of, will verify
    that the pointer is indeed an allocated IL entry when EXPENSIVE_CHECKING

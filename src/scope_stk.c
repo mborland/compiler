@@ -8904,6 +8904,24 @@ processing only if the function is inline.
       }  /* if */
       finish_function_body_processing(sp, /*discard_function_body=*/FALSE,
                                       /*delayed=*/TRUE);
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+      if (sp->function_body_processing_finished &&
+          sp->depth_in_scope_stack == NO_SCOPE_DEPTH &&
+          innermost_function_scope != sp &&
+          !(innermost_function_scope != NULL &&
+            curr_il_region_number ==
+              mem_region_for_routine(
+                         innermost_function_scope->variant.routine.ptr)) &&
+          sp->variant.routine.ptr->defined) {
+        /* The body was finished late (a lambda or local class member), after
+           the region was popped.  If the region is not still in use by an
+           enclosing function that is on the scope stack (or being used as
+           the innermost function, as il_walk.c tests), check it now: it
+           may now be streamed and freed.  (A region still on the stack is
+           checked by the pop of its function.) */
+        check_for_done_with_memory_region(mem_region_for_function_def(n));
+      }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
     }  /* if */
   }  /* if */
 }  /* finish_function_processing_for_function_def */

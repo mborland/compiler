@@ -33,6 +33,28 @@ mem_manage.c -- Memory management routines.
 
 #include "direct_allocator.h"
 
+#ifndef IL_REGIONS_DISPOSED_INCREMENTALLY
+ #error -- IL_REGIONS_DISPOSED_INCREMENTALLY must be defined (host_envir.h).
+#endif /* ifndef IL_REGIONS_DISPOSED_INCREMENTALLY */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+#include "ecil_write.h"
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
+/*
+TRUE if function regions should be left intact after they have been written
+or streamed (for debugging, e.g. --il_display).  hand_off_memory_region
+sends a completed region to the back end: it writes it to the IL file, or
+streams it as ECIL.  Streaming and freeing are separate decisions: a region
+that is kept (see check_for_done_with_memory_region) can still be streamed.
+*/
+#if IL_SHOULD_BE_WRITTEN_TO_FILE
+#define KEEP_IL_REGIONS_FOR_DEBUGGING skip_il_read
+#define hand_off_memory_region(n) write_memory_region(n)
+#else /* !IL_SHOULD_BE_WRITTEN_TO_FILE */
+#define KEEP_IL_REGIONS_FOR_DEBUGGING ecil_keep_regions
+#define hand_off_memory_region(n) ecil_hand_off_region(n)
+#endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+
 /* Conditionally open the "edg" namespace. */
 BEGIN_EDG_NAMESPACE
 
@@ -1203,6 +1225,25 @@ needed (e.g., it has been written out to the IL file).
   /* Let the symbol table know the given memory region is being freed. */
   symbol_table_memory_region_wrap_up(region_number);
 #endif /* !STANDALONE_UTILITY_PROGRAM && EXPENSIVE_CHECKING */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  {
+    /* The function definition table entries of the functions in this region
+       would dangle: clear them.  (Their memory_region field stays valid, so
+       that scope_for_function_def returns NULL for a freed region.) */
+    a_scope_ptr  sp;
+
+    for (sp = il_header.region_scope_entry[region_number]; sp != NULL;
+         sp = sp->next) {
+      if (sp->kind == (a_scope_kind)sck_function &&
+          sp->variant.routine.ptr != NULL &&
+          sp->variant.routine.ptr->function_def_number !=
+                                          NULL_function_def_number) {
+        il_header.function_def_table[
+              sp->variant.routine.ptr->function_def_number].scope = NULL;
+      }  /* if */
+    }  /* for */
+  }
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   /* Traverse the list of blocks and free each one. */
   for (hdr = mem_region_table[region_number]; hdr != NULL;) {
     next_hdr = hdr->next;
@@ -1348,7 +1389,7 @@ any unused space.
 }  /* trim_memory_region */
 
 #if !STANDALONE_UTILITY_PROGRAM
-#if IL_SHOULD_BE_WRITTEN_TO_FILE
+#if IL_REGIONS_DISPOSED_INCREMENTALLY
 
 static a_boolean memory_region_should_be_kept_for_routine(a_routine_ptr	rout,
 							  a_scope_ptr	scope)
@@ -1398,7 +1439,7 @@ memory because of the properties of rout.  scope is the scope of rout
   return keep_memory;
 }  /* memory_region_should_be_kept_for_routine */
 
-#endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#endif /* IL_REGIONS_DISPOSED_INCREMENTALLY */
 #endif /* !STANDALONE_UTILITY_PROGRAM */
 
 void check_for_done_with_memory_region(a_memory_region_number region_number)
@@ -1414,10 +1455,13 @@ memory or with an IL file.
 {
   a_boolean      keep_memory;
 #if !STANDALONE_UTILITY_PROGRAM
-#if IL_SHOULD_BE_WRITTEN_TO_FILE
+#if IL_REGIONS_DISPOSED_INCREMENTALLY
   a_scope_ptr    scope;
   a_routine_ptr  rout;
-#endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#if !IL_SHOULD_BE_WRITTEN_TO_FILE
+  a_boolean      hand_off_now;
+#endif /* !IL_SHOULD_BE_WRITTEN_TO_FILE */
+#endif /* IL_REGIONS_DISPOSED_INCREMENTALLY */
 #endif /* !STANDALONE_UTILITY_PROGRAM */
 
   db_enter(5, "check_for_done_with_memory_region");
@@ -1433,12 +1477,12 @@ memory or with an IL file.
   /* In a standalone program the memory is always freed. */
   keep_memory = FALSE;
 #else /* !STANDALONE_UTILITY_PROGRAM */
-#if !IL_SHOULD_BE_WRITTEN_TO_FILE
+#if !IL_REGIONS_DISPOSED_INCREMENTALLY
   /* The IL is passed to the back end in memory, so it is always kept. */
   keep_memory = TRUE;
-#else /* IL_SHOULD_BE_WRITTEN_TO_FILE */
-  /* Communication with the back end is via a file.  The memory
-     is freed after it's been written to the IL file. */
+#else /* IL_REGIONS_DISPOSED_INCREMENTALLY */
+  /* Communication with the back end is via a file or an ECIL stream.  The
+     memory is freed after it's been written to the IL file or streamed. */
   scope = il_header.region_scope_entry[region_number];
   check_assertion(scope != NULL);
   rout = (scope->kind == (a_scope_kind)sck_function) ?
@@ -1470,9 +1514,11 @@ memory or with an IL file.
     /* The memory region might be needed later (e.g., for a generic
        lambda instantiation).  Do not free it. */
     keep_memory = TRUE;
+#if IL_SHOULD_BE_WRITTEN_TO_FILE
   } else if (skip_il_read) {
     /* For debugging purposes, keep the memory region around. */
     keep_memory = TRUE;
+#endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
   }  /* if */
   if (!keep_memory && rout != NULL) {
     /* So far we don't need to keep the memory.  Go though the list of
@@ -1497,12 +1543,35 @@ memory or with an IL file.
     fprintf(f_debug, "\n");
   }  /* if */
 #endif /* DEBUG */
+#if IL_SHOULD_BE_WRITTEN_TO_FILE
   if (!keep_memory) {
     /* Write the region to the file and free it. */
     check_assertion(!in_secondary_trans_unit(scope));
     write_memory_region(region_number);
   }  /* if */
-#endif /* !IL_SHOULD_BE_WRITTEN_TO_FILE */
+#else /* !IL_SHOULD_BE_WRITTEN_TO_FILE */
+  /* Streaming and freeing are separate decisions: a region that is only
+     kept for debugging is still streamed. */
+  hand_off_now = !keep_memory;
+  if (!hand_off_now && rout != NULL && !in_secondary_trans_unit(scope)) {
+    /* The region is kept only for later use (a constexpr function, local
+       class types, debugging): it is still streamed now if every function
+       in it is finished (design 3, P10).  The end-of-TU sweep skips regions
+       that were already streamed. */
+    a_scope_ptr  sp;
+
+    hand_off_now = TRUE;
+    for (sp = scope; sp != NULL; sp = sp->next) {
+      if (!sp->function_body_processing_finished) hand_off_now = FALSE;
+    }  /* for */
+  }  /* if */
+  if (KEEP_IL_REGIONS_FOR_DEBUGGING) keep_memory = TRUE;
+  if (hand_off_now) {
+    check_assertion(!in_secondary_trans_unit(scope));
+    hand_off_memory_region(region_number);
+  }  /* if */
+#endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#endif /* !IL_REGIONS_DISPOSED_INCREMENTALLY */
 #endif /* !STANDALONE_UTILITY_PROGRAM */
   if (keep_memory) { /*lint !e774*/
     /* Keep the memory for the region.  Trim the region to reclaim unused
@@ -1530,7 +1599,7 @@ part of secondary translation units (perhaps).
 */
 {
   db_enter(5, "check_for_done_with_all_function_memory_regions");
-#if IL_SHOULD_BE_WRITTEN_TO_FILE
+#if IL_REGIONS_DISPOSED_INCREMENTALLY
   {
   /* Loop through the memory regions.  Skip the front end and file scope
      memory regions. */
@@ -1563,15 +1632,15 @@ part of secondary translation units (perhaps).
           fprintf(f_debug, "\n");
         }  /* if */
 #endif /* DEBUG */
-        if (!from_secondary_trans_unit) write_memory_region(n);
-        if (!skip_il_read) {
+        if (!from_secondary_trans_unit) hand_off_memory_region(n);
+        if (!KEEP_IL_REGIONS_FOR_DEBUGGING) {
           free_memory_region(n);
         }  /* if */
       }  /* if */
     }  /* if */
   }  /* for */
   }
-#endif /* !IL_SHOULD_BE_WRITTEN_TO_FILE */
+#endif /* IL_REGIONS_DISPOSED_INCREMENTALLY */
   db_exit();
 }  /* check_for_done_with_all_function_memory_regions */
 

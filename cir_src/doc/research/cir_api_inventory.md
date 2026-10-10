@@ -137,9 +137,9 @@ emits for C (checked in `clang/test/CIR/CodeGen/*.c|.cpp`).
 
 | Op | Create / attrs | Notes |
 | --- | --- | --- |
-| `cir.func` | `FuncOp::create(b, loc, name, FuncType[, linkage[, callingConv]])`; then `addEntryBlock()` (adds block args from the type). Setters: `setLinkageAttr(GlobalLinkageKindAttr)`, `setNoProto(true)`, `setDSOLocal(true)`, `setInlineKind(InlineKind::{NoInline,AlwaysInline,InlineHint})`, `setAlignment(n)`, `setGlobalVisibility(VisibilityKind)`, `SymbolTable::setSymbolVisibility(f, Public/Private)`. Discardable attr `nothrow` via `f->setAttr(CIRDialect::getNoThrowAttrName(), UnitAttr)` | CIRGen creates every function as **declaration with `private` MLIR visibility** (`createCIRFunction`), and switches to `public` when it gets a body or is external-linkage definition (`getMLIRVisibilityFromCIRLinkage`: internal/private -> private, others -> public). C definitions get `nothrow` when exceptions are off. Varargs = `FuncType` `isVarArg`. K&R unprototyped = `no_proto` (calls through unprototyped types are NYI upstream). |
+| `cir.func` | `FuncOp::create(b, loc, name, FuncType[, linkage[, callingConv]])`; then `addEntryBlock()` (adds block args from the type). Setters: `setLinkageAttr(GlobalLinkageKindAttr)`, `setNoProto(true)`, `setDSOLocal(true)`, `setInlineKind(InlineKind::{NoInline,AlwaysInline,InlineHint})`, `setAlignment(n)`, `setGlobalVisibility(VisibilityKind)`, `SymbolTable::setSymbolVisibility(f, Public/Private)`. Discardable attr `nothrow` via `f->setAttr(CIRDialect::getNoThrowAttrName(), UnitAttr)` | CIRGen creates every function as **declaration with `private` MLIR visibility** (`createCIRFunction`), and switches to `public` when it gets a body or is external-linkage definition (`getMLIRVisibilityFromCIRLinkage`: internal/private -> private, others -> public). C definitions get `nothrow` when exceptions are off. Varargs = `FuncType` `isVarArg`. K&R unprototyped = `no_proto` (calls through unprototyped types are NYI upstream; ECIL uses the variadic-bitcast rule of spec 8.8, which avoids the NYI path). |
 | `cir.global` | builder `createGlobal(module, loc, name, ty, isConst, linkage, addrSpace)` then `setInitialValueAttr(attr)`, `setAlignmentAttr(i64)`, `setConstant`, `setDSOLocal`, `setVisibility(SymbolTable::Visibility)`, `setSection`, `setTlsModel` | no initial value + external linkage = declaration (private visibility). Definitions: public for external linkage, private for internal/private. `common` linkage (tentative defs) with non-null init is demoted to `weak` by CIRGen. |
-| `cir.get_global` | `builder.createGetGlobal(globalOp)` or `GetGlobalOp::create(b, loc, ptrTy, symName, tls)`; works for **functions** too (function address = `get_global @f : !cir.ptr<!cir.func<...>>`) | static locals: same, `static_local` unit attr |
+| `cir.get_global` | `builder.createGetGlobal(globalOp)` or `GetGlobalOp::create(b, loc, ptrTy, symName, tls)`; works for **functions** too (function address = `get_global @f : !cir.ptr<!cir.func<...>>`) | static locals: same, but do **not** set `static_local` for unguarded C statics (the verifier requires a guard; spec 8.2) |
 | `cir.call` | `builder.createCallOp(loc, FuncOp, operands, ...)`; indirect: `createIndirectCallOp(loc, fnPtrValue, FuncType, operands)`; result via `.getResult()` (optional) | call attrs `nothrow`/`nounwind`. By-value structs are passed as loaded record values; `CallConvLowering` rewrites them. Variadic: callee type keeps only declared params; extra operands trail. |
 | `cir.return` | `ReturnOp::create(b, loc, {value})` | emitted **directly** at the return statement (no shared return block): store to `__retval` alloca, `load`, `cir.return`, then open a fresh block |
 | `cir.unreachable` / `cir.trap` | `UnreachableOp::create(b, loc)`, `TrapOp::create(b, loc)` | terminators; `__builtin_unreachable`, `__builtin_trap` |
@@ -471,10 +471,10 @@ parameter attributes; CIRGen does emit `arg_attrs` dictionaries with
 * **Not NYI** (supported): `_Complex` (full `CIRGenExprComplex`), bit-fields incl.
   volatile (AAPCS only partially), `goto`/labels, computed goto (`indirect_goto`,
   `block_address`; with limits), `switch` ranges, `_BitInt`, GNU `__int128`, `inline asm`
-  (basic), K&R function *definitions*, varargs.
+  (basic), K&R function *definitions*, K&R *calls* via the spec 8.8 variadic-bitcast rule, varargs.
 
 C constructs CIR cannot yet express (v0 should diagnose and drop the function to a
-declaration): VLAs, K&R-call-through-unprototyped, cleanup attribute, naked
+declaration): VLAs, cleanup attribute, naked
 functions, and everything in the NYI list above that EDG's non-lowered IL can reach.
 
 ## 11. Divergences from the plan (flagged for the orchestrator)

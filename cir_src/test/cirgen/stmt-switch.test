@@ -1,0 +1,304 @@
+; Switch lowering through FlattenCFG (marker cases): fallthrough, range,
+; default in the middle, code before the first case, case labels inside a
+; nested block, break/continue in a switch inside a loop.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK: cir.switch
+; CHECK: cir.case(range
+; CHECK: cir.case(default
+
+frame DECLS
+  STR 10 "sw1"
+  STR 11 "sw2"
+  STR 12 "sw3"
+  STR 13 "sw4"
+  STR 14 "main"
+  TY_FUNC 22 1 0 [1]
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 22 0 1 10
+  DECL_FUNC 41 22 0 1 11
+  DECL_FUNC 42 22 0 1 12
+  DECL_FUNC 43 22 0 1 13
+  DECL_FUNC 44 21 0 9 14
+frame REGION
+  FUNC_BEGIN 40 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 1 nil 4 0
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  SWITCH_BEGIN
+  CASE_VALUE 1
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  CASE_VALUE 2
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 10
+  ADD 1
+  STORE 0 0
+  BREAK_STMT
+  CASE_RANGE 3 5
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 100
+  ADD 1
+  STORE 0 0
+  BREAK_STMT
+  CASE_DEFAULT
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 1000
+  ADD 1
+  STORE 0 0
+  CASE_VALUE 6
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 10000
+  ADD 1
+  STORE 0 0
+  BREAK_STMT
+  SWITCH_END
+  LREF 2
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 1 nil 4 0
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  SWITCH_BEGIN
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 7
+  ADD 1
+  STORE 0 0
+  CASE_VALUE 1
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  SWITCH_END
+  LREF 2
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 1 nil 4 0
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  SWITCH_BEGIN
+  BLOCK_BEGIN
+  CASE_VALUE 1
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  CASE_VALUE 2
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 2
+  ADD 1
+  STORE 0 0
+  BLOCK_END
+  BREAK_STMT
+  CASE_VALUE 3
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 40
+  ADD 1
+  STORE 0 0
+  SWITCH_END
+  LREF 2
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 1 nil 4 0
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  FOR_BEGIN
+  LOCAL 3 1 nil 4 0
+  LREF 3
+  CONST_INT 1 0
+  STORE 0 0
+  FOR_COND true
+  LREF 3
+  LOAD 0
+  LREF 1
+  LOAD 0
+  CMP 0
+  FOR_STEP true
+  LREF 3
+  INC_DEC 0 1
+  DROP
+  FOR_BODY
+  LREF 3
+  LOAD 0
+  SWITCH_BEGIN
+  CASE_VALUE 1
+  CONTINUE_STMT
+  CASE_VALUE 3
+  BREAK_STMT
+  CASE_DEFAULT
+  LREF 2
+  DUP
+  LOAD 0
+  LREF 3
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  SWITCH_END
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 100
+  ADD 1
+  STORE 0 0
+  FOR_END
+  LREF 2
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 44 0
+  CONST_INT 1 1
+  CALL 40 22 1 0
+  CONST_INT 1 11
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 2
+  CALL 40 22 1 0
+  CONST_INT 1 10
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 4
+  CALL 40 22 1 0
+  CONST_INT 1 100
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 5
+  CALL 40 22 1 0
+  CONST_INT 1 100
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 6
+  CALL 40 22 1 0
+  CONST_INT 1 10000
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 5
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 9
+  CALL 40 22 1 0
+  CONST_INT 1 11000
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 6
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 1
+  CALL 41 22 1 0
+  CONST_INT 1 1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 7
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 2
+  CALL 41 22 1 0
+  CONST_INT 1 0
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 8
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 1
+  CALL 42 22 1 0
+  CONST_INT 1 3
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 9
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 2
+  CALL 42 22 1 0
+  CONST_INT 1 2
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 10
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 3
+  CALL 42 22 1 0
+  CONST_INT 1 40
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 11
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 9
+  CALL 42 22 1 0
+  CONST_INT 1 0
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 12
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 5
+  CALL 43 22 1 0
+  CONST_INT 1 406
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 13
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

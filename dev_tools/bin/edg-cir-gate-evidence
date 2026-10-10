@@ -1,0 +1,486 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Produce the M2 gate evidence of the CIR back end in one go.
+
+Run it on the machine that runs the docker images (the x86-64 box), from any
+directory, as a user that can run docker (`sg docker -c "..."`):
+
+  edg-cir-gate-evidence --tree ~/edg-cir-config/m1-tree \\
+      --identity-baseline ~/edg-cir-config/identity-m0c \\
+      --day-baseline-run ~/edg-cir-config/baseline-tree/tests/runs/<ts>
+
+The evidence goes into a dated directory (default
+<tree>/.tmp/gate-evidence/<timestamp>), one subdirectory per step with the full
+log (`log.txt`) and a `result.json`. Steps whose `result.json` says PASS are
+skipped when the command is repeated with --out of an earlier run (resume), and
+--only/--skip select steps. At the end a PASS/FAIL table is printed and written
+to `summary.md`.
+
+Steps (names for --only/--skip):
+
+  build      build cir_src (build/cir), cpfe-cir (build/gcc-cir) and the
+             non-ASan cpfe-cir (build/gcc-release-cir) and the util tools
+  identity   cpfe, cpfe-cp, cdisp and util preprocessed output and
+             --dump_configuration identical to the M0 capture (4 presets)
+  isolation  edg-cir-check-isolation
+  smoke      cir-c-smoke is 100% PASS in edg_x86_64_cir and edg_x86_64_cir_2p
+  corpus     the C corpus in edg_x86_64_cir: summary, CIR-specific failures
+             against edg_x86_64's expectations; 0 FE_CRASH and 0 LIB_CRASH
+  modes      in-process and two-process output identical over the corpus
+  stress     edg-cir-stress (deep nesting through the two-process path)
+  rss        peak memory and time: ASan with the quarantine off, and non-ASan
+  day        the default full day suite (edg_x86_64, edg_x86_64_cp) has the same
+             test statuses as the M0 baseline run
+  ctest      the cir_src tests in every cir_src preset
+
+Use --smoke-filter, --corpus-filter and --types to test the script on a small
+selection first.
+'''
+
+import argparse
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import time
+
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Tuple
+
+STEPS = ('build', 'identity', 'isolation', 'smoke', 'corpus', 'modes',
+         'stress', 'rss', 'day', 'ctest')
+PRESETS = ('linux-gcc-debug', 'linux-gcc-release', 'linux-clang-debug',
+           'linux-i686-gcc-debug')
+BUILD_JOBS = 12  # overridden by --jobs
+
+
+class Context:
+  def __init__(self, args: argparse.Namespace) -> None:
+    self.tree = Path(args.tree).resolve()
+    stamp = datetime.now().strftime('%Y.%m.%d-%H.%M.%S')
+    self.out = Path(args.out).resolve() if args.out else (
+      self.tree / '.tmp' / 'gate-evidence' / stamp
+    )
+    self.args = args
+    self.env = dict(os.environ)
+    self.env['PATH'] = f"{self.tree / 'dev_tools/bin'}:{self.env['PATH']}"
+    self.env['PYTHONPATH'] = str(self.tree / 'dev_tools/pylibs')
+
+
+def run_logged(ctx: Context, step: str, command: List[str],
+               label: str = '', cwd: Optional[Path] = None,
+               extra_env: Optional[Dict[str, str]] = None) -> int:
+  '''Run a command, appending its output to the step's log.txt.'''
+  step_dir = ctx.out / step
+  step_dir.mkdir(parents = True, exist_ok = True)
+  env = dict(ctx.env)
+  env.update(extra_env or {})
+  with open(step_dir / 'log.txt', 'a') as log:
+    log.write(f"\n$ {label or ' '.join(shlex.quote(c) for c in command)}\n")
+    log.flush()
+    proc = subprocess.run(
+      command, cwd = cwd or ctx.tree, env = env, stdout = log,
+      stderr = subprocess.STDOUT
+    )
+    log.write(f"[exit {proc.returncode}]\n")
+  return proc.returncode
+
+
+def _edg_exec_command(ctx: Context, image: str, command: str,
+                      wdir: str = '') -> List[str]:
+  '''The command line that runs `bash -c command` in an edg-exec container.
+
+  edg-exec joins its arguments with spaces, so the shell command is passed
+  as one argument that already holds the quoting.
+  '''
+  edg_exec = [str(ctx.tree / 'dev_tools/bin/edg-exec')]
+  if image:
+    edg_exec += ['--img', image]
+  if wdir:
+    edg_exec += ['--wdir', wdir]
+  edg_exec += ['--', 'bash -c ' + shlex.quote(command)]
+  return ['sg', 'docker', '-c', ' '.join(shlex.quote(a) for a in edg_exec)]
+
+
+def in_cir_env(ctx: Context, step: str, command: str,
+               wdir: str = '', extra_env: Optional[Dict[str, str]] = None
+               ) -> int:
+  '''Run a shell command in the cir-env image with the tree as workspace.
+
+  extra_env variables are set inside the container.
+  '''
+  prefix = ''.join(
+    f"export {key}={shlex.quote(value)}; "
+    for key, value in (extra_env or {}).items()
+  )
+  full = prefix + command
+  return run_logged(ctx, step, _edg_exec_command(ctx, 'cir-env', full, wdir),
+                    label = command)
+
+
+def in_default_env(ctx: Context, step: str, command: str) -> int:
+  return run_logged(ctx, step, _edg_exec_command(ctx, '', command),
+                    label = command)
+
+
+def rel(ctx: Context, path: Path) -> str:
+  '''Path as seen inside the container (the tree is /edg/workspace).'''
+  return f"/edg/workspace/{path.relative_to(ctx.tree)}"
+
+
+def newest_run(ctx: Context, before: set) -> Optional[Path]:
+  runs_dir = ctx.tree / 'tests' / 'runs'
+  new = [p for p in runs_dir.iterdir() if p.is_dir() and p.name not in before]
+  return max(new, key = lambda p: p.stat().st_mtime) if new else None
+
+
+def runs_before(ctx: Context) -> set:
+  runs_dir = ctx.tree / 'tests' / 'runs'
+  return {p.name for p in runs_dir.iterdir()} if runs_dir.exists() else set()
+
+
+def summarize_run(ctx: Context, step: str, run: Path, config: str,
+                  json_name: str) -> Tuple[List[dict], str]:
+  '''Run edg-cir-summary on a run directory; return (results, text).'''
+  json_file = ctx.out / step / json_name
+  proc = subprocess.run(
+    [sys.executable, str(ctx.tree / 'dev_tools/bin/edg-cir-summary'),
+     str(run), config, '--top', '6', '--json', str(json_file),
+     '--reference', str(ctx.tree / 'tests/expectations/edg_x86_64')],
+    cwd = ctx.tree, env = ctx.env, stdout = subprocess.PIPE,
+    stderr = subprocess.STDOUT, text = True
+  )
+  (ctx.out / step / f"summary-{config}.txt").write_text(proc.stdout)
+  results = json.loads(json_file.read_text()).get(config, [])
+  return results, proc.stdout
+
+
+def edgy_run(ctx: Context, step: str, config: str, filters: str,
+             types: str, timeout: int = 120) -> Optional[Path]:
+  before = runs_before(ctx)
+  command = [
+    str(ctx.tree / 'dev_tools/bin/edg-docker-test'), '--non-interactive',
+    '--posture', 'cir', '--only-configs', config, '-T', str(timeout)
+  ]
+  if types:
+    command += ['--types', types]
+  command.append(filters)
+  run_logged(ctx, step, ['sg', 'docker', '-c', ' '.join(
+    shlex.quote(c) for c in command)])
+  return newest_run(ctx, before)
+
+
+# Each step returns (passed, detail).
+def step_build(ctx: Context) -> Tuple[bool, str]:
+  base = 'export EDG_BASE=/edg/workspace/bases/docker/cir-env/gcc; '
+  commands = [
+    'cd cir_src && cmake --preset linux-cir-relwithdebinfo',
+    f"cmake --build build/cir -j{BUILD_JOBS}",
+    base + 'cmake --preset linux-gcc-debug-cir -DEDG_CIR_LINK_LIBRARY=ON',
+    f"cmake --build build/gcc-cir --target cpfe-cir edg_prelink edg_decode "
+    f"-j{BUILD_JOBS}",
+    base + 'cmake --preset linux-gcc-release-cir '
+    '-DEDG_CIR_LINK_LIBRARY=ON',
+    f"cmake --build build/gcc-release-cir --target cpfe-cir edg_prelink "
+    f"edg_decode -j{BUILD_JOBS}"
+  ]
+  failed = [c for c in commands if in_cir_env(ctx, 'build', c) != 0]
+  return not failed, 'built build/cir, build/gcc-cir, build/gcc-release-cir' \
+    if not failed else f"failed: {failed[0]}"
+
+
+def step_identity(ctx: Context) -> Tuple[bool, str]:
+  baseline = ctx.args.identity_baseline
+  if not baseline:
+    return False, '--identity-baseline is required'
+  # The capture runs in a container, so it must be inside the tree.
+  out = ctx.tree / '.tmp' / 'gate-identity' / ctx.out.name
+  presets = ' '.join(ctx.args.identity_presets.split(','))
+  checker = 'python3 dev_tools/bin/edg-macro-identity-check'
+  if in_default_env(ctx, 'identity', f"{checker} configure --src . "
+                    f"--presets {presets}") != 0:
+    return False, 'configure failed'
+  if in_default_env(
+      ctx, 'identity', f"{checker} capture --src . --out {rel(ctx, out)} "
+      f"--presets {presets} --jobs {BUILD_JOBS} --binaries "
+      f"--build-jobs {BUILD_JOBS}") != 0:
+    return False, 'capture failed'
+  proc = subprocess.run(
+    [sys.executable, str(ctx.tree / 'dev_tools/bin/edg-macro-identity-check'),
+     'compare', '--normalize-line-numbers', '--allow-cir-diagnostics',
+     str(Path(baseline).resolve()), str(out)],
+    env = ctx.env, stdout = subprocess.PIPE, stderr = subprocess.STDOUT,
+    text = True
+  )
+  (ctx.out / 'identity' / 'compare.txt').write_text(proc.stdout)
+  last = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ''
+  return proc.returncode == 0, last
+
+
+def step_isolation(ctx: Context) -> Tuple[bool, str]:
+  code = in_cir_env(ctx, 'isolation',
+                    'python3 dev_tools/bin/edg-cir-check-isolation')
+  text = (ctx.out / 'isolation' / 'log.txt').read_text()
+  passes = len(re.findall(r'^PASS:', text, re.M))
+  fails = len(re.findall(r'^FAIL:', text, re.M))
+  return code == 0, f"{passes} checks passed, {fails} failed"
+
+
+def _config_step(ctx: Context, step: str, filters: str, types: str,
+                 configs: Tuple[str, ...]) -> Dict[str, Tuple[Path, List[dict]]]:
+  out = {}
+  for config in configs:
+    run = edgy_run(ctx, step, config, filters, types)
+    if run is None:
+      out[config] = (Path(), [])
+      continue
+    results, _ = summarize_run(ctx, step, run, config, f"{config}.json")
+    out[config] = (run, results)
+  return out
+
+
+def step_smoke(ctx: Context) -> Tuple[bool, str]:
+  data = _config_step(ctx, 'smoke', ctx.args.smoke_filter, ctx.args.types,
+                      ('edg_x86_64_cir', 'edg_x86_64_cir_2p'))
+  parts = []
+  ok = True
+  for config, (run, results) in data.items():
+    passed = sum(1 for r in results if r['bucket'] == 'PASS')
+    parts.append(f"{config} {passed}/{len(results)}")
+    ok = ok and bool(results) and passed == len(results)
+  return ok, ', '.join(parts)
+
+
+def step_corpus(ctx: Context) -> Tuple[bool, str]:
+  data = _config_step(ctx, 'corpus', ctx.args.corpus_filter, ctx.args.types,
+                      ('edg_x86_64_cir',))
+  run, results = data['edg_x86_64_cir']
+  if not results:
+    return False, 'no results'
+  counts: Dict[str, int] = {}
+  for result in results:
+    counts[result['bucket']] = counts.get(result['bucket'], 0) + 1
+  crashes = counts.get('FE_CRASH', 0) + counts.get('LIB_CRASH', 0)
+  specific = [r for r in results if not r['ref_fail'] and
+              r['bucket'] != 'PASS']
+  total = len(results)
+  detail = (f"{counts.get('PASS', 0)}/{total} pass; FE_CRASH "
+            f"{counts.get('FE_CRASH', 0)}, LIB_CRASH "
+            f"{counts.get('LIB_CRASH', 0)}; CIR-specific failures "
+            f"{len(specific)} (the rest also fail in edg_x86_64)")
+  return crashes == 0, detail
+
+
+def step_modes(ctx: Context) -> Tuple[bool, str]:
+  command = (f"python3 dev_tools/bin/edg-cir-compare-modes "
+             f"{shlex.quote(ctx.args.corpus_filter)} -j {BUILD_JOBS}")
+  if ctx.args.types:
+    command += f" --types {ctx.args.types}"
+  code = in_cir_env(ctx, 'modes', command)
+  text = (ctx.out / 'modes' / 'log.txt').read_text()
+  match = re.search(r'(\d+) identical, (\d+) different', text)
+  return code == 0, match.group(0) if match else 'no result line'
+
+
+def step_stress(ctx: Context) -> Tuple[bool, str]:
+  code = in_cir_env(ctx, 'stress', 'python3 dev_tools/bin/edg-cir-stress')
+  text = (ctx.out / 'stress' / 'log.txt').read_text()
+  match = re.search(r'RESULT: .*', text)
+  return code == 0, match.group(0) if match else 'no result line'
+
+
+def step_rss(ctx: Context) -> Tuple[bool, str]:
+  big = f"/tmp/gate-big.c"
+  gen = (f"python3 dev_tools/bin/edg-cir-rss --generate-functions "
+         f"{ctx.args.rss_functions} -o {big}")
+  if in_cir_env(ctx, 'rss', gen) != 0:
+    return False, 'could not generate the input'
+  ok = True
+  detail = []
+  for label, build, env in (
+      ('ASan, quarantine off', 'build/gcc-cir',
+       {'ASAN_OPTIONS': 'quarantine_size_mb=0'}),
+      ('non-ASan', 'build/gcc-release-cir', {})):
+    code = in_cir_env(
+      ctx, 'rss', f"echo '== {label}'; python3 dev_tools/bin/edg-cir-rss "
+      f"--fe-build {build} {big}", extra_env = env
+    )
+    ok = ok and code == 0
+    detail.append(f"{label}: {'ok' if code == 0 else 'failed'}")
+  return ok, '; '.join(detail) + ' (numbers in log.txt)'
+
+
+def _status_lines(run: Path) -> Dict[str, List[str]]:
+  '''Per config: sorted status lines of the run's *.elog files.'''
+  data = {}
+  for config_dir in sorted(p for p in run.iterdir() if p.is_dir()):
+    lines: List[str] = []
+    for elog in sorted(config_dir.glob('suite-*.elog')):
+      lines += [f"{elog.name}:{l.strip()}" for l in elog.read_text(
+        errors = 'replace').splitlines() if l.strip()]
+    data[config_dir.name] = sorted(lines)
+  return data
+
+
+def step_day(ctx: Context) -> Tuple[bool, str]:
+  baseline = ctx.args.day_baseline_run
+  if not baseline:
+    return False, '--day-baseline-run is required'
+  before = runs_before(ctx)
+  run_logged(ctx, 'day', ['sg', 'docker', '-c', ' '.join(
+    shlex.quote(c) for c in [str(ctx.tree / 'dev_tools/bin/edg-docker-test'),
+                             '--non-interactive'])])
+  run = newest_run(ctx, before)
+  if run is None:
+    return False, 'no run produced'
+  base_lines = _status_lines(Path(baseline).resolve())
+  new_lines = _status_lines(run)
+  problems = []
+  for config in ('edg_x86_64', 'edg_x86_64_cp'):
+    if base_lines.get(config) != new_lines.get(config):
+      problems.append(config)
+      only_old = set(base_lines.get(config, [])) - set(new_lines.get(config, []))
+      only_new = set(new_lines.get(config, [])) - set(base_lines.get(config, []))
+      with open(ctx.out / 'day' / 'diff.txt', 'a') as diff:
+        diff.write(f"== {config}\n")
+        diff.writelines(f"- {l}\n" for l in sorted(only_old))
+        diff.writelines(f"+ {l}\n" for l in sorted(only_new))
+  executed = {c: len((run / c / 'executed.elist').read_text().splitlines())
+              for c in ('edg_x86_64', 'edg_x86_64_cp')
+              if (run / c / 'executed.elist').exists()}
+  detail = f"run {run.name}; executed {executed}; "
+  return not problems, detail + (
+    f"statuses differ in {problems} (diff.txt)" if problems else
+    'statuses identical to the baseline')
+
+
+def step_ctest(ctx: Context) -> Tuple[bool, str]:
+  presets_file = ctx.tree / 'cir_src' / 'CMakePresets.json'
+  data = json.loads(presets_file.read_text())
+  failures = []
+  ran = []
+  wanted = [p for p in ctx.args.ctest_presets.split(',') if p]
+  for preset in data['configurePresets']:
+    if preset.get('hidden') or (wanted and preset['name'] not in wanted):
+      continue
+    name = preset['name']
+    binary = preset['binaryDir'].replace('${sourceDir}', 'cir_src')
+    binary = os.path.normpath(binary)
+    commands = [
+      f"cd cir_src && cmake --preset {name}",
+      f"cmake --build {binary} -j{BUILD_JOBS}",
+      f"ctest --test-dir {binary} --output-on-failure -j{BUILD_JOBS}"
+    ]
+    codes = [in_cir_env(ctx, 'ctest', c) for c in commands]
+    ran.append(name)
+    if any(codes):
+      failures.append(name)
+  return not failures, (f"{len(ran) - len(failures)}/{len(ran)} presets pass"
+                        + (f"; failed: {', '.join(failures)}"
+                           if failures else ''))
+
+
+STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
+  'build': step_build, 'identity': step_identity,
+  'isolation': step_isolation, 'smoke': step_smoke, 'corpus': step_corpus,
+  'modes': step_modes, 'stress': step_stress, 'rss': step_rss,
+  'day': step_day, 'ctest': step_ctest
+}
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(description = __doc__.split('\n')[0],
+                                   formatter_class =
+                                   argparse.RawDescriptionHelpFormatter,
+                                   epilog = __doc__.split('\n', 2)[2])
+  parser.add_argument('--tree', default = '.')
+  parser.add_argument('--out', default = '',
+                      help = 'evidence directory (reuse one to resume)')
+  parser.add_argument('--only', default = '', help = 'comma separated steps')
+  parser.add_argument('--skip', default = '', help = 'comma separated steps')
+  parser.add_argument('--force', action = 'store_true',
+                      help = 're-run steps that already PASSed')
+  parser.add_argument('--identity-baseline', default = '',
+                      help = 'identity capture of the M0 commit (a '
+                             'edg-macro-identity-check capture tree)')
+  parser.add_argument('--day-baseline-run', default = '',
+                      help = 'tests/runs/<ts> of a full day suite of the M0 '
+                             'commit')
+  parser.add_argument('--smoke-filter',
+                      default = '@tests/.edgy/filters/cir-c-smoke.txt')
+  parser.add_argument('--corpus-filter',
+                      default = '@tests/.edgy/filters/cir-c-corpus.txt')
+  parser.add_argument('--types', default = 'rp,lp')
+  parser.add_argument('--jobs', type = int, default = 12,
+                      help = 'parallel build and test jobs')
+  parser.add_argument('--rss-functions', type = int, default = 6000)
+  parser.add_argument('--identity-presets', default = ','.join(PRESETS),
+                      help = 'CMake presets of the identity step')
+  parser.add_argument('--ctest-presets', default = '',
+                      help = 'cir_src presets of the ctest step (default: '
+                             'every one)')
+  args = parser.parse_args()
+
+  global BUILD_JOBS
+  BUILD_JOBS = args.jobs
+  ctx = Context(args)
+  ctx.out.mkdir(parents = True, exist_ok = True)
+  only = [s for s in args.only.split(',') if s] or list(STEPS)
+  skip = set(s for s in args.skip.split(',') if s)
+  unknown = [s for s in [*only, *skip] if s not in STEPS]
+  if unknown:
+    parser.error(f"unknown step(s): {', '.join(unknown)}")
+
+  print(f"evidence directory: {ctx.out}")
+  table: List[Tuple[str, str, str, float]] = []
+  for step in STEPS:
+    if step not in only or step in skip:
+      table.append((step, 'SKIPPED', 'not selected', 0.0))
+      continue
+    result_file = ctx.out / step / 'result.json'
+    if result_file.exists() and not args.force:
+      previous = json.loads(result_file.read_text())
+      if previous['status'] == 'PASS':
+        table.append((step, 'PASS', previous['detail'] + ' (cached)', 0.0))
+        print(f"{step}: PASS (cached)")
+        continue
+      # A failed step is repeated from a clean log.
+      log = ctx.out / step / 'log.txt'
+      if log.exists():
+        log.unlink()
+    print(f"{step}: running ...", flush = True)
+    started = time.time()
+    try:
+      passed, detail = STEP_FUNCTIONS[step](ctx)
+    except Exception as error:  # a broken step must not hide the others
+      passed, detail = False, f"script error: {error!r}"
+    seconds = time.time() - started
+    status = 'PASS' if passed else 'FAIL'
+    (ctx.out / step).mkdir(parents = True, exist_ok = True)
+    result_file.write_text(json.dumps(
+      {'status': status, 'detail': detail, 'seconds': round(seconds)}
+    ))
+    table.append((step, status, detail, seconds))
+    print(f"{step}: {status} - {detail}", flush = True)
+
+  lines = ['| step | result | detail | time |', '| --- | --- | --- | ---: |']
+  for step, status, detail, seconds in table:
+    lines.append(f"| {step} | {status} | {detail} | {seconds:.0f} s |")
+  summary = '\n'.join(lines)
+  (ctx.out / 'summary.md').write_text(summary + '\n')
+  print('\n' + summary)
+  failed = [t for t in table if t[1] == 'FAIL']
+  print(f"\nGATE: {'FAIL' if failed else 'PASS'} "
+        f"({len(failed)} failing step(s)); evidence in {ctx.out}")
+  sys.exit(1 if failed else 0)
+
+
+main()

@@ -42,9 +42,9 @@ enum an_option_kind {
   optk_preprocess_only_no_line_dirs,
   optk_preprocess_only_emit_line_dirs,
   optk_keep_comments_in_pp_output,
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
   optk_old_line_dirs,
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_HAS_OUTPUT_FILE */
   optk_C_dialect_pcc,
   optk_list_makefile_dependencies,
   optk_list_include_files,
@@ -108,12 +108,18 @@ enum an_option_kind {
   optk_constexpr_diag_warning,
   optk_constexpr_diag_error,
   optk_display_error_number,
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
   optk_gen_c_file_name,
+#endif /* BACK_END_HAS_OUTPUT_FILE */
+#if BACK_END_GENERATES_SOURCE
   optk_msvc_target_version,
   optk_gnu_target_version,
   optk_clang_target_version,
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_GENERATES_SOURCE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  optk_ecil_output,
+  optk_ecil_keep_regions,
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   optk_create_pch,
   optk_use_pch,
   optk_pch,
@@ -461,13 +467,13 @@ EXTERN_THREAD a_boolean
 			/* If TRUE, comments should be retained in
 			   preprocessing output.  Meaningful only when
 			   generate_pp_output is TRUE. */
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
 EXTERN_THREAD a_boolean
 		gen_old_style_line_dirs;
 			/* If TRUE, generate old-style line directives in
 			   generated C/C++ output, i.e., "# nnn" instead of
 			   "#line nnn". */
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_HAS_OUTPUT_FILE */
 EXTERN_THREAD a_boolean
 		gen_line_info_in_pp_output;
 			/* If TRUE, generate #line directives in
@@ -1365,13 +1371,28 @@ EXTERN_THREAD a_boolean
 			/* Should the diagnostic message output include the
 		           error number. */
 
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
 EXTERN_THREAD a_const_char
 		*gen_c_file_name;
 			/* Points to a string specifying the name of the
-			   generated C file to be created.  The front end
-			   will generate a name if this string is NULL. */
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+			   generated C file to be created (for the CIR back end,
+			   the file of generated code).  The front end will
+			   generate a name if this string is NULL. */
+#endif /* BACK_END_HAS_OUTPUT_FILE */
+
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+EXTERN_THREAD char
+		*ecil_output_file_name;
+			/* Points to the name of the file to which the ECIL
+			   stream is written (--ecil_output), or is "-" for
+			   standard output.  NULL means that the stream is
+			   passed to the CIR library in-process. */
+EXTERN_THREAD a_boolean
+		ecil_keep_regions;
+			/* TRUE if IL memory regions should not be freed after
+			   they are streamed (--ecil_keep_regions; also set by
+			   --il_display, which needs the IL after streaming). */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 EXTERN_THREAD a_boolean
 		precompiled_header_processing_required;

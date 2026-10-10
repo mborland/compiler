@@ -39,7 +39,7 @@ IMAGE_PINS = {
 #
 # i.e., This should be a list of every subdirectory in $EDG_TOOLS/docker that
 # has a Dockerfile that's expected to be executed.
-EXECUTABLE_IMAGES = ('dev-env', 'legacy-dev-env', 'sphinx-env')
+EXECUTABLE_IMAGES = ('dev-env', 'legacy-dev-env', 'sphinx-env', 'cir-env')
 
 # This should be a complete list of all buildable EDG docker images.
 #
@@ -52,7 +52,8 @@ BUILDABLE_IMAGES = (
   'legacy-native-tools',
   'softfloat',
   'ci-runner',
-  'acknowledg-forge'
+  'acknowledg-forge',
+  'llvm-cir'
 )
 
 # The registry namespace EDG images are published under (the GitHub

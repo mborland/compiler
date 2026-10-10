@@ -1,0 +1,10 @@
+; expect: format unknown frame flag bits
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame DECLS flags=0x80
+  TY_VOID 1
+frame END
+  END 2 0

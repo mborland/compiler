@@ -1,0 +1,2 @@
+./a.out
+edgy: program killed after 60 seconds

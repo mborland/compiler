@@ -1,0 +1,54 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 36: warning: unknown attribute "noipa"
+  ATTR (noipa) void array_get_length (void)
+  ^
+
+"Test_name.c", line 43: warning: unknown attribute "noipa"
+  ATTR (noipa) void clear_array_get_length (void)
+  ^
+
+"Test_name.c", line 50: warning: unknown attribute "noipa"
+  ATTR (noipa) void calloc_get_length (void)
+  ^
+
+"Test_name.c", line 57: warning: unknown attribute "noipa"
+  ATTR (noipa) void malloc_get_length (void)
+  ^
+
+"Test_name.c", line 64: warning: unknown attribute "noipa"
+  ATTR (noipa) void vla_get_length (int n)
+  ^
+
+"Test_name.c", line 69: warning: CIR back end: the body of "vla_get_length" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 93: warning: unknown attribute "noipa"
+  ATTR (noipa) void array_test_length (void)
+  ^
+
+"Test_name.c", line 99: warning: unknown attribute "noipa"
+  ATTR (noipa) void clear_array_test_length (void)
+  ^
+
+"Test_name.c", line 105: warning: unknown attribute "noipa"
+  ATTR (noipa) void calloc_test_length (void)
+  ^
+
+"Test_name.c", line 111: warning: unknown attribute "noipa"
+  ATTR (noipa) void malloc_test_length (void)
+  ^
+
+"Test_name.c", line 117: warning: unknown attribute "noipa"
+  ATTR (noipa) void vla_test_length (int n)
+  ^
+
+"Test_name.c", line 121: warning: CIR back end: the body of "vla_test_length" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'vla_get_length' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'vla_test_length' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

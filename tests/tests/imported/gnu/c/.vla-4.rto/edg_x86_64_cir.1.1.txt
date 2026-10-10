@@ -1,0 +1,50 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c99 Test_name.c
+"Test_name.c", line 16: warning: expression has no effect
+    sizeof (b[i++ + sizeof(j++)]);	/* Outer sizeof is evaluated for vla, but not the inner one.  */
+    ^
+
+"Test_name.c", line 28: warning: expression has no effect
+    sizeof (d[i++]);			/* sizeof is evaluated for vla.  */
+    ^
+
+"Test_name.c", line 31: warning: expression has no effect
+    __alignof__(__typeof__(t + (i++,0)));	/* typeof is not evauluated when given a vm inside alignof*/
+    ^
+
+"Test_name.c", line 34: warning: expression has no effect
+    sizeof(__typeof__(t + (i++,0)));	/* typeof is not evauluated when given a vm inside sizeof*/
+    ^
+
+"Test_name.c", line 19: warning: variable "c1" was declared but never referenced
+    __typeof__(b[i++]) c1;		/* typeof is evauluated when given a vm */
+                       ^
+
+"Test_name.c", line 22: warning: variable "c2" was declared but never referenced
+    __typeof__(t + (i++,0)) c2;		/* typeof is evauluated when given a vm */
+                            ^
+
+"Test_name.c", line 25: warning: variable "c3" was declared but never referenced
+    __typeof__(i + (i++,0)) c3;		/* typeof is not evauluated when not given a vm */
+                            ^
+
+"Test_name.c", line 38: warning: CIR back end: the body of "foo" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 42: warning: CIR back end: the body of "foo6" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 47: warning: variable "c" is used before its value is set
+    if (foo6(10, b, c) != 10*sizeof(int)*sizeof(int))
+                    ^
+
+"Test_name.c", line 50: warning: CIR back end: the body of "main" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

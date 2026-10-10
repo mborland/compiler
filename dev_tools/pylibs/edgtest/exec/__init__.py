@@ -9,6 +9,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import sys
 import tempfile
 
@@ -366,6 +367,12 @@ async def invoke_recorded_process(
   if debug:
     print(f"Recording command: {shlex.join(cmd_line)}")
 
+  # Opt-in (the config sets EDG_TEST_KILL_ON_CANCEL): run the process in its
+  # own session, and kill it with all of its children if this coroutine is
+  # cancelled (e.g. by edgy's --timeout).  Without it, a cancelled test leaves
+  # its process (say, a miscompiled program in an infinite loop) running.
+  kill_on_cancel = env.get('EDG_TEST_KILL_ON_CANCEL') == '1'
+
   with tempfile.TemporaryFile(mode='w+b') as test_process_output:
     # Launch the tested process.
     tested_process = await asyncio.create_subprocess_exec(
@@ -374,23 +381,32 @@ async def invoke_recorded_process(
       env = env,
       stdout = asyncio.subprocess.PIPE,
       stderr = asyncio.subprocess.STDOUT,
-      limit = sys.maxsize
+      limit = sys.maxsize,
+      start_new_session = kill_on_cancel
     )
 
-    # Now (if necessary) perform driver debug mode post processing on the file
-    # output to extract the driver debug output from the output stream.
-    async for raw_line in tested_process.stdout:
-      if driver_debug:
-        line = raw_line.decode()
-        match_object = DRIVER_DEBUG_REGEX.match(line)
-        if match_object is not None:
-          match_content = match_object.group(1)
-          print(match_content)
-          continue
-      test_process_output.write(raw_line)
+    try:
+      # Now (if necessary) perform driver debug mode post processing on the
+      # file output to extract the driver debug output from the output stream.
+      async for raw_line in tested_process.stdout:
+        if driver_debug:
+          line = raw_line.decode()
+          match_object = DRIVER_DEBUG_REGEX.match(line)
+          if match_object is not None:
+            match_content = match_object.group(1)
+            print(match_content)
+            continue
+        test_process_output.write(raw_line)
 
-    # Make sure the process terminates.
-    await tested_process.wait()
+      # Make sure the process terminates.
+      await tested_process.wait()
+    except asyncio.CancelledError:
+      if kill_on_cancel:
+        try:
+          os.killpg(tested_process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+          pass
+      raise
 
     # Make sure we're at the start of the file.
     test_process_output.seek(0)
@@ -832,7 +848,7 @@ async def run_test_with_options(test_descript: runtest.TestDescription,
   async def run_executed_process(
       output_file_handle: Any,
       cmd_args: List[str]) -> Tuple[int, str]:
-    return_code = await invoke_recorded_process(
+    execution = invoke_recorded_process(
       cmd_args[:1],
       cmd_args[1:],
       working_dir,
@@ -842,6 +858,21 @@ async def run_test_with_options(test_descript: runtest.TestDescription,
       filter_command = test_descript.filter,
       debug = debug
     )
+    # Opt-in (the config sets EDG_TEST_EXEC_TIMEOUT, in seconds): limit the
+    # run of the compiled program; a program that does not finish gets exit
+    # status 124 and counts as a failed run.  (Needs EDG_TEST_KILL_ON_CANCEL
+    # to stop the program.)
+    exec_timeout = int(env.get('EDG_TEST_EXEC_TIMEOUT', '0'))
+    if exec_timeout > 0:
+      try:
+        return_code = await asyncio.wait_for(execution, exec_timeout)
+      except asyncio.TimeoutError:
+        output_file_handle.write(
+          f"edgy: program killed after {exec_timeout} seconds\n".encode()
+        )
+        return_code = 124
+    else:
+      return_code = await execution
     return return_code, ' '.join(cmd_args)
 
   used_header_unit_args = []

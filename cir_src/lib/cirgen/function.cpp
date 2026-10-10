@@ -307,6 +307,7 @@ FUNC_BEGIN: create the entry block and open the function frame.
     builder_.setInsertionPointToStart(fn_entry_);
     locals_.clear();
     params_seen_ = 0;
+    fn_retval_ = mlir::Value();
     temp_counter_ = 0;
     in_function_ = true;
     values_.clear();
@@ -340,6 +341,8 @@ PARAM: an alloca of the declared type holding the (cast) argument.
   decl = type_at(t_decl);
   if (!good || abi == nullptr || decl == nullptr)
     ok = format_error("PARAM names an unknown type or string");
+  else if (!type_is_complete(abi->cir) || !type_is_complete(decl->cir))
+    ok = format_error("PARAM of an incomplete record type");
   else if (frames_.size() != 1 ||
            params_seen_ >= fn_entry_->getNumArguments())
     ok = format_error("PARAM out of place or too many parameters");
@@ -355,9 +358,21 @@ PARAM: an alloca of the declared type holding the (cast) argument.
     address = alloca_in(fn_entry_, decl->cir, name, align);
     if (abi->cir != decl->cir) {
       mlir::Value converted;
-      uint32_t kind = mlir::isa<cir::IntType>(decl->cir) ? eck_integral
-                                                         : eck_floating;
-      ok = cast_value(kind, argument, decl->cir, converted);
+      uint32_t kind = eck_integral;
+      mlir::Type from = abi->cir;
+      mlir::Type to = decl->cir;
+      if (mlir::isa<cir::IntType>(from) && mlir::isa<cir::IntType>(to))
+        kind = eck_integral;
+      else if (mlir::isa<cir::IntType>(from) && mlir::isa<cir::BoolType>(to))
+        kind = eck_int_to_bool;
+      else if (cir::isAnyFloatingPointType(from) &&
+               cir::isAnyFloatingPointType(to))
+        kind = eck_floating;
+      else
+        ok = format_error("PARAM ABI type cannot be narrowed to its "
+                          "declared type");
+      if (ok)
+        ok = cast_value(kind, argument, decl->cir, converted);
       argument = converted;
     }
   }
@@ -394,6 +409,8 @@ LOCAL: an automatic variable at this point of the body.
   t = type_at(tgid);
   if (!good || t == nullptr) {
     ok = format_error("LOCAL names an unknown type or string");
+  } else if (!type_is_complete(t->cir)) {
+    ok = format_error("LOCAL of an incomplete record type");
   } else {
     if (name.empty())
       name = "tmp" + std::to_string(l);
@@ -406,6 +423,22 @@ LOCAL: an automatic variable at this point of the body.
   }
   return ok;
 }  /* a_emitter::local_decl */
+
+mlir::Value a_emitter::return_slot()
+/*
+The function's single __retval alloca.  Every return of a value goes through
+it, as CIRGen does: CallConvLowering's named return value optimization can
+only forward one alloca to the sret pointer, so returns of different locals
+would leave all but one of them uncopied.
+*/
+{
+  a_type *ret = type_at(fn_return_type_);
+
+  if (!fn_retval_)
+    fn_retval_ = alloca_in(fn_entry_, ret->cir, "__retval",
+                           static_cast<uint32_t>(type_align(ret->cir)));
+  return fn_retval_;
+}  /* a_emitter::return_slot */
 
 void a_emitter::implicit_return(bool is_main)
 /*
@@ -422,7 +455,7 @@ Control may fall off the end of the function (spec 8.3 table).
                                                                  loc())});
   } else if (c_language_) {
     uint32_t align = static_cast<uint32_t>(type_align(ret->cir));
-    mlir::Value slot = alloca_in(fn_entry_, ret->cir, "__retval", align);
+    mlir::Value slot = return_slot();
     mlir::Value v = builder_.createLoad(loc(), slot, false, align);
     cir::ReturnOp::create(builder_, loc(), mlir::ValueRange{v});
   } else {
@@ -504,6 +537,14 @@ RETURN_STMT: cir.return directly at the statement (no shared return block).
           : mlir::isa<cir::IntType>(ret->cir) ? eck_integral : eck_floating;
       ok = cast_value(kind, v, ret->cir, converted);
       v = converted;
+    }
+    if (ok && (mlir::isa<cir::RecordType>(ret->cir) ||
+               mlir::isa<cir::ArrayType>(ret->cir))) {
+      uint32_t align = static_cast<uint32_t>(type_align(ret->cir));
+      mlir::Value slot = return_slot();
+      builder_.createStore(loc(), v, slot, false, false,
+                           builder_.getAlignmentAttr(align));
+      v = builder_.createLoad(loc(), slot, false, align);
     }
     if (ok)
       cir::ReturnOp::create(builder_, loc(), mlir::ValueRange{v});

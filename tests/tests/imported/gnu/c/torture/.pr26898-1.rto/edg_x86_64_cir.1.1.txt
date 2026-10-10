@@ -1,0 +1,13 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/pr26898-1.c", line 10: warning: variable "i1" is used before its value is set
+    if (!(i0 + 1 < i1 + 1 == i0 < i1))
+                   ^
+
+"./torture/pr26898-1.c", line 10: warning: variable "i0" is used before its value is set
+    if (!(i0 + 1 < i1 + 1 == i0 < i1))
+                             ^
+
+/usr/sbin/ld: Test_name.o: in function `main':
+Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+collect2: error: ld returned 1 exit status

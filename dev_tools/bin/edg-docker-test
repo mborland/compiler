@@ -258,6 +258,10 @@ def _configure_cir_posture(args: argparse.Namespace) -> TestRunPosture:
   # Only the CIR suite by default; the other suites push every front-end test
   # through the CIR back end (see cir_src/doc/research/test_plumbing.md).
   base_posture.test_filters = 'cir'
+  # A test that does not finish must not hang the run (a miscompiled program
+  # can loop forever): 5 minutes per test; edgy also limits each compiled
+  # program to 60 seconds for these configs.
+  base_posture.test_timeout_seconds = 300
   return base_posture
 
 def _load_posture_builds(
@@ -351,7 +355,9 @@ def _configure_posture(args: argparse.Namespace) -> TestRunPosture:
     posture.test_filters = args.filters
   if args.record_mode:
     posture.record_tests = True
-  if args.timeout_seconds != posture.test_timeout_seconds:
+  if args.timeout_seconds != posture.test_timeout_seconds and (
+      args.timeout_seconds != 0 or args.posture != 'cir'):
+    # (The cir posture keeps its own default unless -T gives a value.)
     posture.test_timeout_seconds = args.timeout_seconds
   if args.test_types:
     posture.test_types = args.test_types

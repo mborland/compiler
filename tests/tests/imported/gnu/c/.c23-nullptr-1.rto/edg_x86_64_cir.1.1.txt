@@ -1,0 +1,92 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c23 Test_name.c
+"./c23-nullptr-1.c", line 23: warning: variable "static_nptr" was declared but never referenced
+    static nullptr_t static_nptr;
+                     ^
+
+"./c23-nullptr-1.c", line 50: warning: variable "a1" was declared but never referenced
+    __auto_type a1 = nullptr;
+                ^
+
+"./c23-nullptr-1.c", line 51: warning: variable "a2" was declared but never referenced
+    __auto_type a2 = nptr;
+                ^
+
+"./c23-nullptr-1.c", line 70: warning: variable "n" was declared but never referenced
+    const nullptr_t n = 0;
+                    ^
+
+"./c23-nullptr-1.c", line 186: warning: variable "r1" was declared but never referenced
+    __auto_type r1 = b ? nullptr : nullptr;
+                ^
+
+"./c23-nullptr-1.c", line 187: warning: variable "r2" was declared but never referenced
+    __auto_type r2 = b ? nptr : nptr;
+                ^
+
+"./c23-nullptr-1.c", line 190: warning: variable "r3" was declared but never referenced
+    __auto_type r3 = b ? p : nullptr;
+                ^
+
+"./c23-nullptr-1.c", line 191: warning: variable "r4" was declared but never referenced
+    __auto_type r4 = b ? nullptr : p;
+                ^
+
+"./c23-nullptr-1.c", line 192: warning: variable "r5" was declared but never referenced
+    __auto_type r5 = b ? nptr : p;
+                ^
+
+"./c23-nullptr-1.c", line 193: warning: variable "r6" was declared but never referenced
+    __auto_type r6 = b ? p : nptr;
+                ^
+
+"./c23-nullptr-1.c", line 194: warning: variable "r7" was declared but never referenced
+    __auto_type r7 = b ? 0 : p;
+                ^
+
+"./c23-nullptr-1.c", line 195: warning: variable "r8" was declared but never referenced
+    __auto_type r8 = b ? p : 0;
+                ^
+
+"./c23-nullptr-1.c", line 198: warning: variable "r11" was declared but never referenced
+    __auto_type r11 = b ? p : _Generic(0, int : nullptr);
+                ^
+
+"./c23-nullptr-1.c", line 199: warning: variable "r12" was declared but never referenced
+    __auto_type r12 = b ? _Generic(0, int : nullptr) : p;
+                ^
+
+"./c23-nullptr-1.c", line 202: warning: CIR back end: the body of "test_arg1" uses an _Atomic type, which the CIR back end does not support; the function is dropped
+  void test_arg1 (const nullptr_t, _Atomic nullptr_t, volatile nullptr_t) { }
+                                                                            ^
+
+"./c23-nullptr-1.c", line 203: warning: CIR back end: the body of "test_arg2" uses an _Atomic type, which the CIR back end does not support; the function is dropped
+  void test_arg2 (_Atomic int *, const int *, volatile int *) { }
+                                                                ^
+
+"./c23-nullptr-1.c", line 204: warning: CIR back end: the body of "test_arg3" uses an _Atomic type, which the CIR back end does not support; the function is dropped
+  void test_arg3 (_Atomic _Bool, const _Bool, volatile _Bool) { }
+                                                                ^
+
+"./c23-nullptr-1.c", line 218: warning: variable "n2" was declared but never referenced
+    const nullptr_t n2 = nullptr;
+                    ^
+
+"./c23-nullptr-1.c", line 233: warning: variable "p5" was declared but never referenced
+    double (*const p5)(void) = n1;
+                   ^
+
+"./c23-nullptr-1.c", line 240: warning: variable "b2" was declared but never referenced
+    const _Bool b2 = nullptr;
+                ^
+
+"./c23-nullptr-1.c", line 254: warning: CIR back end: the body of "test4" uses an _Atomic type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./c23-nullptr-1.c", line 278: warning: variable "i1" was declared but never referenced
+    _Alignas (nullptr_t) char i1 = 'q';
+                              ^
+
+Error: CIR back end: the definition of 'test4' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

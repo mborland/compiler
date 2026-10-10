@@ -1,0 +1,14 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/builtin-iseqsig-2.c", line 14: warning: CIR back end: the body of "ftrue" uses the builtin function __builtin_iseqsig, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/builtin-iseqsig-2.c", line 21: warning: CIR back end: the body of "ffalse" uses the builtin function __builtin_iseqsig, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'ftrue' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'ffalse' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

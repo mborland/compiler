@@ -1,0 +1,50 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 8: warning: unknown attribute "gnu::noipa"
+  [[gnu::noinline,gnu::noipa]]
+                  ^
+
+"Test_name.c", line 10: warning: unknown attribute "gnu::access"
+      [[gnu::access(read_only, 2, 1)]]
+        ^
+
+"Test_name.c", line 13: warning: CIR back end: the body of "f" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 15: warning: unknown attribute "gnu::noipa"
+  [[gnu::noinline,gnu::noipa]]
+                  ^
+
+"Test_name.c", line 17: warning: unknown attribute "gnu::access"
+      [[gnu::access(read_only, 2, 1)]]
+        ^
+
+"Test_name.c", line 22: warning: unknown attribute "gnu::noipa"
+  [[gnu::noinline,gnu::noipa]]
+                  ^
+
+"Test_name.c", line 26: warning: CIR back end: the body of "h" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 30: warning: unknown attribute "gnu::noipa"
+  [[gnu::noinline,gnu::noipa]]
+                  ^
+
+"Test_name.c", line 34: warning: CIR back end: the body of "i" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 50: warning: CIR back end: the body of "main" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'f' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'h' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'i' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+4 errors detected in the compilation of "Test_name.c".

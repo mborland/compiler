@@ -1,0 +1,64 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c99 Test_name.c
+"Test_name.c", line 20: warning: CIR back end: the body of "f1" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 28: warning: CIR back end: the body of "f1c" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 31: warning: parameter "x" was set but never used
+  f2 (void *x, int j)
+            ^
+
+"Test_name.c", line 36: warning: CIR back end: the body of "f2" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 39: warning: parameter "x" was set but never used
+  f2c (void *x, int j)
+             ^
+
+"Test_name.c", line 44: warning: CIR back end: the body of "f2c" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 52: warning: CIR back end: the body of "f3" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 60: warning: CIR back end: the body of "f3c" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 69: warning: CIR back end: the body of "f4" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 78: warning: CIR back end: the body of "f4c" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "f5c" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f1c' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f2c' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f3c' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f4c' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f5c' was dropped: it uses a construct the CIR back end cannot express
+
+9 errors detected in the compilation of "Test_name.c".

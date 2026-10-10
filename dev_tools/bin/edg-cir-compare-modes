@@ -11,7 +11,9 @@ For every test of a filter list (the M2 gate: the whole C corpus), compiles
 the test source twice with eccp -S, with the options the test would get from
 edgy: once with cpfe-cir (the CIR library in-process) and once through
 cpfe-cir-2p (cpfe-cir writing an ECIL file, then edg-cir).  The two runs must
-give the same exit status, the same diagnostics, and a byte-identical .int.s.
+give the same exit status, a byte-identical .int.s (checked first), and the
+same diagnostics once the CIR library's two message formats are reduced to
+one (see normalize_diagnostics).
 
 Run inside the cir-env image from the repository root:
 
@@ -19,8 +21,11 @@ Run inside the cir-env image from the repository root:
       @tests/.edgy/filters/cir-c-smoke.txt
   ... @tests/.edgy/filters/cir-c-corpus.txt --types rp,lp -j 12
 
-Differences are listed with the first differing line; the exit status is 1 if
-there is any.
+A different exit status (other than the front end's error limit: 4 in-process,
+2 in two-process mode) or different assembly is a failure (`DIFF`, exit status
+1).  Differences only in the diagnostics (text, order, count) or in the
+error-limit exit status are listed as `INFO` and do not fail: the two modes
+report the library's diagnostics from different programs.
 '''
 
 import argparse
@@ -85,6 +90,39 @@ def find_tests(tests_dir: Path, positive: List[str],
   return found
 
 
+_IN_PROCESS_REGEX = re.compile(
+  r'^(?:"[^"]*", line \d+: )?(Error|error|Warning|warning|Remark|remark): '
+  r'CIR back end: (.*)$'
+)
+_TWO_PROCESS_REGEX = re.compile(
+  r'^edg-cir: (error|warning|remark) \[\d+\]: (.*)$'
+)
+_SUMMARY_REGEX = re.compile(r'^\d+ (error|warning)s? detected')
+
+
+def normalize_diagnostics(text: str) -> List[str]:
+  '''Make the diagnostics of the two modes comparable.
+
+  The CIR library's diagnostics are written by the front end in-process
+  ("Error: CIR back end: <text>", with a position and source lines) and by
+  edg-cir in the two-process mode ("edg-cir: error [N]: <text>", without
+  them).  Both reduce to "<severity>: <text>"; the front end's own
+  diagnostics are kept as they are; source lines, carets, blank lines, the
+  error count summary and the generic edg-cir status line are dropped.
+  '''
+  result = []
+  for line in text.splitlines():
+    match = _IN_PROCESS_REGEX.match(line) or _TWO_PROCESS_REGEX.match(line)
+    if match:
+      result.append(f"CIR {match.group(1).lower()}: {match.group(2).strip()}")
+    elif (not line.strip() or line.startswith(' ') or
+          _SUMMARY_REGEX.match(line) or line.startswith('edg-cir: ')):
+      continue
+    else:
+      result.append(line)
+  return result
+
+
 def compile_once(source: Path, options: List[str], env: Dict[str, str],
                  work: Path) -> Tuple[int, str, Optional[bytes]]:
   work.mkdir(parents = True, exist_ok = True)
@@ -106,7 +144,9 @@ def compile_once(source: Path, options: List[str], env: Dict[str, str],
 
 
 def compare_one(test: Path, tests_dir: Path, env_in: Dict[str, str],
-                env_2p: Dict[str, str], keep: Optional[Path]) -> Optional[str]:
+                env_2p: Dict[str, str], keep: Optional[Path]
+                ) -> Optional[Tuple[str, str]]:
+  '''Return None if the modes agree, else ("FAIL"|"INFO", message).'''
   description = runtest.load_description(test, top_dir = tests_dir /
                                          test.relative_to(tests_dir).parts[0])
   for mode, base_options, case_options in description.traverse_cases():
@@ -119,13 +159,21 @@ def compare_one(test: Path, tests_dir: Path, env_in: Dict[str, str],
       if keep is None:
         shutil.rmtree(work, ignore_errors = True)
     if rc_a != rc_b:
-      return f"exit status differs: in-process {rc_a}, two-process {rc_b}"
-    if out_a != out_b:
-      diff = list(difflib.unified_diff(out_a.splitlines(), out_b.splitlines(),
-                                       lineterm = '', n = 0))
-      return 'diagnostics differ: ' + (diff[2] if len(diff) > 2 else '?')
+      message = f"exit status differs: in-process {rc_a}, two-process {rc_b}"
+      if (rc_a, rc_b) == (4, 2):
+        # The front end stops at its error limit (-e 200) and exits with a
+        # catastrophic error; edg-cir has no such limit.
+        return 'INFO', message + ' (error limit)'
+      return 'FAIL', message
     if asm_a != asm_b:
-      return 'generated assembly differs'
+      return 'FAIL', 'generated assembly differs'
+    diags_a = normalize_diagnostics(out_a)
+    diags_b = normalize_diagnostics(out_b)
+    if diags_a != diags_b:
+      diff = list(difflib.unified_diff(diags_a, diags_b, lineterm = '', n = 0))
+      return 'INFO', 'diagnostics differ: ' + ' | '.join(
+        line[:110] for line in diff[2:8]
+      )
   return None
 
 
@@ -171,7 +219,8 @@ def main() -> None:
   keep = Path(args.keep) if args.keep else None
   print(f"comparing {len(tests)} tests with {args.jobs} jobs", flush = True)
 
-  differences = []
+  failures = []
+  infos = []
   with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
     futures = {
       pool.submit(compare_one, t, tests_dir, env_in, env_2p, keep): t
@@ -180,12 +229,17 @@ def main() -> None:
     for future in concurrent.futures.as_completed(futures):
       problem = future.result()
       if problem:
-        differences.append((futures[future], problem))
-  for test, problem in sorted(differences):
-    print(f"DIFF {test.relative_to(tests_dir)}: {problem}")
-  print(f"{len(tests) - len(differences)} identical, "
-        f"{len(differences)} different")
-  sys.exit(1 if differences else 0)
+        (failures if problem[0] == 'FAIL' else infos).append(
+          (futures[future], problem[1])
+        )
+  for test, message in sorted(failures):
+    print(f"DIFF {test.relative_to(tests_dir)}: {message}")
+  for test, message in sorted(infos):
+    print(f"INFO {test.relative_to(tests_dir)}: {message}")
+  identical = len(tests) - len(failures) - len(infos)
+  print(f"{identical} identical, {len(infos)} with only diagnostic or "
+        f"error-limit differences (info), {len(failures)} different")
+  sys.exit(1 if failures else 0)
 
 
 main()

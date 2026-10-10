@@ -1,0 +1,23 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c11 --strict_gnu Test_name.c
+"./pr30260.c", line 18: warning: enumerated type mixed with another type
+    enum A a = -1;
+               ^
+
+"./pr30260.c", line 19: warning: enumerated type mixed with another type
+    enum B b = -1;
+               ^
+
+"./pr30260.c", line 19: warning: integer conversion resulted in a change of sign
+    enum B b = -1;
+               ^
+
+"./pr30260.c", line 25: warning: pointless comparison of unsigned integer with zero
+    if (!(b < 0))
+            ^
+
+/usr/sbin/ld: Test_name.o: in function `main':
+Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+collect2: error: ld returned 1 exit status

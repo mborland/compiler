@@ -1,0 +1,12 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c99 Test_name.c
+"Test_name.c", line 13: warning: a universal character name cannot designate a character in the basic character set
+    if (a\u0024b() != 1)
+         ^
+
+"Test_name.c", line 13: warning: function "a\u0024b" declared implicitly
+    if (a\u0024b() != 1)
+        ^
+
+/usr/sbin/ld: Test_name.o: in function `main':
+Test_name.c:(.text+0xXX): undefined reference to `a\u0024b'
+collect2: error: ld returned 1 exit status

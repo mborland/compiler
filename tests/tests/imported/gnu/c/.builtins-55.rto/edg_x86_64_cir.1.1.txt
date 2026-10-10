@@ -1,0 +1,20 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./builtins-55.c", line 42: warning: CIR back end: the body of "test" uses the builtin function __builtin_lceil, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtins-55.c", line 59: warning: CIR back end: the body of "testf" uses the builtin function __builtin_lceilf, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtins-55.c", line 76: warning: CIR back end: the body of "testl" uses the builtin function __builtin_lceill, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'test' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'testf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'testl' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

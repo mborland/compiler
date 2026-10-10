@@ -317,6 +317,8 @@ Create or update a variable entity (a cir.global).
   } else if (t == nullptr || t->kind == a_type_kind::function_type ||
              t->kind == a_type_kind::void_type) {
     ok = format_error("DECL_VAR type is not an object type");
+  } else if (is_definition && !type_is_complete(t->cir)) {
+    ok = format_error("DECL_VAR definition of an incomplete record type");
   } else if (found == entities_.end()) {
     bool known = true;
     cir::GlobalLinkageKind kind = compat::linkage_kind(
@@ -409,6 +411,8 @@ VAR_INIT: the constant on top of the constant stack initializes the variable.
   e = entity_for(gid, false);
   if (e == nullptr) {
     ok = format_error("VAR_INIT for an unknown variable");
+  } else if (!type_is_complete(type_at(e->type)->cir)) {
+    ok = format_error("VAR_INIT of an incomplete record type");
   } else if (consts_.empty() || !const_aggs_.empty()) {
     ok = format_error("VAR_INIT without a constant");
   } else {
@@ -1006,12 +1010,33 @@ entity policy (spec 8.11).  Runs on the worker thread.
     if (e.is_function && e.has_body &&
         (e.flags & ECIL_DECL_FUNC_INLINE_ONLY)) {
       cir::FuncOp fn = mlir::cast<cir::FuncOp>(e.op);
+      /* Uses may outlive their definitions across blocks: drop them first. */
+      fn.getBody().dropAllReferences();
       fn.getBody().getBlocks().clear();
       fn.setLinkageAttr(cir::GlobalLinkageKindAttr::get(
           ctx_, cir::GlobalLinkageKind::ExternalLinkage));
       mlir::SymbolTable::setSymbolVisibility(
           fn, mlir::SymbolTable::Visibility::Private);
       e.has_body = false;
+    }
+  }
+  /* Declarations without a definition: weak ones are extern_weak, every
+     other kind of declaration is external (llvm.func and llvm.mlir.global
+     accept nothing else). */
+  for (uint64_t gid : entity_order_) {
+    a_entity &e = entities_[gid];
+    bool declared_only = e.is_function ? !e.has_body : !e.has_init &&
+        !(e.flags & ECIL_DECL_VAR_DEFINITION);
+    if (declared_only && e.op != nullptr) {
+      bool weak = e.linkage == elk_weak || e.linkage == elk_weak_odr ||
+                  e.linkage == elk_extern_weak;
+      auto kind = weak ? cir::GlobalLinkageKind::ExternalWeakLinkage
+                       : cir::GlobalLinkageKind::ExternalLinkage;
+      auto attr = cir::GlobalLinkageKindAttr::get(ctx_, kind);
+      if (e.is_function)
+        mlir::cast<cir::FuncOp>(e.op).setLinkageAttr(attr);
+      else
+        mlir::cast<cir::GlobalOp>(e.op).setLinkageAttr(attr);
     }
   }
   /* Unsupported entities. */
@@ -1051,16 +1076,10 @@ entity policy (spec 8.11).  Runs on the worker thread.
      CallConvLowering looks every by-value record up here, and the alignment
      is the front end's (the DataLayout cannot see aligned(N)). */
   for (const a_record_info &info : records_) {
-    if (!info.complete)
-      continue;
-    for (const a_type &t : types_) {
-      if (t.kind == a_type_kind::record_type && t.record == &info) {
-        layouts.push_back(mlir::NamedAttribute(
-            mlir::StringAttr::get(ctx_, info.name),
-            compat::record_layout(ctx_, info.align)));
-        break;
-      }
-    }
+    if (info.complete)
+      layouts.push_back(mlir::NamedAttribute(
+          mlir::StringAttr::get(ctx_, info.name),
+          compat::record_layout(ctx_, info.align)));
   }
   if (!layouts.empty())
     module_->setAttr(compat::record_layouts_attr_name(),

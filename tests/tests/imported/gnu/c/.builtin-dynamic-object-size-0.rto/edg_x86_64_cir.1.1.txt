@@ -1,0 +1,254 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./builtin-dynamic-object-size-0.c", line 13: warning: unknown attribute "__leaf__"
+  __attribute__ ((__nothrow__ , __leaf__))
+                                ^
+
+"./builtin-dynamic-object-size-0.c", line 22: warning: unknown attribute "__leaf__"
+  __attribute__ ((__nothrow__ , __leaf__))
+                                ^
+
+"./builtin-dynamic-object-size-0.c", line 31: warning: unknown attribute "__leaf__"
+  __attribute__ ((__nothrow__ , __leaf__))
+                                ^
+
+"./builtin-dynamic-object-size-0.c", line 148: warning: CIR back end: the body of "test_builtin_malloc_condphi4" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 218: warning: CIR back end: the body of "test_builtin_calloc_condphi" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 242: warning: CIR back end: the body of "test_passthrough_nonssa" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 252: warning: CIR back end: the body of "test_dynarray" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 261: warning: CIR back end: the body of "test_dynarray_cond" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 292: warning: CIR back end: the body of "test_dynarray_struct" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 301: warning: CIR back end: the body of "test_dynarray_struct_subobj" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 311: warning: variable-length array field type will be treated as zero-length array field type
+        char c[sz];
+               ^
+
+"./builtin-dynamic-object-size-0.c", line 336: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                       ^
+
+"./builtin-dynamic-object-size-0.c", line 336: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                                                                ^
+
+"./builtin-dynamic-object-size-0.c", line 345: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                       ^
+
+"./builtin-dynamic-object-size-0.c", line 345: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                                                                ^
+
+"./builtin-dynamic-object-size-0.c", line 354: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                       ^
+
+"./builtin-dynamic-object-size-0.c", line 354: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                                                                ^
+
+"./builtin-dynamic-object-size-0.c", line 363: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                       ^
+
+"./builtin-dynamic-object-size-0.c", line 363: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                                                                ^
+
+"./builtin-dynamic-object-size-0.c", line 372: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                       ^
+
+"./builtin-dynamic-object-size-0.c", line 372: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                                                                ^
+
+"./builtin-dynamic-object-size-0.c", line 381: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                       ^
+
+"./builtin-dynamic-object-size-0.c", line 381: warning: variable-length array field type will be treated as zero-length array field type
+    struct DS { char a[sz]; unsigned long long b; int c; char d[2 * sz]; } s;
+                                                                ^
+
+"./builtin-dynamic-object-size-0.c", line 393: warning: CIR back end: the body of "test_substring" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 430: warning: CIR back end: the body of "test_substring_ptrplus" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 440: warning: CIR back end: the body of "test_substring_ptrplus2" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 445: warning: unknown attribute "access"
+  __attribute__ ((access (__read_write__, 1, 2)))
+                  ^
+
+"./builtin-dynamic-object-size-0.c", line 453: warning: unknown attribute "access"
+  __attribute__ ((access (__read_write__, 2, 1)))
+                  ^
+
+"./builtin-dynamic-object-size-0.c", line 465: warning: CIR back end: the body of "test_parmsz_simple3" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 469: warning: unknown attribute "access"
+  __attribute__ ((access (__read_write__, 1, 2)))
+                  ^
+
+"./builtin-dynamic-object-size-0.c", line 472: warning: arithmetic on pointer to void or function type
+    return __builtin_dynamic_object_size (obj + off, 0);
+                                              ^
+
+"./builtin-dynamic-object-size-0.c", line 476: warning: unknown attribute "access"
+  __attribute__ ((access (__read_write__, 1, 2)))
+                  ^
+
+"./builtin-dynamic-object-size-0.c", line 485: warning: unknown attribute "access"
+  __attribute__ ((access (__read_write__, 1, 2)))
+                  ^
+
+"./builtin-dynamic-object-size-0.c", line 492: warning: unknown attribute "access"
+  __attribute__ ((access (__read_write__, 1, 3)))
+                  ^
+
+"./builtin-dynamic-object-size-0.c", line 501: warning: unknown attribute "access"
+  __attribute__ ((access (__read_write__, 1, 2)))
+                  ^
+
+"./builtin-dynamic-object-size-0.c", line 514: warning: CIR back end: the body of "test_parmsz_internal" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 517: warning: unknown attribute "access"
+  __attribute__ ((access (__read_write__, 2, 1)))
+                  ^
+
+"./builtin-dynamic-object-size-0.c", line 522: warning: CIR back end: the body of "test_parmsz_internal2" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 529: warning: CIR back end: the body of "test_parmsz_internal3" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 536: warning: CIR back end: the body of "test_parmsz_internal4" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 542: warning: unknown attribute "access"
+  __attribute__ ((access (__read_write__, 1, 2)))
+                  ^
+
+"./builtin-dynamic-object-size-0.c", line 619: warning: CIR back end: the body of "test_pr105736" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-dynamic-object-size-0.c", line 625: warning: integer conversion resulted in a change of sign
+    if (outsz != -1 && outsz != 32)
+                 ^
+
+"./builtin-dynamic-object-size-0.c", line 651: warning: integer conversion resulted in a change of sign
+    if (test_builtin_malloc_condphi5 (128, 0, argv[0]) != -1)
+                                                          ^
+
+"./builtin-dynamic-object-size-0.c", line 718: warning: integer conversion resulted in a change of sign
+    if (test_substring_ptrplus2 (128, 4, -3) != (128 - 1) * sizeof (int))
+                                         ^
+
+"./builtin-dynamic-object-size-0.c", line 750: warning: integer conversion resulted in a change of sign
+        != -1)
+           ^
+
+"./builtin-dynamic-object-size-0.c", line 751: warning: integer conversion resulted in a change of sign
+    if (test_parmsz (argv[0], __builtin_strlen (argv[0]) + 1, -1) != 0)
+                                                              ^
+
+"./builtin-dynamic-object-size-0.c", line 765: warning: integer conversion resulted in a change of sign
+    if (test_parmsz_extern (s, 42) != -1)
+                                      ^
+
+"./builtin-dynamic-object-size-0.c", line 765: warning: variable "s" is used before its value is set
+    if (test_parmsz_extern (s, 42) != -1)
+                            ^
+
+"./builtin-dynamic-object-size-0.c", line 768: warning: integer conversion resulted in a change of sign
+    if (test_parmsz_internal (4, obj) != -1)
+                                         ^
+
+"./builtin-dynamic-object-size-0.c", line 770: warning: integer conversion resulted in a change of sign
+    if (test_parmsz_internal2 (4, obj) != -1)
+                                          ^
+
+"./builtin-dynamic-object-size-0.c", line 772: warning: integer conversion resulted in a change of sign
+    if (test_parmsz_internal3 (4, 4, obj) != -1)
+                                             ^
+
+"./builtin-dynamic-object-size-0.c", line 774: warning: integer conversion resulted in a change of sign
+    if (test_parmsz_internal4 (3, 4, obj) != -1)
+                                             ^
+
+"./builtin-dynamic-object-size-0.c", line 778: warning: integer conversion resulted in a change of sign
+    if (test_loop (arr, 42, 32, -1, -1) != 0)
+                                ^
+
+"./builtin-dynamic-object-size-0.c", line 790: warning: integer conversion resulted in a change of sign
+    if (__builtin_dynamic_object_size (t, 0) != -1)
+                                                ^
+
+"./builtin-dynamic-object-size-0.c", line 807: warning: CIR back end: the body of "main" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'test_builtin_malloc_condphi4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_calloc_condphi' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_passthrough_nonssa' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_dynarray' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_dynarray_cond' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_dynarray_struct' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_dynarray_struct_subobj' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_substring' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_substring_ptrplus' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_substring_ptrplus2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_parmsz_simple3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_parmsz_internal4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_pr105736' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+14 errors detected in the compilation of "Test_name.c".

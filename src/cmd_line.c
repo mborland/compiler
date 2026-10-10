@@ -12706,12 +12706,6 @@ enable_microsoft_mode:
   }  /* if */
 #endif /* ONE_INSTANTIATION_PER_OBJECT */
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
-  /* The CIR back end handles only C for now.  The language mode is final
-     here, whether C++ was asked for (--c++, --c++NN, a C++ source file name)
-     or is the default. */
-  if (!C_mode()) {
-    str_command_line_error(ec_cir_error, "C++ is not supported yet");
-  }  /* if */
   /* The ECIL stream on standard output must not be mixed with other output
      of the front end that goes to standard output. */
   if (ecil_output_file_name != NULL &&
@@ -12947,6 +12941,17 @@ enable_microsoft_mode:
   /* If the name is "-", use stdin for input. */
   if (strcmp(opt_arg, "-") == 0) opt_arg = FILE_NAME_FOR_STDIN;
   primary_source_file_name = file_name_from_opt_arg(opt_arg);
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* The CIR back end handles only C for now.  The language mode is final
+     here, whether C++ was asked for (--c++, --c++NN) or is the default.  This
+     is checked whenever a source file is going to be turned into IL (even
+     with -n/--no_code_gen: the ECIL writer and the region lifecycle still
+     run), and not for invocations without IL (--version,
+     --dump_configuration, preprocessing only). */
+  if (!C_mode() && !do_preprocessing_only) {
+    str_command_line_error(ec_cir_error, "C++ is not supported yet");
+  }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   if (put_dir_of_each_opened_source_file_on_incl_search_path) {
     /* Add the directory of the source file to the front of the include file
        search path.  gs_directory_of returns the directory part of the

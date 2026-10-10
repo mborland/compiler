@@ -308,8 +308,23 @@ destroyed.
     (void)emitter.release();
     (void)module.release();
   }
-  emitter.reset();
-  module.reset();
+  if (emitter || module) {
+    /* Destroying nested regions recurses once per nesting level, so it runs
+       on the big-stack worker like everything else that walks the IR.  If
+       even that fails the state is leaked. */
+    std::string reason;
+    bool completed = edg_cir::run_guarded(
+        [this] {
+          emitter.reset();
+          module.reset();
+        },
+        static_cast<unsigned>(EDG_CIR_WORKER_STACK_MB), reason);
+
+    if (!completed) {
+      (void)emitter.release();
+      (void)module.release();
+    }
+  }
 }  /* an_edg_cir_session::~an_edg_cir_session */
 
 void an_edg_cir_session::report(an_edg_cir_severity severity, uint32_t code,
@@ -385,6 +400,12 @@ kill the front end.
 {
   bool accepted = false;
   std::string reason;
+#if EDG_CIR_TEST_HOOKS
+  /* Benchmark hook: EDG_CIR_NO_GUARD=1 skips crash recovery (cost
+     measurement only). */
+  if (std::getenv("EDG_CIR_NO_GUARD") != nullptr)
+    return reader->consume(bytes, length);
+#endif
   bool completed = edg_cir::run_guarded(
       [this, bytes, length, &accepted] {
 #if EDG_CIR_TEST_HOOKS

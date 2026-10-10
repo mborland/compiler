@@ -1,0 +1,14 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c99 Test_name.c
+"./complex-5.c", line 29: warning: CIR back end: the body of "use_complex" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./complex-5.c", line 44: warning: CIR back end: the body of "use_stack" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'use_complex' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'use_stack' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

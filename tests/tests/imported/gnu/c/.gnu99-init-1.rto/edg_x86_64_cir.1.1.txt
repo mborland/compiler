@@ -1,0 +1,11 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c99 --strict_gnu Test_name.c
+Warning: CIR back end: the initializer of "n" uses a GNU range designator followed by more initializers, which the CIR back end does not support; the definition is dropped
+
+/usr/sbin/ld: Test_name.o: in function `main':
+Test_name.c:(.text+0xXX): undefined reference to `n'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `n'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `n'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `n'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `n'
+/usr/sbin/ld: Test_name.o:Test_name.c:(.text+0xXX): more undefined references to `n' follow
+collect2: error: ld returned 1 exit status

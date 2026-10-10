@@ -1,0 +1,1010 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 327: warning: CIR back end: the body of "test_builtin_drem" uses the builtin function __builtin_drem, which the CIR back end does not support; the function is dropped
+  FPTEST2            (drem)
+  ^
+
+"Test_name.c", line 327: warning: CIR back end: the body of "test_builtin_dremf" uses the builtin function __builtin_dremf, which the CIR back end does not support; the function is dropped
+  FPTEST2            (drem)
+  ^
+
+"Test_name.c", line 327: warning: CIR back end: the body of "test_builtin_dreml" uses the builtin function __builtin_dreml, which the CIR back end does not support; the function is dropped
+  FPTEST2            (drem)
+  ^
+
+"Test_name.c", line 345: warning: CIR back end: the body of "test_builtin_j0" uses the builtin function __builtin_j0, which the CIR back end does not support; the function is dropped
+  FPTEST1            (j0)
+  ^
+
+"Test_name.c", line 345: warning: CIR back end: the body of "test_builtin_j0f" uses the builtin function __builtin_j0f, which the CIR back end does not support; the function is dropped
+  FPTEST1            (j0)
+  ^
+
+"Test_name.c", line 345: warning: CIR back end: the body of "test_builtin_j0l" uses the builtin function __builtin_j0l, which the CIR back end does not support; the function is dropped
+  FPTEST1            (j0)
+  ^
+
+"Test_name.c", line 346: warning: CIR back end: the body of "test_builtin_j1" uses the builtin function __builtin_j1, which the CIR back end does not support; the function is dropped
+  FPTEST1            (j1)
+  ^
+
+"Test_name.c", line 346: warning: CIR back end: the body of "test_builtin_j1f" uses the builtin function __builtin_j1f, which the CIR back end does not support; the function is dropped
+  FPTEST1            (j1)
+  ^
+
+"Test_name.c", line 346: warning: CIR back end: the body of "test_builtin_j1l" uses the builtin function __builtin_j1l, which the CIR back end does not support; the function is dropped
+  FPTEST1            (j1)
+  ^
+
+"Test_name.c", line 347: warning: CIR back end: the body of "test_builtin_jn" uses the builtin function __builtin_jn, which the CIR back end does not support; the function is dropped
+  FPTEST2ARG1        (jn, int)
+  ^
+
+"Test_name.c", line 347: warning: CIR back end: the body of "test_builtin_jnf" uses the builtin function __builtin_jnf, which the CIR back end does not support; the function is dropped
+  FPTEST2ARG1        (jn, int)
+  ^
+
+"Test_name.c", line 347: warning: CIR back end: the body of "test_builtin_jnl" uses the builtin function __builtin_jnl, which the CIR back end does not support; the function is dropped
+  FPTEST2ARG1        (jn, int)
+  ^
+
+"Test_name.c", line 349: warning: CIR back end: the body of "test_builtin_llceil" uses the builtin function __builtin_llceil, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (llceil)
+  ^
+
+"Test_name.c", line 349: warning: CIR back end: the body of "test_builtin_llceilf" uses the builtin function __builtin_llceilf, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (llceil)
+  ^
+
+"Test_name.c", line 349: warning: CIR back end: the body of "test_builtin_llceill" uses the builtin function __builtin_llceill, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (llceil)
+  ^
+
+"Test_name.c", line 350: warning: CIR back end: the body of "test_builtin_llfloor" uses the builtin function __builtin_llfloor, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (llfloor)
+  ^
+
+"Test_name.c", line 350: warning: CIR back end: the body of "test_builtin_llfloorf" uses the builtin function __builtin_llfloorf, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (llfloor)
+  ^
+
+"Test_name.c", line 350: warning: CIR back end: the body of "test_builtin_llfloorl" uses the builtin function __builtin_llfloorl, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (llfloor)
+  ^
+
+"Test_name.c", line 358: warning: CIR back end: the body of "test_builtin_lceil" uses the builtin function __builtin_lceil, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (lceil)
+  ^
+
+"Test_name.c", line 358: warning: CIR back end: the body of "test_builtin_lceilf" uses the builtin function __builtin_lceilf, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (lceil)
+  ^
+
+"Test_name.c", line 358: warning: CIR back end: the body of "test_builtin_lceill" uses the builtin function __builtin_lceill, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (lceil)
+  ^
+
+"Test_name.c", line 359: warning: CIR back end: the body of "test_builtin_lfloor" uses the builtin function __builtin_lfloor, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (lfloor)
+  ^
+
+"Test_name.c", line 359: warning: CIR back end: the body of "test_builtin_lfloorf" uses the builtin function __builtin_lfloorf, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (lfloor)
+  ^
+
+"Test_name.c", line 359: warning: CIR back end: the body of "test_builtin_lfloorl" uses the builtin function __builtin_lfloorl, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1    (lfloor)
+  ^
+
+"Test_name.c", line 363: warning: CIR back end: the body of "test_builtin_nans" uses the builtin function __builtin_nans, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1ARG (nans, char *)
+  ^
+
+"Test_name.c", line 363: warning: CIR back end: the body of "test_builtin_nansf" uses the builtin function __builtin_nansf, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1ARG (nans, char *)
+  ^
+
+"Test_name.c", line 363: warning: CIR back end: the body of "test_builtin_nansl" uses the builtin function __builtin_nansl, which the CIR back end does not support; the function is dropped
+  BUILTIN_FPTEST1ARG (nans, char *)
+  ^
+
+"Test_name.c", line 372: warning: CIR back end: the body of "test_builtin_scalb" uses the builtin function __builtin_scalb, which the CIR back end does not support; the function is dropped
+  FPTEST2            (scalb)
+  ^
+
+"Test_name.c", line 372: warning: CIR back end: the body of "test_builtin_scalbf" uses the builtin function __builtin_scalbf, which the CIR back end does not support; the function is dropped
+  FPTEST2            (scalb)
+  ^
+
+"Test_name.c", line 372: warning: CIR back end: the body of "test_builtin_scalbl" uses the builtin function __builtin_scalbl, which the CIR back end does not support; the function is dropped
+  FPTEST2            (scalb)
+  ^
+
+"Test_name.c", line 375: warning: CIR back end: the body of "test_builtin_significand" uses the builtin function __builtin_significand, which the CIR back end does not support; the function is dropped
+  FPTEST1            (significand)
+  ^
+
+"Test_name.c", line 375: warning: CIR back end: the body of "test_builtin_significandf" uses the builtin function __builtin_significandf, which the CIR back end does not support; the function is dropped
+  FPTEST1            (significand)
+  ^
+
+"Test_name.c", line 375: warning: CIR back end: the body of "test_builtin_significandl" uses the builtin function __builtin_significandl, which the CIR back end does not support; the function is dropped
+  FPTEST1            (significand)
+  ^
+
+"Test_name.c", line 383: warning: CIR back end: the body of "test_builtin_y0" uses the builtin function __builtin_y0, which the CIR back end does not support; the function is dropped
+  FPTEST1            (y0)
+  ^
+
+"Test_name.c", line 383: warning: CIR back end: the body of "test_builtin_y0f" uses the builtin function __builtin_y0f, which the CIR back end does not support; the function is dropped
+  FPTEST1            (y0)
+  ^
+
+"Test_name.c", line 383: warning: CIR back end: the body of "test_builtin_y0l" uses the builtin function __builtin_y0l, which the CIR back end does not support; the function is dropped
+  FPTEST1            (y0)
+  ^
+
+"Test_name.c", line 384: warning: CIR back end: the body of "test_builtin_y1" uses the builtin function __builtin_y1, which the CIR back end does not support; the function is dropped
+  FPTEST1            (y1)
+  ^
+
+"Test_name.c", line 384: warning: CIR back end: the body of "test_builtin_y1f" uses the builtin function __builtin_y1f, which the CIR back end does not support; the function is dropped
+  FPTEST1            (y1)
+  ^
+
+"Test_name.c", line 384: warning: CIR back end: the body of "test_builtin_y1l" uses the builtin function __builtin_y1l, which the CIR back end does not support; the function is dropped
+  FPTEST1            (y1)
+  ^
+
+"Test_name.c", line 385: warning: CIR back end: the body of "test_builtin_yn" uses the builtin function __builtin_yn, which the CIR back end does not support; the function is dropped
+  FPTEST2ARG1        (yn, int)
+  ^
+
+"Test_name.c", line 385: warning: CIR back end: the body of "test_builtin_ynf" uses the builtin function __builtin_ynf, which the CIR back end does not support; the function is dropped
+  FPTEST2ARG1        (yn, int)
+  ^
+
+"Test_name.c", line 385: warning: CIR back end: the body of "test_builtin_ynl" uses the builtin function __builtin_ynl, which the CIR back end does not support; the function is dropped
+  FPTEST2ARG1        (yn, int)
+  ^
+
+"Test_name.c", line 389: warning: CIR back end: the body of "test_builtin_cacos" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacos)
+  ^
+
+"Test_name.c", line 389: warning: CIR back end: the body of "test_builtin_cacosf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacos)
+  ^
+
+"Test_name.c", line 389: warning: CIR back end: the body of "test_builtin_cacosl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacos)
+  ^
+
+"Test_name.c", line 389: warning: CIR back end: the body of "test_cacos" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacos)
+  ^
+
+"Test_name.c", line 389: warning: CIR back end: the body of "test_cacosf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacos)
+  ^
+
+"Test_name.c", line 389: warning: CIR back end: the body of "test_cacosl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacos)
+  ^
+
+"Test_name.c", line 390: warning: CIR back end: the body of "test_builtin_cacosh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacosh)
+  ^
+
+"Test_name.c", line 390: warning: CIR back end: the body of "test_builtin_cacoshf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacosh)
+  ^
+
+"Test_name.c", line 390: warning: CIR back end: the body of "test_builtin_cacoshl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacosh)
+  ^
+
+"Test_name.c", line 390: warning: CIR back end: the body of "test_cacosh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacosh)
+  ^
+
+"Test_name.c", line 390: warning: CIR back end: the body of "test_cacoshf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacosh)
+  ^
+
+"Test_name.c", line 390: warning: CIR back end: the body of "test_cacoshl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cacosh)
+  ^
+
+"Test_name.c", line 391: warning: CIR back end: the body of "test_builtin_carg" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (carg)
+  ^
+
+"Test_name.c", line 391: warning: CIR back end: the body of "test_builtin_cargf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (carg)
+  ^
+
+"Test_name.c", line 391: warning: CIR back end: the body of "test_builtin_cargl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (carg)
+  ^
+
+"Test_name.c", line 391: warning: CIR back end: the body of "test_carg" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (carg)
+  ^
+
+"Test_name.c", line 391: warning: CIR back end: the body of "test_cargf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (carg)
+  ^
+
+"Test_name.c", line 391: warning: CIR back end: the body of "test_cargl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (carg)
+  ^
+
+"Test_name.c", line 392: warning: CIR back end: the body of "test_builtin_casin" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casin)
+  ^
+
+"Test_name.c", line 392: warning: CIR back end: the body of "test_builtin_casinf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casin)
+  ^
+
+"Test_name.c", line 392: warning: CIR back end: the body of "test_builtin_casinl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casin)
+  ^
+
+"Test_name.c", line 392: warning: CIR back end: the body of "test_casin" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casin)
+  ^
+
+"Test_name.c", line 392: warning: CIR back end: the body of "test_casinf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casin)
+  ^
+
+"Test_name.c", line 392: warning: CIR back end: the body of "test_casinl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casin)
+  ^
+
+"Test_name.c", line 393: warning: CIR back end: the body of "test_builtin_casinh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casinh)
+  ^
+
+"Test_name.c", line 393: warning: CIR back end: the body of "test_builtin_casinhf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casinh)
+  ^
+
+"Test_name.c", line 393: warning: CIR back end: the body of "test_builtin_casinhl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casinh)
+  ^
+
+"Test_name.c", line 393: warning: CIR back end: the body of "test_casinh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casinh)
+  ^
+
+"Test_name.c", line 393: warning: CIR back end: the body of "test_casinhf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casinh)
+  ^
+
+"Test_name.c", line 393: warning: CIR back end: the body of "test_casinhl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (casinh)
+  ^
+
+"Test_name.c", line 394: warning: CIR back end: the body of "test_builtin_catan" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catan)
+  ^
+
+"Test_name.c", line 394: warning: CIR back end: the body of "test_builtin_catanf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catan)
+  ^
+
+"Test_name.c", line 394: warning: CIR back end: the body of "test_builtin_catanl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catan)
+  ^
+
+"Test_name.c", line 394: warning: CIR back end: the body of "test_catan" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catan)
+  ^
+
+"Test_name.c", line 394: warning: CIR back end: the body of "test_catanf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catan)
+  ^
+
+"Test_name.c", line 394: warning: CIR back end: the body of "test_catanl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catan)
+  ^
+
+"Test_name.c", line 395: warning: CIR back end: the body of "test_builtin_catanh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catanh)
+  ^
+
+"Test_name.c", line 395: warning: CIR back end: the body of "test_builtin_catanhf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catanh)
+  ^
+
+"Test_name.c", line 395: warning: CIR back end: the body of "test_builtin_catanhl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catanh)
+  ^
+
+"Test_name.c", line 395: warning: CIR back end: the body of "test_catanh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catanh)
+  ^
+
+"Test_name.c", line 395: warning: CIR back end: the body of "test_catanhf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catanh)
+  ^
+
+"Test_name.c", line 395: warning: CIR back end: the body of "test_catanhl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (catanh)
+  ^
+
+"Test_name.c", line 396: warning: CIR back end: the body of "test_builtin_ccos" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccos)
+  ^
+
+"Test_name.c", line 396: warning: CIR back end: the body of "test_builtin_ccosf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccos)
+  ^
+
+"Test_name.c", line 396: warning: CIR back end: the body of "test_builtin_ccosl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccos)
+  ^
+
+"Test_name.c", line 396: warning: CIR back end: the body of "test_ccos" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccos)
+  ^
+
+"Test_name.c", line 396: warning: CIR back end: the body of "test_ccosf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccos)
+  ^
+
+"Test_name.c", line 396: warning: CIR back end: the body of "test_ccosl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccos)
+  ^
+
+"Test_name.c", line 397: warning: CIR back end: the body of "test_builtin_ccosh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccosh)
+  ^
+
+"Test_name.c", line 397: warning: CIR back end: the body of "test_builtin_ccoshf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccosh)
+  ^
+
+"Test_name.c", line 397: warning: CIR back end: the body of "test_builtin_ccoshl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccosh)
+  ^
+
+"Test_name.c", line 397: warning: CIR back end: the body of "test_ccosh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccosh)
+  ^
+
+"Test_name.c", line 397: warning: CIR back end: the body of "test_ccoshf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccosh)
+  ^
+
+"Test_name.c", line 397: warning: CIR back end: the body of "test_ccoshl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ccosh)
+  ^
+
+"Test_name.c", line 398: warning: CIR back end: the body of "test_builtin_cexp" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cexp)
+  ^
+
+"Test_name.c", line 398: warning: CIR back end: the body of "test_builtin_cexpf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cexp)
+  ^
+
+"Test_name.c", line 398: warning: CIR back end: the body of "test_builtin_cexpl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cexp)
+  ^
+
+"Test_name.c", line 398: warning: CIR back end: the body of "test_cexp" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cexp)
+  ^
+
+"Test_name.c", line 398: warning: CIR back end: the body of "test_cexpf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cexp)
+  ^
+
+"Test_name.c", line 398: warning: CIR back end: the body of "test_cexpl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cexp)
+  ^
+
+"Test_name.c", line 399: warning: CIR back end: the body of "test_builtin_cimag" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (cimag)
+  ^
+
+"Test_name.c", line 399: warning: CIR back end: the body of "test_builtin_cimagf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (cimag)
+  ^
+
+"Test_name.c", line 399: warning: CIR back end: the body of "test_builtin_cimagl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (cimag)
+  ^
+
+"Test_name.c", line 399: warning: CIR back end: the body of "test_cimag" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (cimag)
+  ^
+
+"Test_name.c", line 399: warning: CIR back end: the body of "test_cimagf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (cimag)
+  ^
+
+"Test_name.c", line 399: warning: CIR back end: the body of "test_cimagl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (cimag)
+  ^
+
+"Test_name.c", line 400: warning: CIR back end: the body of "test_builtin_clog" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (clog)
+  ^
+
+"Test_name.c", line 400: warning: CIR back end: the body of "test_builtin_clogf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (clog)
+  ^
+
+"Test_name.c", line 400: warning: CIR back end: the body of "test_builtin_clogl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (clog)
+  ^
+
+"Test_name.c", line 400: warning: CIR back end: the body of "test_clog" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (clog)
+  ^
+
+"Test_name.c", line 400: warning: CIR back end: the body of "test_clogf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (clog)
+  ^
+
+"Test_name.c", line 400: warning: CIR back end: the body of "test_clogl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (clog)
+  ^
+
+"Test_name.c", line 401: warning: CIR back end: the body of "test_builtin_conj" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (conj)
+  ^
+
+"Test_name.c", line 401: warning: CIR back end: the body of "test_builtin_conjf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (conj)
+  ^
+
+"Test_name.c", line 401: warning: CIR back end: the body of "test_builtin_conjl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (conj)
+  ^
+
+"Test_name.c", line 401: warning: CIR back end: the body of "test_conj" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (conj)
+  ^
+
+"Test_name.c", line 401: warning: CIR back end: the body of "test_conjf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (conj)
+  ^
+
+"Test_name.c", line 401: warning: CIR back end: the body of "test_conjl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (conj)
+  ^
+
+"Test_name.c", line 402: warning: CIR back end: the body of "test_builtin_cpow" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST2 (cpow)
+  ^
+
+"Test_name.c", line 402: warning: CIR back end: the body of "test_builtin_cpowf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST2 (cpow)
+  ^
+
+"Test_name.c", line 402: warning: CIR back end: the body of "test_builtin_cpowl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST2 (cpow)
+  ^
+
+"Test_name.c", line 402: warning: CIR back end: the body of "test_cpow" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST2 (cpow)
+  ^
+
+"Test_name.c", line 402: warning: CIR back end: the body of "test_cpowf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST2 (cpow)
+  ^
+
+"Test_name.c", line 402: warning: CIR back end: the body of "test_cpowl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST2 (cpow)
+  ^
+
+"Test_name.c", line 403: warning: CIR back end: the body of "test_builtin_cproj" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cproj)
+  ^
+
+"Test_name.c", line 403: warning: CIR back end: the body of "test_builtin_cprojf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cproj)
+  ^
+
+"Test_name.c", line 403: warning: CIR back end: the body of "test_builtin_cprojl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cproj)
+  ^
+
+"Test_name.c", line 403: warning: CIR back end: the body of "test_cproj" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cproj)
+  ^
+
+"Test_name.c", line 403: warning: CIR back end: the body of "test_cprojf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cproj)
+  ^
+
+"Test_name.c", line 403: warning: CIR back end: the body of "test_cprojl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (cproj)
+  ^
+
+"Test_name.c", line 404: warning: CIR back end: the body of "test_builtin_creal" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (creal)
+  ^
+
+"Test_name.c", line 404: warning: CIR back end: the body of "test_builtin_crealf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (creal)
+  ^
+
+"Test_name.c", line 404: warning: CIR back end: the body of "test_builtin_creall" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (creal)
+  ^
+
+"Test_name.c", line 404: warning: CIR back end: the body of "test_creal" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (creal)
+  ^
+
+"Test_name.c", line 404: warning: CIR back end: the body of "test_crealf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (creal)
+  ^
+
+"Test_name.c", line 404: warning: CIR back end: the body of "test_creall" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1R (creal)
+  ^
+
+"Test_name.c", line 405: warning: CIR back end: the body of "test_builtin_csin" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csin)
+  ^
+
+"Test_name.c", line 405: warning: CIR back end: the body of "test_builtin_csinf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csin)
+  ^
+
+"Test_name.c", line 405: warning: CIR back end: the body of "test_builtin_csinl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csin)
+  ^
+
+"Test_name.c", line 405: warning: CIR back end: the body of "test_csin" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csin)
+  ^
+
+"Test_name.c", line 405: warning: CIR back end: the body of "test_csinf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csin)
+  ^
+
+"Test_name.c", line 405: warning: CIR back end: the body of "test_csinl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csin)
+  ^
+
+"Test_name.c", line 406: warning: CIR back end: the body of "test_builtin_csinh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csinh)
+  ^
+
+"Test_name.c", line 406: warning: CIR back end: the body of "test_builtin_csinhf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csinh)
+  ^
+
+"Test_name.c", line 406: warning: CIR back end: the body of "test_builtin_csinhl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csinh)
+  ^
+
+"Test_name.c", line 406: warning: CIR back end: the body of "test_csinh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csinh)
+  ^
+
+"Test_name.c", line 406: warning: CIR back end: the body of "test_csinhf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csinh)
+  ^
+
+"Test_name.c", line 406: warning: CIR back end: the body of "test_csinhl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csinh)
+  ^
+
+"Test_name.c", line 407: warning: CIR back end: the body of "test_builtin_csqrt" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csqrt)
+  ^
+
+"Test_name.c", line 407: warning: CIR back end: the body of "test_builtin_csqrtf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csqrt)
+  ^
+
+"Test_name.c", line 407: warning: CIR back end: the body of "test_builtin_csqrtl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csqrt)
+  ^
+
+"Test_name.c", line 407: warning: CIR back end: the body of "test_csqrt" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csqrt)
+  ^
+
+"Test_name.c", line 407: warning: CIR back end: the body of "test_csqrtf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csqrt)
+  ^
+
+"Test_name.c", line 407: warning: CIR back end: the body of "test_csqrtl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (csqrt)
+  ^
+
+"Test_name.c", line 408: warning: CIR back end: the body of "test_builtin_ctan" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctan)
+  ^
+
+"Test_name.c", line 408: warning: CIR back end: the body of "test_builtin_ctanf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctan)
+  ^
+
+"Test_name.c", line 408: warning: CIR back end: the body of "test_builtin_ctanl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctan)
+  ^
+
+"Test_name.c", line 408: warning: CIR back end: the body of "test_ctan" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctan)
+  ^
+
+"Test_name.c", line 408: warning: CIR back end: the body of "test_ctanf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctan)
+  ^
+
+"Test_name.c", line 408: warning: CIR back end: the body of "test_ctanl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctan)
+  ^
+
+"Test_name.c", line 409: warning: CIR back end: the body of "test_builtin_ctanh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctanh)
+  ^
+
+"Test_name.c", line 409: warning: CIR back end: the body of "test_builtin_ctanhf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctanh)
+  ^
+
+"Test_name.c", line 409: warning: CIR back end: the body of "test_builtin_ctanhl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctanh)
+  ^
+
+"Test_name.c", line 409: warning: CIR back end: the body of "test_ctanh" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctanh)
+  ^
+
+"Test_name.c", line 409: warning: CIR back end: the body of "test_ctanhf" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctanh)
+  ^
+
+"Test_name.c", line 409: warning: CIR back end: the body of "test_ctanhl" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  CPTEST1 (ctanh)
+  ^
+
+Error: CIR back end: the definition of 'test_builtin_drem' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_dremf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_dreml' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_j0' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_j0f' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_j0l' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_j1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_j1f' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_j1l' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_jn' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_jnf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_jnl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_llceil' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_llceilf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_llceill' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_llfloor' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_llfloorf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_llfloorl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_lceil' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_lceilf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_lceill' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_lfloor' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_lfloorf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_lfloorl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_nans' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_nansf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_nansl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_scalb' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_scalbf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_scalbl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_significand' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_significandf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_significandl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_y0' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_y0f' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_y0l' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_y1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_y1f' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_y1l' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_yn' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ynf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ynl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cacos' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cacosf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cacosl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cacos' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cacosf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cacosl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cacosh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cacoshf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cacoshl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cacosh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cacoshf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cacoshl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_carg' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cargf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cargl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_carg' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cargf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cargl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_casin' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_casinf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_casinl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_casin' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_casinf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_casinl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_casinh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_casinhf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_casinhl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_casinh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_casinhf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_casinhl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_catan' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_catanf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_catanl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_catan' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_catanf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_catanl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_catanh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_catanhf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_catanhl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_catanh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_catanhf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_catanhl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ccos' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ccosf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ccosl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ccos' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ccosf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ccosl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ccosh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ccoshf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ccoshl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ccosh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ccoshf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ccoshl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cexp' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cexpf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cexpl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cexp' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cexpf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cexpl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cimag' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cimagf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cimagl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cimag' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cimagf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cimagl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_clog' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_clogf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_clogl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_clog' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_clogf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_clogl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_conj' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_conjf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_conjl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_conj' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_conjf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_conjl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cpow' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cpowf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cpowl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cpow' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cpowf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cpowl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cproj' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cprojf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_cprojl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cproj' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cprojf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_cprojl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_creal' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_crealf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_creall' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_creal' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_crealf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_creall' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_csin' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_csinf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_csinl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_csin' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_csinf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_csinl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_csinh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_csinhf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_csinhl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_csinh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_csinhf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_csinhl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_csqrt' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_csqrtf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_csqrtl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_csqrt' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_csqrtf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_csqrtl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ctan' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ctanf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ctanl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ctan' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ctanf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ctanl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ctanh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ctanhf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_builtin_ctanhl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ctanh' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ctanhf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_ctanhl' was dropped: it uses a construct the CIR back end cannot express
+
+168 errors detected in the compilation of "Test_name.c".

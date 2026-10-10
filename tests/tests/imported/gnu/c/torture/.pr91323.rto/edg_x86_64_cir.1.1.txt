@@ -1,0 +1,13 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/pr91323.c", line 10: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+
+"./torture/pr91323.c", line 17: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+
+"./torture/pr91323.c", line 24: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+

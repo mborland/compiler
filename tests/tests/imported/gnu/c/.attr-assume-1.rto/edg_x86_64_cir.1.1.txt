@@ -1,0 +1,21 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c23 Test_name.c
+"Test_name.c", line 56: warning: variable "d" was set but never used
+    double d = 42.0, e = 43.0;
+           ^
+
+"Test_name.c", line 56: warning: variable "e" was set but never used
+    double d = 42.0, e = 43.0;
+                     ^
+
+"Test_name.c", line 65: warning: variable "i" was set but never used
+    int i = 90, j = 91, k = 92;
+        ^
+
+"Test_name.c", line 65: warning: variable "j" was set but never used
+    int i = 90, j = 91, k = 92;
+                ^
+
+"Test_name.c", line 65: warning: variable "k" was set but never used
+    int i = 90, j = 91, k = 92;
+                        ^
+

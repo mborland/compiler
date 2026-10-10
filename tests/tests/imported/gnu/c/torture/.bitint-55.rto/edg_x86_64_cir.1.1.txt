@@ -1,0 +1,42 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c23 Test_name.c
+"Test_name.c", line 15: warning: CIR back end: the body of "foo" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 23: warning: CIR back end: the body of "bar" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 31: warning: CIR back end: the body of "baz" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 38: error: integer constant is too large
+    if (foo (11155754932722990178552651944728825929130437979239421228991532051555943675wb,
+             ^
+
+"Test_name.c", line 41: error: integer constant is too large
+    if (foo (542904728531209767665756029992981529373473101602268731408384wb,
+             ^
+
+"Test_name.c", line 45: error: integer constant is too large
+    if (foo (542904728531209767665690117878483036079552477922114364506112wb,
+             ^
+
+"Test_name.c", line 49: error: integer constant is too large
+    if (foo (542904728531209767665690117878483036079534031178040654954496wb,
+             ^
+
+"Test_name.c", line 53: error: integer constant is too large
+    if (foo (542904728531209767665454670484032559818581851459155356811264wb,
+             ^
+
+"Test_name.c", line 59: error: integer constant is too large
+    if (bar (6703903964971298549787012499102923063739682910296196688861780721860882015036773488400937149083451713845015929093243025426876941405973284973216824503042048uwb,
+             ^
+
+"Test_name.c", line 64: error: integer constant is too large
+    if (baz (115792089237316195423570985008687907853269984665640564039457584007913129639926uwb,
+             ^
+
+7 errors detected in the compilation of "Test_name.c".

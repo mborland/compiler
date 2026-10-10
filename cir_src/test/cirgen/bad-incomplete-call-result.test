@@ -1,0 +1,28 @@
+; Strict contract (emitter side): CALL with an incomplete record type as argument or result
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; CHECK: error [1001]: CALL with an incomplete record type as argument or result
+
+frame DECLS
+  STR 10 "f"
+  STR 11 "g"
+  STR 12 "v"
+  STR 13 "h"
+  TY_RECORD_DECL 20 0 nil
+  TY_FUNC 21 1 0 []
+  TY_FUNC 22 20 0 []
+  TY_FUNC 23 1 0 [20]
+  DECL_FUNC 30 21 0 1 10
+  DECL_FUNC 31 22 0 0 11
+  DECL_FUNC 32 23 0 0 13
+  DECL_VAR 33 20 0 0 4 12
+frame REGION
+  FUNC_BEGIN 30 0
+  CALL 31 22 0 0
+  DROP
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

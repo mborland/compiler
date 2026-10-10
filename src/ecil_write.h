@@ -231,6 +231,8 @@ typedef enum an_ecil_gid_kind {
 #define ECIL_GF_NO_PROTO    0x20u   /* egk_func_type: unprototyped. */
 #define ECIL_GF_VECTOR      0x40u   /* An opaque GNU vector type. */
 #define ECIL_GF_COMPLEX     0x80u   /* An opaque complex/imaginary type. */
+#define ECIL_GF_FAILED      0x100u  /* A record whose body could not be
+                                       written (an unsupported member). */
 
 /* Everything the writer remembers about a G-id. */
 typedef struct an_ecil_gid_info {
@@ -337,6 +339,13 @@ extern void ecil_complete_pending_records(an_ecil_frame *frame);
 
 extern uint32_t ecil_function_id(an_ecil_frame *frame, a_routine_ptr rout);
 
+extern uint32_t ecil_array_of(an_ecil_frame *frame, uint32_t elem,
+                              uint64_t count);
+
+extern a_boolean ecil_is_plain_float_type(a_type_ptr type);
+
+extern a_targ_alignment ecil_variable_alignment(a_variable_ptr var);
+
 extern void ecil_bind_symbol(uint32_t name_sid, uint32_t gid);
 
 extern uint32_t ecil_variable_symbol_gid(an_ecil_frame *frame,
@@ -358,10 +367,28 @@ extern uint32_t ecil_intern_cstring(an_ecil_frame *frame, const char *text);
 /* Constants, string literals and global variable definitions
    (ecil_const.c). */
 
+/* One entry of a gathered (merged) aggregate. */
+typedef struct an_init_entry {
+  uint64_t      index;
+  uint64_t      count;            /* 1, or the repeat count. */
+  a_constant_ptr
+                value;            /* The constant (a ck_init_repeat node for
+                                     a repeat entry). */
+  a_constant_ptr
+                *sources;         /* Merged aggregates: all the aggregates
+                                     initializing this member, in order; NULL
+                                     if there is only value. */
+  size_t        num_sources;
+  a_boolean     removed;
+  a_boolean     is_char;          /* One element of a string constant (value
+                                     is the string, index the position). */
+} an_init_entry;
+
 /*
 One level of an aggregate initializer, with C11 6.7.9 "current object"
 handling: designators move the cursor, unnamed bit-fields are skipped, a
-union takes one entry.
+union takes its last entry, and initializers that revisit one member are
+merged (see ecil_init_level_start).
 */
 typedef struct an_init_level {
   a_type_ptr    type;             /* The aggregate type (typerefs skipped). */
@@ -372,17 +399,60 @@ typedef struct an_init_level {
   a_field_ptr   cur_field;        /* Records: the member at cur. */
   a_constant_ptr
                 next_const;       /* The next constant of the list. */
+  /* Gathered mode (the aggregate has designators that revisit a member):
+     the entries, merged, in order. */
+  an_init_entry *entries;
+  size_t        num_entries;
+  size_t        entry_pos;
+  /* The entry last returned by ecil_init_level_next. */
+  uint64_t      entry_count;
+  a_boolean     entry_is_char;    /* The entry is a character of a string. */
+  a_constant_ptr
+                *entry_sources;   /* NULL unless merged. */
+  size_t        entry_num_sources;
 } an_init_level;
 
+/*
+Start walking the entries of an aggregate initialized by one constant, or by
+several (sources: a later one revisits the same member as an earlier one, as
+in "{ .b = 1, .a = 2, .c = 3 }" where b and c are in one anonymous struct).
+The aggregate's type must already have been introduced.  After
+ecil_init_level_next, the fields entry_sources and entry_num_sources of the
+level give the sources of the entry returned (NULL if it is just the value)
+and entry_count its repeat count; the level must be ended with
+ecil_init_level_end.
+*/
 extern void ecil_init_level_start(an_init_level *level,
-                                  a_constant_ptr aggregate);
+                                  a_constant_ptr *sources,
+                                  size_t         num_sources);
 
 extern a_boolean ecil_init_level_next(an_init_level  *level,
                                       uint64_t       *index,
                                       a_constant_ptr *value);
 
+extern void ecil_init_level_end(an_init_level *level);
+
+/* C_INT for byte pos of a string constant as an element of the level's
+   array (an entry with entry_is_char). */
+extern void ecil_emit_string_char(an_ecil_frame *frame, an_init_level *level,
+                                  a_constant_ptr str, uint64_t pos);
+
 extern a_boolean ecil_emit_float_constant(an_ecil_frame *frame,
                                            a_constant_ptr c);
+
+extern uint32_t ecil_member_type_gid(an_ecil_frame *frame,
+                                     an_init_level  *level,
+                                     uint64_t       index);
+
+extern a_boolean ecil_emit_constant_sources(an_ecil_frame *frame,
+                                            a_constant_ptr constant,
+                                            a_constant_ptr *sources,
+                                            size_t         num_sources,
+                                            uint32_t       target_type);
+
+extern a_boolean ecil_emit_constant_typed(an_ecil_frame *frame,
+                                          a_constant_ptr constant,
+                                          uint32_t       target_type);
 
 extern a_boolean ecil_emit_constant(an_ecil_frame *frame,
                                     a_constant_ptr constant);
@@ -416,6 +486,8 @@ extern void ecil_code_reset(void);
 extern void ecil_check_variable_attributes(a_variable_ptr var);
 
 extern const char *ecil_library_builtin_name(const char *name);
+
+extern a_boolean ecil_is_library_function(const char *name);
 
 /* Stream-level helpers. */
 

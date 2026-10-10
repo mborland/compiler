@@ -1,0 +1,108 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./pr97172.c", line 31: warning: CIR back end: the body of "gn" uses a variable length array, which the CIR back end does not support; the function is dropped
+  void gn (int a[n]) { fn (a); }
+                               ^
+
+"./pr97172.c", line 32: warning: CIR back end: the body of "gnp1" uses a variable length array, which the CIR back end does not support; the function is dropped
+  void gnp1 (int a[n + 1]) { fnp1 (a); }
+                                       ^
+
+"./pr97172.c", line 33: warning: CIR back end: the body of "gnd2p1" uses a variable length array, which the CIR back end does not support; the function is dropped
+  void gnd2p1 (int a[n / 2 + 1]) { fnp1 (a); }
+                                             ^
+
+"./pr97172.c", line 35: warning: CIR back end: the body of "gx_n" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gx_n (int a[][n]) { fx_n (a); }
+                                     ^
+
+"./pr97172.c", line 36: warning: CIR back end: the body of "gx_np1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gx_np1 (int a[][n + 1]) { fx_np1 (a); }
+                                             ^
+
+"./pr97172.c", line 37: warning: CIR back end: the body of "gx_nd2p1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gx_nd2p1 (int a[][n / 2 + 1]) { fx_np1 (a); }
+                                                   ^
+
+"./pr97172.c", line 39: warning: CIR back end: the body of "g2_n" uses variable length array, which the CIR back end does not support; the function is dropped
+  void g2_n (int a[2][n]) { f2_n (a); }
+                                      ^
+
+"./pr97172.c", line 40: warning: CIR back end: the body of "g2_np1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void g2_np1 (int a[2][n + 1]) { f2_np1 (a); }
+                                              ^
+
+"./pr97172.c", line 41: warning: CIR back end: the body of "g2_nd2p1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void g2_nd2p1 (int a[2][n / 2 + 1]) { f2_np1 (a); }
+                                                    ^
+
+"./pr97172.c", line 43: warning: CIR back end: the body of "gn_3" uses a variable length array, which the CIR back end does not support; the function is dropped
+  void gn_3 (int a[n][3]) { fn_3 (a); }
+                                      ^
+
+"./pr97172.c", line 44: warning: CIR back end: the body of "gnp1_3" uses a variable length array, which the CIR back end does not support; the function is dropped
+  void gnp1_3 (int a[n + 1][3]) { fnp1_3 (a); }
+                                              ^
+
+"./pr97172.c", line 45: warning: CIR back end: the body of "gnd2p1_3" uses a variable length array, which the CIR back end does not support; the function is dropped
+  void gnd2p1_3 (int a[n / 2 + 1][3]) { fnp1_3 (a); }
+                                                    ^
+
+"./pr97172.c", line 47: warning: CIR back end: the body of "gn_n" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gn_n (int a[n][n]) { fn_n (a); }
+                                      ^
+
+"./pr97172.c", line 48: warning: CIR back end: the body of "gn_np1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gn_np1 (int a[n][n + 1]) { fn_np1 (a); }
+                                              ^
+
+"./pr97172.c", line 49: warning: CIR back end: the body of "gnp1_np1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gnp1_np1 (int a[n + 1][n + 1]) { fnp1_np1 (a); }
+                                                      ^
+
+"./pr97172.c", line 50: warning: CIR back end: the body of "gnd2p1_nd2p1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gnd2p1_nd2p1 (int a[n / 2 + 1][n / 2 + 1]) { fnp1_np1 (a); }
+                                                                  ^
+
+"./pr97172.c", line 52: warning: CIR back end: the body of "gn_n_n" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gn_n_n (int a[n][n][n]) { fn_n_n (a); }
+                                             ^
+
+"./pr97172.c", line 53: warning: CIR back end: the body of "gn_n_np1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gn_n_np1 (int a[n][n][n + 1]) { fn_n_np1 (a); }
+                                                     ^
+
+"./pr97172.c", line 54: warning: CIR back end: the body of "gn_np1_np1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gn_np1_np1 (int a[n][n + 1][n + 1]) { fn_np1_np1 (a); }
+                                                             ^
+
+"./pr97172.c", line 55: warning: CIR back end: the body of "gnp1_np1_np1" uses variable length array, which the CIR back end does not support; the function is dropped
+  void gnp1_np1_np1 (int a[n + 1][n + 1][n + 1]) { fnp1_np1_np1 (a); }
+                                                                     ^
+
+"./pr97172.c", line 57: warning: CIR back end: the body of "gnd2p1_nd2p1_nd2p1" uses variable length array, which the CIR back end does not support; the function is dropped
+  { fnp1_np1_np1 (a); }
+                      ^
+
+"./pr97172.c", line 68: warning: CIR back end: the body of "gna3_1" uses a variable length array, which the CIR back end does not support; the function is dropped
+        int c[n / 2 + 1]) { fna3_1 (n, a, b, c); }
+                                                 ^
+
+"./pr97172.c", line 81: warning: CIR back end: the body of "gna3_2_3_4" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'gn' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gnp1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gnd2p1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gn_3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gnp1_3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gnd2p1_3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gna3_1' was dropped: it uses a construct the CIR back end cannot express
+
+7 errors detected in the compilation of "Test_name.c".

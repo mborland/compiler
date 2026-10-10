@@ -216,6 +216,7 @@ def step_identity(ctx: Context) -> Tuple[bool, str]:
   proc = subprocess.run(
     [sys.executable, str(ctx.tree / 'dev_tools/bin/edg-macro-identity-check'),
      'compare', '--normalize-line-numbers', '--allow-cir-diagnostics',
+     '--presets', ctx.args.identity_presets,
      str(Path(baseline).resolve()), str(out)],
     env = ctx.env, stdout = subprocess.PIPE, stderr = subprocess.STDOUT,
     text = True
@@ -286,7 +287,7 @@ def step_modes(ctx: Context) -> Tuple[bool, str]:
     command += f" --types {ctx.args.types}"
   code = in_cir_env(ctx, 'modes', command)
   text = (ctx.out / 'modes' / 'log.txt').read_text()
-  match = re.search(r'(\d+) identical, (\d+) different', text)
+  match = re.search(r'\d+ identical, .* different', text)
   return code == 0, match.group(0) if match else 'no result line'
 
 
@@ -298,32 +299,42 @@ def step_stress(ctx: Context) -> Tuple[bool, str]:
 
 
 def step_rss(ctx: Context) -> Tuple[bool, str]:
-  big = f"/tmp/gate-big.c"
-  gen = (f"python3 dev_tools/bin/edg-cir-rss --generate-functions "
-         f"{ctx.args.rss_functions} -o {big}")
-  if in_cir_env(ctx, 'rss', gen) != 0:
-    return False, 'could not generate the input'
-  ok = True
-  detail = []
-  for label, build, env in (
-      ('ASan, quarantine off', 'build/gcc-cir',
-       {'ASAN_OPTIONS': 'quarantine_size_mb=0'}),
-      ('non-ASan', 'build/gcc-release-cir', {})):
-    code = in_cir_env(
-      ctx, 'rss', f"echo '== {label}'; python3 dev_tools/bin/edg-cir-rss "
-      f"--fe-build {build} {big}", extra_env = env
-    )
-    ok = ok and code == 0
-    detail.append(f"{label}: {'ok' if code == 0 else 'failed'}")
-  return ok, '; '.join(detail) + ' (numbers in log.txt)'
+  # One container: /tmp is not shared between edg-exec runs.
+  big = '/tmp/gate-big.c'
+  rss = 'python3 dev_tools/bin/edg-cir-rss'
+  command = (
+    f"{rss} --generate-functions {ctx.args.rss_functions} -o {big} && "
+    f"echo '== ASan front end, ASAN_OPTIONS=quarantine_size_mb=0' && "
+    f"ASAN_OPTIONS=quarantine_size_mb=0 {rss} --fe-build build/gcc-cir "
+    f"{big} && "
+    f"echo '== non-ASan front end (build/gcc-release-cir)' && "
+    f"{rss} --fe-build build/gcc-release-cir {big}"
+  )
+  code = in_cir_env(ctx, 'rss', command)
+  text = (ctx.out / 'rss' / 'log.txt').read_text()
+  rows = re.findall(
+    r'^(inproc|keep|2p-fe|2p-edg-cir|cpfe)\s+\S+\s+\S+\s+(\d+)$', text,
+    re.M
+  )
+  bad = [name for name, rc in rows if rc != '0']
+  ok = code == 0 and len(rows) >= 10 and not bad
+  return ok, (f"{len(rows)} measurements; numbers in log.txt"
+              if ok else f"failed (see log.txt): rows with a failing "
+              f"exit status: {bad or 'none'}, {len(rows)} measurements")
 
 
-def _status_lines(run: Path) -> Dict[str, List[str]]:
-  '''Per config: sorted status lines of the run's *.elog files.'''
+def _status_lines(run: Path, suites: Optional[List[str]] = None
+                  ) -> Dict[str, List[str]]:
+  '''Per config: sorted status lines of the run's suite-*.elog files.
+
+  suites, if given, restricts them to those test suites.
+  '''
   data = {}
   for config_dir in sorted(p for p in run.iterdir() if p.is_dir()):
     lines: List[str] = []
     for elog in sorted(config_dir.glob('suite-*.elog')):
+      if suites is not None and elog.stem[len('suite-'):] not in suites:
+        continue
       lines += [f"{elog.name}:{l.strip()}" for l in elog.read_text(
         errors = 'replace').splitlines() if l.strip()]
     data[config_dir.name] = sorted(lines)
@@ -335,14 +346,20 @@ def step_day(ctx: Context) -> Tuple[bool, str]:
   if not baseline:
     return False, '--day-baseline-run is required'
   before = runs_before(ctx)
+  day_command = [str(ctx.tree / 'dev_tools/bin/edg-docker-test'),
+                 '--non-interactive']
+  suites = None
+  if ctx.args.day_filter:
+    # A partial run (for testing the script): compare only those suites.
+    day_command.append(ctx.args.day_filter)
+    suites = sorted({f.split('/')[0] for f in ctx.args.day_filter.split(',')})
   run_logged(ctx, 'day', ['sg', 'docker', '-c', ' '.join(
-    shlex.quote(c) for c in [str(ctx.tree / 'dev_tools/bin/edg-docker-test'),
-                             '--non-interactive'])])
+    shlex.quote(c) for c in day_command)])
   run = newest_run(ctx, before)
   if run is None:
     return False, 'no run produced'
-  base_lines = _status_lines(Path(baseline).resolve())
-  new_lines = _status_lines(run)
+  base_lines = _status_lines(Path(baseline).resolve(), suites)
+  new_lines = _status_lines(run, suites)
   problems = []
   for config in ('edg_x86_64', 'edg_x86_64_cp'):
     if base_lines.get(config) != new_lines.get(config):
@@ -414,6 +431,9 @@ def main() -> None:
   parser.add_argument('--day-baseline-run', default = '',
                       help = 'tests/runs/<ts> of a full day suite of the M0 '
                              'commit')
+  parser.add_argument('--day-filter', default = '',
+                      help = 'run only these suites in the day step (for '
+                             'trying the script; the gate run has none)')
   parser.add_argument('--smoke-filter',
                       default = '@tests/.edgy/filters/cir-c-smoke.txt')
   parser.add_argument('--corpus-filter',
@@ -452,10 +472,10 @@ def main() -> None:
         table.append((step, 'PASS', previous['detail'] + ' (cached)', 0.0))
         print(f"{step}: PASS (cached)")
         continue
-      # A failed step is repeated from a clean log.
-      log = ctx.out / step / 'log.txt'
-      if log.exists():
-        log.unlink()
+    # Every execution starts with a clean log.
+    old_log = ctx.out / step / 'log.txt'
+    if old_log.exists():
+      old_log.unlink()
     print(f"{step}: running ...", flush = True)
     started = time.time()
     try:

@@ -1,0 +1,142 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 10: warning: function "__builtin_nansd32" declared implicitly
+    return __builtin_issignaling (__builtin_nansd32 (""));
+                                  ^
+
+"Test_name.c", line 11: warning: CIR back end: the body of "f1" uses the builtin function __builtin_nansd32, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 16: warning: function "__builtin_nand64" declared implicitly
+    return __builtin_issignaling (__builtin_nand64 (""));
+                                  ^
+
+"Test_name.c", line 17: warning: CIR back end: the body of "f2" uses the builtin function __builtin_nand64, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 22: error: extra text after expected end of number
+    return __builtin_issignaling (0.0DD);
+                                     ^
+
+"Test_name.c", line 26: error: identifier "_Decimal32" is undefined
+  f4 (_Decimal32 x)
+      ^
+
+"Test_name.c", line 32: error: identifier "_Decimal64" is undefined
+  f5 (_Decimal64 x)
+      ^
+
+"Test_name.c", line 38: error: identifier "_Decimal128" is undefined
+  f6 (_Decimal128 x)
+      ^
+
+"Test_name.c", line 43: error: identifier "_Decimal32" is undefined
+  _Decimal32 x;
+  ^
+
+"Test_name.c", line 44: error: identifier "_Decimal64" is undefined
+  _Decimal64 y;
+  ^
+
+"Test_name.c", line 45: error: identifier "_Decimal128" is undefined
+  _Decimal128 z;
+  ^
+
+"Test_name.c", line 53: warning: function "__builtin_nansd32" declared implicitly
+    if (f4 (x) || !f4 (__builtin_nansd32 ("0x123")) || f4 (42.0DF) || f4 (__builtin_nand32 ("0x234"))
+                       ^
+
+"Test_name.c", line 53: error: extra text after expected end of number
+    if (f4 (x) || !f4 (__builtin_nansd32 ("0x123")) || f4 (42.0DF) || f4 (__builtin_nand32 ("0x234"))
+                                                               ^
+
+"Test_name.c", line 53: warning: function "__builtin_nand32" declared implicitly
+    if (f4 (x) || !f4 (__builtin_nansd32 ("0x123")) || f4 (42.0DF) || f4 (__builtin_nand32 ("0x234"))
+                                                                          ^
+
+"Test_name.c", line 54: warning: function "__builtin_infd32" declared implicitly
+        || f4 (__builtin_infd32 ()) || f4 (-__builtin_infd32 ()) || f4 (-42.0DF) || f4 (-0.0DF) || f4 (0.0DF))
+               ^
+
+"Test_name.c", line 54: error: extra text after expected end of number
+        || f4 (__builtin_infd32 ()) || f4 (-__builtin_infd32 ()) || f4 (-42.0DF) || f4 (-0.0DF) || f4 (0.0DF))
+                                                                             ^
+
+"Test_name.c", line 54: error: extra text after expected end of number
+        || f4 (__builtin_infd32 ()) || f4 (-__builtin_infd32 ()) || f4 (-42.0DF) || f4 (-0.0DF) || f4 (0.0DF))
+                                                                                            ^
+
+"Test_name.c", line 54: error: extra text after expected end of number
+        || f4 (__builtin_infd32 ()) || f4 (-__builtin_infd32 ()) || f4 (-42.0DF) || f4 (-0.0DF) || f4 (0.0DF))
+                                                                                                          ^
+
+"Test_name.c", line 56: warning: function "__builtin_nansd32" declared implicitly
+    x = __builtin_nansd32 ("");
+        ^
+
+"Test_name.c", line 60: warning: function "__builtin_nansd64" declared implicitly
+    if (f5 (y) || !f5 (__builtin_nansd64 ("0x123")) || f5 (42.0DD) || f5 (__builtin_nand64 ("0x234"))
+                       ^
+
+"Test_name.c", line 60: error: extra text after expected end of number
+    if (f5 (y) || !f5 (__builtin_nansd64 ("0x123")) || f5 (42.0DD) || f5 (__builtin_nand64 ("0x234"))
+                                                               ^
+
+"Test_name.c", line 60: warning: function "__builtin_nand64" declared implicitly
+    if (f5 (y) || !f5 (__builtin_nansd64 ("0x123")) || f5 (42.0DD) || f5 (__builtin_nand64 ("0x234"))
+                                                                          ^
+
+"Test_name.c", line 61: warning: function "__builtin_infd64" declared implicitly
+        || f5 (__builtin_infd64 ()) || f5 (-__builtin_infd64 ()) || f5 (-42.0DD) || f5 (-0.0DD) || f5 (0.0DD))
+               ^
+
+"Test_name.c", line 61: error: extra text after expected end of number
+        || f5 (__builtin_infd64 ()) || f5 (-__builtin_infd64 ()) || f5 (-42.0DD) || f5 (-0.0DD) || f5 (0.0DD))
+                                                                             ^
+
+"Test_name.c", line 61: error: extra text after expected end of number
+        || f5 (__builtin_infd64 ()) || f5 (-__builtin_infd64 ()) || f5 (-42.0DD) || f5 (-0.0DD) || f5 (0.0DD))
+                                                                                            ^
+
+"Test_name.c", line 61: error: extra text after expected end of number
+        || f5 (__builtin_infd64 ()) || f5 (-__builtin_infd64 ()) || f5 (-42.0DD) || f5 (-0.0DD) || f5 (0.0DD))
+                                                                                                          ^
+
+"Test_name.c", line 63: warning: function "__builtin_nansd64" declared implicitly
+    y = __builtin_nansd64 ("");
+        ^
+
+"Test_name.c", line 67: warning: function "__builtin_nansd128" declared implicitly
+    if (f6 (z) || !f6 (__builtin_nansd128 ("0x123")) || f6 (42.0DL) || f6 (__builtin_nand128 ("0x234"))
+                       ^
+
+"Test_name.c", line 67: error: extra text after expected end of number
+    if (f6 (z) || !f6 (__builtin_nansd128 ("0x123")) || f6 (42.0DL) || f6 (__builtin_nand128 ("0x234"))
+                                                                ^
+
+"Test_name.c", line 67: warning: function "__builtin_nand128" declared implicitly
+    if (f6 (z) || !f6 (__builtin_nansd128 ("0x123")) || f6 (42.0DL) || f6 (__builtin_nand128 ("0x234"))
+                                                                           ^
+
+"Test_name.c", line 68: warning: function "__builtin_infd128" declared implicitly
+        || f6 (__builtin_infd128 ()) || f6 (-__builtin_infd128 ()) || f6 (-42.0DL) || f6 (-0.0DL) || f6 (0.0DL))
+               ^
+
+"Test_name.c", line 68: error: extra text after expected end of number
+        || f6 (__builtin_infd128 ()) || f6 (-__builtin_infd128 ()) || f6 (-42.0DL) || f6 (-0.0DL) || f6 (0.0DL))
+                                                                               ^
+
+"Test_name.c", line 68: error: extra text after expected end of number
+        || f6 (__builtin_infd128 ()) || f6 (-__builtin_infd128 ()) || f6 (-42.0DL) || f6 (-0.0DL) || f6 (0.0DL))
+                                                                                              ^
+
+"Test_name.c", line 68: error: extra text after expected end of number
+        || f6 (__builtin_infd128 ()) || f6 (-__builtin_infd128 ()) || f6 (-42.0DL) || f6 (-0.0DL) || f6 (0.0DL))
+                                                                                                            ^
+
+"Test_name.c", line 70: warning: function "__builtin_nansd128" declared implicitly
+    z = __builtin_nansd128 ("");
+        ^
+
+19 errors detected in the compilation of "Test_name.c".

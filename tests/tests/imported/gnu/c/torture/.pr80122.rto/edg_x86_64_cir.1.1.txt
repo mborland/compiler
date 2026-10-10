@@ -1,0 +1,20 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 24: warning: CIR back end: the body of "send_msg_to_gm_w_dev_t" uses the builtin function __builtin_va_arg_pack_len, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 35: warning: CIR back end: the body of "send_msg_to_gm" uses the builtin function __builtin_va_arg_pack_len, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 44: warning: CIR back end: the body of "send_enable" uses the builtin function __builtin_va_arg_pack_len, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'send_msg_to_gm_w_dev_t' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'send_msg_to_gm' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'send_enable' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

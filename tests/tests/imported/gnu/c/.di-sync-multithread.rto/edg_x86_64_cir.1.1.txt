@@ -1,0 +1,18 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c99 --strict_gnu Test_name.c
+"./di-sync-multithread.c", line 141: warning: CIR back end: the body of "worker" uses the builtin function __sync_and_and_fetch_8, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./di-sync-multithread.c", line 173: warning: integer conversion resulted in a change of sign
+    tmp = __sync_val_compare_and_swap (&workspace, 0, -1ll);
+                                                      ^
+
+"./di-sync-multithread.c", line 220: warning: CIR back end: the body of "main" uses the builtin function __sync_lock_release_8, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'worker' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

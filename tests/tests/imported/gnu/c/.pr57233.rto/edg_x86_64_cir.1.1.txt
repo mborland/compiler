@@ -1,0 +1,92 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 19: warning: CIR back end: the body of "f1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 25: warning: CIR back end: the body of "f2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 31: warning: CIR back end: the body of "f3" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 33: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone)) void
+                           ^
+
+"Test_name.c", line 37: warning: CIR back end: the body of "f4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 43: warning: CIR back end: the body of "f5" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 49: warning: CIR back end: the body of "f6" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 55: warning: CIR back end: the body of "f7" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 57: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone)) void
+                           ^
+
+"Test_name.c", line 61: warning: CIR back end: the body of "f8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 67: warning: CIR back end: the body of "f9" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 73: warning: CIR back end: the body of "f10" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 79: warning: CIR back end: the body of "f11" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 81: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone)) void
+                           ^
+
+"Test_name.c", line 85: warning: CIR back end: the body of "f12" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 174: warning: CIR back end: the body of "main" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f5' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f6' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f7' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f9' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f10' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f11' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f12' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+13 errors detected in the compilation of "Test_name.c".

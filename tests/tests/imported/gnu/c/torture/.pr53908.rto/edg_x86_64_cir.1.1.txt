@@ -1,0 +1,120 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 5: warning: declaration of "size_t" does not match the expected type "unsigned long"
+  typedef unsigned int size_t;
+                       ^
+
+"Test_name.c", line 35: warning: unknown attribute "__noclone__"
+  __attribute__((__noclone__, __noinline__))
+                 ^
+
+"Test_name.c", line 38: warning: unknown attribute "__noclone__"
+  __attribute__((__noclone__, __noinline__))
+                 ^
+
+"Test_name.c", line 41: warning: unknown attribute "__noclone__"
+  __attribute__((__noclone__, __noinline__))
+                 ^
+
+"Test_name.c", line 109: warning: unknown attribute "__noclone__"
+  char *foo (void) __attribute__((__noclone__, __noinline__));
+                                  ^
+
+"Test_name.c", line 110: warning: unknown attribute "__noclone__"
+  char* g_strdup (const char *str) __attribute__((__malloc__, __noclone__, __noinline__));
+                                                              ^
+
+"Test_name.c", line 136: warning: unknown attribute "__noclone__"
+  __attribute__((__noclone__, __noinline__))
+                 ^
+
+"Test_name.c", line 161: warning: enumerated type mixed with another type
+    return ret_val;
+           ^
+
+"Test_name.c", line 174: warning: enumerated type mixed with another type
+      user_resp = get_user_info_from_header(req->internal_realm,
+                                            ^
+
+"Test_name.c", line 178: warning: enumerated type mixed with another type
+        resp = has_auth_user(authent, 0, req->internal_realm, "", 1);
+                                         ^
+
+"Test_name.c", line 187: warning: enumerated type mixed with another type
+      resp = has_www_auth("", 1, req->internal_realm, resp);
+                                 ^
+
+"Test_name.c", line 188: warning: enumerated type mixed with another type
+    return ret_val;
+           ^
+
+"Test_name.c", line 191: warning: unknown attribute "__noclone__"
+  int __attribute__ ((__noinline__, __noclone__))
+                                    ^
+
+"Test_name.c", line 214: warning: CIR back end: the body of "authent_author" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 218: warning: unknown attribute "__noclone__"
+  __attribute__ ((__noinline__, __noclone__))
+                                ^
+
+"Test_name.c", line 224: warning: CIR back end: the body of "foo" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 226: warning: unknown attribute "__noclone__"
+  __attribute__ ((__noinline__, __noclone__))
+                                ^
+
+"Test_name.c", line 232: warning: CIR back end: the body of "ha_get_string_value" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 234: warning: unknown attribute "__noclone__"
+  __attribute__ ((__noinline__, __noclone__))
+                                ^
+
+"Test_name.c", line 242: warning: CIR back end: the body of "has_auth_user" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 244: warning: unknown attribute "__noclone__"
+  __attribute__ ((__noinline__, __noclone__))
+                                ^
+
+"Test_name.c", line 250: warning: CIR back end: the body of "has_www_auth" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 254: warning: unknown attribute "__noclone__"
+  __attribute__((__malloc__, __noclone__, __noinline__))
+                             ^
+
+"Test_name.c", line 262: warning: CIR back end: the body of "g_strdup" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 264: warning: unknown attribute "__noclone__"
+  __attribute__((__noclone__, __noinline__))
+                 ^
+
+"Test_name.c", line 270: warning: CIR back end: the body of "g_free" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'g_strdup' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'ha_get_string_value' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'g_free' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'has_auth_user' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'has_www_auth' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'authent_author' was dropped: it uses a construct the CIR back end cannot express
+
+7 errors detected in the compilation of "Test_name.c".

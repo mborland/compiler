@@ -1,0 +1,33 @@
+; A C99 inline definition without an external definition keeps no body.  The
+; body here has several top-level blocks (label/goto, code after a return),
+; whose values must be released before the blocks are erased.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; CHECK: cir.func {{.*}}private {{.*}}@f(!s32i) -> !s32i
+; CHECK-NOT: cir.label
+
+frame DECLS
+  STR 10 "f"
+  TY_FUNC 20 1 0 [1]
+  DECL_FUNC 30 20 0 19 10
+frame REGION
+  FUNC_BEGIN 30 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  TO_BOOL
+  IF_BEGIN 0
+  GOTO_STMT 5 0
+  IF_END
+  LREF 1
+  CONST_INT 1 2
+  STORE 0 0
+  LABEL 5 nil
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

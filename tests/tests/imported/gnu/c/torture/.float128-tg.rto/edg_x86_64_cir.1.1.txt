@@ -1,0 +1,26 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+Warning: CIR back end: the initializer of "inf" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "nanval" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "zero" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "negzero" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "one" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "true_min" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'inf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'zero' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'negzero' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'nanval' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'one' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'true_min' was dropped: it uses a construct the CIR back end cannot express
+
+6 errors detected in the compilation of "Test_name.c".

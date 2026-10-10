@@ -1,0 +1,45 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c23 --diag_error=cir_warning Test_name.c
+"Test_name.c", line 9: warning: variable "l" was declared but never referenced
+  int use(struct B *p) { struct B l; return p->x; }
+                                  ^
+
+"Test_name.c", line 9: error: CIR back end: the body of "use" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  int use(struct B *p) { struct B l; return p->x; }
+                                                  ^
+
+1 error detected in the compilation of "Test_name.c".
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 202311 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  TY_FUNC 5 4 0 []
+  STR 5 "f1"
+  DECL_FUNC 6 5 0 0 5
+  DECL_FUNC 6 5 0 1 5
+  STR 6 "A"
+  TY_RECORD_DECL 7 0 6
+  TY_PTR 8 7
+  TY_FUNC 9 4 0 [8]
+  STR 7 "ta"
+  DECL_FUNC 10 9 0 0 7
+  FUNC_BEGIN 6 0
+  BLOCK_BEGIN
+  CONST_NULL 8
+  CALL 10 9 1 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame ABORT

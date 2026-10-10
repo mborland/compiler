@@ -40,7 +40,7 @@ imported/gnu/c/torture/pr79088.sft.c
 imported/gnu/c/torture/pr80974.sft.c
 imported/gnu/c/tree-ssa/20040319-1.sft.c
 imported/gnu/c/tree-ssa/alias-7.sft.c
-imported/gnu/c/tree-ssa/pr14841.sft.c
+imported/gnu/c/tree-ssa/pr22236.sft.c
 imported/gnu/c/tree-ssa/pr22018.sft.c
 imported/gnu/c/tree-ssa/pr41497.sft.c
 imported/gnu/c/tree-ssa/pr87022.sft.c

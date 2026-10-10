@@ -46,3 +46,9 @@ if(EDG_CIR_LIT AND EXISTS "${EDG_LLVM_CIR_PREFIX}/bin/FileCheck")
   add_test(NAME lit
     COMMAND python3 "${EDG_CIR_LIT}" -v "${CMAKE_BINARY_DIR}/test/lit")
 endif()
+
+# Benchmark: per-frame consume cost (see consume_bench.cpp); not a test.
+add_executable(consume_bench consume_bench.cpp)
+target_link_libraries(consume_bench PRIVATE edg_cir_options edg_cir)
+set_target_properties(consume_bench PROPERTIES
+  BUILD_RPATH "${CMAKE_BINARY_DIR}/lib")

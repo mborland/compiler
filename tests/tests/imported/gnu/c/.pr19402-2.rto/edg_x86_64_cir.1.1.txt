@@ -1,0 +1,62 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 13: warning: CIR back end: the body of "powif" uses the builtin function __builtin_powif, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 18: warning: CIR back end: the body of "powi" uses the builtin function __builtin_powi, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 23: warning: CIR back end: the body of "powil" uses the builtin function __builtin_powil, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 29: warning: CIR back end: the body of "powcif" uses the builtin function __builtin_powif, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 34: warning: CIR back end: the body of "powci" uses the builtin function __builtin_powi, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 39: warning: CIR back end: the body of "powcil" uses the builtin function __builtin_powil, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 45: warning: CIR back end: the body of "powicf" uses the builtin function __builtin_powif, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 50: warning: CIR back end: the body of "powic" uses the builtin function __builtin_powi, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 55: warning: CIR back end: the body of "powicl" uses the builtin function __builtin_powil, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 85: warning: CIR back end: the body of "main" uses the builtin function __builtin_powi, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'powif' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'powi' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'powil' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'powcif' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'powci' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'powcil' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'powicf' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'powic' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'powicl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+10 errors detected in the compilation of "Test_name.c".

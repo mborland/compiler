@@ -1,0 +1,32 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c99 --strict_gnu Test_name.c
+"./vla-16.c", line 23: warning: CIR back end: the body of "f1" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./vla-16.c", line 32: warning: CIR back end: the body of "f2" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./vla-16.c", line 41: warning: CIR back end: the body of "f3" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./vla-16.c", line 50: warning: CIR back end: the body of "f4" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./vla-16.c", line 59: warning: CIR back end: the body of "f5" uses variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f5' was dropped: it uses a construct the CIR back end cannot express
+
+5 errors detected in the compilation of "Test_name.c".

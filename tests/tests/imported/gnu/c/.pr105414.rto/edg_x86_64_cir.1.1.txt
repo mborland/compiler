@@ -1,0 +1,23 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./pr105414.c", line 15: warning: function "issignaling" declared implicitly
+    if (issignaling (fmin (a, a)))
+        ^
+
+"./pr105414.c", line 18: warning: function "issignaling" declared implicitly
+    if (issignaling (fmax (a, a)))
+        ^
+
+"./pr105414.c", line 23: warning: function "issignaling" declared implicitly
+    if (issignaling (fmin (a, b)))
+        ^
+
+"./pr105414.c", line 26: warning: function "issignaling" declared implicitly
+    if (issignaling (fmax (a, b)))
+        ^
+
+/usr/sbin/ld: Test_name.o: in function `main':
+Test_name.c:(.text+0xXX): undefined reference to `issignaling'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `issignaling'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `issignaling'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `issignaling'
+collect2: error: ld returned 1 exit status

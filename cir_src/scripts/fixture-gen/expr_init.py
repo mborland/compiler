@@ -61,5 +61,10 @@ body += addtest("t_init_big", [Lr(1) + big + ["INIT_CONST"], ret(ADD(ADD(ADD(ADD
 body += addtest("t_init_big_zero", [seq(ai(1,5) and [] ), Lr(1) + ["INIT_ZERO"], ret(ADD(ai(1,0), ai(1,99)))], [(1,A100,16)], 0)
 # MATERIALIZE_TEMP: mk(3,4).b
 body += addtest("t_materialize", [ret(ADD(seq(CALL(mk,Tmk,[K(1,3),K(1,4)]), ["MATERIALIZE_TEMP 9 %d" % S, f"FIELD {S} 1", "LOAD 0"]), K(1,1)))], [], 5)
+# a = (b = c) with records: the inner STORE pushes the stored record prvalue
+body += addtest("t_chain_assign", pre_dirty(1) if False else [
+  seq(f(3, S, 0), K(1, 1), ["STORE 0 0"]), seq(f(3, S, 1), K(1, 2), ["STORE 0 0"]),
+  seq(Lr(1), Lr(2), Lr(3), ["LOAD 0", "STORE 0 2", "STORE 0 0"]),
+  ret(ADD(MUL(seq(f(1, S, 0), ["LOAD 0"]), K(1, 10)), seq(f(1, S, 1), ["LOAD 0"])))], [(1, S, 4), (2, S, 4), (3, S, 4)], 12)
 p.funcs = [body]
 p.render(D+"expr-init.test", exp)

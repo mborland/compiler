@@ -1,0 +1,38 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 19: warning: CIR back end: the body of "test1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 25: warning: CIR back end: the body of "test2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 31: warning: CIR back end: the body of "test3" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 37: warning: CIR back end: the body of "test4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 43: warning: CIR back end: the body of "test5" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 74: warning: CIR back end: the body of "do_test" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'test1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test5' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'do_test' was dropped: it uses a construct the CIR back end cannot express
+
+6 errors detected in the compilation of "Test_name.c".

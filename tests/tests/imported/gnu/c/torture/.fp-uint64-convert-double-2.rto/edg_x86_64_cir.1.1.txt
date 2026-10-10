@@ -1,0 +1,17 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/fp-uint64-convert-double-2.c", line 10: warning: unknown attribute "noipa"
+  void __attribute__((noipa))
+                      ^
+
+"./torture/fp-uint64-convert-double-2.c", line 25: warning: unknown attribute "noipa"
+  void __attribute__((noipa))
+                      ^
+
+"./torture/fp-uint64-convert-double-2.c", line 39: warning: unknown attribute "noipa"
+  void __attribute__((noipa))
+                      ^
+
+"./torture/fp-uint64-convert-double-2.c", line 53: warning: unknown attribute "noipa"
+  void __attribute__((noipa))
+                      ^
+

@@ -1,0 +1,104 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c23 Test_name.c
+"Test_name.c", line 60: warning: CIR back end: the body of "main" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "a" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "b" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "c" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "d" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "e" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "f" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "g" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "h" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "i" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "j" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "k" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "l" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "m" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "n" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "o" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "p" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "q" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "r" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "s" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "t" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "u" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "v" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "w" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "x" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'a' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'd' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'e' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'g' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'h' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'i' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'j' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'k' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'l' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'm' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'n' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'o' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'p' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'q' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'r' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 's' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 't' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'u' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'w' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'x' was dropped: it uses a construct the CIR back end cannot express
+
+25 errors detected in the compilation of "Test_name.c".

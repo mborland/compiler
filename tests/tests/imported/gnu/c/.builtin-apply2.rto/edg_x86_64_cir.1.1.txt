@@ -1,0 +1,12 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 41: warning: argument of type "void (*)(char *, double, double, double, int)" is incompatible with parameter of type "void (*)(...)"
+    __builtin_apply(foo, __builtin_apply_args(), STACK_ARGUMENTS_SIZE);
+                    ^
+
+"Test_name.c", line 42: warning: CIR back end: the body of "bar" uses the builtin function __builtin_apply, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'bar' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

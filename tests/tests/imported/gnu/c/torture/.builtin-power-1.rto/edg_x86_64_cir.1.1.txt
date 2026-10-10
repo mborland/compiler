@@ -1,0 +1,15 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+/usr/sbin/ld: Test_name.o: in function `test':
+Test_name.c:(.text+0xXX): undefined reference to `link_failure_sqrt_sqrt'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_sqrt_cbrt'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_cbrt_sqrt'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_cbrt_cbrt'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_pow_sqrt'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_pow_cbrt'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_sqrt_pow'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_cbrt_pow'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_pow_pow'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_root_x_root'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_root_x_root'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_failure_pow_x_pow'
+collect2: error: ld returned 1 exit status

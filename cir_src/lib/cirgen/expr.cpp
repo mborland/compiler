@@ -177,6 +177,7 @@ object now holds.
     cir::LoadOp load = value.getDefiningOp<cir::LoadOp>();
 
     if (is_aggregate_type(value.getType()) && load && value.use_empty() &&
+        result == nullptr &&
         pointee == value.getType() && !load.getIsVolatile()) {
       cir::CopyOp copy = builder_.createCopy(target.value, load.getAddr(),
                                              is_volatile);
@@ -375,7 +376,13 @@ Apply an ECIL cast kind.
   case eck_floating: ck = cir::CastKind::floating; break;
   case eck_int_to_ptr: ck = cir::CastKind::int_to_ptr; break;
   case eck_ptr_to_int: ck = cir::CastKind::ptr_to_int; break;
-  case eck_bitcast: ck = cir::CastKind::bitcast; break;
+  case eck_bitcast:
+    /* Strict: pointer/integer conversions have their own cast kinds. */
+    if (mlir::isa<cir::PointerType>(v.getType()) !=
+        mlir::isa<cir::PointerType>(to))
+      ok = format_error("CAST bitcast between a pointer and a non-pointer "
+                        "type (use ptr_to_int or int_to_ptr)");
+    break;
   case eck_array_to_ptrdecay: ck = cir::CastKind::array_to_ptrdecay; break;
   default:
     ok = format_error("unknown cast kind");
@@ -393,7 +400,20 @@ mlir::Value a_emitter::get_constant_value(mlir::Attribute attr)
 A cir.const of the (typed) attribute.
 */
 {
-  return builder_.getConstant(loc(), mlir::cast<mlir::TypedAttr>(attr));
+  mlir::Value result;
+  auto pointer = mlir::dyn_cast<cir::ConstPtrAttr>(attr);
+
+  if (pointer && !pointer.isNullValue()) {
+    /* The LLVM lowering has no non-null pointer-valued cir.const. */
+    mlir::Value integer = builder_.getConstantInt(
+        loc(), compat::int_type(ctx_, 64, false),
+        static_cast<int64_t>(pointer.getValue().getInt()));
+    result = builder_.createCast(loc(), cir::CastKind::int_to_ptr, integer,
+                                 pointer.getType());
+  } else {
+    result = builder_.getConstant(loc(), mlir::cast<mlir::TypedAttr>(attr));
+  }
+  return result;
 }  /* a_emitter::get_constant_value */
 
 void a_emitter::zero_fill(mlir::Value address, mlir::Type type, uint32_t align)
@@ -544,6 +564,16 @@ and an indirect call with all arguments as variadic extras.
   call_type = type_at(t_call);
   if (call_type == nullptr || call_type->kind != a_type_kind::function_type)
     ok = format_error("CALL names a type that is not a function type");
+  if (ok) {
+    /* Result and parameters of a call must be complete. */
+    for (uint64_t p : call_type->params)
+      ok = ok && type_at(p) != nullptr && type_is_complete(type_at(p)->cir);
+    ok = ok && type_at(call_type->target) != nullptr &&
+         type_is_complete(type_at(call_type->target)->cir);
+    if (!ok)
+      ok = format_error("CALL with an incomplete record type as argument "
+                        "or result");
+  }
   if (ok) {
     args.resize(static_cast<size_t>(nargs));
     for (size_t k = static_cast<size_t>(nargs); ok && k > 0; --k)
@@ -988,8 +1018,8 @@ CIRGen does.
       ok = format_error("floating-point class builtins need a floating "
                         "operand");
     } else if (id == ebi_signbit) {
-      push_prvalue(cir::SignBitOp::create(builder_, loc(), builder_.getBoolTy(),
-                                          args[0]));
+      push_prvalue(cir::SignBitOp::create(builder_, loc(),
+                                          builder_.getBoolTy(), args[0]));
     } else {
       auto constant = args.size() == 2
                           ? args[1].getDefiningOp<cir::ConstantOp>()
@@ -1177,6 +1207,12 @@ Handle one expression record.
       ok = format_error("LOAD of a function designator");
       break;
     }
+    if (v.kind == a_value_kind::glvalue &&
+        !type_is_complete(mlir::cast<cir::PointerType>(v.value.getType())
+                              .getPointee())) {
+      ok = format_error("LOAD of an incomplete record type");
+      break;
+    }
     push_prvalue(load_value(v, (r.ops[0].u & ECIL_ACCESS_VOLATILE) != 0));
     break;
   }
@@ -1190,8 +1226,12 @@ Handle one expression record.
       ok = false;
       break;
     }
+    if (!type_is_complete(value.getType())) {
+      ok = format_error("STORE of an incomplete record type");
+      break;
+    }
     if (!store_value(target, value, (r.ops[0].u & ECIL_ACCESS_VOLATILE) != 0,
-                     &stored)) {
+                     result_kind == esr_none ? nullptr : &stored)) {
       ok = false;
       break;
     }
@@ -1294,7 +1334,10 @@ Handle one expression record.
           loc(), builder_.getSIntNTy(64), bytes);
       result = builder_.createPtrStride(loc(), base, offset);
     }
-    push_prvalue(builder_.createBitcast(loc(), result, t->cir));
+    if (!mlir::isa<cir::PointerType>(t->cir))
+      ok = format_error("ADDR_OFFSET result type is not a pointer type");
+    else
+      push_prvalue(builder_.createBitcast(loc(), result, t->cir));
     break;
   }
   case eop_dup:
@@ -1322,6 +1365,10 @@ Handle one expression record.
     t = type_at(tgid);
     if (t == nullptr || !pop_prvalue(v)) {
       ok = format_error("MATERIALIZE_TEMP names an unknown type");
+      break;
+    }
+    if (!type_is_complete(t->cir)) {
+      ok = format_error("MATERIALIZE_TEMP of an incomplete record type");
       break;
     }
     local.align = static_cast<uint32_t>(type_align(t->cir));
@@ -1352,8 +1399,15 @@ Handle one expression record.
     }
     result = arithmetic(r.opcode, static_cast<uint32_t>(r.ops[0].u), lhs, rhs);
     if (!result) {
+      std::string lhs_text;
+      std::string rhs_text;
+      llvm::raw_string_ostream lhs_stream(lhs_text);
+      llvm::raw_string_ostream rhs_stream(rhs_text);
+      lhs.getType().print(lhs_stream);
+      rhs.getType().print(rhs_stream);
       ok = format_error(std::string(r.info->name) +
-                          ": invalid operand types");
+                        ": invalid operand types (" + lhs_stream.str() +
+                        ", " + rhs_stream.str() + ")");
       break;
     }
     push_prvalue(result);

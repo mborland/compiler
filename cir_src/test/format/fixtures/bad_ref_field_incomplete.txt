@@ -10,9 +10,9 @@ frame REGION
   STR 2 "f"
   DECL_FUNC 3 2 0 1 2
   TY_RECORD_DECL 4 0 nil
+  DECL_VAR 5 4 0 0 4 nil
   FUNC_BEGIN 3 0
-  LOCAL 1 4 nil 4 0
-  LREF 1
+  GREF 5
   FIELD 4 0
   DROP
   FUNC_END 0

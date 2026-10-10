@@ -418,7 +418,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
   failures = 0
   checked = 0
 
-  presets = sorted(
+  presets = args.presets.split(',') if args.presets else sorted(
     {p.name for p in before_root.iterdir() if p.is_dir()} |
     {p.name for p in after_root.iterdir() if p.is_dir()}
   )
@@ -556,6 +556,11 @@ def parse_args() -> argparse.Namespace:
     '--allow-added-line', default = '',
     help = 'with --normalize-line-numbers, "after" preprocessed lines '
            'matching this regex are ignored (e.g. a new dump statement)'
+  )
+  compare.add_argument(
+    '--presets', default = '',
+    help = 'compare only these comma separated presets (default: all in '
+           'either tree)'
   )
   compare.add_argument(
     '--allow-cir-diagnostics', action = 'store_true',

@@ -1,0 +1,58 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/floatn-basic.h", line 44: warning: identifier-only parameters can only be used in old-style function definitions, which are nonstandard since C23
+  krfn (arg)
+        ^
+
+"./torture/floatn-basic.h", line 48: warning: CIR back end: the body of "krfn" uses a floating constant of this format, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/floatn-basic.h", line 52: warning: identifier-only parameters can only be used in old-style function definitions, which are nonstandard since C23
+  krprofn (arg)
+           ^
+
+"./torture/floatn-basic.h", line 56: warning: CIR back end: the body of "krprofn" uses a floating constant of this format, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/floatn-basic.h", line 62: warning: CIR back end: the body of "profn" uses a floating constant of this format, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/floatn-basic.h", line 143: warning: CIR back end: the body of "main" uses a floating constant of this format, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "a" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "b" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "c" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "a2" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "z" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "nz" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'krfn' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'krprofn' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'profn' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'a' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'a2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'z' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'nz' was dropped: it uses a construct the CIR back end cannot express
+
+10 errors detected in the compilation of "Test_name.c".

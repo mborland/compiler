@@ -240,6 +240,8 @@ private:
   bool need_type(const an_operand &op, bool optional, std::string &problem);
   bool need_complete(const an_operand &op, std::string &problem,
                      const a_ent *&out);
+  bool need_object(const an_operand &op, const char *what,
+                   std::string &problem);
   bool introduce(const an_operand &op, a_ent entity, std::string &problem);
   bool declare(const a_record &r, a_kind kind, std::string &problem);
   bool bind_name(uint64_t g, const an_operand &sid, uint64_t linkage,

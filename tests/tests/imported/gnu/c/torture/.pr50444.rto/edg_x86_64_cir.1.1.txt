@@ -1,0 +1,26 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 32: warning: CIR back end: the body of "ssefunc" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 42: warning: CIR back end: the body of "caster" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 59: warning: CIR back end: the body of "ctor" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 69: warning: CIR back end: the body of "method" uses a call with an argument of unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'ssefunc' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'caster' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'ctor' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'method' was dropped: it uses a construct the CIR back end cannot express
+
+4 errors detected in the compilation of "Test_name.c".

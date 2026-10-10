@@ -1,0 +1,44 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c11 Test_name.c
+"Test_name.c", line 45: warning: CIR back end: the body of "main" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "num_f" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "den_f" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "cres_f" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "num_d" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "den_d" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "cres_d" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "num_ld" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "den_ld" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "cres_ld" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'num_f' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'den_f' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'cres_f' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'num_d' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'den_d' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'cres_d' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'num_ld' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'den_ld' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'cres_ld' was dropped: it uses a construct the CIR back end cannot express
+
+10 errors detected in the compilation of "Test_name.c".

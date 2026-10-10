@@ -1,0 +1,18 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./flex-array-counted-by-2.c", line 12: warning: unknown attribute "counted_by"
+    char c[] __attribute__ ((counted_by (b)));
+                             ^
+
+"./flex-array-counted-by-2.c", line 31: warning: unknown attribute "counted_by"
+    char c[] __attribute__ ((counted_by (b)));
+                             ^
+
+Warning: CIR back end: the initializer of "static_annotated" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "nested_static_annotated" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'static_annotated' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'nested_static_annotated' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

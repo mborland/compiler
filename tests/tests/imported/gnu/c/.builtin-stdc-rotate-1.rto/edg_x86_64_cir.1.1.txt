@@ -1,0 +1,39 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c11 Test_name.c
+"Test_name.c", line 10: warning: function "__builtin_stdc_rotate_left" declared implicitly
+    return (__builtin_stdc_rotate_left (a, n)
+            ^
+
+"Test_name.c", line 15: warning: CIR back end: the body of "rotate_left" uses the builtin function __builtin_stdc_rotate_left, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 21: warning: function "__builtin_stdc_rotate_right" declared implicitly
+    return (__builtin_stdc_rotate_right (a, n)
+            ^
+
+"Test_name.c", line 26: warning: CIR back end: the body of "rotate_right" uses the builtin function __builtin_stdc_rotate_right, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 33: warning: function "__builtin_stdc_rotate_left" declared implicitly
+    if (__builtin_stdc_rotate_left ((unsigned char) 0, 0) != 0
+        ^
+
+"Test_name.c", line 74: warning: function "__builtin_stdc_rotate_right" declared implicitly
+    if (__builtin_stdc_rotate_right ((unsigned char) 0, 0) != 0
+        ^
+
+"Test_name.c", line 113: warning: function "__builtin_stdc_rotate_left" declared implicitly
+    if (__builtin_stdc_rotate_left ((unsigned __int128) 0U, 0) != 0
+        ^
+
+"Test_name.c", line 121: warning: function "__builtin_stdc_rotate_right" declared implicitly
+    if (__builtin_stdc_rotate_right (0ULL, 0) != 0
+        ^
+
+"Test_name.c", line 131: catastrophic error: #error directive: __builtin_stdc_rotate_left not implemented
+  #error __builtin_stdc_rotate_left not implemented
+   ^
+
+1 catastrophic error detected in the compilation of "Test_name.c".
+Compilation terminated.

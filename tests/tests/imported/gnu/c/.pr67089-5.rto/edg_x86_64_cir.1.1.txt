@@ -1,0 +1,48 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 12: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone))
+                           ^
+
+"Test_name.c", line 17: warning: CIR back end: the body of "foo" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 19: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone)) void
+                           ^
+
+"Test_name.c", line 40: warning: unknown attribute "noclone"
+  T (1, unsigned int, x - 2U, if (r > x) foo (0))
+  ^
+
+"Test_name.c", line 41: warning: unknown attribute "noclone"
+  T (2, unsigned long, x - 2U, if (r <= x) foo (0))
+  ^
+
+"Test_name.c", line 42: warning: unknown attribute "noclone"
+  T (3, unsigned short, 2U - x, if (r > 2U) foo (0))
+  ^
+
+"Test_name.c", line 43: warning: unknown attribute "noclone"
+  T (4, unsigned char, 2U - x, if (r <= 2U) foo (0))
+  ^
+
+"Test_name.c", line 44: warning: unknown attribute "noclone"
+  T (5, unsigned int, x + -2U, if (r > x) foo (0))
+  ^
+
+"Test_name.c", line 45: warning: unknown attribute "noclone"
+  T (6, unsigned long, x + -2UL, if (r <= x) foo (0))
+  ^
+
+"Test_name.c", line 46: warning: unknown attribute "noclone"
+  T (7, unsigned short, (unsigned short) -2 + x, if (r > (unsigned short) -2) foo (0))
+  ^
+
+"Test_name.c", line 47: warning: unknown attribute "noclone"
+  T (8, unsigned char, (unsigned char) -2 + x, if (r <= (unsigned char) -2) foo (0))
+  ^
+
+Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

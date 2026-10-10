@@ -1,0 +1,5 @@
+; Destroying a deeply nested (unflattened) CIR module must not use the
+; caller's stack: 10000 nested blocks under a 256 KiB main stack.
+; RUN: python3 %scripts/ecil-stress-gen.py nested_blocks 10000 > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: sh -c 'ulimit -s 256; %edg-cir --emit=cir --disable-cir-passes -o %t.cir %t.ecil'

@@ -1,0 +1,110 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 40: warning: CIR back end: the body of "test_fetch_add" uses the builtin function __atomic_fetch_add_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 66: warning: CIR back end: the body of "test_fetch_sub" uses the builtin function __atomic_fetch_sub_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 91: warning: CIR back end: the body of "test_fetch_and" uses the builtin function __atomic_fetch_and_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 115: warning: CIR back end: the body of "test_fetch_nand" uses the builtin function __atomic_fetch_nand_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 140: warning: CIR back end: the body of "test_fetch_xor" uses the builtin function __atomic_fetch_xor_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 170: warning: CIR back end: the body of "test_fetch_or" uses the builtin function __atomic_fetch_or_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 197: warning: CIR back end: the body of "test_add_fetch" uses the builtin function __atomic_add_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 223: warning: CIR back end: the body of "test_sub_fetch" uses the builtin function __atomic_sub_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 250: warning: CIR back end: the body of "test_and_fetch" uses the builtin function __atomic_and_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 274: warning: CIR back end: the body of "test_nand_fetch" uses the builtin function __atomic_nand_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 301: warning: CIR back end: the body of "test_xor_fetch" uses the builtin function __atomic_xor_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 331: warning: CIR back end: the body of "test_or_fetch" uses the builtin function __atomic_or_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 366: warning: CIR back end: the body of "test_add" uses the builtin function __atomic_add_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 398: warning: CIR back end: the body of "test_sub" uses the builtin function __atomic_sub_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 431: warning: CIR back end: the body of "test_and" uses the builtin function __atomic_and_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 461: warning: CIR back end: the body of "test_nand" uses the builtin function __atomic_fetch_nand_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 494: warning: CIR back end: the body of "test_xor" uses the builtin function __atomic_xor_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 530: warning: CIR back end: the body of "test_or" uses the builtin function __atomic_or_fetch_4, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'test_fetch_add' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_fetch_sub' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_fetch_and' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_fetch_nand' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_fetch_xor' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_fetch_or' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_add_fetch' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_sub_fetch' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_and_fetch' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_nand_fetch' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_xor_fetch' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_or_fetch' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_add' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_sub' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_and' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_nand' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_xor' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test_or' was dropped: it uses a construct the CIR back end cannot express
+
+18 errors detected in the compilation of "Test_name.c".

@@ -1,10 +1,10 @@
-edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --diag_error=3601 Test_name.c
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --diag_error=cir_warning Test_name.c
 "Test_name.c", line 5: error: CIR back end: the body of "vla" uses a variable length array, which the CIR back end does not support; the function is dropped
   int vla(int n) { int a[n]; a[0] = 1; return a[0]; }
                                                     ^
 
 1 error detected in the compilation of "Test_name.c".
-ecil 0.4 features=0x00000000
+ecil 0.6 features=0x00000000
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""

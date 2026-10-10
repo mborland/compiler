@@ -59,7 +59,8 @@ _CRASH_REGEX = re.compile(
   r'terminate called|[Ss]tack overflow'
 )
 _LIB_INTERNAL_REGEX = re.compile(
-  r'CIR back end:.*(internal|EDG_CIR_ERROR_INTERNAL|crash|stack)|'
+  r'CIR back end:.*(internal (error|crash)|EDG_CIR_ERROR_INTERNAL|'
+  r'stack (overflow|exhaust))|'
   r'edg-cir: .*internal|PLEASE submit a bug report|LLVM ERROR|'
   r'UNREACHABLE executed',
   re.IGNORECASE

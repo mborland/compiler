@@ -1,0 +1,26 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/builtin-issignaling-1.c", line 74: warning: CIR back end: the body of "f1" uses the builtin function __builtin_nansf16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/builtin-issignaling-1.c", line 80: warning: CIR back end: the body of "f2" uses the builtin function __builtin_nanf16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/builtin-issignaling-1.c", line 86: warning: CIR back end: the body of "f3" uses a floating constant of this format, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/builtin-issignaling-1.c", line 141: warning: CIR back end: the body of "main" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+4 errors detected in the compilation of "Test_name.c".

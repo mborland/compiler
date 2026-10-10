@@ -423,3 +423,49 @@ matter:
 * **Missing runtime directory fails loudly:** the base exits with an error if
   `EDG_CIR_RT_LIBDIR` is not set (it is exported by the build's
   `environment.sh`), instead of failing later at the link.
+
+## 8. `eccp --cpfe_only` still runs the back end: which tests does it matter for?
+
+`edgtest/exec/__init__.py:99-107` runs front-end test types (`fp`, `fn`, `fc`)
+with `eccp --cpfe_only` (`-S`). In `eccp.sh` that sets `fe_only=1` and
+`keep_int_file=1`: only the C compiler step is skipped. The front end is still
+invoked as `cpfe ... --gen_c_file_name=<tmp>/X.int.s`, so under
+`edg_x86_64_cir` **the whole CIR back end runs for every `fp`/`fn`/`fc` test**
+(the only option that suppresses the back end is `-n`/`--no_code_gen`, which
+`eccp` does not pass for these tests; `cmd_line.c:10698`). The same holds for
+`edg_x86_64`: its C-generating back end runs too, but it is not expected to fail
+on valid input, so nobody notices.
+
+Consequences, by test type (run under a CIR config):
+
+* **`fp` (front end, expect pass):** a valid program that uses a construct the
+  CIR back end does not support now fails (compile exit 2 from a "CIR back end:"
+  diagnostic) although the front end accepts it. In `imported/gnu/c` this is
+  11254 `fp` tests, far more than the 2561
+  run/link tests of the M2 corpus. Hence the corpus runs use `--types rp,lp`.
+  `fp` tests that exercise only parsing/semantics get an unrelated CIR status.
+* **`fn` (front end, expect failure):** a CIR error or a back-end crash cannot
+  turn a `fn` test into a pass of the wrong kind unless the front end accepted
+  the program (then the test already fails in every configuration); but a
+  front-end error followed by the stream's `F_ABORT` is the expected path (the
+  library reports "the front end aborted the ECIL stream" only as a note after
+  the B2 fix). A crash would appear as `ABORT`, not `PASS`: such crashes count
+  in the gate.
+* **`fc` (front end, catastrophic error expected):** the stream is aborted the
+  same way; no change.
+* **`cp`/`cn`/`cc` (`eccp -c`), `lp`/`ln`, `rp`/`rn`/`ra`:** they run the back
+  end anyway, so `--cpfe_only` is irrelevant to them.
+* **`//script:` tests:** unaffected (they run their own command).
+* **Time:** a `--cpfe_only` run in the CIR config costs the library's pipeline
+  (MLIR, LLVM) on top of the front end (not measured per test), so a whole-suite run of the
+  default suites under `edg_x86_64_cir` is not a good idea: run `edg_x86_64_cir`
+  only on the `cir` suite and the corpus filters.
+
+If the back end should be skipped for `fp`/`fn`/`fc` in a CIR config (so those
+types test only the front end), the harness would add `--no_code_gen` for them
+when `BACK_END_TYPE` is 3: a one-line change in `get_command` plus a config
+flag. Not done: the current gate does not run those test types under CIR, and
+running the back end on them is useful as a no-crash check on a large input
+set (this is how the 11254 `fp` tests of `imported/gnu/c` can be used as an
+extra robustness corpus).
+

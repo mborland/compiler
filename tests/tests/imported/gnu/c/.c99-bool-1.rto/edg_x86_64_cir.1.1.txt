@@ -1,0 +1,12 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c99 --strict_gnu Test_name.c
+"./c99-bool-1.c", line 233: warning: expression has no effect
+    if ((4, u) != 1)
+         ^
+
+"./c99-bool-1.c", line 248: warning: CIR back end: the body of "main" uses ++/-- on _Bool, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

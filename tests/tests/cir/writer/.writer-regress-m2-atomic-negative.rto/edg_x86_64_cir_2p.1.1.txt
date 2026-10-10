@@ -1,0 +1,26 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --gcc --diag_error=cir_warning Test_name.c
+"Test_name.c", line 6: warning: variable "l" was declared but never referenced
+  int use(struct A *p) { struct A l; return p->y; }
+                                  ^
+
+"Test_name.c", line 6: error: CIR back end: the body of "use" uses an _Atomic type, which the CIR back end does not support; the function is dropped
+  int use(struct A *p) { struct A l; return p->y; }
+                                                  ^
+
+1 error detected in the compilation of "Test_name.c".
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 201112 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame ABORT

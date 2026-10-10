@@ -1,0 +1,76 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 11: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone))
+                           ^
+
+"Test_name.c", line 16: warning: CIR back end: the body of "foo" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 28: warning: unknown attribute "noclone"
+  T (1, unsigned int, x - y, if (r > x) foo (0))
+  ^
+
+"Test_name.c", line 29: warning: unknown attribute "noclone"
+  T (2, unsigned long, x - y, if (r <= x) foo (0))
+  ^
+
+"Test_name.c", line 30: warning: unknown attribute "noclone"
+  T (3, unsigned short, x - y, if (x < r) foo (r))
+  ^
+
+"Test_name.c", line 31: warning: unknown attribute "noclone"
+  T (4, unsigned long long, x - y, if (x >= r) foo (0))
+  ^
+
+"Test_name.c", line 32: warning: unknown attribute "noclone"
+  T (5, unsigned int, x - y, if (r >= x) foo (0))
+  ^
+
+"Test_name.c", line 33: warning: unknown attribute "noclone"
+  T (6, unsigned long, x - y, if (r < x) foo (0))
+  ^
+
+"Test_name.c", line 34: warning: unknown attribute "noclone"
+  T (7, unsigned short, x - y, if (x <= r) foo (r))
+  ^
+
+"Test_name.c", line 35: warning: unknown attribute "noclone"
+  T (8, unsigned long long, x - y, if (d || x > r) foo (0))
+  ^
+
+"Test_name.c", line 36: warning: unknown attribute "noclone"
+  T (9, unsigned int, x - y, if (d || r > x) foo (0))
+  ^
+
+"Test_name.c", line 37: warning: unknown attribute "noclone"
+  T (10, unsigned long, x - y, if (d || r <= x) foo (0))
+  ^
+
+"Test_name.c", line 38: warning: unknown attribute "noclone"
+  T (11, unsigned char, x - y, if (d || x < r) foo (0))
+  ^
+
+"Test_name.c", line 39: warning: unknown attribute "noclone"
+  T (12, unsigned long long, x - y, if (d || x >= r) foo (0))
+  ^
+
+"Test_name.c", line 40: warning: unknown attribute "noclone"
+  T (13, unsigned int, x - y, if (d || r >= x) foo (0))
+  ^
+
+"Test_name.c", line 41: warning: unknown attribute "noclone"
+  T (14, unsigned long, x - y, if (d || r < x) foo (0))
+  ^
+
+"Test_name.c", line 42: warning: unknown attribute "noclone"
+  T (15, unsigned short, x - y, if (d || x <= r) foo (0))
+  ^
+
+"Test_name.c", line 43: warning: unknown attribute "noclone"
+  T (16, unsigned long long, x - y, if (d || x > r) foo (0))
+  ^
+
+Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

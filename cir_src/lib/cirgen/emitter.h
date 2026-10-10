@@ -237,6 +237,7 @@ private:
   void lower_union(a_type &t, a_record_info &rec);
   uint64_t type_size(mlir::Type t);
   uint64_t type_align(mlir::Type t, bool natural = false);
+  bool type_is_complete(mlir::Type t) const;
   uint64_t field_bit_offset(const a_field &f) const
     { return f.byte_offset * 8 + (f.is_bitfield ? f.bit_offset : 0); }
   uint32_t derived_align(uint32_t base, uint64_t offset) const;
@@ -286,6 +287,7 @@ private:
   mlir::Value pop_bool_condition();
   bool emit_return(const ecil::a_record &r);
   void implicit_return(bool is_main);
+  mlir::Value return_slot();
   mlir::Value alloca_in(mlir::Block *block, mlir::Type type,
                         const std::string &name, uint32_t align);
   mlir::Value alloca_here(mlir::Type type, const std::string &name,
@@ -342,6 +344,9 @@ private:
   /* Types and entities. */
   std::vector<a_type>                     types_;
   std::deque<a_record_info>               records_;
+  /* The record info of a CIR record type, keyed by the type's identity. */
+  std::unordered_map<const void *, const a_record_info *>
+                                          record_of_type_;
   std::vector<uint64_t>                   record_gids_;
   std::unordered_map<std::string, unsigned>
                                           record_names_;
@@ -365,6 +370,7 @@ private:
   unsigned                                params_seen_ = 0;
   unsigned                                temp_counter_ = 0;
   uint64_t                                fn_return_type_ = 0;
+  mlir::Value                             fn_retval_;  /* __retval slot */
   std::vector<std::pair<uint64_t, std::string>>
                                           renames_;
   std::vector<cir::GlobalOp>              temporaries_;

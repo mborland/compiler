@@ -1,0 +1,45 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 81: warning: integer conversion resulted in a change of sign
+    if (j == -7)
+             ^
+
+"Test_name.c", line 84: warning: integer conversion resulted in a change of sign
+    if (i >= -3)
+             ^
+
+"Test_name.c", line 98: warning: integer conversion resulted in a change of sign
+    if (j == -7)
+             ^
+
+"Test_name.c", line 101: warning: integer conversion resulted in a change of sign
+    if (i >= -3)
+             ^
+
+"Test_name.c", line 115: warning: integer conversion resulted in a change of sign
+    if (j == -7)
+             ^
+
+"Test_name.c", line 118: warning: integer conversion resulted in a change of sign
+    if (i >= -3)
+             ^
+
+"Test_name.c", line 132: warning: integer conversion resulted in a change of sign
+    if (j == -7)
+             ^
+
+"Test_name.c", line 135: warning: integer conversion resulted in a change of sign
+    if (i >= -3)
+             ^
+
+/usr/sbin/ld: Test_name.o: in function `fle22':
+Test_name.c:(.text+0xXX): undefined reference to `unreachable'
+/usr/sbin/ld: Test_name.o: in function `fle32':
+Test_name.c:(.text+0xXX): undefined reference to `unreachable'
+/usr/sbin/ld: Test_name.o: in function `flt22':
+Test_name.c:(.text+0xXX): undefined reference to `unreachable'
+/usr/sbin/ld: Test_name.o: in function `flt32':
+Test_name.c:(.text+0xXX): undefined reference to `unreachable'
+/usr/sbin/ld: Test_name.o: in function `fgt22':
+Test_name.c:(.text+0xXX): undefined reference to `unreachable'
+/usr/sbin/ld: Test_name.o:Test_name.c:(.text+0xXX): more undefined references to `unreachable' follow
+collect2: error: ld returned 1 exit status

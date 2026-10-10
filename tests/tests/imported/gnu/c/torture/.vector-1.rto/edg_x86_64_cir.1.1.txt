@@ -1,0 +1,32 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 16: warning: CIR back end: the body of "f0" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 20: warning: CIR back end: the body of "f1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 24: warning: CIR back end: the body of "f2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 28: warning: CIR back end: the body of "f3" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 44: warning: CIR back end: the body of "main" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'f0' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+5 errors detected in the compilation of "Test_name.c".

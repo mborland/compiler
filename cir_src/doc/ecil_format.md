@@ -312,8 +312,14 @@ When `end_reachable` is set and control falls off the end:
   expression records, because it does not touch the value stack.
 - `MATERIALIZE_TEMP(l, t)` creates temporary `l` in the current block,
   stores the popped prvalue and pushes its glvalue.
-- The consumer places allocas in the current scope; HoistAllocas moves
-  them later.
+- **Placement.** The consumer may place each alloca at function entry, and
+  the v0 library does so. `BLOCK_BEGIN`/`BLOCK_END` brackets are scoping
+  hints, not exact variable lifetimes.
+- **For-init variables.** The writer currently emits a for-init variable
+  inside a `BLOCK` that closes before `FOR_COND`, even though the condition,
+  step and body use it.
+- **C++ (M3).** This must be fixed before M3, where lifetimes drive
+  destructors: the init scope must stay open over the whole loop.
 
 ### 8.4 Statements
 

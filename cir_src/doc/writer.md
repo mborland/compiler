@@ -117,9 +117,20 @@ Types: integers, `_Bool`, floats (`FBITS` for x87 `long double`; the
 constant is checked to convert exactly), pointers, arrays, records
 (bit-fields: byte offset plus bit offset and width; zero-width bit-fields
 as unnamed fields of width 0; zero-length arrays and zero-size record
-members are `empty_for_abi`), functions (variadic, no-proto). Complex,
-vector, bit-precise, half and quad types are opaque and make any function
-that needs them unsupported.
+members are `empty_for_abi`), functions (variadic, no-proto).  `_Float16` (GNU
+or C23 spelling) is `TY_FLOAT` half and `_Float128` is `TY_FLOAT` quad (not
+opaque): declarations
+and operations on them are sent as ordinary ones, and the support of the
+library for them was not checked (their constants are unsupported by the
+writer: `arg_float_value`).  Complex, vector and bit-precise types (and any
+other type ECIL has no encoding for) are `TY_OPAQUE`: laid out by size and
+alignment, so a record containing one keeps its layout.  Declarations with
+opaque parameter or return types are sent; a function definition that has
+one, and every value-level use of an opaque scalar (a load, an operation, a
+conversion, a call argument or result) is unsupported (spec 8.11).  A record
+that has a `_BitInt` bit-field is opaque storage as a whole.  A record whose
+body could not be written (an unsupported member) is marked failed: its
+uses that need a complete record are unsupported.
 
 ### Builtins
 
@@ -170,8 +181,15 @@ values. Verified by running every corpus file twice and comparing bytes
 
 There is no recursion on IL depth: types, expressions, statements,
 initializers and constants run on explicit heap stacks (`ecil_type.c`,
-`ecil_code.c`, `ecil_const.c`). A cycle check of the call graph over the
-six source files finds no cycles. In CHECKING builds
+`ecil_code.c`, `ecil_const.c`).  A call-graph check over the six source
+files (252 functions) finds one cycle: constant emission (`emit_leaf`) can
+reach `ecil_variable_id`, which defines a static local that has no
+declaration statement (`__func__`, a compound literal) on first use, and that
+definition emits its own constant.  The nesting is bounded by the nesting of
+such objects in the source (one level for `__func__`), not by IL depth, and
+the nested call uses its own scratch buffer.  A pathological nesting of
+compound literals in static initializers would recurse once per level.  In
+CHECKING builds
 `ecil_code_stack_high` records the work-stack high-water mark
 (`ECIL_STATS=1` prints it from the writer-only harness).
 

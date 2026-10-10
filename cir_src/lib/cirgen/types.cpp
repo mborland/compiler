@@ -198,17 +198,35 @@ that the offsets CIR computes agree with the front end's.
   } else if (auto array = mlir::dyn_cast<cir::ArrayType>(t)) {
     result = type_align(array.getElementType(), natural);
   } else if (auto record = mlir::dyn_cast<cir::RecordType>(t)) {
-    result = layout_.getTypeABIAlignment(t);
-    for (const a_record_info &info : records_) {
-      if (!natural && info.complete &&
-          info.name == record.getName().getValue().str())
-        result = std::max<uint64_t>(result, info.align);
-    }
+    /* The front end's alignment is authoritative (a packed record is less
+       aligned than its DataLayout alignment, an aligned(N) one more). */
+    auto found = record_of_type_.find(record.getAsOpaquePointer());
+
+    if (!natural && found != record_of_type_.end() &&
+        found->second->complete)
+      result = found->second->align;
+    else
+      result = layout_.getTypeABIAlignment(t);
   } else {
     result = layout_.getTypeABIAlignment(t);
   }
   return result;
 }  /* a_emitter::type_align */
+
+bool a_emitter::type_is_complete(mlir::Type t) const
+/*
+True unless t is a record without a body or an array of one: computing the
+size, alignment or storage of such a type is a front-end contract violation.
+*/
+{
+  bool complete = true;
+
+  if (auto record = mlir::dyn_cast<cir::RecordType>(t))
+    complete = record.isComplete();
+  else if (auto array = mlir::dyn_cast<cir::ArrayType>(t))
+    complete = type_is_complete(array.getElementType());
+  return complete;
+}  /* a_emitter::type_is_complete */
 
 uint32_t a_emitter::derived_align(uint32_t base, uint64_t offset) const
 /*
@@ -402,6 +420,7 @@ Handle one type introduction record (TY_*, except the body records).
       t->cir = info.is_union ? compat::incomplete_union(ctx_, info.name)
                              : compat::incomplete_struct(ctx_, info.name,
                                                          info.is_class);
+      record_of_type_[t->cir.getAsOpaquePointer()] = &info;
     }
     break;
   }
@@ -505,6 +524,9 @@ REC_FIELD: append to the record being defined; complete it with the last one.
       ok = format_error("REC_FIELD uses an unknown string id");
     else if (type_at(f.type) == nullptr)
       ok = format_error("REC_FIELD names an unknown type");
+    else if (f.is_bitfield &&
+             !mlir::isa<cir::IntType, cir::BoolType>(type_at(f.type)->cir))
+      ok = format_error("bit-field member of a non-integer type");
     else {
       t->record->fields.push_back(f);
       if (--t->record->pending_fields == 0)

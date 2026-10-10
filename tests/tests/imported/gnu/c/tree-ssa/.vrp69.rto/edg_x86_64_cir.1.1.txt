@@ -1,0 +1,18 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./tree-ssa/vrp69.c", line 22: warning: pointless comparison of unsigned integer with zero
+    do { __typeof__ (i + 0x5) v = (i + 0x5); if (v < 0x0) link_error(); if (v > 0x3) link_error(); if (v < 0x0 || v > 0x3) link_error (); } while (0);
+                                                   ^
+
+"./tree-ssa/vrp69.c", line 22: warning: pointless comparison of unsigned integer with zero
+    do { __typeof__ (i + 0x5) v = (i + 0x5); if (v < 0x0) link_error(); if (v > 0x3) link_error(); if (v < 0x0 || v > 0x3) link_error (); } while (0);
+                                                                                                         ^
+
+/usr/sbin/ld: Test_name.o: in function `test1':
+Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.o: in function `test2':
+Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.o:Test_name.c:(.text+0xXX): more undefined references to `link_error' follow
+collect2: error: ld returned 1 exit status

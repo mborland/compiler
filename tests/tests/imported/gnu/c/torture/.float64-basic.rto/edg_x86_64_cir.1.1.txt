@@ -1,0 +1,9 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/floatn-basic.h", line 44: warning: identifier-only parameters can only be used in old-style function definitions, which are nonstandard since C23
+  krfn (arg)
+        ^
+
+"./torture/floatn-basic.h", line 52: warning: identifier-only parameters can only be used in old-style function definitions, which are nonstandard since C23
+  krprofn (arg)
+           ^
+

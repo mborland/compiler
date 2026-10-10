@@ -1,0 +1,60 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./builtin-object-size-4.c", line 100: warning: arithmetic on pointer to void or function type
+    r = memcpy (r + 2, "b", 2) + 2;
+                  ^
+
+"./builtin-object-size-4.c", line 100: warning: arithmetic on pointer to void or function type
+    r = memcpy (r + 2, "b", 2) + 2;
+                               ^
+
+"./builtin-object-size-4.c", line 111: warning: arithmetic on pointer to void or function type
+    r = memset (r + 2, 'b', 2) + 2;
+                  ^
+
+"./builtin-object-size-4.c", line 111: warning: arithmetic on pointer to void or function type
+    r = memset (r + 2, 'b', 2) + 2;
+                               ^
+
+"./builtin-object-size-4.c", line 118: warning: arithmetic on pointer to void or function type
+    r = strcpy (r + 2, "cd") + 2;
+                  ^
+
+"./builtin-object-size-4.c", line 209: warning: arithmetic on pointer to void or function type
+    if (__builtin_dynamic_object_size (r + 2, 3) != sizeof (L"abcd\0efg") - 2)
+                                         ^
+
+"./builtin-object-size-4.c", line 214: warning: CIR back end: the body of "test1" uses a variable length array, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-object-size-4.c", line 390: warning: CIR back end: the body of "test3" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./builtin-object-size-4.c", line 451: warning: subscript out of range
+    char *p = &t.buf2[-4];
+                     ^
+
+"./builtin-object-size-4.c", line 460: warning: subscript out of range
+    q = &t.buf[11];
+              ^
+
+"./builtin-object-size-4.c", line 463: warning: subscript out of range
+    p = &t.buf[-4];
+              ^
+
+"./builtin-object-size-4.c", line 599: warning: missing return statement at end of non-void function "test9"
+  }
+  ^
+
+"./builtin-object-size-4.c", line 619: warning: CIR back end: the body of "main" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'test1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

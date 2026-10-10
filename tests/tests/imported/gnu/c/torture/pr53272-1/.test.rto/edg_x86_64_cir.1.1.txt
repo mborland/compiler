@@ -1,0 +1,47 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c pr53272-2.c
+Test_name.c:
+"Test_name.c", line 17: warning: unknown attribute "__noclone__"
+  __attribute__ ((__noinline__, __noclone__))
+                                ^
+
+"Test_name.c", line 19: warning: unknown attribute "__noclone__"
+  __attribute__ ((__noinline__, __noclone__))
+                                ^
+
+"Test_name.c", line 22: warning: unknown attribute "__noclone__"
+  __attribute__ ((__noinline__, __noclone__))
+                                ^
+
+"Test_name.c", line 42: warning: CIR back end: the body of "rtc_update_irq_enable" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'rtc_update_irq_enable' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".
+pr53272-2.c:
+"pr53272-2.c", line 1: warning: unknown attribute "__noclone__"
+  __attribute__ ((__noinline__, __noclone__))
+                                ^
+
+"pr53272-2.c", line 6: warning: CIR back end: the body of "foo" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"pr53272-2.c", line 8: warning: unknown attribute "__noclone__"
+  __attribute__ ((__noinline__, __noclone__))
+                                ^
+
+"pr53272-2.c", line 14: warning: CIR back end: the body of "foobar" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"pr53272-2.c", line 27: warning: unknown attribute "__noclone__"
+  extern __attribute__ ((__noinline__, __noclone__))
+                                       ^
+
+Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'foobar' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "pr53272-2.c".

@@ -1,0 +1,8 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c pr85244-2.c
+Test_name.c:
+pr85244-2.c:
+Warning: CIR back end: the initializer of "val" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'val' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "pr85244-2.c".

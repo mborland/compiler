@@ -1,0 +1,347 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c11 Test_name.c
+"Test_name.c", line 10: warning: function "__builtin_stdc_leading_zeros" declared implicitly
+    return (__builtin_stdc_leading_zeros (a)
+            ^
+
+"Test_name.c", line 15: warning: CIR back end: the body of "leading_zeros" uses the builtin function __builtin_stdc_leading_zeros, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 21: warning: function "__builtin_stdc_leading_ones" declared implicitly
+    return (__builtin_stdc_leading_ones (a)
+            ^
+
+"Test_name.c", line 26: warning: CIR back end: the body of "leading_ones" uses the builtin function __builtin_stdc_leading_ones, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 32: warning: function "__builtin_stdc_trailing_zeros" declared implicitly
+    return (__builtin_stdc_trailing_zeros (a)
+            ^
+
+"Test_name.c", line 37: warning: CIR back end: the body of "trailing_zeros" uses the builtin function __builtin_stdc_trailing_zeros, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 43: warning: function "__builtin_stdc_trailing_ones" declared implicitly
+    return (__builtin_stdc_trailing_ones (a)
+            ^
+
+"Test_name.c", line 48: warning: CIR back end: the body of "trailing_ones" uses the builtin function __builtin_stdc_trailing_ones, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 54: warning: function "__builtin_stdc_first_leading_zero" declared implicitly
+    return (__builtin_stdc_first_leading_zero (a)
+            ^
+
+"Test_name.c", line 59: warning: CIR back end: the body of "first_leading_zero" uses the builtin function __builtin_stdc_first_leading_zero, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 65: warning: function "__builtin_stdc_first_leading_one" declared implicitly
+    return (__builtin_stdc_first_leading_one (a)
+            ^
+
+"Test_name.c", line 70: warning: CIR back end: the body of "first_leading_one" uses the builtin function __builtin_stdc_first_leading_one, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 76: warning: function "__builtin_stdc_first_trailing_zero" declared implicitly
+    return (__builtin_stdc_first_trailing_zero (a)
+            ^
+
+"Test_name.c", line 81: warning: CIR back end: the body of "first_trailing_zero" uses the builtin function __builtin_stdc_first_trailing_zero, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 87: warning: function "__builtin_stdc_first_trailing_one" declared implicitly
+    return (__builtin_stdc_first_trailing_one (a)
+            ^
+
+"Test_name.c", line 92: warning: CIR back end: the body of "first_trailing_one" uses the builtin function __builtin_stdc_first_trailing_one, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 98: warning: function "__builtin_stdc_count_zeros" declared implicitly
+    return (__builtin_stdc_count_zeros (a)
+            ^
+
+"Test_name.c", line 103: warning: CIR back end: the body of "count_zeros" uses the builtin function __builtin_stdc_count_zeros, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 109: warning: function "__builtin_stdc_count_ones" declared implicitly
+    return (__builtin_stdc_count_ones (a)
+            ^
+
+"Test_name.c", line 114: warning: CIR back end: the body of "count_ones" uses the builtin function __builtin_stdc_count_ones, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 120: warning: function "__builtin_stdc_has_single_bit" declared implicitly
+    return (__builtin_stdc_has_single_bit (a)
+            ^
+
+"Test_name.c", line 125: warning: CIR back end: the body of "has_single_bit" uses the builtin function __builtin_stdc_has_single_bit, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 131: warning: function "__builtin_stdc_bit_width" declared implicitly
+    return (__builtin_stdc_bit_width (a)
+            ^
+
+"Test_name.c", line 136: warning: CIR back end: the body of "bit_width" uses the builtin function __builtin_stdc_bit_width, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 142: warning: function "__builtin_stdc_bit_floor" declared implicitly
+    return (__builtin_stdc_bit_floor (a)
+            ^
+
+"Test_name.c", line 147: warning: CIR back end: the body of "bit_floor" uses the builtin function __builtin_stdc_bit_floor, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 153: warning: function "__builtin_stdc_bit_ceil" declared implicitly
+    return (__builtin_stdc_bit_ceil (a)
+            ^
+
+"Test_name.c", line 158: warning: CIR back end: the body of "bit_ceil" uses the builtin function __builtin_stdc_bit_ceil, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 165: warning: function "__builtin_stdc_leading_zeros" declared implicitly
+    if (__builtin_stdc_leading_zeros ((unsigned char) 0) != __CHAR_BIT__
+        ^
+
+"Test_name.c", line 176: warning: function "__builtin_stdc_leading_zeros" declared implicitly
+    if (__builtin_stdc_leading_zeros ((unsigned char) ~0U) != 0
+        ^
+
+"Test_name.c", line 182: warning: function "__builtin_stdc_leading_zeros" declared implicitly
+    if (__builtin_stdc_leading_zeros ((unsigned char) 3) != __CHAR_BIT__ - 2
+        ^
+
+"Test_name.c", line 188: warning: function "__builtin_stdc_leading_ones" declared implicitly
+    if (__builtin_stdc_leading_ones ((unsigned char) 0) != 0
+        ^
+
+"Test_name.c", line 199: warning: function "__builtin_stdc_leading_ones" declared implicitly
+    if (__builtin_stdc_leading_ones ((unsigned char) ~0U) != __CHAR_BIT__
+        ^
+
+"Test_name.c", line 205: warning: function "__builtin_stdc_leading_ones" declared implicitly
+    if (__builtin_stdc_leading_ones ((unsigned char) ~3) != __CHAR_BIT__ - 2
+        ^
+
+"Test_name.c", line 211: warning: function "__builtin_stdc_trailing_zeros" declared implicitly
+    if (__builtin_stdc_trailing_zeros ((unsigned char) 0) != __CHAR_BIT__
+        ^
+
+"Test_name.c", line 222: warning: function "__builtin_stdc_trailing_zeros" declared implicitly
+    if (__builtin_stdc_trailing_zeros ((unsigned char) ~0U) != 0
+        ^
+
+"Test_name.c", line 228: warning: function "__builtin_stdc_trailing_zeros" declared implicitly
+    if (__builtin_stdc_trailing_zeros ((unsigned char) 2) != 1
+        ^
+
+"Test_name.c", line 234: warning: function "__builtin_stdc_trailing_ones" declared implicitly
+    if (__builtin_stdc_trailing_ones ((unsigned char) 0) != 0
+        ^
+
+"Test_name.c", line 245: warning: function "__builtin_stdc_trailing_ones" declared implicitly
+    if (__builtin_stdc_trailing_ones ((unsigned char) ~0U) != __CHAR_BIT__
+        ^
+
+"Test_name.c", line 251: warning: function "__builtin_stdc_trailing_ones" declared implicitly
+    if (__builtin_stdc_trailing_ones ((unsigned char) 5) != 1
+        ^
+
+"Test_name.c", line 257: warning: function "__builtin_stdc_first_leading_zero" declared implicitly
+    if (__builtin_stdc_first_leading_zero ((unsigned char) 0) != 1
+        ^
+
+"Test_name.c", line 268: warning: function "__builtin_stdc_first_leading_zero" declared implicitly
+    if (__builtin_stdc_first_leading_zero ((unsigned char) ~0U) != 0
+        ^
+
+"Test_name.c", line 274: warning: function "__builtin_stdc_first_leading_zero" declared implicitly
+    if (__builtin_stdc_first_leading_zero ((unsigned char) ~3U) != __CHAR_BIT__ - 1
+        ^
+
+"Test_name.c", line 280: warning: function "__builtin_stdc_first_leading_one" declared implicitly
+    if (__builtin_stdc_first_leading_one ((unsigned char) 0) != 0
+        ^
+
+"Test_name.c", line 291: warning: function "__builtin_stdc_first_leading_one" declared implicitly
+    if (__builtin_stdc_first_leading_one ((unsigned char) ~0U) != 1
+        ^
+
+"Test_name.c", line 297: warning: function "__builtin_stdc_first_leading_one" declared implicitly
+    if (__builtin_stdc_first_leading_one ((unsigned char) 3) != __CHAR_BIT__ - 1
+        ^
+
+"Test_name.c", line 303: warning: function "__builtin_stdc_first_trailing_zero" declared implicitly
+    if (__builtin_stdc_first_trailing_zero ((unsigned char) 0) != 1
+        ^
+
+"Test_name.c", line 314: warning: function "__builtin_stdc_first_trailing_zero" declared implicitly
+    if (__builtin_stdc_first_trailing_zero ((unsigned char) ~0U) != 0
+        ^
+
+"Test_name.c", line 320: warning: function "__builtin_stdc_first_trailing_zero" declared implicitly
+    if (__builtin_stdc_first_trailing_zero ((unsigned char) 2) != 1
+        ^
+
+"Test_name.c", line 326: warning: function "__builtin_stdc_first_trailing_one" declared implicitly
+    if (__builtin_stdc_first_trailing_one ((unsigned char) 0) != 0
+        ^
+
+"Test_name.c", line 337: warning: function "__builtin_stdc_first_trailing_one" declared implicitly
+    if (__builtin_stdc_first_trailing_one ((unsigned char) ~0U) != 1
+        ^
+
+"Test_name.c", line 343: warning: function "__builtin_stdc_first_trailing_one" declared implicitly
+    if (__builtin_stdc_first_trailing_one ((unsigned char) 4) != 3
+        ^
+
+"Test_name.c", line 349: warning: function "__builtin_stdc_count_zeros" declared implicitly
+    if (__builtin_stdc_count_zeros ((unsigned char) 0) != __CHAR_BIT__
+        ^
+
+"Test_name.c", line 360: warning: function "__builtin_stdc_count_zeros" declared implicitly
+    if (__builtin_stdc_count_zeros ((unsigned char) ~0U) != 0
+        ^
+
+"Test_name.c", line 366: warning: function "__builtin_stdc_count_zeros" declared implicitly
+    if (__builtin_stdc_count_zeros ((unsigned char) 1U) != __CHAR_BIT__ - 1
+        ^
+
+"Test_name.c", line 372: warning: function "__builtin_stdc_count_ones" declared implicitly
+    if (__builtin_stdc_count_ones ((unsigned char) 0) != 0
+        ^
+
+"Test_name.c", line 383: warning: function "__builtin_stdc_count_ones" declared implicitly
+    if (__builtin_stdc_count_ones ((unsigned char) ~0U) != __CHAR_BIT__
+        ^
+
+"Test_name.c", line 389: warning: function "__builtin_stdc_count_ones" declared implicitly
+    if (__builtin_stdc_count_ones ((unsigned char) ~1U) != __CHAR_BIT__ - 1
+        ^
+
+"Test_name.c", line 395: warning: function "__builtin_stdc_has_single_bit" declared implicitly
+    if (__builtin_stdc_has_single_bit ((unsigned char) 0)
+        ^
+
+"Test_name.c", line 406: warning: function "__builtin_stdc_has_single_bit" declared implicitly
+    if (!__builtin_stdc_has_single_bit ((unsigned char) 2)
+         ^
+
+"Test_name.c", line 412: warning: function "__builtin_stdc_has_single_bit" declared implicitly
+    if (__builtin_stdc_has_single_bit ((unsigned char) 7)
+        ^
+
+"Test_name.c", line 418: warning: function "__builtin_stdc_bit_width" declared implicitly
+    if (__builtin_stdc_bit_width ((unsigned char) 0) != 0
+        ^
+
+"Test_name.c", line 429: warning: function "__builtin_stdc_bit_width" declared implicitly
+    if (__builtin_stdc_bit_width ((unsigned char) ~0U) != __CHAR_BIT__
+        ^
+
+"Test_name.c", line 435: warning: function "__builtin_stdc_bit_width" declared implicitly
+    if (__builtin_stdc_bit_width ((unsigned char) ((unsigned char) ~0U >> 1)) != __CHAR_BIT__ - 1
+        ^
+
+"Test_name.c", line 446: warning: function "__builtin_stdc_bit_floor" declared implicitly
+    if (__builtin_stdc_bit_floor ((unsigned char) 0) != 0
+        ^
+
+"Test_name.c", line 457: warning: function "__builtin_stdc_bit_floor" declared implicitly
+    if (__builtin_stdc_bit_floor ((unsigned char) ~0U) != (1U << (__CHAR_BIT__ - 1))
+        ^
+
+"Test_name.c", line 463: warning: function "__builtin_stdc_bit_floor" declared implicitly
+    if (__builtin_stdc_bit_floor ((unsigned char) 4) != 4
+        ^
+
+"Test_name.c", line 474: warning: function "__builtin_stdc_bit_ceil" declared implicitly
+    if (__builtin_stdc_bit_ceil ((unsigned char) 0) != 1
+        ^
+
+"Test_name.c", line 485: warning: function "__builtin_stdc_bit_ceil" declared implicitly
+    if (__builtin_stdc_bit_ceil ((unsigned char) ~0U) != 0
+        ^
+
+"Test_name.c", line 491: warning: function "__builtin_stdc_bit_ceil" declared implicitly
+    if (__builtin_stdc_bit_ceil ((unsigned char) ((unsigned char) ~0U >> 1)) != (1U << (__CHAR_BIT__ - 1))
+        ^
+
+"Test_name.c", line 502: warning: function "__builtin_stdc_bit_ceil" declared implicitly
+    if (__builtin_stdc_bit_ceil ((unsigned char) 1) != 1
+        ^
+
+"Test_name.c", line 514: warning: function "__builtin_stdc_leading_zeros" declared implicitly
+    if (__builtin_stdc_leading_zeros ((unsigned __int128) 0) != __SIZEOF_INT128__ * __CHAR_BIT__
+        ^
+
+"Test_name.c", line 518: warning: function "__builtin_stdc_leading_ones" declared implicitly
+    if (__builtin_stdc_leading_ones ((unsigned __int128) 0) != 0
+        ^
+
+"Test_name.c", line 522: warning: function "__builtin_stdc_trailing_zeros" declared implicitly
+    if (__builtin_stdc_trailing_zeros ((unsigned __int128) 0) != __SIZEOF_INT128__ * __CHAR_BIT__
+        ^
+
+"Test_name.c", line 526: warning: function "__builtin_stdc_trailing_ones" declared implicitly
+    if (__builtin_stdc_trailing_ones ((unsigned __int128) 0) != 0
+        ^
+
+"Test_name.c", line 530: warning: function "__builtin_stdc_first_leading_zero" declared implicitly
+    if (__builtin_stdc_first_leading_zero ((unsigned __int128) 0) != 1
+        ^
+
+"Test_name.c", line 534: warning: function "__builtin_stdc_first_leading_one" declared implicitly
+    if (__builtin_stdc_first_leading_one ((unsigned __int128) 0) != 0
+        ^
+
+"Test_name.c", line 538: warning: function "__builtin_stdc_first_trailing_zero" declared implicitly
+    if (__builtin_stdc_first_trailing_zero ((unsigned __int128) 0) != 1
+        ^
+
+"Test_name.c", line 542: warning: function "__builtin_stdc_first_trailing_one" declared implicitly
+    if (__builtin_stdc_first_trailing_one ((unsigned __int128) 0) != 0
+        ^
+
+"Test_name.c", line 546: warning: function "__builtin_stdc_count_zeros" declared implicitly
+    if (__builtin_stdc_count_zeros ((unsigned __int128) 0) != __SIZEOF_INT128__ * __CHAR_BIT__
+        ^
+
+"Test_name.c", line 550: warning: function "__builtin_stdc_count_ones" declared implicitly
+    if (__builtin_stdc_count_ones ((unsigned __int128) 0) != 0
+        ^
+
+"Test_name.c", line 554: warning: function "__builtin_stdc_has_single_bit" declared implicitly
+    if (__builtin_stdc_has_single_bit ((unsigned __int128) 0)
+        ^
+
+"Test_name.c", line 558: warning: function "__builtin_stdc_bit_width" declared implicitly
+    if (__builtin_stdc_bit_width ((unsigned __int128) 0) != 0
+        ^
+
+"Test_name.c", line 562: warning: function "__builtin_stdc_bit_floor" declared implicitly
+    if (__builtin_stdc_bit_floor ((unsigned __int128) 0) != 0
+        ^
+
+"Test_name.c", line 566: warning: function "__builtin_stdc_bit_ceil" declared implicitly
+    if (__builtin_stdc_bit_ceil ((unsigned __int128) 0) != 1
+        ^
+
+"Test_name.c", line 574: catastrophic error: #error directive: __builtin_stdc_leading_zeros not implemented
+  #error __builtin_stdc_leading_zeros not implemented
+   ^
+
+1 catastrophic error detected in the compilation of "Test_name.c".
+Compilation terminated.

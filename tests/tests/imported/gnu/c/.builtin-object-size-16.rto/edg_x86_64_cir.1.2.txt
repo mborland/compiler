@@ -1,0 +1,59 @@
+./a.out
+FAIL: line 99: __builtin_object_size(a0, 0) == 0, got 18446744073709551615
+FAIL: line 99: __builtin_object_size(a0, 1) == 0, got 18446744073709551615
+FAIL: line 100: __builtin_object_size(ax2, 0) == 1, got 18446744073709551615
+FAIL: line 100: __builtin_object_size(ax2, 1) == 1, got 18446744073709551615
+FAIL: line 100: __builtin_object_size(ax2, 2) == 1, got 0
+FAIL: line 100: __builtin_object_size(ax2, 3) == 1, got 0
+FAIL: line 102: __builtin_object_size(a1, 0) == 1, got 18446744073709551615
+FAIL: line 102: __builtin_object_size(a1, 1) == 1, got 18446744073709551615
+FAIL: line 102: __builtin_object_size(a1, 2) == 1, got 0
+FAIL: line 102: __builtin_object_size(a1, 3) == 1, got 0
+FAIL: line 103: __builtin_object_size(a2, 0) == 2, got 18446744073709551615
+FAIL: line 103: __builtin_object_size(a2, 1) == 2, got 18446744073709551615
+FAIL: line 103: __builtin_object_size(a2, 2) == 2, got 0
+FAIL: line 103: __builtin_object_size(a2, 3) == 2, got 0
+FAIL: line 104: __builtin_object_size(a9, 0) == 9, got 18446744073709551615
+FAIL: line 104: __builtin_object_size(a9, 1) == 9, got 18446744073709551615
+FAIL: line 104: __builtin_object_size(a9, 2) == 9, got 0
+FAIL: line 104: __builtin_object_size(a9, 3) == 9, got 0
+FAIL: line 106: __builtin_object_size(a0, 0) == 0, got 18446744073709551615
+FAIL: line 106: __builtin_object_size(a0, 1) == 0, got 18446744073709551615
+FAIL: line 107: __builtin_object_size(ax2, 0) == 1, got 18446744073709551615
+FAIL: line 107: __builtin_object_size(ax2, 1) == 1, got 18446744073709551615
+FAIL: line 107: __builtin_object_size(ax2, 2) == 1, got 0
+FAIL: line 107: __builtin_object_size(ax2, 3) == 1, got 0
+FAIL: line 109: __builtin_object_size(ia0, 0) == 0, got 18446744073709551615
+FAIL: line 109: __builtin_object_size(ia0, 1) == 0, got 18446744073709551615
+FAIL: line 110: __builtin_object_size(ia1, 0) == 4, got 18446744073709551615
+FAIL: line 110: __builtin_object_size(ia1, 1) == 4, got 18446744073709551615
+FAIL: line 110: __builtin_object_size(ia1, 2) == 4, got 0
+FAIL: line 110: __builtin_object_size(ia1, 3) == 4, got 0
+FAIL: line 111: __builtin_object_size(ia9, 0) == 36, got 18446744073709551615
+FAIL: line 111: __builtin_object_size(ia9, 1) == 36, got 18446744073709551615
+FAIL: line 111: __builtin_object_size(ia9, 2) == 36, got 0
+FAIL: line 111: __builtin_object_size(ia9, 3) == 36, got 0
+FAIL: line 116: __builtin_object_size(a2x2, 0) == 4, got 18446744073709551615
+FAIL: line 116: __builtin_object_size(a2x2, 1) == 4, got 18446744073709551615
+FAIL: line 116: __builtin_object_size(a2x2, 2) == 4, got 0
+FAIL: line 116: __builtin_object_size(a2x2, 3) == 4, got 0
+FAIL: line 117: __builtin_object_size(&a2x2[0], 0) == 4, got 18446744073709551615
+FAIL: line 117: __builtin_object_size(&a2x2[0], 1) == 4, got 18446744073709551615
+FAIL: line 117: __builtin_object_size(&a2x2[0], 2) == 4, got 0
+FAIL: line 117: __builtin_object_size(&a2x2[0], 3) == 4, got 0
+FAIL: line 118: __builtin_object_size(&a2x2[0][0], 0) == 4, got 18446744073709551615
+FAIL: line 118: __builtin_object_size(&a2x2[0][0], 1) == 2, got 18446744073709551615
+FAIL: line 118: __builtin_object_size(&a2x2[0][0], 2) == 4, got 0
+FAIL: line 118: __builtin_object_size(&a2x2[0][0], 3) == 2, got 0
+FAIL: line 119: __builtin_object_size(&a2x2 + 1, 0) == 0, got 18446744073709551615
+FAIL: line 120: __builtin_object_size(&a2x2[0] + 1, 0) == 2, got 18446744073709551615
+FAIL: line 120: __builtin_object_size(&a2x2[0] + 1, 2) == 2, got 0
+FAIL: line 121: __builtin_object_size(&a2x2[0][0] + 1, 0) == 3, got 18446744073709551615
+FAIL: line 121: __builtin_object_size(&a2x2[0][0] + 1, 2) == 3, got 0
+FAIL: line 123: __builtin_object_size(a3x5, 0) == 15, got 18446744073709551615
+FAIL: line 123: __builtin_object_size(a3x5, 1) == 15, got 18446744073709551615
+FAIL: line 123: __builtin_object_size(a3x5, 2) == 15, got 0
+FAIL: line 123: __builtin_object_size(a3x5, 3) == 15, got 0
+FAIL: line 124: __builtin_object_size(&a3x5[0][0] + 0, 0) == 15, got 18446744073709551615
+FAIL: line 124: __builtin_object_size(&a3x5[0][0] + 0, 1) == 5, got 18446744073709551615
+FAIL: line 124: __builtin_object_size(&a

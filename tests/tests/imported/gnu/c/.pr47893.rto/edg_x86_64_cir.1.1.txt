@@ -1,0 +1,76 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 61: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+
+"Test_name.c", line 68: warning: CIR back end: the body of "fn1" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 72: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+
+"Test_name.c", line 83: warning: CIR back end: the body of "fn2" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 85: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+
+"Test_name.c", line 89: warning: CIR back end: the body of "fn3" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 93: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+
+"Test_name.c", line 99: warning: CIR back end: the body of "fn4" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 101: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+
+"Test_name.c", line 107: warning: CIR back end: the body of "fn5" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 111: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+
+"Test_name.c", line 116: warning: CIR back end: the body of "fn6" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 118: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone))
+                            ^
+
+"Test_name.c", line 123: warning: CIR back end: the body of "fn7" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 151: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone))
+                           ^
+
+Error: CIR back end: the definition of 'fn1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'fn2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'fn3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'fn4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'fn5' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'fn6' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'fn7' was dropped: it uses a construct the CIR back end cannot express
+
+7 errors detected in the compilation of "Test_name.c".

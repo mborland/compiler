@@ -162,7 +162,8 @@ def main() -> None:
     )
 
     def eccp_fe_only(env: Dict[str, str], extra: str = '') -> List[str]:
-      return [eccp, '-S', *extra.split(), str(source)]
+      # C mode: cpfe-cir rejects C++ for now.
+      return [eccp, '-S', '--c11', *extra.split(), str(source)]
 
     for row in rows:
       env = dict(base_env)

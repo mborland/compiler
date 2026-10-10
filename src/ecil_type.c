@@ -259,9 +259,10 @@ kind of type when it is a vector or complex type.
   unsigned int  flags = gid != 0 ? ecil_gid_info(gid)->flags : 0u;
 
   if (flags & ECIL_GF_VECTOR) {
-    ecil_note_unsupported("vector types are not supported");
+    ecil_note_unsupported("a vector type (vector types are not supported)");
   } else if (flags & ECIL_GF_COMPLEX) {
-    ecil_note_unsupported("complex types are not supported");
+    ecil_note_unsupported("a complex type (complex types are not "
+                          "supported)");
   } else {
     ecil_note_unsupported(fallback);
   }  /* if */
@@ -314,12 +315,20 @@ none for it.  The size of the IL type is authoritative.
   switch (type->variant.float_kind) {
     case fk_float16:
     case fk_fp16:
+    case fk_std_float16:
       format = (unsigned int)eff_ieee_half;
+      break;
+    case fk_std_float32:
+      format = (unsigned int)eff_ieee_single;
+      break;
+    case fk_std_float64:
+      format = (unsigned int)eff_ieee_double;
       break;
     case fk_std_bfloat16:
       format = (unsigned int)eff_bfloat16;
       break;
     case fk_float128:
+    case fk_std_float128:
       format = (unsigned int)eff_ieee_quad;
       break;
     case fk_float80:
@@ -426,6 +435,52 @@ Make the ptr type of a pointer whose pointee has an id.
 }  /* finish_pointer */
 
 
+uint32_t ecil_array_of(an_ecil_frame *frame, uint32_t elem, uint64_t count)
+/*
+Return the G-id of the complete array type of count elements of type elem
+(for a type the front end does not have, such as the one-element array of a
+tentative definition with an incomplete array type, C11 6.9.2p5).
+*/
+{
+  uint32_t  key[4];
+  uint32_t  gid;
+
+  key[0] = (uint32_t)egk_array;
+  key[1] = elem;
+  key[2] = (uint32_t)(count & 0xFFFFFFFFu);
+  key[3] = (uint32_t)(count >> 32);
+  gid = ecil_word_lookup(key, 4);
+  if (gid == 0) {
+    gid = ecil_new_gid(egk_array);
+    if (gid != 0) {
+      an_ecil_gid_info  *info = ecil_gid_info(gid);
+      an_ecil_gid_info  *einfo = ecil_gid_info(elem);
+      an_ecil_buffer    *saved;
+
+      info->ref = elem;
+      info->count = count;
+      info->size = (uint32_t)(einfo->size * count);
+      info->align = einfo->align;
+      info->flags = einfo->flags & (ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE |
+                                    ECIL_GF_FAILED);
+      if (info->flags != 0) {
+        info->flags = ECIL_GF_ABI_OPAQUE | (info->flags & ECIL_GF_FAILED);
+      }  /* if */
+      ecil_word_register(key, 4, gid);
+      saved = ecil_frame_enter_decl(frame);
+      ecil_rec_begin(frame, eop_ty_array);
+      ecil_arg_uint(frame, gid);
+      ecil_arg_uint(frame, elem);
+      ecil_arg_uint(frame, count);
+      ecil_arg_uint(frame, 0);
+      ecil_rec_end(frame);
+      ecil_frame_leave_decl(frame, saved);
+    }  /* if */
+  }  /* if */
+  return gid;
+}  /* ecil_array_of */
+
+
 static uint32_t finish_array(an_ecil_frame *frame, a_type_ptr t)
 /*
 Make the array type of an array whose element type has an id.
@@ -458,8 +513,11 @@ Make the array type of an array whose element type has an id.
       info->count = count;
       info->size = (uint32_t)t->size;
       info->align = einfo->align;
-      info->flags = einfo->flags & (ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE);
-      if (info->flags != 0) info->flags = ECIL_GF_ABI_OPAQUE;
+      info->flags = einfo->flags & (ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE |
+                                    ECIL_GF_FAILED);
+      if (info->flags != 0) {
+        info->flags = ECIL_GF_ABI_OPAQUE | (info->flags & ECIL_GF_FAILED);
+      }  /* if */
       ecil_word_register(key, 4, gid);
       saved = ecil_frame_enter_decl(frame);
       ecil_rec_begin(frame, eop_ty_array);
@@ -479,6 +537,19 @@ Make the array type of an array whose element type has an id.
 }  /* finish_array */
 
 
+a_boolean ecil_is_plain_float_type(a_type_ptr type)
+/*
+Return TRUE for the type float itself: only it is promoted to double by the
+default argument promotions (not _Float32 and the like).
+*/
+{
+  a_type_ptr  t = skip_typerefs(type);
+
+  return t->kind == tk_float &&
+         t->variant.float_kind == (a_float_kind)fk_float;
+}  /* ecil_is_plain_float_type */
+
+
 static a_type_ptr promoted_param_type(a_type_ptr type,
                                       uint32_t   *promoted_gid,
                                       an_ecil_frame *frame)
@@ -494,7 +565,7 @@ Returns the IL type (unused by callers other than for symmetry).
   if ((info->kind == egk_int && info->bits < 32) || info->kind == egk_bool) {
     gid = ecil_intern_int_type(frame, 32, TRUE, 4, 4);
   } else if (info->kind == egk_float &&
-             info->float_format == (unsigned int)eff_ieee_single) {
+             ecil_is_plain_float_type(type)) {
     gid = ecil_intern_float_type(frame, (unsigned int)eff_ieee_double, 8, 8);
   }  /* if */
   *promoted_gid = gid;
@@ -612,7 +683,8 @@ Return TRUE if the field has no name.
 }  /* field_is_unnamed */
 
 
-static void emit_record_body(an_ecil_frame *frame, a_type_ptr t, uint32_t gid)
+static void emit_record_fields(an_ecil_frame *frame, a_type_ptr t,
+                               uint32_t gid)
 /*
 Emit TY_RECORD_BODY and the REC_FIELD records of a complete record whose
 field types all have ids; assign each field its member index.
@@ -706,6 +778,30 @@ field types all have ids; assign each field its member index.
   }  /* for */
   ecil_frame_leave_decl(frame, saved);
   info->flags |= ECIL_GF_COMPLETE;
+}  /* emit_record_fields */
+
+
+static void emit_record_body(an_ecil_frame *frame, a_type_ptr t, uint32_t gid)
+/*
+Emit the body of a complete record whose field types all have ids, unless
+a member is a record that failed: then this record fails too (it keeps its
+declaration only, and uses that need it complete are unsupported).
+*/
+{
+  a_field_ptr  field;
+  a_boolean    failed = FALSE;
+
+  for (field = t->variant.class_struct_union.field_list;
+       field != NULL && !failed; field = field->next) {
+    uint32_t  fg = known_type_id(field->type);
+
+    failed = fg != 0 && (ecil_gid_info(fg)->flags & ECIL_GF_FAILED) != 0;
+  }  /* for */
+  if (failed) {
+    ecil_gid_info(gid)->flags |= ECIL_GF_FAILED | ECIL_GF_ABI_OPAQUE;
+  } else {
+    emit_record_fields(frame, t, gid);
+  }  /* if */
 }  /* emit_record_body */
 
 
@@ -763,6 +859,11 @@ Process the work stack down to depth base.
                        (unsigned int)t->size, (unsigned int)t->alignment);
           }  /* if */
           ecil_set_gid(t, gid);
+          type_stack_size--;
+          break;
+        case tk_nullptr:
+          /* C23 nullptr_t: a null pointer, laid out as void *. */
+          ecil_set_gid(t, ecil_ptr_type(frame, ecil_void_type(frame)));
           type_stack_size--;
           break;
         case tk_float:
@@ -915,7 +1016,22 @@ Process the work stack down to depth base.
       }  /* if */
     }  /* if */
   }  /* while */
-  if (ecil_unsupported_reason != NULL) type_stack_size = base;
+  if (ecil_unsupported_reason != NULL) {
+    size_t  i;
+
+    /* Records in progress keep their gid but never get a body: mark them,
+       so that uses that need a complete record are diagnosed. */
+    for (i = base; i < type_stack_size; i++) {
+      a_type_ptr  st = type_stack[i].type;
+
+      if ((st->kind == tk_struct || st->kind == tk_union ||
+           st->kind == tk_class) && ecil_gid_of(st) != 0) {
+        ecil_gid_info(ecil_gid_of(st))->flags |= (ECIL_GF_FAILED |
+                                                  ECIL_GF_ABI_OPAQUE);
+      }  /* if */
+    }  /* for */
+    type_stack_size = base;
+  }  /* if */
 }  /* run_type_stack */
 
 
@@ -939,15 +1055,41 @@ ecil_unsupported_reason set) if the type cannot be represented.
 }  /* ecil_type_id */
 
 
+static a_boolean record_has_atomic_member(a_type_ptr t)
+/*
+Return TRUE if a member of the record has an _Atomic-qualified type.
+*/
+{
+  a_field_ptr  field;
+  a_boolean    found = FALSE;
+
+  for (field = t->variant.class_struct_union.field_list;
+       field != NULL && !found; field = field->next) {
+    a_type_ptr  ft = field->type;
+
+    while (ft->kind == tk_typeref && !found) {
+      found = (ft->variant.typeref.qualifiers & TQ_C11_ATOMIC) != 0;
+      ft = ft->variant.typeref.type;
+    }  /* while */
+  }  /* for */
+  return found;
+}  /* record_has_atomic_member */
+
+
 void ecil_complete_pending_records(an_ecil_frame *frame)
 /*
 Emit the body of every record that was declared incomplete and has been
-completed since.  Those still incomplete stay pending.
+completed since.  Those still incomplete stay pending.  A record the stream
+cannot describe (an _Atomic member, a _BitInt bit-field, an unsupported
+member) is marked failed instead; that never makes the caller's own
+construct unsupported, so the reason of the caller is kept aside.
 */
 {
-  size_t  i;
-  size_t  kept = 0;
+  size_t      i;
+  size_t      kept = 0;
+  const char  *caller_reason = ecil_unsupported_reason;
 
+  ecil_unsupported_reason = NULL;
   for (i = 0; i < num_pending_records; i++) {
     uint32_t          gid = pending_records[i];
     an_ecil_gid_info  *info = ecil_gid_info(gid);
@@ -955,6 +1097,8 @@ completed since.  Those still incomplete stay pending.
 
     if (t->incomplete) {
       pending_records[kept++] = gid;
+    } else if (has_bit_precise_bit_field(t) || record_has_atomic_member(t)) {
+      info->flags |= ECIL_GF_FAILED | ECIL_GF_ABI_OPAQUE;
     } else {
       size_t            base = type_stack_size;
       a_type_work_item  *item = push_type(t, tph_fields);
@@ -963,9 +1107,15 @@ completed since.  Those still incomplete stay pending.
         item->field_cursor = t->variant.class_struct_union.field_list;
         run_type_stack(frame, base);
       }  /* if */
+      if (ecil_unsupported_reason != NULL) {
+        /* run_type_stack marked the record failed. */
+        info->flags |= ECIL_GF_FAILED | ECIL_GF_ABI_OPAQUE;
+        ecil_unsupported_reason = NULL;
+      }  /* if */
     }  /* if */
   }  /* for */
   num_pending_records = kept;
+  ecil_unsupported_reason = caller_reason;
 }  /* ecil_complete_pending_records */
 
 
@@ -1013,6 +1163,73 @@ ignore_routine_in_back_end, which is FALSE without IL lowering).
 }  /* ecil_routine_is_filtered */
 
 
+static const char *const library_names[] = {
+  "abort", "abs", "acos", "acosf", "acosh", "acoshf", "acoshl", "acosl",
+  "aligned_alloc", "asin", "asinf", "asinh", "asinhf", "asinhl", "asinl",
+  "atan", "atan2", "atan2f", "atan2l", "atanf", "atanh", "atanhf",
+  "atanhl", "atanl", "atoi", "atol", "atoll", "bcmp", "bcopy", "bzero",
+  "calloc", "cbrt", "cbrtf", "cbrtl", "ceil", "ceilf", "ceill",
+  "copysign", "copysignf", "copysignl", "cos", "cosf", "cosh", "coshf",
+  "coshl", "cosl", "erf", "erfc", "erfcf", "erfcl", "erff", "erfl",
+  "exit", "_exit", "_Exit", "exp", "exp10", "exp10f", "exp10l", "exp2",
+  "exp2f", "exp2l", "expf", "expl", "expm1", "expm1f", "expm1l", "fabs",
+  "fabsf", "fabsl", "fdim", "fdimf", "fdiml", "ffs", "ffsl", "ffsll",
+  "floor", "floorf", "floorl", "fma", "fmaf", "fmal", "fmax", "fmaxf",
+  "fmaxl", "fmin", "fminf", "fminl", "fmod", "fmodf", "fmodl", "fprintf",
+  "fputc", "fputs", "free", "frexp", "frexpf", "frexpl", "fscanf",
+  "fwrite", "hypot", "hypotf", "hypotl", "ilogb", "ilogbf", "ilogbl",
+  "imaxabs", "index", "isalnum", "isalpha", "isascii", "isblank",
+  "iscntrl", "isdigit", "isgraph", "islower", "isprint", "ispunct",
+  "isspace", "isupper", "isxdigit", "labs", "ldexp", "ldexpf", "ldexpl",
+  "lgamma", "lgammaf", "lgammal", "llabs", "llrint", "llrintf",
+  "llrintl", "llround", "llroundf", "llroundl", "log", "log10", "log10f",
+  "log10l", "log1p", "log1pf", "log1pl", "log2", "log2f", "log2l",
+  "logb", "logbf", "logbl", "logf", "logl", "lrint", "lrintf", "lrintl",
+  "lround", "lroundf", "lroundl", "malloc", "memchr", "memcmp", "memcpy",
+  "memmove", "mempcpy", "memset", "modf", "modff", "modfl", "nan",
+  "nanf", "nanl", "nearbyint", "nearbyintf", "nearbyintl", "nextafter",
+  "nextafterf", "nextafterl", "nexttoward", "nexttowardf", "nexttowardl",
+  "pow", "pow10", "pow10f", "pow10l", "powf", "powl", "printf",
+  "putchar", "puts", "realloc", "remainder", "remainderf", "remainderl",
+  "remquo", "remquof", "remquol", "rindex", "rint", "rintf", "rintl",
+  "round", "roundf", "roundl", "scalbln", "scalblnf", "scalblnl",
+  "scalbn", "scalbnf", "scalbnl", "scanf", "sin", "sinf", "sinh",
+  "sinhf", "sinhl", "sinl", "snprintf", "sprintf", "sqrt", "sqrtf",
+  "sqrtl", "sscanf", "stpcpy", "stpncpy", "strcasecmp", "strcat",
+  "strchr", "strcmp", "strcpy", "strcspn", "strdup", "strlen",
+  "strncasecmp", "strncat", "strncmp", "strncpy", "strndup", "strnlen",
+  "strpbrk", "strrchr", "strspn", "strstr", "tan", "tanf", "tanh",
+  "tanhf", "tanhl", "tanl", "tgamma", "tgammaf", "tgammal", "tolower",
+  "toupper", "trunc", "truncf", "truncl", "vfprintf", "vfscanf",
+  "vprintf", "vscanf", "vsnprintf", "vsprintf", "vsscanf", NULL
+};
+
+
+static a_boolean in_library_list(const char *base)
+/*
+Return TRUE if base is the name of a listed libc/libm function.
+*/
+{
+  size_t    i;
+  a_boolean found = FALSE;
+
+  for (i = 0; library_names[i] != NULL && !found; i++) {
+    found = strcmp(library_names[i], base) == 0;
+  }  /* for */
+  return found;
+}  /* in_library_list */
+
+
+a_boolean ecil_is_library_function(const char *name)
+/*
+Return TRUE if name is, as written, a listed libc/libm function (the front
+end declares some of them as builtin routines under their plain names).
+*/
+{
+  return in_library_list(name);
+}  /* ecil_is_library_function */
+
+
 const char *ecil_library_builtin_name(const char *name)
 /*
 Return the library function behind a __builtin_X name (X, a pointer into
@@ -1025,57 +1242,12 @@ ctype functions) are listed here.  Builtins that ECIL has BUILTIN records for
 (ffs, alloca, bswap, ...) are tested before this list, in ecil_code.c.
 */
 {
-  static const char *const library_names[] = {
-    "abort", "abs", "acos", "acosf", "acosh", "acoshf", "acoshl", "acosl",
-    "aligned_alloc", "asin", "asinf", "asinh", "asinhf", "asinhl", "asinl",
-    "atan", "atan2", "atan2f", "atan2l", "atanf", "atanh", "atanhf",
-    "atanhl", "atanl", "atoi", "atol", "atoll", "bcmp", "bcopy", "bzero",
-    "calloc", "cbrt", "cbrtf", "cbrtl", "ceil", "ceilf", "ceill",
-    "copysign", "copysignf", "copysignl", "cos", "cosf", "cosh", "coshf",
-    "coshl", "cosl", "erf", "erfc", "erfcf", "erfcl", "erff", "erfl",
-    "exit", "_exit", "_Exit", "exp", "exp10", "exp10f", "exp10l", "exp2",
-    "exp2f", "exp2l", "expf", "expl", "expm1", "expm1f", "expm1l", "fabs",
-    "fabsf", "fabsl", "fdim", "fdimf", "fdiml", "ffs", "ffsl", "ffsll",
-    "floor", "floorf", "floorl", "fma", "fmaf", "fmal", "fmax", "fmaxf",
-    "fmaxl", "fmin", "fminf", "fminl", "fmod", "fmodf", "fmodl", "fprintf",
-    "fputc", "fputs", "free", "frexp", "frexpf", "frexpl", "fscanf",
-    "fwrite", "hypot", "hypotf", "hypotl", "ilogb", "ilogbf", "ilogbl",
-    "imaxabs", "index", "isalnum", "isalpha", "isascii", "isblank",
-    "iscntrl", "isdigit", "isgraph", "islower", "isprint", "ispunct",
-    "isspace", "isupper", "isxdigit", "labs", "ldexp", "ldexpf", "ldexpl",
-    "lgamma", "lgammaf", "lgammal", "llabs", "llrint", "llrintf",
-    "llrintl", "llround", "llroundf", "llroundl", "log", "log10", "log10f",
-    "log10l", "log1p", "log1pf", "log1pl", "log2", "log2f", "log2l",
-    "logb", "logbf", "logbl", "logf", "logl", "lrint", "lrintf", "lrintl",
-    "lround", "lroundf", "lroundl", "malloc", "memchr", "memcmp", "memcpy",
-    "memmove", "mempcpy", "memset", "modf", "modff", "modfl", "nan",
-    "nanf", "nanl", "nearbyint", "nearbyintf", "nearbyintl", "nextafter",
-    "nextafterf", "nextafterl", "nexttoward", "nexttowardf", "nexttowardl",
-    "pow", "pow10", "pow10f", "pow10l", "powf", "powl", "printf",
-    "putchar", "puts", "realloc", "remainder", "remainderf", "remainderl",
-    "remquo", "remquof", "remquol", "rindex", "rint", "rintf", "rintl",
-    "round", "roundf", "roundl", "scalbln", "scalblnf", "scalblnl",
-    "scalbn", "scalbnf", "scalbnl", "scanf", "sin", "sinf", "sinh",
-    "sinhf", "sinhl", "sinl", "snprintf", "sprintf", "sqrt", "sqrtf",
-    "sqrtl", "sscanf", "stpcpy", "stpncpy", "strcasecmp", "strcat",
-    "strchr", "strcmp", "strcpy", "strcspn", "strdup", "strlen",
-    "strncasecmp", "strncat", "strncmp", "strncpy", "strndup", "strnlen",
-    "strpbrk", "strrchr", "strspn", "strstr", "tan", "tanf", "tanh",
-    "tanhf", "tanhl", "tanl", "tgamma", "tgammaf", "tgammal", "tolower",
-    "toupper", "trunc", "truncf", "truncl", "vfprintf", "vfscanf",
-    "vprintf", "vscanf", "vsnprintf", "vsprintf", "vsscanf", NULL
-  };
+
   const char  *result = NULL;
   const char  *base = name + 10;
-  size_t      i;
 
-  if (strncmp(name, "__builtin_", 10) == 0) {
-    for (i = 0; library_names[i] != NULL; i++) {
-      if (strcmp(library_names[i], base) == 0) {
-        result = base;
-        break;
-      }  /* if */
-    }  /* for */
+  if (strncmp(name, "__builtin_", 10) == 0 && in_library_list(base)) {
+    result = base;
   }  /* if */
   return result;
 }  /* ecil_library_builtin_name */
@@ -1327,6 +1499,12 @@ dropped as unsupported), if its facts changed.
 
   compute_func_state(frame, rout, defining, unsupported, &state);
   if (ecil_unsupported_reason == NULL) {
+    if ((ecil_gid_info(gid)->flags & ECIL_GF_DEFINED) && !unsupported) {
+      /* Once the body has been streamed its type must not change (a K&R
+         definition later redeclared with a prototype keeps the type of
+         the definition). */
+      state.type = ecil_gid_info(gid)->decl_type;
+    }  /* if */
     emit_func_decl_if_changed(frame, gid, &state);
     if (defining && !unsupported) {
       ecil_gid_info(gid)->flags |= ECIL_GF_DEFINED;
@@ -1357,6 +1535,22 @@ The symbol name of an external-linkage variable, or NULL.
 }  /* var_symbol_name */
 
 
+a_targ_alignment ecil_variable_alignment(a_variable_ptr var)
+/*
+The explicit alignment of a variable, in bytes (0 for the natural one): its
+own alignment attribute, or that of a typedef with an alignment attribute.
+*/
+{
+  a_targ_alignment  result = var->alignment;
+  a_targ_alignment  declared = var->type->alignment;
+
+  if (declared > result && declared > skip_typerefs(var->type)->alignment) {
+    result = declared;
+  }  /* if */
+  return result;
+}  /* ecil_variable_alignment */
+
+
 uint32_t ecil_variable_symbol_gid(an_ecil_frame *frame, a_variable_ptr var)
 /*
 The G-id already bound to this variable's symbol name, or 0.
@@ -1380,7 +1574,14 @@ DECL_VAR (as a declaration) at its first reference.
 {
   uint32_t  gid = ecil_gid_of(var);
 
-  if (gid == 0 && ecil_unsupported_reason == NULL) {
+  if (gid == 0 && var->source_corresp.is_local_to_function &&
+      var->storage_class == (a_storage_class)sc_static &&
+      ecil_unsupported_reason == NULL) {
+    /* A static local with no declaration statement (__func__) that is
+       first reached through an address constant: define it now. */
+    ecil_define_variable(frame, var, NULL);
+    gid = ecil_gid_of(var);
+  } else if (gid == 0 && ecil_unsupported_reason == NULL) {
     uint32_t  type;
 
     ecil_check_variable_attributes(var);
@@ -1427,7 +1628,7 @@ DECL_VAR (as a declaration) at its first reference.
         ecil_arg_uint(frame, type);
         ecil_arg_uint(frame, linkage);
         ecil_arg_uint(frame, flags);
-        ecil_arg_uint(frame, (uint64_t)var->alignment);
+        ecil_arg_uint(frame, (uint64_t)ecil_variable_alignment(var));
         if (name_sid != 0) {
           ecil_arg_uint(frame, name_sid);
         } else {
@@ -1439,7 +1640,7 @@ DECL_VAR (as a declaration) at its first reference.
         info->decl_linkage = linkage;
         info->decl_flags = flags;
         info->decl_name = name_sid;
-        info->decl_align = (uint32_t)var->alignment;
+        info->decl_align = (uint32_t)ecil_variable_alignment(var);
         info->decl_emitted = TRUE;
       }  /* if */
     }  /* if */

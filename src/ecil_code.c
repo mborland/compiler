@@ -95,6 +95,9 @@ void ecil_code_reset(void)
 Release the writer's function-body storage at the end of a compilation.
 */
 {
+  while (num_agg_levels > 0) {
+    ecil_init_level_end(&agg_levels[--num_agg_levels]);
+  }  /* while */
   free(code_stack);
   free(streamed_bitmap);
   free(agg_levels);
@@ -585,10 +588,19 @@ An enk_constant node: a value, or (string literals) a glvalue.
             ecil_rec1(frame, eop_gref, g);
             if (!is_function) ecil_rec0(frame, eop_addr);
             if (!is_function || c->variant.address.offset != 0) {
+              /* ADDR_OFFSET's type is a pointer type: for an address that
+                 was cast to an integer, use void * and convert after. */
+              uint32_t  pt = (info_of(t)->kind == egk_ptr) ? t :
+                     ecil_ptr_type(frame, ecil_void_type(frame));
+
               ecil_rec_begin(frame, eop_addr_offset);
-              ecil_arg_uint(frame, t);
+              ecil_arg_uint(frame, pt);
               ecil_arg_int(frame, (int64_t)c->variant.address.offset);
               ecil_rec_end(frame);
+              if (pt != t) emit_convert(frame, pt, t);
+            } else if (info_of(t)->kind != egk_ptr) {
+              emit_convert(frame, ecil_ptr_type(frame,
+                                                ecil_void_type(frame)), t);
             }  /* if */
           }  /* if */
         }
@@ -647,6 +659,33 @@ An enk_variable node: LREF or GREF (a glvalue).
 }  /* emit_variable_node */
 
 
+static a_boolean value_is_opaque_scalar(an_ecil_frame *frame,
+                                        an_expr_node_ptr node)
+/*
+Return TRUE if the node's type is an opaque scalar (_Float16, _BitInt, ...):
+ECIL has no operations on such values, so every value-level use of one is
+unsupported (spec 8.11).  Records with opaque members are copied whole and
+are not scalars.
+*/
+{
+  uint32_t  t = ecil_type_id(frame, node->type);
+
+  return t != 0 && info_of(t)->kind == egk_opaque;
+}  /* value_is_opaque_scalar */
+
+
+static a_boolean value_is_failed_record(an_ecil_frame *frame,
+                                        an_expr_node_ptr node)
+/*
+Return TRUE if the node's type is a record whose body could not be written.
+*/
+{
+  uint32_t  t = ecil_type_id(frame, node->type);
+
+  return t != 0 && (info_of(t)->flags & ECIL_GF_FAILED) != 0;
+}  /* value_is_failed_record */
+
+
 static void emit_load_if_value(an_ecil_frame *frame, an_expr_node_ptr node)
 /*
 After the address of a storage-designating node: add the implicit
@@ -656,7 +695,11 @@ lvalue-to-rvalue conversion if the node is used as a value.
   if (!is_glvalue_node(node)) {
     a_type_ptr  t = skip_typerefs(node->type);
 
-    if (t->kind != tk_array && t->kind != tk_routine) {
+    if (value_is_opaque_scalar(frame, node) ||
+        value_is_failed_record(frame, node)) {
+      ecil_note_unsupported_type(ecil_type_id(frame, node->type),
+                                 "a value of an unsupported type");
+    } else if (t->kind != tk_array && t->kind != tk_routine) {
       ecil_rec_begin(frame, eop_load);
       ecil_arg_uint(frame, access_is_volatile(node) ?
                            ECIL_ACCESS_VOLATILE : 0u);
@@ -668,13 +711,7 @@ lvalue-to-rvalue conversion if the node is used as a value.
 
 /* Unsupported builtins and the library builtin rule. */
 
-static a_boolean is_builtin_name(const char *name)
-/*
-Return TRUE for names that begin with __builtin_.
-*/
-{
-  return name != NULL && strncmp(name, "__builtin_", 10) == 0;
-}  /* is_builtin_name */
+
 
 
 
@@ -839,6 +876,38 @@ SPECIAL_C23_VA_START for __builtin_c23_va_start, or 0.
 }  /* special_builtin_id */
 
 
+static a_boolean builtin_is_unsupported(a_routine_ptr rout)
+/*
+Return TRUE if rout is a front-end builtin routine (a __builtin_X name or a
+routine the front end declares itself, such as __sync_* and __atomic_*) that
+ECIL has no mapping for.  Library functions, under either spelling, are
+ordinary calls.
+*/
+{
+  const char  *name = rout->source_corresp.name;
+  a_boolean   is_builtin = FALSE;
+  a_boolean   unsupported = FALSE;
+
+  if (name != NULL) {
+    is_builtin = strncmp(name, "__builtin_", 10) == 0;
+#if BUILTIN_FUNCTIONS_ENABLED
+    if (!is_builtin &&
+        rout->special_kind == (a_special_function_kind)sfk_none &&
+        rout->variant.builtin_function_kind !=
+                                           (a_builtin_function_kind)bfk_none) {
+      is_builtin = TRUE;
+    }  /* if */
+#endif /* BUILTIN_FUNCTIONS_ENABLED */
+    if (is_builtin && special_builtin_id(name) == 0 &&
+        ecil_library_builtin_name(name) == NULL &&
+        !ecil_is_library_function(name)) {
+      unsupported = TRUE;
+    }  /* if */
+  }  /* if */
+  return unsupported;
+}  /* builtin_is_unsupported */
+
+
 /* Operators. */
 
 static unsigned int arith_flags(uint32_t gid)
@@ -999,7 +1068,12 @@ Resolve a member selection to the record's G-id and the member's position.
     *index = ecil_gid_of(field) - 1;
     ok = TRUE;
   } else if (*rec_gid != 0) {
-    ecil_note_unsupported("a member of an incomplete type");
+    if (info_of(*rec_gid)->flags & ECIL_GF_OPAQUE) {
+      ecil_note_unsupported("a member of a record with a _BitInt bit-field "
+                            "(opaque storage)");
+    } else {
+      ecil_note_unsupported("a member of an incomplete type");
+    }  /* if */
   }  /* if */
   return ok;
 }  /* field_index */
@@ -1416,8 +1490,7 @@ eok_call: callee (unless direct), arguments in order, then CALL.
     } else if (direct != NULL) {
       const char  *name = direct->source_corresp.name;
 
-      if (is_builtin_name(name) && special_builtin_id(name) == 0 &&
-          ecil_library_builtin_name(name) == NULL) {
+      if (builtin_is_unsupported(direct)) {
         note_unsupported_builtin(name);
       } else if (special_builtin_id(name != NULL ? name : "") != 0) {
         it->b = special_builtin_id(name);
@@ -1479,14 +1552,17 @@ eok_call: callee (unless direct), arguments in order, then CALL.
       uint32_t  at = ecil_type_id(frame, arg->type);
 
       nargs++;
-      if (at != 0 && info_of(at)->kind == egk_record &&
-          (info_of(at)->flags & ECIL_GF_ABI_OPAQUE)) {
+      if (at != 0 && (info_of(at)->kind == egk_opaque ||
+                      (info_of(at)->kind == egk_record &&
+                       (info_of(at)->flags & ECIL_GF_ABI_OPAQUE)))) {
         ecil_note_unsupported("a call with an argument of unsupported type");
       }  /* if */
     }  /* for */
     result_gid = ecil_type_id(frame, node->type);
-    if (result_gid != 0 && info_of(result_gid)->kind == egk_record &&
-        (info_of(result_gid)->flags & ECIL_GF_ABI_OPAQUE)) {
+    if (result_gid != 0 && (info_of(result_gid)->kind == egk_opaque ||
+                            (info_of(result_gid)->kind == egk_record &&
+                             (info_of(result_gid)->flags &
+                                                    ECIL_GF_ABI_OPAQUE)))) {
       ecil_note_unsupported("a call returning an unsupported type");
     }  /* if */
     fn_type = skip_typerefs(callee->type);
@@ -1585,6 +1661,35 @@ eok_call: callee (unless direct), arguments in order, then CALL.
 }  /* do_call */
 
 
+static uint32_t bit_field_promoted_gid(an_ecil_frame *frame,
+                                       an_expr_node_ptr lhs,
+                                       uint32_t         tl)
+/*
+The type of a compound assignment's left operand after the integer
+promotions: a bit-field narrower than int promotes to int whatever its
+declared type (C11 6.3.1.1p2), so "unsigned b:3; b /= -2" divides signed.
+*/
+{
+  uint32_t  result = tl;
+
+  if (lhs->kind == (an_expr_node_kind)enk_operation &&
+      (lhs->variant.operation.kind == eok_dot_field ||
+       lhs->variant.operation.kind == eok_points_to_field) &&
+      lhs->variant.operation.operands != NULL &&
+      lhs->variant.operation.operands->next != NULL &&
+      lhs->variant.operation.operands->next->kind ==
+                                        (an_expr_node_kind)enk_field) {
+    a_field_ptr  field =
+        node_field(lhs->variant.operation.operands->next);
+
+    if (field->is_bit_field && field->bit_size < 32) {
+      result = ecil_intern_int_type(frame, 32, TRUE, 4, 4);
+    }  /* if */
+  }  /* if */
+  return result;
+}  /* bit_field_promoted_gid */
+
+
 static void do_compound_assignment(an_ecil_frame *frame, size_t idx)
 /*
 Compound assignment is expanded here so that cast classification stays in
@@ -1615,9 +1720,9 @@ one place:  <lhs glv> DUP LOAD cast <rhs> cast <op> cast STORE.
     if (op == eok_padd_assign || op == eok_psubtract_assign) {
       comp = tl;
     } else if (op == eok_shiftl_assign || op == eok_shiftr_assign) {
-      comp = promoted_gid(frame, tl);
+      comp = promoted_gid(frame, bit_field_promoted_gid(frame, lhs, tl));
     } else {
-      comp = common_gid(frame, tl, tr);
+      comp = common_gid(frame, bit_field_promoted_gid(frame, lhs, tl), tr);
     }  /* if */
     if (op != eok_padd_assign && op != eok_psubtract_assign) {
       emit_convert(frame, tl, comp);
@@ -2056,8 +2161,7 @@ Visit an expression item.
         const char  *name = node_routine(node)->source_corresp.name;
         uint32_t    gid;
 
-        if (is_builtin_name(name) && special_builtin_id(name) == 0 &&
-            ecil_library_builtin_name(name) == NULL) {
+        if (builtin_is_unsupported(node_routine(node))) {
           note_unsupported_builtin(name);
         } else {
           gid = ecil_function_id(frame, node_routine(node));
@@ -2074,7 +2178,15 @@ Visit an expression item.
       code_stack_size--;
       break;
     case enk_operation:
-      do_operation(frame, idx);
+      if (!is_glvalue_node(node) && value_is_opaque_scalar(frame, node) &&
+          node->variant.operation.kind != eok_parens) {
+        ecil_note_unsupported_type(ecil_type_id(frame, node->type),
+                                   "an operation on an unsupported scalar "
+                                   "type");
+        code_stack_size--;
+      } else {
+        do_operation(frame, idx);
+      }  /* if */
       break;
     case enk_c11_generic:
       it->entry = node->variant.c11_generic.result;
@@ -2175,9 +2287,36 @@ Return TRUE if the aggregate constant contains a ck_dynamic_init entry.
 }  /* constant_has_dynamic_part */
 
 
-static a_boolean push_agg_level(a_constant_ptr aggregate)
+static a_boolean merged_has_dynamic_part(a_constant_ptr *sources, size_t n)
 /*
-Push a cursor for a dynamic aggregate; FALSE if memory ran out.
+Return TRUE if any of the merged aggregate constants has a dynamic part.
+*/
+{
+  size_t    i;
+  a_boolean found = FALSE;
+
+  for (i = 0; i < n && !found; i++) {
+    found = constant_has_dynamic_part(sources[i]);
+  }  /* for */
+  return found;
+}  /* merged_has_dynamic_part */
+
+
+static void reset_agg_levels(void)
+/*
+Discard the dynamic aggregate cursors.
+*/
+{
+  while (num_agg_levels > 0) {
+    ecil_init_level_end(&agg_levels[--num_agg_levels]);
+  }  /* while */
+}  /* reset_agg_levels */
+
+
+static a_boolean push_agg_level(a_constant_ptr *sources, size_t n)
+/*
+Push a cursor for a dynamic aggregate initialized by the given constants;
+FALSE if memory ran out.
 */
 {
   a_boolean ok = TRUE;
@@ -2196,15 +2335,17 @@ Push a cursor for a dynamic aggregate; FALSE if memory ran out.
       agg_levels_capacity = new_capacity;
     }  /* if */
   }  /* if */
-  if (ok) ecil_init_level_start(&agg_levels[num_agg_levels++], aggregate);
+  if (ok) ecil_init_level_start(&agg_levels[num_agg_levels++], sources, n);
   return ok;
 }  /* push_agg_level */
 
 
-static void begin_dynamic_aggregate(an_ecil_frame *frame, a_constant_ptr c)
+static void begin_dynamic_aggregate(an_ecil_frame *frame, a_constant_ptr c,
+                                    a_constant_ptr *sources, size_t n)
 /*
 AGG_INIT_BEGIN for a nested dynamic aggregate (the target glvalue is on the
-stack) and push its cursor.
+stack) and push its cursor.  It is initialized by c, or by the n merged
+constants in sources.
 */
 {
   uint32_t      t = ecil_type_id(frame, c->type);
@@ -2215,7 +2356,8 @@ stack) and push its cursor.
       ecil_gid_info(t)->kind != egk_array) {
     ecil_note_unsupported_type(t, "an aggregate initializer of an opaque "
                                   "type");
-  } else if (t != 0 && push_agg_level(c)) {
+  } else if (t != 0 && push_agg_level(sources != NULL ? sources : &c,
+                                      sources != NULL ? n : 1)) {
     ecil_rec_begin(frame, eop_agg_init_begin);
     ecil_arg_uint(frame, t);
     ecil_arg_uint(frame, flags);
@@ -2254,7 +2396,8 @@ from the dynamic init in it->entry.
         break;
       case dik_constant:
         ecil_rec1(frame, eop_lref, lid);
-        if (ecil_emit_constant(frame, di->variant.constant.ptr)) {
+        if (ecil_emit_constant_typed(frame, di->variant.constant.ptr,
+                                     it->b)) {
           ecil_rec0(frame, eop_init_const);
         }  /* if */
         code_stack_size--;
@@ -2269,7 +2412,7 @@ from the dynamic init in it->entry.
         it->kind = cik_agg;
         it->phase = 0;
         it->cursor = (void *)(uintptr_t)num_agg_levels;
-        begin_dynamic_aggregate(frame, di->variant.constant.ptr);
+        begin_dynamic_aggregate(frame, di->variant.constant.ptr, NULL, 0);
         break;
       default:
         ecil_note_unsupported("this kind of initialization");
@@ -2296,9 +2439,14 @@ cursor-stack depth at which this aggregate started.
 
     if (!ecil_init_level_next(level, &index, &value)) {
       ecil_rec0(frame, eop_agg_init_end);
+      ecil_init_level_end(level);
       num_agg_levels--;
+    } else if (level->entry_is_char) {
+      ecil_rec1(frame, eop_agg_sel, index);
+      ecil_emit_string_char(frame, level, value, index);
+      ecil_rec0(frame, eop_init_const);
     } else if (value->kind == (a_constant_repr_kind)ck_init_repeat) {
-      uint64_t  count = (uint64_t)value->variant.init_repeat.count;
+      uint64_t  count = level->entry_count;
       uint64_t  i;
 
       if (value->variant.init_repeat.constant->kind ==
@@ -2308,7 +2456,9 @@ cursor-stack depth at which this aggregate started.
       } else {
         for (i = 0; i < count && ecil_unsupported_reason == NULL; i++) {
           ecil_rec1(frame, eop_agg_sel, index + i);
-          if (ecil_emit_constant(frame, value->variant.init_repeat.constant)) {
+          if (ecil_emit_constant_typed(frame,
+                          value->variant.init_repeat.constant,
+                          ecil_member_type_gid(frame, level, index))) {
             ecil_rec0(frame, eop_init_const);
           }  /* if */
         }  /* for */
@@ -2321,18 +2471,29 @@ cursor-stack depth at which this aggregate started.
         (void)push_item(cik_store, NULL, 0);
         push_expr(di->variant.expression, 0);
       } else if (di->kind == dik_constant) {
-        if (ecil_emit_constant(frame, di->variant.constant.ptr)) {
+        if (ecil_emit_constant_typed(frame, di->variant.constant.ptr,
+                              ecil_member_type_gid(frame, level, index))) {
           ecil_rec0(frame, eop_init_const);
         }  /* if */
       } else {
         ecil_note_unsupported("this kind of aggregate member initializer");
       }  /* if */
-    } else if (constant_has_dynamic_part(value)) {
+    } else if (constant_has_dynamic_part(value) ||
+               (level->entry_sources != NULL &&
+                merged_has_dynamic_part(level->entry_sources,
+                                        level->entry_num_sources))) {
+      a_constant_ptr  *srcs = level->entry_sources;
+      size_t          num_srcs = level->entry_num_sources;
+
       ecil_rec1(frame, eop_agg_sel, index);
-      begin_dynamic_aggregate(frame, value);
+      begin_dynamic_aggregate(frame, value, srcs, num_srcs);
     } else {
       ecil_rec1(frame, eop_agg_sel, index);
-      if (ecil_emit_constant(frame, value)) ecil_rec0(frame, eop_init_const);
+      if (ecil_emit_constant_sources(frame, value, level->entry_sources,
+                           level->entry_num_sources,
+                           ecil_member_type_gid(frame, level, index))) {
+        ecil_rec0(frame, eop_init_const);
+      }  /* if */
     }  /* if */
   }  /* if */
 }  /* do_agg */
@@ -2360,7 +2521,10 @@ stmk_decl: declare the locals (LOCAL) and define the static variables.
       } else {
         uint32_t  t = ecil_type_id(frame, var->type);
 
-        if (t != 0) {
+        if (t != 0 && (info_of(t)->flags & ECIL_GF_FAILED)) {
+          ecil_note_unsupported_type(t, "a variable of a record type that "
+                                        "is not supported");
+        } else if (t != 0) {
           uint32_t  lid = new_lid();
           uint32_t  name_sid = var->source_corresp.name != NULL ?
                      ecil_intern_cstring(frame, var->source_corresp.name) : 0;
@@ -2375,7 +2539,7 @@ stmk_decl: declare the locals (LOCAL) and define the static variables.
           } else {
             ecil_arg_nil(frame);
           }  /* if */
-          ecil_arg_uint(frame, (uint64_t)var->alignment);
+          ecil_arg_uint(frame, (uint64_t)ecil_variable_alignment(var));
           ecil_arg_uint(frame, 0);
           ecil_rec_end(frame);
         }  /* if */
@@ -2722,11 +2886,38 @@ Process items until the stack is empty or something is unsupported.
     }  /* switch */
   }  /* while */
   code_stack_size = 0;
-  num_agg_levels = 0;
+  reset_agg_levels();
 }  /* run_code_stack */
 
 
 /* Functions. */
+
+static a_boolean type_is_opaque_value(uint32_t gid)
+/*
+Return TRUE for an opaque scalar and for a record with opaque storage by
+value: a value of the type cannot be passed or returned.
+*/
+{
+  return info_of(gid)->kind == egk_opaque ||
+         (info_of(gid)->kind == egk_record &&
+          (info_of(gid)->flags & ECIL_GF_ABI_OPAQUE) != 0);
+}  /* type_is_opaque_value */
+
+
+static void check_definition_return_type(an_ecil_frame *frame,
+                                         a_routine_ptr  rout)
+/*
+Diagnose a definition whose return type is opaque (spec 8.11).
+*/
+{
+  a_type_ptr  ft = skip_typerefs(rout->type);
+  uint32_t    rt = ecil_type_id(frame, ft->variant.routine.return_type);
+
+  if (rt != 0 && type_is_opaque_value(rt)) {
+    ecil_note_unsupported_type(rt, "a return type that is unsupported");
+  }  /* if */
+}  /* check_definition_return_type */
+
 
 static void emit_function(an_ecil_frame *frame, a_scope_ptr scope)
 /*
@@ -2744,6 +2935,9 @@ and warn.
   /* A reason noted while introducing the declaration (an unsupported
      parameter type) is reported with the dropped body below. */
   ecil_unsupported_reason = NULL;
+  /* Records declared incomplete in an earlier frame and completed since get
+     their bodies before anything here can need them complete. */
+  ecil_complete_pending_records(frame);
   gid = ecil_function_id(frame, rout);
   if (gid != 0 && ecil_unsupported_reason == NULL) {
     ecil_gid_info(gid)->entity = rout;
@@ -2758,6 +2952,7 @@ and warn.
                                    skip_typerefs(rout->type))->prototyped;
     a_boolean       reachable = TRUE;
 
+    check_definition_return_type(frame, rout);
     ecil_rec2(frame, eop_func_begin, gid, 0);
     for (param = scope->variant.routine.parameters; param != NULL;
          param = param->next) {
@@ -2766,13 +2961,19 @@ and warn.
       uint32_t  lid;
       uint32_t  name_sid = 0;
 
+      if (decl != 0 && type_is_opaque_value(decl)) {
+        /* The ABI of an opaque parameter is unknown (spec 8.11). */
+        ecil_note_unsupported_type(decl, "a parameter of an unsupported "
+                                         "type");
+      }  /* if */
+
       if (decl != 0 && !prototyped) {
         an_ecil_gid_info  *pi = info_of(decl);
 
         if ((pi->kind == egk_int && pi->bits < 32) || pi->kind == egk_bool) {
           abi = ecil_intern_int_type(frame, 32, TRUE, 4, 4);
         } else if (pi->kind == egk_float &&
-                   pi->float_format == (unsigned int)eff_ieee_single) {
+                   ecil_is_plain_float_type(param->type)) {
           abi = ecil_intern_float_type(frame,
                                        (unsigned int)eff_ieee_double, 8, 8);
         }  /* if */
@@ -2826,7 +3027,7 @@ and warn.
     cir_be_warning(message);
   }  /* if */
   code_stack_size = 0;
-  num_agg_levels = 0;
+  reset_agg_levels();
   ecil_forget_lids();
   mark_streamed(rout);
 }  /* emit_function */

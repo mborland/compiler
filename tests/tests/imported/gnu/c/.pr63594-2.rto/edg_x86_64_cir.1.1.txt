@@ -1,0 +1,564 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 86: warning: unknown attribute "noclone"
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1char64" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2char64" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3char64" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1char32" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2char32" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3char32" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1char16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2char16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3char16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1char8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2char8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3char8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1char4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2char4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3char4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1char2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2char2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3char2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1char1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2char1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3char1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1short32" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2short32" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3short32" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1short16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2short16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3short16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1short8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2short8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3short8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1short4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2short4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3short4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1short2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2short2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3short2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1short1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2short1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3short1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1int16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2int16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3int16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1int8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2int8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3int8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1int4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2int4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3int4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1int2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2int2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3int2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1int1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2int1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3int1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1float16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2float16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3float16" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1float8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2float8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3float8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1float4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2float4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3float4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1float2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2float2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3float2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1float1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2float1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3float1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1llong8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2llong8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3llong8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1llong4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2llong4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3llong4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1llong2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2llong2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3llong2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1llong1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2llong1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3llong1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1double8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2double8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3double8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1double4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2double4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3double4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1double2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2double2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3double2" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test1double1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test2double1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test3double1" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  TESTS
+  ^
+
+Error: CIR back end: the definition of 'test1char64' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2char64' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3char64' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1char32' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2char32' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3char32' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1char16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2char16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3char16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1char8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2char8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3char8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1char4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2char4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3char4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1char2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2char2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3char2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1char1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2char1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3char1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1short32' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2short32' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3short32' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1short16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2short16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3short16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1short8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2short8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3short8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1short4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2short4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3short4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1short2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2short2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3short2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1short1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2short1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3short1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1int16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2int16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3int16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1int8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2int8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3int8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1int4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2int4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3int4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1int2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2int2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3int2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1int1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2int1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3int1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1float16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2float16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3float16' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1float8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2float8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3float8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1float4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2float4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3float4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1float2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2float2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3float2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1float1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2float1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3float1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1llong8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2llong8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3llong8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1llong4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2llong4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3llong4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1llong2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2llong2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3llong2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1llong1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2llong1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3llong1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1double8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2double8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3double8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1double4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2double4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3double4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1double2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2double2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3double2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test1double1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test2double1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'test3double1' was dropped: it uses a construct the CIR back end cannot express
+
+93 errors detected in the compilation of "Test_name.c".

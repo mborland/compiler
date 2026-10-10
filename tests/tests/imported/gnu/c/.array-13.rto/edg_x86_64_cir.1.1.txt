@@ -1,0 +1,22 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 20: warning: excess initializers are ignored
+  static struct g g = { 4, { 0, 1, 2, 3 } }; /* { dg-warning "(excess elements)|(near initialization)" } */
+                             ^
+
+"Test_name.c", line 19: warning: variable "junk1" was declared but never referenced
+  static int junk1[] = { -1, -1, -1, -1 };
+             ^
+
+"Test_name.c", line 20: warning: variable "g" was declared but never referenced
+  static struct g g = { 4, { 0, 1, 2, 3 } }; /* { dg-warning "(excess elements)|(near initialization)" } */
+                  ^
+
+"Test_name.c", line 21: warning: variable "junk2" was declared but never referenced
+  static int junk2[] = { -1, -1, -1, -1 };
+             ^
+
+Warning: CIR back end: the initializer of "f" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'f' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,158 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 5: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 10: warning: CIR back end: the body of "bar" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 16: warning: CIR back end: the body of "baz" uses the builtin function __builtin_va_arg_pack, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 18: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 25: warning: CIR back end: the body of "f1" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 27: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 32: warning: CIR back end: the body of "f2" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 34: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 39: warning: CIR back end: the body of "f3" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 41: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 47: warning: CIR back end: the body of "f4" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 49: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 56: warning: CIR back end: the body of "f5" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 58: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 63: warning: CIR back end: the body of "f6" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 65: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 71: warning: CIR back end: the body of "f7" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 73: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 80: warning: CIR back end: the body of "f8" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 82: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 88: warning: CIR back end: the body of "f9" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 90: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 97: warning: CIR back end: the body of "f10" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 99: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 106: warning: CIR back end: the body of "f11" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 108: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 115: warning: CIR back end: the body of "f12" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 117: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 123: warning: CIR back end: the body of "f13" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 125: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) int
+                            ^
+
+"Test_name.c", line 130: warning: CIR back end: the body of "f14" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'bar' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'baz' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f4' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f5' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f6' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f7' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f9' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f10' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f11' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f12' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f13' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'f14' was dropped: it uses a construct the CIR back end cannot express
+
+16 errors detected in the compilation of "Test_name.c".

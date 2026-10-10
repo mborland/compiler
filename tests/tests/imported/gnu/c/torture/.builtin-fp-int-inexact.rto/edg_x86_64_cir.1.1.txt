@@ -1,0 +1,49 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/builtin-fp-int-inexact.c", line 24: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double ceil (double x) { return x; } __attribute__ ((noinline, noclone)) float ceilf (float x) { return x; } __attribute__ ((noinline, noclone)) long double ceill (long double x) { return x; }
+                            ^
+
+"./torture/builtin-fp-int-inexact.c", line 24: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double ceil (double x) { return x; } __attribute__ ((noinline, noclone)) float ceilf (float x) { return x; } __attribute__ ((noinline, noclone)) long double ceill (long double x) { return x; }
+                                                                                                     ^
+
+"./torture/builtin-fp-int-inexact.c", line 24: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double ceil (double x) { return x; } __attribute__ ((noinline, noclone)) float ceilf (float x) { return x; } __attribute__ ((noinline, noclone)) long double ceill (long double x) { return x; }
+                                                                                                                                                                             ^
+
+"./torture/builtin-fp-int-inexact.c", line 25: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double floor (double x) { return x; } __attribute__ ((noinline, noclone)) float floorf (float x) { return x; } __attribute__ ((noinline, noclone)) long double floorl (long double x) { return x; }
+                            ^
+
+"./torture/builtin-fp-int-inexact.c", line 25: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double floor (double x) { return x; } __attribute__ ((noinline, noclone)) float floorf (float x) { return x; } __attribute__ ((noinline, noclone)) long double floorl (long double x) { return x; }
+                                                                                                      ^
+
+"./torture/builtin-fp-int-inexact.c", line 25: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double floor (double x) { return x; } __attribute__ ((noinline, noclone)) float floorf (float x) { return x; } __attribute__ ((noinline, noclone)) long double floorl (long double x) { return x; }
+                                                                                                                                                                               ^
+
+"./torture/builtin-fp-int-inexact.c", line 26: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double round (double x) { return x; } __attribute__ ((noinline, noclone)) float roundf (float x) { return x; } __attribute__ ((noinline, noclone)) long double roundl (long double x) { return x; }
+                            ^
+
+"./torture/builtin-fp-int-inexact.c", line 26: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double round (double x) { return x; } __attribute__ ((noinline, noclone)) float roundf (float x) { return x; } __attribute__ ((noinline, noclone)) long double roundl (long double x) { return x; }
+                                                                                                      ^
+
+"./torture/builtin-fp-int-inexact.c", line 26: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double round (double x) { return x; } __attribute__ ((noinline, noclone)) float roundf (float x) { return x; } __attribute__ ((noinline, noclone)) long double roundl (long double x) { return x; }
+                                                                                                                                                                               ^
+
+"./torture/builtin-fp-int-inexact.c", line 27: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double trunc (double x) { return x; } __attribute__ ((noinline, noclone)) float truncf (float x) { return x; } __attribute__ ((noinline, noclone)) long double truncl (long double x) { return x; }
+                            ^
+
+"./torture/builtin-fp-int-inexact.c", line 27: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double trunc (double x) { return x; } __attribute__ ((noinline, noclone)) float truncf (float x) { return x; } __attribute__ ((noinline, noclone)) long double truncl (long double x) { return x; }
+                                                                                                      ^
+
+"./torture/builtin-fp-int-inexact.c", line 27: warning: unknown attribute "noclone"
+  __attribute__ ((noinline, noclone)) double trunc (double x) { return x; } __attribute__ ((noinline, noclone)) float truncf (float x) { return x; } __attribute__ ((noinline, noclone)) long double truncl (long double x) { return x; }
+                                                                                                                                                                               ^
+

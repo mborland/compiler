@@ -1,0 +1,22 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"Test_name.c", line 7: warning: unknown attribute "noclone"
+  unsigned int __attribute__((noinline,noclone))
+                                       ^
+
+"Test_name.c", line 21: warning: unknown attribute "noclone"
+  int __attribute__((noinline,noclone))
+                              ^
+
+"Test_name.c", line 35: warning: unknown attribute "noclone"
+  int __attribute__((noinline,noclone))
+                              ^
+
+/usr/sbin/ld: Test_name.o: in function `test0':
+Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.o: in function `test1':
+Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `link_error'
+/usr/sbin/ld: Test_name.o:Test_name.c:(.text+0xXX): more undefined references to `link_error' follow
+collect2: error: ld returned 1 exit status

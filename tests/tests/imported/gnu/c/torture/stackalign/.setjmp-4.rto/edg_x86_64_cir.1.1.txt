@@ -1,0 +1,14 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/stackalign/setjmp-4.c", line 13: warning: CIR back end: the body of "raise0" uses the builtin function __builtin_longjmp, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/stackalign/setjmp-4.c", line 32: warning: CIR back end: the body of "execute" uses the builtin function __builtin_setjmp, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'raise0' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'execute' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

@@ -140,6 +140,29 @@ C_AGG targets).
   return ok;
 }  /* a_ref_checker::need_complete */
 
+bool a_ref_checker::need_object(const an_operand &op, const char *what,
+                                std::string &problem)
+/*
+A type operand naming an object that is allocated or defined: a record (or
+an array of records) must have its body by then.
+*/
+{
+  bool ok = need_type(op, false, problem);
+  uint64_t v = 0;
+
+  if (ok && operand_id(op, v)) {
+    const a_ent *e = find(v);
+    while (e != nullptr && e->kind == k_array)
+      e = find(e->element);
+    if (e != nullptr && e->kind == k_record && !e->complete) {
+      problem = std::string("incomplete record: ") + what + " uses G-id " +
+                number(v) + " before its TY_RECORD_BODY";
+      ok = false;
+    }
+  }
+  return ok;
+}  /* a_ref_checker::need_object */
+
 bool a_ref_checker::introduce(const an_operand &op, a_ent entity,
                               std::string &problem)
 /*
@@ -205,6 +228,12 @@ entity or re-issue it (the same kind only).
   } else {
     ok = need_type(r.ops[1], false, problem) &&
          need_sid(name, true, "the name", problem);
+  }
+  if (ok && kind == k_var) {
+    uint64_t flags = 0;
+    operand_u64(r.ops[3], flags);
+    if (flags & ECIL_DECL_VAR_DEFINITION)
+      ok = need_object(r.ops[1], "a DECL_VAR definition", problem);
   }
   if (ok) {
     operand_id(r.ops[1], t);
@@ -454,7 +483,11 @@ Apply the reference rules of one record.
       if (ok) {
         operand_u64(r.ops[0], v);
         e = find(v);
-        if (e->kind == k_array) {
+        if (r.ops[3].kind != an_operand_kind::nil && e->kind != k_int &&
+            e->kind != k_bool) {
+          problem = "bit-field member of non-integer type G-id " + number(v);
+          ok = false;
+        } else if (e->kind == k_array) {
           const a_ent *el = find(e->element);
           if (el != nullptr && el->kind == k_record && !el->complete &&
               e->has_count && e->count != 0) {
@@ -512,18 +545,18 @@ Apply the reference rules of one record.
     }
     break;
   case eop_param:
-    ok = need_type(r.ops[1], false, problem) &&
-         need_type(r.ops[2], false, problem) &&
+    ok = need_object(r.ops[1], "PARAM", problem) &&
+         need_object(r.ops[2], "PARAM", problem) &&
          need_sid(r.ops[3], true, "the parameter name", problem) &&
          introduce_local(r.ops[0], l_value, problem);
     break;
   case eop_local:
-    ok = need_type(r.ops[1], false, problem) &&
+    ok = need_object(r.ops[1], "LOCAL", problem) &&
          need_sid(r.ops[2], true, "the local name", problem) &&
          introduce_local(r.ops[0], l_value, problem);
     break;
   case eop_materialize_temp:
-    ok = need_type(r.ops[1], false, problem) &&
+    ok = need_object(r.ops[1], "MATERIALIZE_TEMP", problem) &&
          introduce_local(r.ops[0], l_value, problem);
     break;
   case eop_label:
@@ -636,6 +669,13 @@ Apply the reference rules of one record.
     }
     break;
   case eop_const_int:
+    ok = need_type(r.ops[0], false, problem);
+    if (ok && operand_u64(r.ops[0], v) && find(v)->kind == k_ptr) {
+      problem = "CONST_INT of pointer type G-id " + number(v) +
+                " (use CONST_PTR or CONST_NULL)";
+      ok = false;
+    }
+    break;
   case eop_const_float:
   case eop_const_null:
   case eop_const_ptr:
@@ -658,6 +698,13 @@ Apply the reference rules of one record.
     }
     break;
   case eop_addr_offset:
+    ok = need_type(r.ops[0], false, problem);
+    if (ok && operand_u64(r.ops[0], v) && find(v)->kind != k_ptr) {
+      problem = "ADDR_OFFSET result type G-id " + number(v) +
+                " is not a pointer type";
+      ok = false;
+    }
+    break;
   case eop_cast:
   case eop_ptr_diff:
   case eop_va_arg:

@@ -1,0 +1,16 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc --c23 Test_name.c
+"Test_name.c", line 11: warning: unknown attribute "noipa"
+  __attribute__((noipa)) void
+                 ^
+
+"Test_name.c", line 81: warning: CIR back end: the body of "foo" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 130: warning: CIR back end: the body of "main" uses an operation on an unsupported scalar type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: C_INT of a non-integer type
+
+1 error detected in the compilation of "Test_name.c".

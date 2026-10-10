@@ -16,6 +16,7 @@ Kinds:
   switch       one switch with N cases
   ternary      a ? 1 : (a ? 2 : (...)) N deep
   land         a && (a && (...)) N deep
+  funcs        N small functions, each in its own F_REGION frame
 """
 import os, sys
 
@@ -95,6 +96,16 @@ def gen(kind, n):
             e += ["LREF 1", "LOAD 0", "TO_BOOL", "LAND_BEGIN"]
         e += ["CONST_INT 1 1", "TO_BOOL"] + ["LAND_END"] * n
         out = body_func(["LREF 2"] + e + ["CAST 4 1", "STORE 0 0"])
+    elif kind == "funcs":
+        out = ["frame DECLS", "  TY_FUNC 20 1 0 [1]"]
+        for i in range(n):
+            g = 100 + i
+            out += ["frame REGION", '  STR %d "f%d"' % (1000 + i, i),
+                    "  DECL_FUNC %d 20 0 1 %d" % (g, 1000 + i),
+                    "  FUNC_BEGIN %d 0" % g, "  PARAM 1 1 1 nil 0",
+                    "  LREF 1", "  LOAD 0", "  CONST_INT 1 %d" % i, "  ADD 1",
+                    "  RETURN_STMT true", "  FUNC_END 0"]
+        out += ["frame END", "  END auto 0"]
     elif kind in ("init_deep", "agg_init"):
         out = ["frame DECLS", '  STR 10 "g"', '  STR 11 "main"',
                '  STR 12 "f"', "  TY_FUNC 21 1 0 []"]

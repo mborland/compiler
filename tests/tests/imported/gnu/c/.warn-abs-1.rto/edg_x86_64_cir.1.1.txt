@@ -1,0 +1,26 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./warn-abs-1.c", line 32: warning: CIR back end: the body of "tst_notint" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./warn-abs-1.c", line 40: warning: CIR back end: the body of "tst_notfloat" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./warn-abs-1.c", line 55: warning: CIR back end: the body of "tst_notcomplex" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./warn-abs-1.c", line 62: warning: CIR back end: the body of "tst_cplx_size" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'tst_notint' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'tst_notfloat' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'tst_notcomplex' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'tst_cplx_size' was dropped: it uses a construct the CIR back end cannot express
+
+4 errors detected in the compilation of "Test_name.c".

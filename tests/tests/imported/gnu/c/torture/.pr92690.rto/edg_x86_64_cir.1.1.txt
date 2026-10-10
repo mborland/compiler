@@ -1,0 +1,32 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./torture/pr92690.c", line 10: warning: unknown attribute "noipa"
+  void __attribute__((noipa))
+                      ^
+
+"./torture/pr92690.c", line 15: warning: CIR back end: the body of "foo" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/pr92690.c", line 17: warning: unknown attribute "noipa"
+  void __attribute__((noipa))
+                      ^
+
+"./torture/pr92690.c", line 22: warning: CIR back end: the body of "bar" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/pr92690.c", line 27: warning: function "feenableexcept" declared implicitly
+    feenableexcept (
+    ^
+
+"./torture/pr92690.c", line 38: warning: CIR back end: the body of "main" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'bar' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

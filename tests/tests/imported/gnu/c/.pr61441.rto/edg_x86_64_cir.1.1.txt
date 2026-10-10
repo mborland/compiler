@@ -1,0 +1,23 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
+"./pr61441.c", line 14: warning: function "issignaling" declared implicitly
+    if (issignaling(x))
+        ^
+
+"./pr61441.c", line 44: warning: function "issignaling" declared implicitly
+      if (!issignaling(x))
+           ^
+
+"./pr61441.c", line 49: warning: function "issignaling" declared implicitly
+    else if (issignaling(x))
+             ^
+
+"./pr61441.c", line 24: warning: variable "y" was declared but never referenced
+    float x, y;
+             ^
+
+/usr/sbin/ld: Test_name.o: in function `conversion':
+Test_name.c:(.text+0xXX): undefined reference to `issignaling'
+/usr/sbin/ld: Test_name.o: in function `operation':
+Test_name.c:(.text+0xXX): undefined reference to `issignaling'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `issignaling'
+collect2: error: ld returned 1 exit status

@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Check that the CIR library and the front end stay isolated.
+
+The cir_src library and the front end share nothing but the headers in
+cir_src/include/edg_cir/.  This tool checks, in an up-to-date pair of builds
+(the cir_src library in --cir-build, cpfe-cir in --fe-build):
+
+  1. Touching src/il.h makes `ninja` in the library build do no work.
+  2. No library object depends on a file under src/ (`ninja -t deps`).
+  3. The only cir_src files cpfe-cir objects depend on are under
+     cir_src/include/edg_cir/, and cpfe/cpfe-cp objects depend on none.
+  4. Touching libedg_cir.so (and its SONAME link) makes `ninja -n cpfe-cir`
+     in the front end build show no work, so a library rebuild never relinks
+     the front end (LINK_DEPENDS_NO_SHARED).
+  5. No front end object depends on a header under $EDG_LLVM_CIR_PREFIX.
+
+Timestamps of touched files are restored.  Run it from the repository root
+(for example with `edg-exec --img cir-env -- edg-cir-check-isolation`).  The
+exit status is 0 if every check passes.
+'''
+
+import argparse
+import os
+import subprocess
+import sys
+
+from pathlib import Path
+from typing import Iterator, List, Optional, Tuple
+
+def _ninja(build_dir: Path, *args: str) -> str:
+  '''Run ninja in build_dir and return stdout.'''
+  proc = subprocess.run(
+    ['ninja', '-C', str(build_dir), *args],
+    stdout = subprocess.PIPE,
+    stderr = subprocess.STDOUT,
+    text = True
+  )
+  return proc.stdout
+
+def _is_no_work(ninja_output: str) -> bool:
+  return 'no work to do' in ninja_output
+
+def _touch(path: Path) -> Tuple[int, int]:
+  '''Update the mtime of path to now; return the old (atime, mtime) in ns.'''
+  stat = path.stat()
+  os.utime(path)
+  return (stat.st_atime_ns, stat.st_mtime_ns)
+
+def _restore(path: Path, times: Tuple[int, int]) -> None:
+  os.utime(path, ns = times)
+
+def _deps_paths(build_dir: Path) -> Iterator[Tuple[str, List[str]]]:
+  '''Yield (object, [dependency paths]) from `ninja -t deps`.'''
+  current: Optional[str] = None
+  deps: List[str] = []
+  for line in _ninja(build_dir, '-t', 'deps').splitlines():
+    if line.startswith('    '):
+      deps.append(line.strip())
+    elif line.strip() == '':
+      continue
+    else:
+      if current is not None:
+        yield current, deps
+      current = line.split(':')[0]
+      deps = []
+  if current is not None:
+    yield current, deps
+
+def _resolve(build_dir: Path, dep: str) -> Path:
+  path = Path(dep)
+  if not path.is_absolute():
+    path = build_dir / path
+  return Path(os.path.normpath(path))
+
+def check_il_touch(repo: Path, cir_build: Path) -> List[str]:
+  problems = []
+  # `ninja -n` cannot be used here: the library build re-runs CMake for its
+  # CONFIGURE_DEPENDS globs, which a dry run never gets past.  A real run is
+  # safe, since the point is that it does nothing.
+  _ninja(cir_build)
+  if not _is_no_work(_ninja(cir_build)):
+    return ['the library build does not settle; build it first']
+  header = repo / 'src' / 'il.h'
+  times = _touch(header)
+  try:
+    output = _ninja(cir_build)
+  finally:
+    _restore(header, times)
+  if not _is_no_work(output):
+    problems.append('touching src/il.h makes the library build do work:\n'
+                    + output)
+  return problems
+
+def check_library_deps(repo: Path, cir_build: Path) -> List[str]:
+  problems = []
+  src_dir = repo / 'src'
+  for obj, deps in _deps_paths(cir_build):
+    for dep in deps:
+      resolved = _resolve(cir_build, dep)
+      if src_dir in resolved.parents:
+        problems.append(f"library object {obj} depends on {resolved}")
+  return problems
+
+def check_front_end_deps(repo: Path, fe_build: Path) -> List[str]:
+  problems = []
+  allowed = repo / 'cir_src' / 'include' / 'edg_cir'
+  cir_src = repo / 'cir_src'
+  for obj, deps in _deps_paths(fe_build):
+    is_cir_object = 'cpfe-cir' in obj
+    for dep in deps:
+      resolved = _resolve(fe_build, dep)
+      if cir_src not in resolved.parents:
+        continue
+      if not is_cir_object:
+        problems.append(f"{obj} depends on {resolved}")
+      elif allowed not in resolved.parents:
+        problems.append(f"cpfe-cir object {obj} depends on {resolved}, "
+                        'outside cir_src/include/edg_cir')
+  return problems
+
+def check_library_touch(repo: Path, cir_build: Path,
+                        fe_build: Path) -> List[str]:
+  '''Touching the shared library must not make the front end relink.'''
+  problems = []
+  if not _is_no_work(_ninja(fe_build, '-n', 'cpfe-cir')):
+    return ['the front end build is not up to date; build it first']
+  libraries = sorted((cir_build / 'lib').glob('libedg_cir.so*'))
+  if not libraries:
+    return [f"no libedg_cir.so* found in {cir_build / 'lib'}"]
+  saved = [(lib, _touch(lib.resolve())) for lib in libraries]
+  try:
+    output = _ninja(fe_build, '-n', 'cpfe-cir')
+  finally:
+    for lib, times in saved:
+      _restore(lib.resolve(), times)
+  if not _is_no_work(output):
+    problems.append('touching the shared library makes the front end build '
+                    'do work (is LINK_DEPENDS_NO_SHARED set?):\n' + output)
+  return problems
+
+
+def check_no_llvm_headers(fe_build: Path) -> List[str]:
+  '''No front end object may depend on the LLVM/MLIR/Clang headers.'''
+  problems = []
+  prefixes = {os.environ.get('EDG_LLVM_CIR_PREFIX', '/edg/llvm-cir')}
+  prefixes = {Path(os.path.normpath(p)) for p in prefixes if p}
+  for obj, deps in _deps_paths(fe_build):
+    for dep in deps:
+      resolved = _resolve(fe_build, dep)
+      if any(prefix in resolved.parents for prefix in prefixes):
+        problems.append(f"{obj} depends on {resolved}")
+  return problems
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = 'Check the isolation of cir_src from the front end.'
+  )
+  parser.add_argument('--repo', default = '.', help = 'repository root')
+  parser.add_argument('--cir-build', default = 'build/cir',
+                      help = 'build directory of the cir_src library')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir',
+                      help = 'build directory of cpfe-cir')
+  args = parser.parse_args()
+
+  repo = Path(args.repo).resolve()
+  cir_build = (repo / args.cir_build).resolve()
+  fe_build = (repo / args.fe_build).resolve()
+
+  checks = [
+    ('touching src/il.h does not rebuild the library',
+     lambda: check_il_touch(repo, cir_build)),
+    ('no library object depends on src/',
+     lambda: check_library_deps(repo, cir_build)),
+    ('front end objects depend only on cir_src/include/edg_cir/',
+     lambda: check_front_end_deps(repo, fe_build)),
+    ('touching libedg_cir.so does not rebuild or relink the front end',
+     lambda: check_library_touch(repo, cir_build, fe_build)),
+    ('no front end object depends on the LLVM/MLIR/Clang headers',
+     lambda: check_no_llvm_headers(fe_build))
+  ]
+  failed = False
+  for description, check in checks:
+    problems = check()
+    if problems:
+      failed = True
+      print(f"FAIL: {description}")
+      for problem in problems:
+        print(f"  {problem}")
+    else:
+      print(f"PASS: {description}")
+  sys.exit(1 if failed else 0)
+
+main()

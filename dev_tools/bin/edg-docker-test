@@ -29,7 +29,8 @@ BUILTIN_POSTURES = [
   'day',
   'night',
   'quick-c-fe',
-  'extensive'
+  'extensive',
+  'cir'
 ]
 
 def parse_args() -> argparse.Namespace:
@@ -74,6 +75,24 @@ def parse_args() -> argparse.Namespace:
     help = 'do not keep edgy testing results'
   )
   parser.add_argument(
+    '--types',
+    dest = 'test_types',
+    default = '',
+    help = (
+      'only run tests that have a case of one of these comma separated test '
+      'types (e.g. rp,lp); passed to edgy'
+    )
+  )
+  parser.add_argument(
+    '--only-configs',
+    dest = 'only_configs',
+    default = '',
+    help = (
+      'run only these comma separated test configs (they must be configs of '
+      'the posture)'
+    )
+  )
+  parser.add_argument(
     '--non-interactive',
     dest = 'non_interactive',
     action = 'store_true',
@@ -102,7 +121,10 @@ def parse_args() -> argparse.Namespace:
 class TestRunPostureBuild:
   def __init__(self, *, cmake_preset: str, build_path: str,
                targets: List[str], test_configs: List[str],
-               edg_base: str) -> None:
+               edg_base: str, source_dir: str = '') -> None:
+    # source_dir is the directory (relative to the mono repo) whose
+    # CMakePresets.json defines cmake_preset; empty means the repo root.
+    self.source_dir = source_dir
     self.cmake_preset = cmake_preset
     self.build_path = build_path
     self.targets = targets
@@ -115,7 +137,16 @@ class TestRunPosture:
                record_tests: bool, slow_tests: bool, meticulous: bool,
                test_filters: str,
                acknowledg_ui_host: Optional[str],
-               acknowledg_api_host: Optional[str]) -> None:
+               acknowledg_api_host: Optional[str],
+               image: str = edgdocker.DEFAULT_IMAGE,
+               test_types: str = '', only_configs: str = '') -> None:
+    # Passed to edgy as --types and --config (restricting the posture's
+    # configs) when not empty.
+    self.test_types = test_types
+    self.only_configs = only_configs
+    # The docker image (see edgdocker.EXECUTABLE_IMAGES) every build and test
+    # command runs in.
+    self.image = image
     self.builds = builds
     self.keep_test_results = keep_test_results
     self.test_timeout_seconds = test_timeout_seconds
@@ -201,6 +232,34 @@ def _configure_extensive_posture(args: argparse.Namespace) -> TestRunPosture:
   ]
   return base_posture
 
+def _configure_cir_posture(args: argparse.Namespace) -> TestRunPosture:
+  base_posture = _configure_day_posture(args)
+  base_posture.image = 'cir-env'
+  cir_base = 'bases/docker/cir-env/gcc'
+  base_posture.builds = [
+    # The cir_src library first: the front end links against it.
+    TestRunPostureBuild(
+      cmake_preset = 'linux-cir-relwithdebinfo',
+      build_path = 'build/cir',
+      targets = ['all'],
+      test_configs = [],
+      edg_base = cir_base,
+      source_dir = 'cir_src'
+    ),
+    TestRunPostureBuild(
+      cmake_preset = 'linux-gcc-debug-cir',
+      build_path = 'build/gcc-cir',
+      # eccp also runs edg_prelink and edg_decode when it links.
+      targets = ['cpfe-cir', 'edg_prelink', 'edg_decode'],
+      test_configs = ['edg_x86_64_cir', 'edg_x86_64_cir_2p'],
+      edg_base = cir_base
+    )
+  ]
+  # Only the CIR suite by default; the other suites push every front-end test
+  # through the CIR back end (see cir_src/doc/research/test_plumbing.md).
+  base_posture.test_filters = 'cir'
+  return base_posture
+
 def _load_posture_builds(
                  config_file_dict: Any,
                  default_posture: TestRunPosture) -> List[TestRunPostureBuild]:
@@ -214,7 +273,8 @@ def _load_posture_builds(
       build_path = build_dict['build_path'],
       targets = build_dict['targets'],
       test_configs = build_dict['test_configs'],
-      edg_base = build_dict['edg_base']
+      edg_base = build_dict['edg_base'],
+      source_dir = build_dict.get('source_dir', '')
     ))
 
   return build_objs
@@ -256,7 +316,8 @@ def load_posture_file(file_path: Path,
       acknowledg_api_host = config_file_dict.get(
         'acknowledg_api_host',
         default_posture.acknowledg_api_host
-      )
+      ),
+      image = config_file_dict.get('image', default_posture.image)
     )
 
 def _configure_base_posture(args: argparse.Namespace) -> TestRunPosture:
@@ -268,6 +329,8 @@ def _configure_base_posture(args: argparse.Namespace) -> TestRunPosture:
     return _configure_quick_c_fe_posture(args)
   elif args.posture == 'extensive':
     return _configure_extensive_posture(args)
+  elif args.posture == 'cir':
+    return _configure_cir_posture(args)
   elif args.posture.startswith('@'):
     posture_file_path = Path(args.posture[1:])
     if posture_file_path.exists():
@@ -290,12 +353,27 @@ def _configure_posture(args: argparse.Namespace) -> TestRunPosture:
     posture.record_tests = True
   if args.timeout_seconds != posture.test_timeout_seconds:
     posture.test_timeout_seconds = args.timeout_seconds
+  if args.test_types:
+    posture.test_types = args.test_types
+  if args.only_configs:
+    posture.only_configs = args.only_configs
   if args.discard_test_results:
     posture.keep_test_results = False
   if args.non_interactive:
     posture.acknowledg_api_host = None
     posture.acknowledg_ui_host = None
   return posture
+
+def _edg_exec_args(posture: TestRunPosture, *,
+                   working_dir: str = '') -> List[str]:
+  '''Return the edg-exec command prefix (up to and including "--").'''
+  args = [str(TOOL_PATH_EDG_EXEC)]
+  if posture.image != edgdocker.DEFAULT_IMAGE:
+    args.extend(['--img', posture.image])
+  if working_dir:
+    args.extend(['--wdir', working_dir])
+  args.append('--')
+  return args
 
 def _apply_tty_fix(cmd_str: str) -> str:
   # There are some quirks in how docker maps stdin, stdout, and stderr.  There
@@ -327,8 +405,7 @@ def configure_build(src_dir: Path, posture: TestRunPosture, *,
 
     configure_cmd = f"cmake --preset {build.cmake_preset}"
     cmd_args = [
-      str(TOOL_PATH_EDG_EXEC),
-      '--',
+      *_edg_exec_args(posture, working_dir = build.source_dir),
       _apply_tty_fix(configure_cmd)
     ]
     if dry_run or verbose:
@@ -352,12 +429,12 @@ def update_build(src_dir: Path, posture: TestRunPosture, *,
     build_cmd = f"cmake --build {build.build_path}"
     build_target_str = ' '.join(build.targets)
     if build_target_str != 'all':
-      build_cmd += f" --target=\"{build_target_str}\""
+      # cmake takes several targets after a single --target.
+      build_cmd += f" --target {build_target_str}"
     if verbose:
       build_cmd = f"{build_cmd} --verbose"
     cmd_args = [
-      str(TOOL_PATH_EDG_EXEC),
-      '--',
+      *_edg_exec_args(posture),
       _apply_tty_fix(build_cmd)
     ]
     if dry_run or verbose:
@@ -378,6 +455,8 @@ def generate_run_timestamp() -> str:
   return datetime.now().strftime(edgutil.RUN_TIMESTAMP_FORMAT)
 
 def _build_edgy_test_config_arg(posture: TestRunPosture) -> str:
+  if posture.only_configs:
+    return posture.only_configs
   all_configs = set()
 
   for build in posture.builds:
@@ -401,6 +480,8 @@ def _build_edgy_args(posture: TestRunPosture, *,
     # "claim" /tmp/edgy-run within the container.  It will be both unique and
     # auto-deleted upon the contianer terminating.
     arg_str += ' --runs-dir=/tmp/edgy-run'
+  if posture.test_types:
+    arg_str += f" --types={posture.test_types}"
   if posture.slow_tests:
     arg_str += ' -A'
   if posture.meticulous:
@@ -485,8 +566,7 @@ def run_tests(tmp_dir: Path, src_dir: Path, posture: TestRunPosture, *,
   )
 
   cmd_args = [
-    str(TOOL_PATH_EDG_EXEC),
-    '--',
+    *_edg_exec_args(posture),
     _apply_tty_fix(f"edg-prefix-env-loader {docker_invocation_file}"),
   ]
 
@@ -526,8 +606,7 @@ def run_acknowledg(tmp_dir: Path, src_dir: Path, posture: TestRunPosture, *,
   )
 
   cmd_args = [
-    str(TOOL_PATH_EDG_EXEC),
-    '--',
+    *_edg_exec_args(posture),
     _apply_tty_fix(f"edg-prefix-env-loader {docker_invocation_file}"),
   ]
 
@@ -568,9 +647,8 @@ def main() -> None:
   if args.verbose:
     print(f"Using front end source in: {src_dir}", flush = True)
 
-  edgdocker.ensure_edg_docker_image_present(edgdocker.DEFAULT_IMAGE)
-
   run_posture = _configure_posture(args)
+  edgdocker.ensure_edg_docker_image_present(run_posture.image)
   if args.dry_run or args.verbose:
     config_str = json.dumps(
       vars(run_posture),

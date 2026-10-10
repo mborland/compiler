@@ -1,5 +1,14 @@
 # CIRGen map: what clang does for C, what we reuse, what we write
 
+> **Errata (design.md section 8; the spec wins).** (a) Case labels are inline `CASE_VALUE`/
+> `CASE_RANGE`/`CASE_DEFAULT` markers, not `CASE_BEGIN/END` brackets: see 2.6 as corrected.
+> (b) `LAND_END`/`LOR_END` push **bool**; the writer emits `bool_to_int`. (i) K&R/unprototyped
+> calls are supported through the variadic-bitcast rule (spec 8.8). (h) No `static_local` on
+> `get_global` for unguarded C statics. (n) Record names below that differ from
+> `ecil_format.h` (`LVAR_DECL` = `LOCAL`, `ASSIGN`/`STORE` = `STORE`, `DISCARD` = `DROP`,
+> `FOR_COND_END`/`FOR_STEP_END` = the `FOR_COND(has)`/`FOR_STEP(has)` markers, ...) are
+> descriptive only; use the header's names and arities.
+
 Source: `clang/lib/CIR/CodeGen` at llvm-project 894bfff5ca9fbe8ffc4171d5f5a4e68d11537f6d
 (read from `~/src/llvm-project-cir`).  Companion to `cir_api_inventory.md`.
 
@@ -119,7 +128,8 @@ memcpy-from-constant-global optimization at this SHA: `emitAutoVarInit: constant
 aggregate` is NYI and `trivialAutoVarInit` modes are NYI); string-literal init of char
 arrays -> aggregate init; `static` locals -> a `cir.global` named `fn.var` (uniqued) with
 internal linkage (initializer through the constant emitter) and uses via
-`cir.get_global` (`static_local`); `extern` block-scope declarations -> `get_global`.
+`cir.get_global` (no `static_local` attribute: the verifier wants a guard for it and C statics
+have none; ECIL's `static_local` flag is informational); `extern` block-scope declarations -> `get_global`.
 VLAs: NYI.  `__attribute__((cleanup))`: NYI.
 
 ### CIRGenExpr / CIRGenExprScalar
@@ -183,7 +193,10 @@ the casts; we receive explicit cast records from the FE), for a direct call
 `createCallOp(loc, fnOp, args)`; indirect `createIndirectCallOp(loc, fnPtr, funcType,
 args)`; void result -> no result; record result -> call returns the record value, we
 spill it to a temp alloca and treat it as an address; add `nothrow` when exceptions are
-off.  K&R unprototyped calls: NYI upstream -> diagnose.  `noreturn`: unreachable after
+off.  K&R/unprototyped calls are NYI upstream; we support them with the spec 8.8 rule (a
+call whose call-site type is `no_proto`, or does not match the callee's `cir.func` type,
+becomes `get_global` + `cast bitcast` to a zero-fixed-parameter variadic function pointer type
+and an indirect `cir.call` with all arguments as variadic extras).  `noreturn`: unreachable after
 the call (`emitUnreachable`).  Parameter attrs (`llvm.noundef/noalias/nonnull`,
 sign/zero-ext) are optional.
 **We write `CallEmitter`** (about 200 lines).
@@ -243,11 +256,11 @@ the frame close adds the terminator and moves the insertion point after the op.
 | `SCOPE` | `BLOCK_BEGIN` (block with decls or the enclosing scope of if/for/switch) | `ScopeOp::create(b, loc, noop)`, IP saved inside | `BLOCK_END`: `cir.yield` (terminate region), IP after op. Blocks without declarations/labels may skip the scope (v0: always emit; `CIRSimplify` folds trivial scopes: `ScopeOp::fold`) |
 | `IF` | `IF_BEGIN` (pops the condition, converted to `!cir.bool`) | `IfOp::create(b, loc, cond, /*withElse=*/false, noop, noop)` | phase THEN until `IF_ELSE`: terminate then-region, `createBlock(&ifOp.getElseRegion())`, phase ELSE; `IF_END`: terminate current region, IP after op |
 | `TERNARY` | `TERN_BEGIN` (pops cond; result type id in the record, void allowed) | `OperationState` + `b.create` (inventory sec. 4) | `TERN_ELSE` pops the true value, `cir.yield %v`, opens region 1; `TERN_END` pops the false value, yields, IP after op, **pushes the op result** |
-| `LAND` / `LOR` | `LAND_BEGIN`/`LOR_BEGIN` (lhs already a `!cir.bool`) | `cir.ternary` over bool: LAND true-arm = rhs, false-arm = `false` const; LOR true-arm = `true` const, false-arm = rhs | `*_END` pops rhs bool, yields, pushes `bool_to_int` result (C `int`) |
+| `LAND` / `LOR` | `LAND_BEGIN`/`LOR_BEGIN` (lhs already a `!cir.bool`) | `cir.ternary` over bool: LAND true-arm = rhs, false-arm = `false` const; LOR true-arm = `true` const, false-arm = rhs | `*_END` pops rhs bool, yields, pushes the **bool** result (the writer emits `CAST(bool_to_int, int)` after it) |
 | `FOR` | `FOR_BEGIN` | `createFor(loc, noop, noop, noop)`; the init statement was emitted by the enclosing `SCOPE` before it | `FOR_COND`... `FOR_COND_END` pops cond -> `cir.condition`; `FOR_BODY`; `FOR_STEP`... `FOR_STEP_END` yield; `FOR_END`: IP after op |
 | `WHILE` / `DO` | `WHILE_BEGIN` / `DO_BEGIN` | `createWhile` / `createDoWhile` (region order **body, cond** for `do`) | as FOR |
 | `SWITCH` | `SWITCH_BEGIN` (pops integer cond; bool -> `u1`) | `SwitchOp::create(b, loc, cond, noop-with-state)` | see 2.6 |
-| `CASE` | `CASE_BEGIN(kind, values)` | `CaseOp::create(b, loc, ArrayAttr, kind, ip)` | see 2.6 |
+| `CASE` | inline `CASE_VALUE`/`CASE_RANGE`/`CASE_DEFAULT` marker (no frame) | an empty-region marker `CaseOp::create(b, loc, ArrayAttr, kind, ip)` + `cir.yield` | see 2.6 |
 | `CLEANUP_SCOPE` | (M3) | `cir.cleanup.scope` | reserved |
 
 Non-region constructs (loops' `break/continue`, `return`, `goto`, `label`) are plain
@@ -297,46 +310,34 @@ value); `++/--/op=` are get, op, set.  Volatile bit-fields set `is_volatile`; AA
 "volatile access width" variants are ARM-only (skip).  Zero-width and unnamed
 bit-fields have no `FIELD` references.
 
-### 2.6 Switch, case, fallthrough, break
-Upstream shape (`emitSwitchStmt`, `emitSwitchBody`, `emitCaseDefaultCascade`): a
-`cir.scope` holds the switch (its init/condition variable); inside it `cir.switch(%cond)`
-has one body block containing **sibling `cir.case` ops**; each case region runs
-until its terminator: `cir.yield` = fall through to the next case in the switch body,
-`cir.break` = leave the switch, `return`/`goto` as usual.  Algorithm for the
-frame machine:
-* `SWITCH_BEGIN`: pop cond, create `cir.switch` (callback no-op creates the body block),
-  frame keeps `body_block`, `case_ip` (insertion point at the end of the most recent
-  top-level case region, initially unset), `saw_case` = false.  IP := body block.
-* Statements *before* the first case label (legal C, unreachable unless jumped to) are
-  emitted into the body block; at the first `CASE_BEGIN` a new block is created in the
-  body region and a `cir.br` links to it (upstream does this for pre-case statements).
-* `CASE_BEGIN(kind, values)` where the **parent frame is the switch's own statement
-  list** (a top-level case): terminate nothing; restore IP to the body block end; create
-  `CaseOp::create(b, loc, ArrayAttr, kind, ip)`; kind `Equal` with `[IntAttr(condTy, v)]`,
-  `Range` with `[lo, hi]` (GNU `a ... b`), `Default` with `[]`, `Anyof` unused by CIRGen
-  but legal for merged labels; IP := the case region.  Consecutive labels
-  (`case 1: case 2: stmt`) become consecutive sibling cases (the first is yielded empty,
-  falling into the next: "simple form").
-* `CASE_END` (the labelled substatement has been emitted): at top level, **keep emitting
-  into the same case region** (statements following until the next label belong to it:
-  the fallthrough structure), i.e. save `case_ip` and leave the builder there.
-  For a **nested** case (a label inside an `if`/loop/block within the switch: Duff's
-  device), `CaseOp::create` is emitted at the current IP in that inner region and only the
-  labelled substatement lives inside; `CASE_END` restores the outer IP.
-* `SWITCH_END`: for every `cir.case` (collect them with `SwitchOp::collectCases`) and for
-  the body region, add `cir.yield` to unterminated blocks and erase empty unreachable
-  blocks (`terminateStructuredRegionBody`); set `all_enum_cases_covered` if known; IP after
-  the switch op; the enclosing `SCOPE` closes normally.
-* `cir.break` is created in whatever region is current (inside a case, nested `if`, etc.)
-  and is verified to be inside a loop/switch (`AncestorOneOf`).  `continue` likewise
-  needs an enclosing loop ancestor.
-The ECIL must therefore bracket the labelled substatement (`CASE_BEGIN ... CASE_END`)
-and tell the emitter whether the label is directly in the switch body (derivable from the
-frame stack: parent frame kind == SWITCH or SCOPE-directly-under-SWITCH).
+### 2.6 Switch, case, fallthrough, break (as specified: ecil_format.md 8.4)
+ECIL has no case brackets.  `<cond> SWITCH_BEGIN <body> SWITCH_END` with inline
+`CASE_VALUE(v)`, `CASE_RANGE(lo, hi)` and `CASE_DEFAULT` records at the label positions; a
+label may sit directly in the switch body or inside a plain block in it (Duff's device is
+diagnosed by the writer).  The consumer emits each label as a **marker case**: an
+`cir.case` whose region holds just `cir.yield`, created at the current insertion point inside the
+`cir.switch` body; the labelled statements follow in the *enclosing* region, not inside the case.
+`FlattenCFG` turns the case region's `yield` into a branch to the op after the case
+(`FlattenCFG.cpp:418-433` at the pin), which yields C fallthrough.  (This differs from upstream's
+sibling-case-with-body shape; cir-lib validates it in M2 with switch, fallthrough, default, range
+and nested-block tests and falls back to sibling top-level cases if the flattener rejects it.)
+* `SWITCH_BEGIN`: pop the condition (a `bool` is coerced to `u1` first), create `cir.switch`
+  (a no-op callback creates the single body block), push a `SWITCH` frame, IP := body block.
+* `CASE_VALUE(v)`: `CaseOp::create(b, loc, [IntAttr(condTy, v)], Equal, ip)` then, with the
+  builder at the case ip, `cir.yield`; restore the previous IP (just after the case op).
+  `CASE_RANGE` uses `Range` with `[lo, hi]` (GNU `a ... b`); `CASE_DEFAULT` uses `Default` with `[]`.
+  Consecutive labels simply give consecutive marker cases.
+* Statements before the first label (unreachable unless jumped to) are emitted into the
+  body region as they come.
+* `SWITCH_END`: close like any frame: `cir.yield` on an unterminated body block, erase empty
+  predecessor-less blocks (`terminateStructuredRegionBody`), set `all_enum_cases_covered` if
+  known, IP after the switch; the enclosing `SCOPE` closes normally.
+* `cir.break` is created in whatever region is current; the verifier requires an enclosing
+  loop/switch ancestor (`AncestorOneOf`); `continue` needs a loop ancestor.
 
 ### 2.7 Block-scope allocas and `HoistAllocas`
 Each region-owning frame records `alloca_block` = the first block of its region.
-`LVAR_DECL` creates `cir.alloca "name" align(n)` at
+`LOCAL` (the spec's name; formerly `LVAR_DECL`) creates `cir.alloca "name" align(n)` at
 `getBestAllocaInsertPoint(frame.alloca_block)` (after the last alloca/label in that block)
 inside an `InsertionGuard`: exactly `CIRGenFunction::emitAlloca`.  Parameters and `__retval`
 go to the function entry block.  Temporaries (aggregate call results, compound literals)
@@ -397,8 +398,8 @@ the body to the same op and switches visibility to public.  `NAME_BIND` renames 
    width, `hasCheapUnalignedBitFieldAccess`, `char` signedness, `long double` format,
    `va_list` shape (x86-64: `[1 x __va_list_tag]` with the 4-member record; the FE must
    introduce that record type), triple, `target_abi`.
-3. `CASE` must bracket its substatement; label ids -> strings; switch condition type
-   after integral promotion; `_Bool` switch conditions.
+3. (Resolved by spec 8.4: inline CASE markers.) Label ids -> hint strings; switch
+   condition type after integral promotion; `_Bool` switch conditions.
 4. Explicit conversion records (integral promotion, usual arithmetic conversions, bool
    conversions, array-to-pointer, function-to-pointer, default argument promotions) --
    CIRGen relies on the AST having made them explicit.

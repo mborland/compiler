@@ -39,7 +39,7 @@ IMAGE_PINS = {
 #
 # i.e., This should be a list of every subdirectory in $EDG_TOOLS/docker that
 # has a Dockerfile that's expected to be executed.
-EXECUTABLE_IMAGES = ('dev-env', 'legacy-dev-env', 'sphinx-env')
+EXECUTABLE_IMAGES = ('dev-env', 'legacy-dev-env', 'sphinx-env', 'cir-env')
 
 # This should be a complete list of all buildable EDG docker images.
 #
@@ -51,7 +51,8 @@ BUILDABLE_IMAGES = (
   'native-tools',
   'legacy-native-tools',
   'softfloat',
-  'ci-runner'
+  'ci-runner',
+  'llvm-cir'
 )
 
 def get_docker_file_dir(image_name: str) -> Path:

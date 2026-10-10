@@ -204,7 +204,7 @@ against the recording, with the normalizations in `edgtest/filter` (addresses ar
 irrelevant since the stream has no pointers). Because of the "REQUIREMENTS NOT
 MET" fan-out (2.4) these live in the new `cir` suite. Substring matching means
 `//require:BACK_END_TYPE 3` is right, but `BACK_END_TYPE 1` would also match
-`BACK_END_TYPE 10+`; the values are 0-3 so that is moot.
+`BACK_END_TYPE 10+`; the values are 1-4 so that is moot.
 
 ## 5. ASan and exit codes
 
@@ -399,3 +399,27 @@ matches any sibling starting with that string (`pr41033-2.sft.c` ...); run once
 with `--cmd` to confirm the list expands to exactly these 40 tests, or add the
 `--types` option and exact names. The smoke list is a starting point: cir-lib
 should drop or swap any test that needs a feature its v0 op set lacks.
+
+## 7. Differences between the cir-env base and the dev-env base
+
+The M2 gate compares `edg_x86_64_cir` with `edg_x86_64`, so the differences of
+`bases/docker/cir-env/gcc/edg_eccp_config` from `bases/docker/dev-env/gcc/`
+matter:
+
+* **`EDG_USE_SYSTEM_HEADERS` is 1 (dev-env: 0).** The generated code links
+  against libstdc++/glibc (Itanium ABI), so the front end must see those
+  libraries' headers (`EDG_GCC_INCL_SCRAPE`/`EDG_GCC_CINCL_SCRAPE`), not EDG's
+  `include_c++` headers written for the `edgrt` runtime. A test that includes a
+  system header therefore sees different declarations under the two configs, so
+  a difference in status for such a test is not necessarily a CIR bug.
+  Tests with no `#include` (the smoke list) are unaffected.
+* **The assembler and linker are gcc, as in dev-env**, with the dev-env
+  default options. (An earlier M1 draft used the LLVM clang because LLVM's
+  assembly used `.prefalign`, which GNU as does not know; `edg-cir --emit=asm`
+  now disables LLVM's integrated assembler and emits plain `.p2align`.)
+* **`EDG_GEN_C_SUFFIX` is `.int.s`, `EDG_RUNTIME_LIB` is empty** and the link
+  line has `-ledg_cir_rt -lstdc++ -lgcc_s -lm -lpthread` (dev-env: `-lstdc++
+  -lgcc_s -lpthread` plus `-ledgrt`).
+* **Missing runtime directory fails loudly:** the base exits with an error if
+  `EDG_CIR_RT_LIBDIR` is not set (it is exported by the build's
+  `environment.sh`), instead of failing later at the link.

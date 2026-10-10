@@ -33,6 +33,14 @@ Rules for callers and implementers:
   re-enter the session (e.g. an abort path that calls consume).
 - The library copies any bytes it keeps (strings, names, partial frames);
   the caller's buffer need only be valid during the call.
+- While a session call runs, the library installs process-global state:
+  LLVM's fatal-error handler and signal-based crash recovery (SIGSEGV,
+  SIGABRT, SIGBUS, ...).  Guarded calls serialize on an internal mutex, so
+  use one active session per process, and use a session from only one
+  thread at a time.  The embedder must not install its own LLVM fatal-error
+  handler or conflicting SIGSEGV/SIGABRT handlers while an edg_cir_* call
+  is active.  After a recovered crash the session is poisoned: later calls
+  fail and close deliberately leaks its internal state.
 - Owned by the orchestrator; changes bump EDG_CIR_API_VERSION.
 */
 

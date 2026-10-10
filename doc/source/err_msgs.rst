@@ -10447,3 +10447,9 @@ Error Messages
    - | ``tag_redefined_differently``\ :
      | this declaration of *entity-kind "entity"*\  does not declare the
        same type as the declaration at line *xxxx*\ 
+ * - ``3600``\ 
+   - | ``cir_error``\ :
+     | CIR back end: *xxxx*\ 
+ * - ``3601``\ 
+   - | ``cir_warning``\ :
+     | CIR back end: *xxxx*\ 

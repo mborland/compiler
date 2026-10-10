@@ -1,0 +1,12 @@
+; --emit=asm must be GNU-as compatible: no .prefalign (LLVM 24 emits it only
+; for the integrated assembler), and the object route still works.
+; RUN: cat %S/Inputs/header.txt %S/spike.test > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=asm %t.ecil -o %t.s
+; RUN: %FileCheck %s --input-file=%t.s
+; RUN: %not grep -q prefalign %t.s
+; RUN: as %t.s -o %t.o
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+; CHECK: .p2align
+; CHECK: main:

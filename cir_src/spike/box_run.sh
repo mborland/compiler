@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # Runs inside the cir-env container, cwd = /edg/workspace.
 # SPIKE_PREFIX=/full selects the unpruned install (the pruned prefix lacks
 # files referenced by LLVMExports.cmake, so find_package(LLVM) fails there).

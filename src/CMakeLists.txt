@@ -254,3 +254,19 @@ add_custom_target(cpfe-all)
 add_subdirectory(cmake/cpfe)
 add_subdirectory(cmake/cpfe-cp)
 add_subdirectory(cmake/cdisp)
+
+# The ClangIR back end is opt-in: it needs the cir_src contract headers and,
+# unless EDG_CIR_LINK_LIBRARY is OFF, a built libedg_cir.
+set(EDG_BUILD_CIR OFF CACHE BOOL "Build cpfe-cir (the ClangIR back end)")
+if($CACHE{EDG_BUILD_CIR})
+  set(EDG_CIR_LINK_LIBRARY ON CACHE BOOL
+      "Link cpfe-cir against libedg_cir (OFF builds a writer-only cpfe-cir)")
+  if(NOT DEFINED ENV{EDG_CIR_DIR} OR "$ENV{EDG_CIR_DIR}" STREQUAL "")
+    set(EDG_CIR_DIR "${CMAKE_SOURCE_DIR}/build/cir")
+  else()
+    set(EDG_CIR_DIR "$ENV{EDG_CIR_DIR}")
+  endif()
+  # Also visible to cmake/wrapper.cmake (environment.sh).
+  set(EDG_CIR_DIR "${EDG_CIR_DIR}" CACHE INTERNAL "Where libedg_cir is built")
+  add_subdirectory(cmake/cpfe-cir)
+endif()

@@ -1,0 +1,24 @@
+; EXT records, extension frames and an unknown ignorable feature bit.
+ecil 0.6 features=0x00000012
+frame HEADER supp
+  STR 1 "x86_64-unknown-linux-gnu"
+  EXT 7 "header extension"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame 0x80 bytes=00010203fffefd
+frame DECLS
+  EXT 1 ""
+  TY_VOID 1
+  EXT 300 bin16:"declaration extension"
+frame 0xff supp bytes=
+frame REGION
+  STR 2 "f"
+  TY_FUNC 3 1 0 []
+  DECL_FUNC 2 3 0 1 2
+  FUNC_BEGIN 2 0
+  EXT 9 "inside a body"
+  RETURN_STMT false
+  FUNC_END 0
+frame 0x81 bytes=deadbeef
+frame END
+  END 6 0

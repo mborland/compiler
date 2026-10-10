@@ -1,6 +1,47 @@
 Version 7.1
 
 10/9/26
+Streaming of declarations and function bodies to the CIR back end
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it, the
+front end now writes the program to the back end as a stream of frames (the
+ECIL format described in cir_src/doc/ecil_format.md) instead of keeping the
+whole IL until the end of the translation unit.  Each C function is written
+when its body is complete and its memory region is then freed, so memory use
+grows with the largest function rather than with the translation unit; the
+file-scope declarations and the definitions of file-scope variables are
+written at the end.  A function that uses a construct the stream cannot yet
+express (for example variable length arrays, complex or vector types, inline
+assembly, or GNU alias and constructor attributes) is dropped with a
+cir_warning diagnostic naming the construct, and the back end then reports an
+error for the missing definition.  If the compilation has errors the stream is
+marked invalid.  The memory-region bookkeeping
+(check_for_done_with_memory_region, free_memory_region and the
+end-of-compilation sweep) is now controlled by the new macro
+IL_REGIONS_DISPOSED_INCREMENTALLY, which is true whenever
+IL_SHOULD_BE_WRITTEN_TO_FILE is true, so the other configurations behave as
+before.  In the CIR configuration the IL entry prefix has a 32-bit
+identification field that costs no space on hosts that align IL entries to
+8 bytes.
+
+10/9/26
+Diagnostics and options of the new CIR back end configuration
+
+A new configuration of the front end (BACK_END_TYPE_CIR) passes the IL to the
+ClangIR back end.  It is selected when the front end is built and is not part
+of the default configurations.  It adds two diagnostics: cir_error (3600) and
+cir_warning (3601), which report problems found by that back end, for example
+--diag_error=cir_warning.  In that configuration, and only in it, there are
+two new options, --ecil_output=file (write the stream of declarations and
+function bodies that is given to the back end to a file, or to standard output
+if the file is "-") and --ecil_keep_regions (do not free the memory for a
+function after it has been handed to the back end), --gen_c_file_name and
+--old_line_commands are accepted as in the C-generating back end, and
+precompiled headers, modules and C++ are not supported.  The new diagnostics
+add two entries to the error tables of every configuration; there is no other
+change to the other configurations.
+
+10/9/26
 New BACK_END_TYPE configuration macro
 
 The back end used by a configuration is now identified by a single macro,

@@ -1,0 +1,6 @@
+; expect: format first frame must be F_HEADER
+ecil 0.6 features=0x0
+frame REGION
+  STR 1 "x"
+frame END
+  END 1 0

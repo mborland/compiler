@@ -1,0 +1,63 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "cir-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "EDG_CIR_WERROR": "ON"
+      }
+    },
+    {
+      "name": "linux-cir-relwithdebinfo",
+      "displayName": "libedg_cir, -O2 -g (default; cir-env image)",
+      "inherits": "cir-base",
+      "binaryDir": "${sourceDir}/../build/cir",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "linux-cir-release",
+      "displayName": "libedg_cir, -O2 (release)",
+      "inherits": "cir-base",
+      "binaryDir": "${sourceDir}/../build/cir-release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release",
+                          "EDG_CIR_TEST_HOOKS": "OFF" }
+    },
+    {
+      "name": "linux-cir-asan",
+      "displayName": "libedg_cir with ASan (testing the library itself; not loadable by a non-ASan front end)",
+      "inherits": "cir-base",
+      "binaryDir": "${sourceDir}/../build/cir-asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-omit-frame-pointer"
+      }
+    },
+    {
+      "name": "cir-format-only",
+      "displayName": "lib/format, ecil-dump, ecil-asm only (no LLVM; Mac/Windows ok)",
+      "inherits": "cir-base",
+      "binaryDir": "${sourceDir}/../build/cir-format",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "EDG_CIR_FORMAT_ONLY": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "linux-cir-relwithdebinfo",
+      "configurePreset": "linux-cir-relwithdebinfo" },
+    { "name": "linux-cir-release", "configurePreset": "linux-cir-release" },
+    { "name": "linux-cir-asan", "configurePreset": "linux-cir-asan" },
+    { "name": "cir-format-only", "configurePreset": "cir-format-only" }
+  ],
+  "testPresets": [
+    { "name": "linux-cir-relwithdebinfo",
+      "configurePreset": "linux-cir-relwithdebinfo",
+      "output": { "outputOnFailure": true } },
+    { "name": "cir-format-only", "configurePreset": "cir-format-only",
+      "output": { "outputOnFailure": true } }
+  ]
+}

@@ -1,0 +1,340 @@
+/*
+Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+Exceptions.
+See https://edgcpp.org/LICENSE.txt for license information.
+SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+*/
+
+/*
+pipeline.cpp -- verify, CIR-to-CIR passes, lowering to LLVM IR, GlobalDCE
+(always, also at -O0), optimization and code generation.  Everything here
+runs on one worker thread with a large stack (CrashRecoveryContext), inside
+an MLIR context with multithreading disabled, so deep verifier/pass
+recursion has stack to spare.  A fatal LLVM error or a crash is turned into
+EDG_CIR_ERROR_INTERNAL.  Diagnostics are queued and delivered by the caller
+after the worker has joined.
+*/
+
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <functional>
+#include <mutex>
+#include <string>
+
+#include "clang/CIR/CIRToCIRPasses.h"
+#include "clang/CIR/Dialect/IR/CIRDialect.h"
+#include "clang/CIR/LowerToLLVM.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/IR/DiagnosticPrinter.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Passes/OptimizationLevel.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Support/CrashRecoveryContext.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/IPO/GlobalDCE.h"
+#include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/Verifier.h"
+
+#include "cir_module.h"
+#include "emitter.h"
+
+namespace edg_cir {
+
+namespace {
+
+struct a_fatal_state {
+  std::string message;
+};  /* a_fatal_state */
+
+void fatal_error_handler(void *user_data, const char *reason, bool)
+/*
+LLVM fatal error handler (process-wide while installed): remember the
+message and unwind to the worker's CrashRecoveryContext.
+*/
+{
+  auto *state = static_cast<a_fatal_state *>(user_data);
+
+  state->message = reason;
+  if (llvm::CrashRecoveryContext *context =
+                                    llvm::CrashRecoveryContext::GetCurrent())
+    context->HandleExit(1);
+}  /* fatal_error_handler */
+
+void llvm_diagnostic(const llvm::DiagnosticInfo *info, void *user_data)
+/*
+Queue an LLVM diagnostic raised during lowering or code generation.
+*/
+{
+  auto *session = static_cast<an_edg_cir_session *>(user_data);
+  std::string text;
+  llvm::raw_string_ostream os(text);
+  llvm::DiagnosticPrinterRawOStream printer(os);
+  an_edg_cir_severity severity = EDG_CIR_SEVERITY_NOTE;
+
+  /* Size and optimization remarks are not diagnostics. */
+  if (info->getSeverity() != llvm::DS_Remark) {
+    info->print(printer);
+    os.flush();
+    switch (info->getSeverity()) {
+    case llvm::DS_Error:
+      severity = EDG_CIR_SEVERITY_ERROR;
+      break;
+    case llvm::DS_Warning:
+      severity = EDG_CIR_SEVERITY_WARNING;
+      break;
+    default:
+      break;
+    }
+    session->report(severity, edc_llvm, text);
+    if (severity == EDG_CIR_SEVERITY_ERROR && session->status == EDG_CIR_OK) {
+      session->status = EDG_CIR_ERROR_PIPELINE;
+      session->status_message = text;
+    }
+  }
+}  /* llvm_diagnostic */
+
+void lower_and_emit(an_edg_cir_session &session, mlir::ModuleOp module,
+                    llvm::raw_string_ostream &out)
+/*
+Lower the (CIR-pass-processed) module to LLVM IR, run GlobalDCE and the
+optimizer, and produce the requested LLVM-level output.  Sets
+session.status on failure.
+*/
+{
+  a_cir_module &cm = *session.module;
+  llvm::LLVMContext llvm_context;
+  std::unique_ptr<llvm::Module> lowered;
+  bool go = true;
+
+  llvm_context.setDiagnosticHandlerCallBack(llvm_diagnostic, &session);
+  lowered = cir::direct::lowerDirectlyFromCIRToLLVMIR(module, llvm_context,
+                                                      /*enableOpenMP=*/false);
+  if (!lowered) {
+    session.fail(EDG_CIR_ERROR_PIPELINE, edc_pipeline,
+                 "lowering CIR to LLVM IR failed");
+    go = false;
+  }
+  if (go) {
+    lowered->setTargetTriple(cm.triple);
+    lowered->setDataLayout(cm.layout);
+    if ((session.flags & EDG_CIR_FLAG_VERIFY_EACH) &&
+        llvm::verifyModule(*lowered, &llvm::errs())) {
+      session.fail(EDG_CIR_ERROR_VERIFY, edc_pipeline,
+                   "the LLVM verifier rejected the lowered module");
+      go = false;
+    }
+  }
+  if (go) {
+    llvm::LoopAnalysisManager lam;
+    llvm::FunctionAnalysisManager fam;
+    llvm::CGSCCAnalysisManager cgam;
+    llvm::ModuleAnalysisManager mam;
+    llvm::PassBuilder builder(cm.machine.get());
+    llvm::ModulePassManager mpm;
+
+    builder.registerModuleAnalyses(mam);
+    builder.registerCGSCCAnalyses(cgam);
+    builder.registerFunctionAnalyses(fam);
+    builder.registerLoopAnalyses(lam);
+    builder.crossRegisterProxies(lam, fam, cgam, mam);
+    if (session.opt_level <= 0) {
+      /* Dead internal functions of streamed regions must go even at -O0. */
+      mpm.addPass(llvm::GlobalDCEPass());
+    } else {
+      llvm::OptimizationLevel level =
+          session.opt_level == 1 ? llvm::OptimizationLevel::O1
+          : session.opt_level == 2 ? llvm::OptimizationLevel::O2
+                                   : llvm::OptimizationLevel::O3;
+      mpm = builder.buildPerModuleDefaultPipeline(level);
+    }
+    mpm.run(*lowered, mam);
+    go = session.status == EDG_CIR_OK;
+  }
+  if (go) {
+    switch (session.output_kind) {
+    case EDG_CIR_OUTPUT_LLVM_IR:
+      lowered->print(out, nullptr);
+      out.flush();
+      break;
+    case EDG_CIR_OUTPUT_LLVM_BC:
+      llvm::WriteBitcodeToFile(*lowered, out);
+      out.flush();
+      break;
+    case EDG_CIR_OUTPUT_ASM:
+    case EDG_CIR_OUTPUT_OBJECT: {
+      llvm::legacy::PassManager codegen;
+      llvm::CodeGenFileType kind = session.output_kind == EDG_CIR_OUTPUT_ASM
+                                     ? llvm::CodeGenFileType::AssemblyFile
+                                     : llvm::CodeGenFileType::ObjectFile;
+      llvm::SmallVector<char, 0> buffer;
+      llvm::raw_svector_ostream stream(buffer);
+
+      if (cm.machine->addPassesToEmitFile(codegen, stream, nullptr, kind)) {
+        session.fail(EDG_CIR_ERROR_PIPELINE, edc_pipeline,
+                     "the target cannot emit this output kind");
+      } else {
+        codegen.run(*lowered);
+        session.output.assign(buffer.data(), buffer.size());
+      }
+      break;
+    }
+    default:
+      break;
+    }
+  }
+}  /* lower_and_emit */
+
+void pipeline_body(an_edg_cir_session &session)
+/*
+Run the stages requested by the session's output kind (the worker thread's
+body): verify, textual CIR, CIR-to-CIR passes, then lower_and_emit.
+*/
+{
+  a_cir_module &cm = *session.module;
+  mlir::ModuleOp module = cm.module.get();
+  mlir::ScopedDiagnosticHandler diagnostics(
+      &cm.context, [&session](mlir::Diagnostic &diagnostic) {
+        an_edg_cir_severity severity = EDG_CIR_SEVERITY_NOTE;
+        switch (diagnostic.getSeverity()) {
+        case mlir::DiagnosticSeverity::Error:
+          severity = EDG_CIR_SEVERITY_ERROR;
+          break;
+        case mlir::DiagnosticSeverity::Warning:
+          severity = EDG_CIR_SEVERITY_WARNING;
+          break;
+        default:
+          break;
+        }
+        std::string text = diagnostic.str();
+        /* Debug aid: EDG_CIR_DEBUG_NOTES=1 appends the first line of each
+           attached note (the verifier puts the offending operation there). */
+        if (std::getenv("EDG_CIR_DEBUG_NOTES") != nullptr) {
+          for (mlir::Diagnostic &note : diagnostic.getNotes()) {
+            std::string line = note.str();
+            line = line.substr(0, line.find('\n'));
+            text += "\n  note: " + line.substr(0, 400);
+          }
+        }
+        session.report(severity, edc_mlir, text);
+        return mlir::success();
+      });
+  llvm::raw_string_ostream out(session.output);
+  bool go = true;
+
+#if EDG_CIR_TEST_HOOKS
+  /* Test hooks: prove that a fatal LLVM error or a crash in the worker
+     becomes EDG_CIR_ERROR_INTERNAL (see test/driver). */
+  if (const char *hook = std::getenv("EDG_CIR_TEST_CRASH")) {
+    if (std::strcmp(hook, "fatal") == 0)
+      llvm::report_fatal_error("EDG_CIR_TEST_CRASH=fatal");
+    else if (std::strcmp(hook, "usage") == 0)
+      llvm::reportFatalUsageError("EDG_CIR_TEST_CRASH=usage");
+    else if (std::strcmp(hook, "segv") == 0)
+      std::raise(SIGSEGV);
+    else if (std::strcmp(hook, "abort") == 0)
+      std::abort();
+  }
+#endif
+
+  if (session.emitter && !session.emitter->finish())
+    go = false;
+  /* Debug aid: EDG_CIR_NO_VERIFY=1 lets an invalid module be printed. */
+  if (go && std::getenv("EDG_CIR_NO_VERIFY") == nullptr &&
+      mlir::failed(mlir::verify(module))) {
+    session.fail(EDG_CIR_ERROR_VERIFY, edc_pipeline,
+                 "the MLIR verifier rejected the module");
+    go = false;
+  }
+  if (go && session.output_kind == EDG_CIR_OUTPUT_NONE)
+    go = false;
+  if (go && session.output_kind == EDG_CIR_OUTPUT_CIR) {
+    module->print(out);
+    out.flush();
+    go = false;
+  }
+  if (go && !(session.flags & EDG_CIR_FLAG_DISABLE_CIR_PASSES)) {
+    bool verify_each = (session.flags & EDG_CIR_FLAG_VERIFY_EACH) != 0;
+    if (mlir::failed(cir::runCIRToCIRPasses(
+            module, cm.context, verify_each, /*enableIdiomRecognizer=*/false,
+            /*enableCIRSimplify=*/session.opt_level > 0,
+            /*enableLibOpt=*/false, /*libOptOptions=*/"",
+            /*enableCallConvLowering=*/true))) {
+      session.fail(EDG_CIR_ERROR_PIPELINE, edc_pipeline,
+                   "the CIR-to-CIR passes failed");
+      go = false;
+    }
+  }
+  if (go && session.output_kind == EDG_CIR_OUTPUT_CIR_LOWERED) {
+    module->print(out);
+    out.flush();
+    go = false;
+  }
+  if (go)
+    lower_and_emit(session, module, out);
+}  /* pipeline_body */
+
+}  /* anonymous namespace */
+
+bool run_guarded(const std::function<void()> &body, unsigned stack_mb,
+                 std::string &message)
+/*
+Run body under LLVM crash recovery and a fatal-error handler.  Both are
+process-global, so one mutex serializes every guarded section of every
+session (one active session per process).  stack_mb != 0 runs body on a
+fresh thread with that stack.  Returns false (and the reason in message) when
+body crashed or hit a fatal error.
+*/
+{
+  static std::mutex guard;
+  std::lock_guard<std::mutex> lock(guard);
+  a_fatal_state fatal;
+  bool completed;
+
+  llvm::CrashRecoveryContext::Enable();
+  llvm::install_fatal_error_handler(fatal_error_handler, &fatal);
+  {
+    llvm::CrashRecoveryContext context;
+    completed = stack_mb != 0
+        ? context.RunSafelyOnThread(body, stack_mb * 1024u * 1024u)
+        : context.RunSafely(body);
+  }
+  llvm::remove_fatal_error_handler();
+  llvm::CrashRecoveryContext::Disable();
+  message = fatal.message;
+  return completed;
+}  /* run_guarded */
+
+an_edg_cir_status run_pipeline(an_edg_cir_session &session)
+/*
+Run the pipeline on a big-stack worker thread and return the session status.
+*/
+{
+  std::string reason;
+  bool completed;
+
+  session.in_worker = true;
+  completed = run_guarded([&session] { pipeline_body(session); },
+                          static_cast<unsigned>(EDG_CIR_WORKER_STACK_MB),
+                          reason);
+  session.in_worker = false;
+  session.deliver_queue();
+  if (!completed) {
+    session.poisoned = true;
+    session.fail(EDG_CIR_ERROR_INTERNAL, edc_internal,
+                 reason.empty()
+                     ? "the CIR pipeline crashed (signal)"
+                     : "internal error in the CIR pipeline: " + reason);
+  } else if (session.status != EDG_CIR_OK && session.status_message.empty()) {
+    session.fail(session.status, edc_pipeline, "the CIR pipeline failed");
+  }
+  return session.status;
+}  /* run_pipeline */
+
+}  /* namespace edg_cir */

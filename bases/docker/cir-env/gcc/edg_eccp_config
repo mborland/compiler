@@ -1,0 +1,96 @@
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+################################################################################
+#
+# Configuration file for the EDG eccp script, for the CIR back end (cpfe-cir).
+# Derived from ../../dev-env/gcc/edg_eccp_config.  The front end writes
+# assembly (.int.s) through the CIR library, which gcc assembles and links
+# exactly as it does for the other configurations; there is no EDG runtime
+# library.
+#
+# This file must be located in the directory specified by the EDG_BASE
+# environment variable.  It is used to set other environment variables
+# that are used by the eccp script.
+#
+################################################################################
+EDG_DEFAULT_DEFINES="-D__CHAR_BIT__=8"
+EDG_DEFAULT_CPP_DEFINES="-D_POSIX_SOURCE"
+
+# Use GCC.
+EDG_C_TO_OBJ_COMPILER=gcc
+
+# The generated code runs on libstdc++/glibc, so use their headers by default.
+EDG_USE_SYSTEM_HEADERS=${EDG_USE_SYSTEM_HEADERS-1}
+if [ $EDG_USE_SYSTEM_HEADERS -eq 0 ] ; then
+  # Use EDG include paths only.
+  EDG_INCLDIR=${EDG_INCLDIR-"$EDG_BASE/include"}
+  EDG_CINCLDIR=${EDG_CINCLDIR-"$EDG_BASE/include_c99"}
+else
+  # Use the GCC include paths.
+  EDG_INCLDIR=${EDG_INCLDIR-"$EDG_GCC_INCL_SCRAPE"}
+  EDG_CINCLDIR=${EDG_CINCLDIR-"$EDG_GCC_CINCL_SCRAPE"}
+  # Inject --gnu_version to the scraped GCC version.
+  EDG_CPFE_DEFAULT_OPTIONS="--gnu_version=$EDG_GCC_VER_SCRAPE $EDG_CPFE_DEFAULT_OPTIONS"
+fi
+# The generated assembly needs the small CIR runtime shim (libedg_cir_rt) and
+# the Itanium ABI libraries.  EDG_CIR_RT_LIBDIR is exported by the CMake build
+# (environment.sh).
+if [ -z "$EDG_CIR_RT_LIBDIR" ] ; then
+  echo "eccp: EDG_CIR_RT_LIBDIR is not set; the cir-env base needs the" \
+       "directory of libedg_cir_rt (see build/gcc-cir/environment.sh)." >&2
+  exit 1
+fi
+EDG_C_TO_OBJ_LIBRARIES="$EDG_C_TO_OBJ_LIBRARIES -L$EDG_CIR_RT_LIBDIR -ledg_cir_rt -lstdc++ -lgcc_s -lm -lpthread"
+
+# The generated file is assembly, not C.  (A suffix not ending in ".c" also
+# makes eccp pass --old_line_commands to the front end.)
+EDG_GEN_C_SUFFIX=".int.s"
+
+# No EDG runtime library: assigned (empty) so it overrides the EDG_RUNTIME_LIB
+# set in the docker image environment.
+EDG_RUNTIME_LIB=""
+
+# Get rid of the annoying "nm: stubs.o: no symbols" errors:
+EDG_PRELINK_DEFAULT_OPTIONS='-c "nm -og 2>/dev/null" '$EDG_PRELINK_DEFAULT_OPTIONS
+
+default_opts=$(printf '%s' \
+  "$EDG_C_TO_OBJ_DEFAULT_OPTIONS " \
+  '-w -Dva_copy=__va_copy -falign-functions=4 -fdiagnostics-plain-output'
+)
+
+EDG_GCC_VER_SCRAPE=${EDG_GCC_VER_SCRAPE-140000}
+if [ $EDG_GCC_VER_SCRAPE -ge 140000 ] ; then
+  #
+  # As of GCC 14 the following flags are required to prevent spurious
+  # errors when compiling the generated C code.
+  #
+  # See https://gcc.gnu.org/gcc-14/porting_to.html for more information.
+  #
+  warnings_to_disable=$(printf '%s' \
+    '-Wno-error=implicit-function-declaration ' \
+    '-Wno-error=incompatible-pointer-types ' \
+    '-Wno-error=int-conversion ' \
+    '-Wno-error=return-mismatch '
+  )
+  default_opts="$default_opts $warnings_to_disable"
+fi
+
+EDG_C_TO_OBJ_DEFAULT_OPTIONS=$default_opts
+EDG_C_TO_OBJ_DEFAULT_OPTIONS_linux_aarch64=$default_opts
+EDG_C_TO_OBJ_DEFAULT_OPTIONS_linux_armv7="$default_opts -m32 -march=i686 -msse2"
+EDG_C_TO_OBJ_DEFAULT_OPTIONS_linux_riscv64="$default_opts"
+EDG_C_TO_OBJ_DEFAULT_OPTIONS_linux_riscv32="$default_opts -m32 -march=i686 -msse2"
+EDG_C_TO_OBJ_DEFAULT_OPTIONS_linux_i686="$default_opts -m32 -march=i686 -msse2"
+EDG_C_TO_OBJ_DEFAULT_OPTIONS_linux_x86_64="$default_opts -m64 -march=x86-64"
+EDG_C_TO_OBJ_DEFAULT_OPTIONS_win64="$default_opts"
+EDG_C_TO_OBJ_DEFAULT_OPTIONS_win32="$default_opts -m32 -march=i686 -msse2"
+
+EDG_C_TO_OBJ_C99_OPTIONS="-std=gnu9x"
+
+EDG_SUPPRESS_PATCH_MUNCH=1
+EDG_STD_LIBS=${EDG_STD_LIBS-""}
+COLLECT_NO_DEMANGLE=1
+export COLLECT_NO_DEMANGLE

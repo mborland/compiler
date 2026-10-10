@@ -1,0 +1,8 @@
+fe_only -DTEST_NUMBER=1 --c11 Test_name.c
+"Test_name.c", line 4: warning: CIR back end: the body of "vla" uses a variable length array, which the CIR back end does not support; the function is dropped
+  int vla(int n) { int a[n]; a[0] = 1; return a[0]; }
+                                                    ^
+
+Error: CIR back end: the definition of 'vla' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

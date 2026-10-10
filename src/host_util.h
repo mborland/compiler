@@ -71,11 +71,11 @@ called again.
      the size of GEN_C_FILE_SUFFIX or OBJECT_FILE_SUFFIX (which includes the
      null terminator), not the strlen. */
   max_len_without_suffix = MAX_INSTANTIATION_OUTPUT_FILE_LEN - 8;
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
   max_len_without_suffix -= (long long)sizeof(GEN_C_FILE_SUFFIX);
-#else /* !(BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE) */
+#else /* !BACK_END_HAS_OUTPUT_FILE */
   max_len_without_suffix -= (long long)sizeof(OBJECT_FILE_SUFFIX);
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_HAS_OUTPUT_FILE */
   check_assertion(max_len_without_suffix > 0);
   (void)strncpy(buffer, mangled_name, size_t_arg(max_len_without_suffix));
   buffer[max_len_without_suffix] = '\0';

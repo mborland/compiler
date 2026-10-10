@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # ClangIR toolchain spike (see README.md).  Standalone: it does not use
 # anything from src/ and is not part of the front-end build.
 #

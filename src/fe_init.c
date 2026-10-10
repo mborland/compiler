@@ -165,6 +165,9 @@ END_EDG_NAMESPACE  /* Conditionally close the "edg" namespace. */
 #if BACK_END_TYPE == BACK_END_TYPE_CP_GEN
 #include "cp_gen_be.h"
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CP_GEN */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+#include "ecil_write.h"
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 #if NEED_NAME_MANGLING
 #include "lower_il.h"
@@ -2064,6 +2067,11 @@ source file's compilation.
     start_il_file();
   }  /* if */
 #endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* Open the ECIL stream (the preamble and the header frame are written
+     when it is opened or at the first hand-off). */
+  if (!do_preprocessing_only) ecil_stream_open();
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   /* The primary source file pointer is updated when the file is opened. */
   il_header.primary_source_file = NULL;
   write_init();

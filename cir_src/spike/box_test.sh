@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # Inside cir-env, cwd=/edg/workspace.
 B=build/cir-spike; S=$B/spike
 $S -print-cir -o $B/spike.o > $B/pre.cir 2>$B/err.txt; echo "spike rc=$?"; cat $B/err.txt

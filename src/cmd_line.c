@@ -258,11 +258,11 @@ Initialize the option information table.
   add_option_description(optk_keep_comments_in_pp_output, "comments", 'C',
                          /*value=*/TRUE, /*arg_required=*/FALSE,
                          pchek_none);
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
   add_option_description(optk_old_line_dirs, "old_line_commands", '\0',
                          /*value=*/TRUE, /*arg_required=*/FALSE,
                          pchek_none);
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_HAS_OUTPUT_FILE */
   add_option_description(optk_C_dialect_pcc, "old_c", 'K',
                          /*value=*/TRUE, /*arg_required=*/FALSE,
                          pchek_command_line);
@@ -483,10 +483,20 @@ Initialize the option information table.
   add_option_description(optk_display_error_number, "no_display_error_number",
                          '\0', /*value=*/FALSE, /*arg_required=*/FALSE,
                          pchek_none);
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
   add_option_description(optk_gen_c_file_name, "gen_c_file_name",
                          '\0', /*value=*/TRUE, /*arg_required=*/TRUE,
                          pchek_none);
+#endif /* BACK_END_HAS_OUTPUT_FILE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  add_option_description(optk_ecil_output, "ecil_output",
+                         '\0', /*value=*/TRUE, /*arg_required=*/TRUE,
+                         pchek_none);
+  add_option_description(optk_ecil_keep_regions, "ecil_keep_regions",
+                         '\0', /*value=*/TRUE, /*arg_required=*/FALSE,
+                         pchek_none);
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+#if BACK_END_GENERATES_SOURCE
   /* --msvc_target_version is supported for compatibility but deprecated
      in favor of regularity with --gen_c_{msvc|gnu|clang}_version. */
   add_option_description(optk_msvc_target_version, "msvc_target_version",
@@ -501,7 +511,7 @@ Initialize the option information table.
   add_option_description(optk_clang_target_version, "gen_c_clang_version",
                          '\0', /*value=*/TRUE, /*arg_required=*/TRUE,
                          pchek_command_line);
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_GENERATES_SOURCE */
   add_option_description(optk_create_pch, "create_pch",
                          '\0', /*value=*/TRUE, /*arg_required=*/TRUE,
                          pchek_none);
@@ -10630,14 +10640,14 @@ Process the arguments on the command line that invoked the compiler.
         check_assertion(opt_value == TRUE);
         keep_comments_in_pp_output = TRUE;
         break;
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
       case optk_old_line_dirs:
         /* Generate old-style line directives in generated C/C++ output,
            i.e., "# nnn" instead of "#line nnn". */
         check_assertion(opt_value == TRUE);
         gen_old_style_line_dirs = TRUE;
         break;
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_HAS_OUTPUT_FILE */
       case optk_C_dialect_pcc:
         /* Compile K&R/pcc dialect of C. */
         check_assertion(opt_value == TRUE);
@@ -10676,6 +10686,10 @@ Process the arguments on the command line that invoked the compiler.
 #if IL_SHOULD_BE_WRITTEN_TO_FILE
         skip_il_read = TRUE;
 #endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+        /* The IL is displayed after it has been streamed, so keep it. */
+        ecil_keep_regions = TRUE;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
         break;
 #endif /* NEED_IL_DISPLAY */
       case optk_cplusplus_anachronisms:
@@ -10951,6 +10965,11 @@ Process the arguments on the command line that invoked the compiler.
         break;
       case optk_modules:
         /* Enable/disable support for modules. */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+        if (opt_value) {
+          str_command_line_error(ec_cir_error, "modules are not supported");
+        }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
         modules_enabled = opt_value;
         if (modules_enabled) {
           if (!option_kind_used[(int)optk_export_template]) {
@@ -11097,11 +11116,24 @@ Process the arguments on the command line that invoked the compiler.
         /* Enable or disable display of error number in diagnostic messages. */
         display_error_number = opt_value;
         break;
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
       case optk_gen_c_file_name:
         /* The name to be used for the generated C file. */
         gen_c_file_name = file_name_from_opt_arg(opt_arg);
         break;
+#endif /* BACK_END_HAS_OUTPUT_FILE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+      case optk_ecil_output:
+        /* The file to which the ECIL stream is written ("-" for stdout). */
+        ecil_output_file_name = (char*)file_name_from_opt_arg(opt_arg);
+        break;
+      case optk_ecil_keep_regions:
+        /* Do not free IL memory regions after they are streamed. */
+        check_assertion(opt_value == TRUE);
+        ecil_keep_regions = TRUE;
+        break;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+#if BACK_END_GENERATES_SOURCE
       case optk_msvc_target_version:
         /* The Microsoft C/C++ compiler being targeted. */
         scan_opt_arg_number(&msvc_target_version_number, opt_arg);
@@ -11118,7 +11150,17 @@ Process the arguments on the command line that invoked the compiler.
         scan_opt_arg_number(&clang_target_version_number, opt_arg);
         clang_is_generated_code_target = TRUE;
         break;
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_GENERATES_SOURCE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+      case optk_create_pch:
+      case optk_use_pch:
+      case optk_pch:
+        /* Precompiled headers do not work with a back end that streams and
+           frees the IL as it goes. */
+        str_command_line_error(ec_cir_error,
+                               "precompiled headers are not supported");
+        break;
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
       case optk_create_pch:
         /* Create precompiled header file as part of this compilation. */
         check_assertion(opt_value == TRUE);
@@ -11150,6 +11192,7 @@ Process the arguments on the command line that invoked the compiler.
         create_precompiled_header = FALSE;
         precompiled_header_processing_required = TRUE;
         break;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
       case optk_pch_messages:
         /* Enable or suppress PCH messages. */
         suppress_pch_messages = !opt_value;
@@ -12662,6 +12705,32 @@ enable_microsoft_mode:
     instantiation_dir_name = NULL;
   }  /* if */
 #endif /* ONE_INSTANTIATION_PER_OBJECT */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* The CIR back end handles only C for now.  The language mode is final
+     here, whether C++ was asked for (--c++, --c++NN, a C++ source file name)
+     or is the default. */
+  if (!C_mode()) {
+    str_command_line_error(ec_cir_error, "C++ is not supported yet");
+  }  /* if */
+  /* The ECIL stream on standard output must not be mixed with other output
+     of the front end that goes to standard output. */
+  if (ecil_output_file_name != NULL &&
+      strcmp(ecil_output_file_name, "-") == 0) {
+    if (do_preprocessing_only) {
+      str_command_line_error(ec_cir_error,
+                             "--ecil_output=- cannot be used with an option "
+                             "that writes the preprocessing output or "
+                             "dependencies to standard output");
+    }  /* if */
+#if NEED_IL_DISPLAY
+    if (il_display) {
+      str_command_line_error(ec_cir_error,
+                             "--ecil_output=- cannot be used with "
+                             "--il_display, which writes to standard output");
+    }  /* if */
+#endif /* NEED_IL_DISPLAY */
+  }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   /* Determine whether enum types are considered to be integral. This global
      variable is used by is_integral_type, which returns TRUE for enum types
      in C mode and cfront mode, but otherwise returns FALSE in C++. */
@@ -13242,9 +13311,9 @@ variables declared in cmd_line.h.
   pp_output_file_needed = FALSE;
   generate_pp_output = FALSE;
   keep_comments_in_pp_output = FALSE;
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
   gen_old_style_line_dirs = FALSE;
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_HAS_OUTPUT_FILE */
   gen_edg_special_types = FALSE;
   gen_line_info_in_pp_output = FALSE;
   f_pp_output = NULL;
@@ -13424,9 +13493,13 @@ variables declared in cmd_line.h.
   implicit_template_inclusion_mode = DEFAULT_IMPLICIT_TEMPLATE_INCLUSION_MODE;
 #endif /* INSTANTIATION_BY_IMPLICIT_INCLUSION */
   display_error_number = DEFAULT_DISPLAY_ERROR_NUMBER;
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_HAS_OUTPUT_FILE
   gen_c_file_name = NULL;
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_HAS_OUTPUT_FILE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  ecil_output_file_name = NULL;
+  ecil_keep_regions = FALSE;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   precompiled_header_processing_required = FALSE;
   create_precompiled_header = FALSE;
   use_precompiled_header = FALSE;

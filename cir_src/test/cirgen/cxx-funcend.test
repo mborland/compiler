@@ -1,0 +1,44 @@
+; C++ (HDR_LANG 1): a non-void function that can fall off its end gets
+; trap + unreachable (spec 8.3), where C loads the uninitialized __retval.
+; RUN: cat %S/Inputs/header_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK: cir.lang = #cir.lang<cxx>
+; CHECK: cir.func {{.*}}@f
+; CHECK: cir.trap
+; CHECK: cir.func {{.*}}@main
+
+frame DECLS
+  STR 10 "f"
+  STR 11 "main"
+  TY_FUNC 20 1 0 [1]
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 30 20 0 1 10
+  DECL_FUNC 31 21 0 9 11
+frame REGION
+  FUNC_BEGIN 30 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  TO_BOOL
+  IF_BEGIN 0
+  CONST_INT 1 7
+  RETURN_STMT true
+  IF_END
+  FUNC_END 1
+  FUNC_BEGIN 31 0
+  CONST_INT 1 1
+  CALL 30 20 1 0
+  CONST_INT 1 7
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  FUNC_END 1
+frame END
+  END auto 0

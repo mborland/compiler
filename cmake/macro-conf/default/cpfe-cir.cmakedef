@@ -1,0 +1,42 @@
+# Configuration of cpfe-cir, the front end with the ClangIR (CIR) back end.
+# This is a standalone configuration: it deliberately does not import the
+# platform or build-type cpfe fragments, which enable lowering, multiple
+# translation units, and IL file output.  See cir_src/doc/design.md section 4.
+
+# Select the CIR back end.  (BACK_END_IS_C_GEN_BE and BACK_END_IS_CP_GEN_BE
+# are derived from this.)
+BACK_END_TYPE=BACK_END_TYPE_CIR
+
+# The IL is not lowered, and this is not a source analysis configuration.
+DO_IL_LOWERING=0
+DOING_SOURCE_ANALYSIS=0
+
+# The IL is streamed to the back end one function at a time and freed.
+IL_SHOULD_BE_WRITTEN_TO_FILE=0
+FREE_MEMORY_REGIONS_EARLY=1
+MAINTAIN_NEEDED_FLAGS=0
+
+# Poison freed regions (checks that nothing refers to a streamed function).
+OVERWRITE_FREED_MEM_BLOCKS=1
+
+# Names are mangled up front (Itanium ABI); end-of-translation-unit in-place
+# mangling of every name conflicts with streaming.
+NEED_NAME_MANGLING=1
+MANGLE_ALL_NAMES=0
+
+# Templates are instantiated where used, with COMDAT.
+AUTOMATIC_TEMPLATE_INSTANTIATION=0
+INSTANTIATE_TEMPLATES_EVERYWHERE_USED=1
+ONE_INSTANTIATION_PER_OBJECT=0
+COMPILE_MULTIPLE_TRANSLATION_UNITS=0
+
+# Designated initializers reach the back end as they are written.
+LOWER_DESIGNATED_INITIALIZERS=0
+
+# The Itanium C++ ABI; no Microsoft extensions; no coroutines yet.
+IA64_ABI=1
+import <support/feature/microsoft-extensions/off>
+
+# Neither modules nor precompiled headers are supported yet.
+DEFAULT_MODULES_ENABLED=0
+COROUTINE_ENABLING_POSSIBLE=0

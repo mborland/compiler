@@ -61,7 +61,12 @@ class TestRunConfig:
   def __init__(self, name: str, config_providing_fe_env: str,
                front_end_env_paths: Dict[str, List[str]],
                env_overrides: Dict[str, str], expectations_dir: Path,
-               flakey_tests_dir: Path) -> None:
+               flakey_tests_dir: Path,
+               sidecar_env_vars: Optional[List[str]] = None) -> None:
+    # sidecar_env_vars names environment variables that point at files that
+    # must be copied next to the front end binary copy (e.g. a shared
+    # library that the binary finds through $ORIGIN).
+    self.sidecar_env_vars = sidecar_env_vars or []
     self.name = name
     self.config_providing_fe_env = config_providing_fe_env
     self.front_end_env_paths = front_end_env_paths
@@ -229,6 +234,57 @@ def _load_cpp_back_end_configs(loaded_configs: Dict[str, TestRunConfig],
       flakey_tests_dir
     )
 
+def _load_cir_back_end_configs(loaded_configs: Dict[str, TestRunConfig],
+                               test_home: Path,
+                               config_dict: Any) -> None:
+  '''Load the configs for cpfe-cir (the ClangIR back end).
+
+  The front end is exported as CPFE (so eccp and the tests need no changes)
+  from the environment variables in bin_path_env (CPFE_CIR), and the cir_src
+  shared library (EDG_CIR_LIB) is copied next to the binary copy.
+  '''
+  for variant in config_dict.get('variants', []):
+    run_config_name = variant['name']
+    expectations_dir = test_home / 'expectations' / run_config_name
+    if not os.path.isdir(expectations_dir):
+      edgutil.eprint(f"Expected expectation directory at {expectations_dir}")
+      sys.exit(1)
+
+    bin_env_paths = config_dict.get('bin_path_env', [])
+    flakey_tests_dir = test_home / 'flakey-tests' / run_config_name
+    if variant.get('two_process', False):
+      # eccp runs the cpfe-cir-2p wrapper (as CPFE), which runs cpfe-cir
+      # (CPFE_CIR_BIN, the binary that provides the build constants) to write
+      # an ECIL file and then edg-cir on it to write the .int.s.
+      loaded_configs[run_config_name] = TestRunConfig(
+        run_config_name,
+        'CPFE_CIR_BIN',
+        {
+          'CPFE_CIR_BIN': bin_env_paths
+        },
+        {
+          'CPFE': str(edgutil.RequiredToolPath('cpfe-cir-2p')),
+          'EDG_CONFIG': run_config_name
+        },
+        expectations_dir,
+        flakey_tests_dir,
+        sidecar_env_vars = config_dict.get('sidecar_env', [])
+      )
+      continue
+    loaded_configs[run_config_name] = TestRunConfig(
+      run_config_name,
+      'CPFE',
+      {
+        'CPFE': bin_env_paths
+      },
+      {
+        'EDG_CONFIG': run_config_name
+      },
+      expectations_dir,
+      flakey_tests_dir,
+      sidecar_env_vars = config_dict.get('sidecar_env', [])
+    )
+
 def load_edgy_config(args: argparse.Namespace, test_home: Path) -> EdgyConfig:
   config_file_path = Path(test_home / '.edgy' / 'config.json')
   with open(config_file_path, 'r') as file_handle:
@@ -245,6 +301,12 @@ def load_edgy_config(args: argparse.Namespace, test_home: Path) -> EdgyConfig:
       loaded_configs,
       test_home,
       run_configs_dict.get('cpp', {})
+    )
+
+    _load_cir_back_end_configs(
+      loaded_configs,
+      test_home,
+      run_configs_dict.get('cir', {})
     )
 
     test_suites = config_file_dict.get('test_suites', {})
@@ -352,17 +414,17 @@ def load_run_configs(args: argparse.Namespace,
 
 def parse_test_suites(filter_str: str) -> Tuple[Set[str], Set[str]]:
   # Split by ","s to get the individual test suite specifications.
-  result = filter_str.split(',')
+  specs = filter_str.split(',')
   # Remove anything after a /, that's a test name specification, use a set to
-  # ensure the test suites we get back are unique.
-  result = list(map(lambda suite: suite.split('/')[0], result))
-  # Remove negative suites (they can't introduce suite selections) and
-  # guarantee uniqueness.
+  # ensure the test suites we get back are unique.  A negative specification
+  # that has a path ("!suite/dir/") only excludes tests, not the whole suite.
   positive_filters = set()
   negative_filters = set()
-  for suite in result:
+  for spec in specs:
+    suite = spec.split('/')[0]
     if suite.startswith('!'):
-      negative_filters.add(suite[1:])
+      if '/' not in spec:
+        negative_filters.add(suite[1:])
     else:
       positive_filters.add(suite)
   return positive_filters, negative_filters
@@ -692,6 +754,28 @@ def _construct_crash_avoidance_filters(
 
   return is_safe_test
 
+def _construct_type_filters(
+               args: argparse.Namespace,
+               test_suite: TestSuiteConfig) -> Callable[[TestSuiteTest], bool]:
+  '''Keep only tests with at least one case of the requested test types.'''
+  wanted_types = set(args.test_types.split(','))
+
+  def has_wanted_type(test: TestSuiteTest) -> bool:
+    try:
+      test_descript = edgtest.runtest.load_description(
+        test.path, top_dir = test_suite.path
+      )
+      for mode, _, _ in test_descript.traverse_cases():
+        if edgtest.runtest.test_type_to_string(mode) in wanted_types:
+          return True
+    except Exception as e:
+      if sys.version_info >= (3, 11):
+        e.add_note(f"while parsing test arguments for {test.path}")
+      raise
+    return False
+
+  return has_wanted_type
+
 def _construct_flakey_filters(
                args: argparse.Namespace,
                test_suite: TestSuiteConfig) -> Callable[[TestSuiteTest], bool]:
@@ -748,6 +832,13 @@ def _find_or_copy_front_end(args: argparse.Namespace,
       # Copy the front end binary preserving the name.
       run_fe_path =  run_config_path / fe_path.name
       shutil.copy2(fe_path, run_fe_path)
+      # Copy files the binary needs next to it (found through $ORIGIN).
+      for sidecar_env_var in run_config.sidecar_env_vars:
+        sidecar_value = grab_env_var(sidecar_env_var)
+        if sidecar_value is not None and os.path.isfile(sidecar_value):
+          shutil.copy2(sidecar_value, run_config_path)
+          if args.verbose:
+            print(f"Copied \"{sidecar_env_var}\" next to the front end.")
       if args.verbose:
         print(f"Using a local copy at: {run_fe_path}.")
       return run_fe_path
@@ -1543,6 +1634,8 @@ class DynamicLoadingTestRunner:
       all_filters.append(_construct_prefix_filters(self.args, test_suite))
     if is_replay_run(self.args):
       all_filters.append(_construct_replay_filters(self.args, test_suite))
+    if self.args.test_types:
+      all_filters.append(_construct_type_filters(self.args, test_suite))
     if self.args.avoid_crashes:
       all_filters.append(
         _construct_crash_avoidance_filters(self.args, test_suite)
@@ -2195,6 +2288,15 @@ def parse_args() -> argparse.Namespace:
     help = 'record tests'
   )
   parser.add_argument(
+    '--types',
+    dest = 'test_types',
+    default = '',
+    help = (
+      'only run tests that have a case of one of these comma separated test '
+      'types (e.g. rp,lp for run and link tests)'
+    )
+  )
+  parser.add_argument(
     '--crash-avoidance',
     dest = 'avoid_crashes',
     action = 'store_true',
@@ -2263,7 +2365,7 @@ def _load_filter_file(file_path: Path) -> Set[str]:
   with open(file_path, 'r') as file_handle:
     for line in file_handle:
       line = line.strip()
-      if len(line) == 0:
+      if len(line) == 0 or line.startswith('#'):
         continue
       file_filters.add(line)
   return file_filters

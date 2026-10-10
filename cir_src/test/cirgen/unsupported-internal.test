@@ -1,0 +1,23 @@
+; Unsupported policy: an unreferenced internal definition that was dropped
+; vanishes under --keep-going; a referenced one is still an error.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --keep-going --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; CHECK: error [1003]: the internal definition of 'used_static' was dropped but is still referenced
+; CHECK-NOT: unused_static
+
+frame DECLS
+  STR 10 "used_static"
+  STR 11 "unused_static"
+  STR 12 "main"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 41 21 1 32 10
+  DECL_FUNC 43 21 1 32 11
+  DECL_FUNC 42 21 0 9 12
+frame REGION
+  FUNC_BEGIN 42 0
+  CALL 41 21 0 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

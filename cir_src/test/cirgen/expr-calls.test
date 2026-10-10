@@ -1,0 +1,372 @@
+; Calls: direct, K&R/no_proto call-site types, re-issued declarations (F3),
+; indirect, record arguments/results through CallConvLowering, mixed fp.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe -lm
+; RUN: %t.exe
+
+; CHECK-DAG: cir.call @add2({{.*}}) nothrow : (!s32i, !s32i) -> !s32i
+; CHECK-DAG: cir.cast bitcast {{.*}} !cir.ptr<!cir.func<(...) -> !s32i>>
+; CHECK-DAG: cir.call {{%[0-9]+}}(
+; CHECK-DAG: cir.func {{.*}}@knr
+
+frame DECLS
+  TY_FUNC 21 1 0 [1, 1]
+  TY_FUNC 22 1 2 []
+  TY_FUNC 23 1 2 [1, 1]
+  TY_FUNC 24 1 0 [1]
+  TY_FUNC 25 1 1 [1]
+  TY_FUNC 26 10 0 [1, 10, 9]
+  TY_PTR 27 21
+  TY_RECORD_DECL 28 0 nil
+  TY_RECORD_BODY 28 8 8 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 1 4 nil nil nil 0
+  TY_FUNC 29 28 0 [1, 1]
+  TY_FUNC 30 1 0 [28]
+  TY_ARRAY 31 3 4 0
+  TY_RECORD_DECL 32 0 nil
+  TY_RECORD_BODY 32 32 32 8 0 1
+  REC_FIELD 31 0 nil nil nil 0
+  TY_FUNC 33 1 0 [32]
+  TY_FUNC 34 32 0 [1]
+  STR 10 "add2"
+  DECL_FUNC 100 21 0 1 10
+  STR 11 "knr"
+  DECL_FUNC 101 22 0 0 11
+  STR 12 "late"
+  DECL_FUNC 102 24 0 0 12
+  STR 13 "mk"
+  DECL_FUNC 103 29 0 1 13
+  STR 14 "sumP"
+  DECL_FUNC 104 30 0 1 14
+  STR 15 "mix"
+  DECL_FUNC 105 26 0 1 15
+  STR 16 "sumBig"
+  DECL_FUNC 106 33 0 1 16
+  STR 17 "mkBig"
+  DECL_FUNC 107 34 0 1 17
+  TY_PTR 35 3
+  TY_FUNC 36 1 0 []
+  STR 18 "t_direct"
+  DECL_FUNC 108 36 0 1 18
+  STR 19 "t_late"
+  DECL_FUNC 109 36 0 1 19
+  STR 20 "t_knr"
+  DECL_FUNC 110 36 0 1 20
+  STR 21 "t_indirect"
+  DECL_FUNC 111 36 0 1 21
+  STR 22 "t_record"
+  DECL_FUNC 112 36 0 1 22
+  STR 23 "t_record_direct"
+  DECL_FUNC 113 36 0 1 23
+  STR 24 "t_big"
+  DECL_FUNC 114 36 0 1 24
+  STR 25 "t_mixed"
+  DECL_FUNC 115 36 0 1 25
+  TY_FUNC 37 1 0 []
+  STR 26 "main"
+  DECL_FUNC 116 37 0 9 26
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 1 1 nil 0
+  PARAM 2 1 1 nil 0
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 103 0
+  PARAM 1 1 1 nil 0
+  PARAM 2 1 1 nil 0
+  LOCAL 3 28 nil 4 0
+  LREF 3
+  FIELD 28 0
+  LREF 1
+  LOAD 0
+  STORE 0 0
+  LREF 3
+  FIELD 28 1
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  LREF 3
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 104 0
+  PARAM 1 28 28 nil 0
+  LREF 1
+  FIELD 28 0
+  LOAD 0
+  LREF 1
+  FIELD 28 1
+  LOAD 0
+  CONST_INT 1 10
+  MUL 1
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 105 0
+  PARAM 1 1 1 nil 0
+  PARAM 2 10 10 nil 0
+  PARAM 3 9 9 nil 0
+  LREF 1
+  LOAD 0
+  CAST 6 10
+  LREF 2
+  LOAD 0
+  LREF 3
+  LOAD 0
+  CAST 8 10
+  MUL 0
+  ADD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 106 0
+  PARAM 1 32 32 nil 0
+  LREF 1
+  FIELD 32 0
+  ADDR
+  CAST 12 35
+  CONST_INT 1 0
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  LREF 1
+  FIELD 32 0
+  ADDR
+  CAST 12 35
+  CONST_INT 1 3
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  CONST_INT 3 10
+  MUL 1
+  ADD 0
+  CAST 0 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 107 0
+  PARAM 2 1 1 nil 0
+  LOCAL 1 32 nil 8 0
+  LREF 1
+  FIELD 32 0
+  ADDR
+  CAST 12 35
+  CONST_INT 1 0
+  PTR_STRIDE 0
+  DEREF
+  LREF 2
+  LOAD 0
+  CONST_INT 1 0
+  ADD 1
+  CAST 0 3
+  STORE 0 0
+  LREF 1
+  FIELD 32 0
+  ADDR
+  CAST 12 35
+  CONST_INT 1 1
+  PTR_STRIDE 0
+  DEREF
+  LREF 2
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  CAST 0 3
+  STORE 0 0
+  LREF 1
+  FIELD 32 0
+  ADDR
+  CAST 12 35
+  CONST_INT 1 2
+  PTR_STRIDE 0
+  DEREF
+  LREF 2
+  LOAD 0
+  CONST_INT 1 2
+  ADD 1
+  CAST 0 3
+  STORE 0 0
+  LREF 1
+  FIELD 32 0
+  ADDR
+  CAST 12 35
+  CONST_INT 1 3
+  PTR_STRIDE 0
+  DEREF
+  LREF 2
+  LOAD 0
+  CONST_INT 1 3
+  ADD 1
+  CAST 0 3
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+frame REGION
+  FUNC_BEGIN 108 0
+  CONST_INT 1 1
+  CONST_INT 1 2
+  CALL 100 21 2 0
+  CONST_INT 1 3
+  CONST_INT 1 4
+  CALL 100 21 2 0
+  CALL 100 21 2 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 109 0
+  CONST_INT 1 5
+  CALL 102 24 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 110 0
+  CONST_INT 1 3
+  CONST_INT 1 300
+  CALL 101 22 2 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 111 0
+  LOCAL 1 27 nil 8 0
+  LREF 1
+  GREF 100
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  CONST_INT 1 20
+  CONST_INT 1 22
+  CALL_INDIRECT 21 2 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 112 0
+  LOCAL 1 28 nil 4 0
+  LREF 1
+  CONST_INT 1 3
+  CONST_INT 1 4
+  CALL 103 29 2 0
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  CALL 104 30 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 113 0
+  CONST_INT 1 5
+  CONST_INT 1 6
+  CALL 103 29 2 0
+  CALL 104 30 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 114 0
+  LOCAL 1 32 nil 8 0
+  LREF 1
+  CONST_INT 1 7
+  CALL 107 34 1 0
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  CALL 106 33 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 115 0
+  CONST_INT 1 2
+  CONST_FLOAT 10 f64:0x3ff8000000000000
+  CONST_FLOAT 9 f32:0x40800000
+  CALL 105 26 3 0
+  CAST 7 1
+  RETURN_STMT true
+  FUNC_END 0
+frame DECLS
+  DECL_FUNC 102 25 0 1 12
+  DECL_FUNC 101 23 0 1 11
+frame REGION
+  FUNC_BEGIN 102 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CONST_INT 1 2
+  MUL 1
+  CONST_INT 1 1
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 101 0
+  PARAM 1 1 6 nil 0
+  PARAM 2 1 4 nil 0
+  LREF 1
+  LOAD 0
+  CAST 0 1
+  LREF 2
+  LOAD 0
+  CAST 0 1
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 116 0
+  CALL 108 37 0 0
+  CONST_INT 1 10
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  CALL 109 37 0 0
+  CONST_INT 1 11
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  CALL 110 37 0 0
+  CONST_INT 1 47
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  CALL 111 37 0 0
+  CONST_INT 1 42
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  CALL 112 37 0 0
+  CONST_INT 1 43
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 5
+  RETURN_STMT true
+  IF_END
+  CALL 113 37 0 0
+  CONST_INT 1 65
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 6
+  RETURN_STMT true
+  IF_END
+  CALL 114 37 0 0
+  CONST_INT 1 107
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 7
+  RETURN_STMT true
+  IF_END
+  CALL 115 37 0 0
+  CONST_INT 1 8
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 8
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

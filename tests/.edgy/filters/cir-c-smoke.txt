@@ -1,0 +1,47 @@
+# Filter list for edgy ("edgy @tests/.edgy/filters/<this file>"): one path
+# prefix per line, relative to the tests directory; "!" excludes.  Blank lines
+# and lines starting with "#" are ignored.
+#
+# cir-c-smoke: 40 simple GNU C testsuite run tests (no includes, VLAs,
+# _Complex, _Atomic or GNU extensions), the M2 smoke list.  Each entry is a
+# whole file name so that it matches exactly one test.
+imported/gnu/c/20000623-1.sft.c
+imported/gnu/c/20020210-1.sft.c
+imported/gnu/c/20030708-1.sft.c
+imported/gnu/c/20040331-1.sft.c
+imported/gnu/c/c2y-switch-3.sft.c
+imported/gnu/c/doloop-2.sft.c
+imported/gnu/c/nrv1.sft.c
+imported/gnu/c/pr108308.sft.c
+imported/gnu/c/pr18241-3.sft.c
+imported/gnu/c/pr20115.sft.c
+imported/gnu/c/pr35616.sft.c
+imported/gnu/c/pr41033.sft.c
+imported/gnu/c/pr46315.sft.c
+imported/gnu/c/pr60485-2.sft.c
+imported/gnu/c/pr97567.sft.c
+imported/gnu/c/struct-ret-1.sft.c
+imported/gnu/c/torture/pr100492.sft.c
+imported/gnu/c/torture/pr105665.sft.c
+imported/gnu/c/torture/pr114787.sft.c
+imported/gnu/c/torture/pr27116-2.sft.c
+imported/gnu/c/torture/pr35634.sft.c
+imported/gnu/c/torture/pr39132.sft.c
+imported/gnu/c/torture/pr48124-2.sft.c
+imported/gnu/c/torture/pr53663-2.sft.c
+imported/gnu/c/torture/pr57303.sft.c
+imported/gnu/c/torture/pr58941.sft.c
+imported/gnu/c/torture/pr59058.sft.c
+imported/gnu/c/torture/pr60733.sft.c
+imported/gnu/c/torture/pr61757.sft.c
+imported/gnu/c/torture/pr66375.sft.c
+imported/gnu/c/torture/pr68721.sft.c
+imported/gnu/c/torture/pr79088.sft.c
+imported/gnu/c/torture/pr80974.sft.c
+imported/gnu/c/tree-ssa/20040319-1.sft.c
+imported/gnu/c/tree-ssa/alias-7.sft.c
+imported/gnu/c/tree-ssa/pr14841.sft.c
+imported/gnu/c/tree-ssa/pr22018.sft.c
+imported/gnu/c/tree-ssa/pr41497.sft.c
+imported/gnu/c/tree-ssa/pr87022.sft.c
+imported/gnu/c/tree-ssa/tailrecursion-7.sft.c

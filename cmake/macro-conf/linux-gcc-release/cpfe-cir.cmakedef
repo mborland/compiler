@@ -1,0 +1,6 @@
+# Auto Generated Default File
+import <default/cpfe-cir>
+
+# Do not poison freed memory in release builds (the default configuration
+# turns it on to catch uses of an IL region after it was streamed).
+OVERWRITE_FREED_MEM_BLOCKS=0

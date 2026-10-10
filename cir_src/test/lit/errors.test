@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# Error reporting and exit codes of edg-cir (status code = exit code).
+# RUN: %ecil-asm %S/Inputs/empty.txt -o %t.ecil
+# RUN: %not %edg-cir --triple=aarch64-unknown-linux-gnu --emit=asm %t.ecil 2>&1 | %FileCheck %s --check-prefix=TRIPLE
+# RUN: sh -c '%edg-cir --triple=aarch64-unknown-linux-gnu --emit=asm %t.ecil 2> /dev/null; test $? -eq 4'
+# RUN: head -c 20 %t.ecil > %t.trunc
+# RUN: sh -c '%edg-cir --emit=cir %t.trunc 2> /dev/null; test $? -eq 2'
+# RUN: %not %edg-cir --emit=cir %t.trunc 2>&1 | %FileCheck %s --check-prefix=TRUNC
+# RUN: %not %edg-cir --emit=cir %S/no-such-file.ecil 2>&1 | %FileCheck %s --check-prefix=NOFILE
+# RUN: sh -c '%edg-cir --bogus 2> /dev/null; test $? -eq 64'
+
+# TRIPLE: error{{.*}}not supported
+# TRUNC: error{{.*}}truncated
+# NOFILE: cannot read

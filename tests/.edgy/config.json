@@ -30,6 +30,23 @@
           "name": "edg_x86_32_cp"
         }
       ]
+    },
+    "cir": {
+      "bin_path_env": [
+        "CPFE_CIR"
+      ],
+      "sidecar_env": [
+        "EDG_CIR_LIB"
+      ],
+      "variants": [
+        {
+          "name": "edg_x86_64_cir"
+        },
+        {
+          "name": "edg_x86_64_cir_2p",
+          "two_process": true
+        }
+      ]
     }
   },
   "config_sets": {
@@ -42,6 +59,10 @@
       "edg_x86_64_cp",
       "edg_x86_32",
       "edg_x86_32_cp"
+    ],
+    "cir": [
+      "edg_x86_64_cir",
+      "edg_x86_64_cir_2p"
     ]
   },
   "test_suites": {
@@ -57,6 +78,7 @@
       "imported"
     ],
     "secondary": [
+      "cir"
     ]
   }
 }

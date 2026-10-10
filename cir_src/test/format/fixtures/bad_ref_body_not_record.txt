@@ -1,0 +1,11 @@
+; expect: format TY_RECORD_BODY names a G-id that is not a TY_RECORD_DECL
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  TY_RECORD_BODY 1 4 4 4 0 0
+frame END
+  END 2 0

@@ -1,0 +1,10 @@
+; expect: format NAME_BIND names a G-id that was not declared
+ecil 0.6 features=0x00000008
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame NAMES
+  NAME_BIND 9 1 0
+frame END
+  END 2 0

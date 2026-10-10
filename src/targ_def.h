@@ -3551,9 +3551,11 @@ and no target compiler has been specified, provide a default target.
 #endif /* BACK_END_IS_C_GEN_BE */
 #endif /* !defined(GCC_IS_GENERATED_CODE_TARGET) && ... */
 
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE || \
+    BACK_END_TYPE == BACK_END_TYPE_CIR
 /*
-Make sure undefined targets are defined to FALSE.
+Make sure undefined targets are defined to FALSE.  (The CIR back end does not
+generate source for a target compiler, so they are all FALSE for it.)
 */
 #if !defined(GCC_IS_GENERATED_CODE_TARGET)
 #define GCC_IS_GENERATED_CODE_TARGET FALSE
@@ -3567,7 +3569,7 @@ Make sure undefined targets are defined to FALSE.
 #if !defined(MSVC_IS_GENERATED_CODE_TARGET)
 #define MSVC_IS_GENERATED_CODE_TARGET FALSE
 #endif /* !defined(MSVC_IS_GENERATED_CODE_TARGET) */
-#endif /* BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_IS_C_GEN_BE || ... */
 
 /*
 Flag that is TRUE if the GNU "ifunc" dispatch mechanism is to be lowered.

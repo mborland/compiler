@@ -23,7 +23,7 @@ ECIL_VERSION_MAJOR or ECIL_VERSION_MINOR (section 9 of the spec).
 #include <stdint.h>
 
 #define ECIL_VERSION_MAJOR 0
-#define ECIL_VERSION_MINOR 3
+#define ECIL_VERSION_MINOR 6
 
 /*
 The stream preamble: 8 magic bytes, then u16 major, u16 minor and
@@ -311,7 +311,9 @@ typedef enum an_ecil_cmp_kind {
   ecmp_gt = 2,
   ecmp_ge = 3,
   ecmp_eq = 4,
-  ecmp_ne = 5
+  ecmp_ne = 5,
+  ecmp_one = 6,  /* Floating ordered-and-unequal (islessgreater). */
+  ecmp_uno = 7   /* Floating unordered (isunordered). */
 } an_ecil_cmp_kind;
 
 /* Mirrors the CIR cast kinds the v0 writer can produce. */
@@ -344,11 +346,41 @@ typedef enum an_ecil_store_result {
   esr_prv  = 2   /* The stored value is pushed (C). */
 } an_ecil_store_result;
 
+/*
+Builtins.  Operands are prvalues already converted to the builtin's
+parameter types; the result type is the BUILTIN record's t.
+*/
 typedef enum an_ecil_builtin {
-  ebi_expect      = 1,
-  ebi_unreachable = 2,
-  ebi_trap        = 3
+  ebi_expect       = 1,   /* (v, expected) -> v */
+  ebi_unreachable  = 2,   /* () */
+  ebi_trap         = 3,   /* () */
+  ebi_alloca       = 4,   /* (size) -> void*; function-lifetime storage */
+  ebi_bswap        = 5,   /* (x) -> x's type */
+  ebi_clz          = 6,   /* (x) -> int; undefined for 0 */
+  ebi_ctz          = 7,   /* (x) -> int; undefined for 0 */
+  ebi_popcount     = 8,   /* (x) -> int */
+  ebi_parity       = 9,   /* (x) -> int */
+  ebi_ffs          = 10,  /* (x) -> int */
+  ebi_clrsb        = 11,  /* (x) -> int */
+  ebi_add_overflow = 12,  /* (a, b, T *res) -> bool; *res = wrapped a+b */
+  ebi_sub_overflow = 13,  /* (a, b, T *res) -> bool */
+  ebi_mul_overflow = 14,  /* (a, b, T *res) -> bool */
+  ebi_is_fp_class  = 15,  /* (x, mask) -> bool; mask is a constant int of
+                             ECIL_FP_CLASS_* bits (LLVM FPClassTest) */
+  ebi_signbit      = 16   /* (x) -> bool */
 } an_ecil_builtin;
+
+/* Bits of the ebi_is_fp_class mask (same values as LLVM's FPClassTest). */
+#define ECIL_FP_CLASS_SNAN           0x001u
+#define ECIL_FP_CLASS_QNAN           0x002u
+#define ECIL_FP_CLASS_NEG_INF        0x004u
+#define ECIL_FP_CLASS_NEG_NORMAL     0x008u
+#define ECIL_FP_CLASS_NEG_SUBNORMAL  0x010u
+#define ECIL_FP_CLASS_NEG_ZERO       0x020u
+#define ECIL_FP_CLASS_POS_ZERO       0x040u
+#define ECIL_FP_CLASS_POS_SUBNORMAL  0x080u
+#define ECIL_FP_CLASS_POS_NORMAL     0x100u
+#define ECIL_FP_CLASS_POS_INF        0x200u
 
 /* Flag bits of operands named "flags". */
 

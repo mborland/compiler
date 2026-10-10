@@ -555,14 +555,17 @@ back end (cp_gen_be) is run, this is the suffix appended to the base of the
 primary source file to get the name of the generated C output file.
 */
 #ifndef GEN_C_FILE_SUFFIX
-#if BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+/* The CIR back end writes assembly. */
+#define GEN_C_FILE_SUFFIX ".int.s"
+#elif BACK_END_IS_C_GEN_BE || BACK_END_IS_CP_GEN_BE
 #if EDG_MSDOS
 /* File names under MSDOS cannot have multiple periods. */
 #define GEN_C_FILE_SUFFIX ".ic"
 #else /* !EDG_MSDOS */
 #define GEN_C_FILE_SUFFIX ".int.c"
 #endif /* if EDG_MSDOS */
-#endif /* BACK_END_IS_C_GEN_BE || ... */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #endif /* ifndef GEN_C_FILE_SUFFIX */
 
 /*
@@ -672,20 +675,40 @@ FALSE means the IL is passed in memory to the back end.
 #endif /* STANDALONE_UTILITY_PROGRAM */
 
 /*
+Flag that is TRUE if the memory regions holding the IL are handed to the back
+end (written to the IL file, or streamed as ECIL) and freed one function at a
+time, rather than all being kept in memory until the end of the translation
+unit.  The region lifecycle code in mem_manage.c uses this flag.
+*/
+#ifndef IL_REGIONS_DISPOSED_INCREMENTALLY
+#if IL_SHOULD_BE_WRITTEN_TO_FILE || BACK_END_TYPE == BACK_END_TYPE_CIR
+#define IL_REGIONS_DISPOSED_INCREMENTALLY TRUE
+#else /* !(IL_SHOULD_BE_WRITTEN_TO_FILE || BACK_END_TYPE == ...) */
+#define IL_REGIONS_DISPOSED_INCREMENTALLY FALSE
+#endif /* IL_SHOULD_BE_WRITTEN_TO_FILE || BACK_END_TYPE == ... */
+#endif /* ifndef IL_REGIONS_DISPOSED_INCREMENTALLY */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR && IL_SHOULD_BE_WRITTEN_TO_FILE
+ #error -- The CIR back end streams ECIL, not the IL file.
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR && IL_SHOULD_BE_WRITTEN_TO_FILE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR && !FREE_MEMORY_REGIONS_EARLY
+ #error -- The CIR back end requires FREE_MEMORY_REGIONS_EARLY.
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR && !FREE_MEMORY_REGIONS_EARLY */
+
+/*
 Flag that is TRUE to cause IL lowering to be done, to lower C++ intermediate
 language to C intermediate language, allowing the C++ front end to be used
 with a C back end.
 */
 #ifndef DO_IL_LOWERING
-#if BACK_END_IS_CP_GEN_BE
+#if BACK_END_IS_CP_GEN_BE || BACK_END_TYPE == BACK_END_TYPE_CIR
 #define DO_IL_LOWERING FALSE
-#else /* !BACK_END_IS_CP_GEN_BE */
+#else /* !(BACK_END_IS_CP_GEN_BE || BACK_END_TYPE == BACK_END_TYPE_CIR) */
 #if defined(DOING_SOURCE_ANALYSIS) && DOING_SOURCE_ANALYSIS
 #define DO_IL_LOWERING FALSE
 #else /* !(defined(DOING_SOURCE_ANALYSIS) && DOING_SOURCE_ANALYSIS) */
 #define DO_IL_LOWERING TRUE
 #endif /* defined(DOING_SOURCE_ANALYSIS) && DOING_SOURCE_ANALYSIS */
-#endif /* BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_IS_CP_GEN_BE || BACK_END_TYPE == BACK_END_TYPE_CIR */
 #endif /* ifndef DO_IL_LOWERING */
 #if BACK_END_IS_C_GEN_BE && !DO_IL_LOWERING
  #error -- IL lowering must be done for the C-generating back end.
@@ -950,9 +973,10 @@ generates information for a prelinker, and the prelinker controls the
 instantiation process at link time.
 */
 #ifndef AUTOMATIC_TEMPLATE_INSTANTIATION
-#if BACK_END_IS_CP_GEN_BE
+#if BACK_END_IS_CP_GEN_BE || BACK_END_TYPE == BACK_END_TYPE_CIR
 /* Automatic template instantiation is generally not a good idea when doing
-   source-to-source translation. */
+   source-to-source translation.  The CIR back end instantiates templates
+   where they are used, with COMDAT. */
 #define AUTOMATIC_TEMPLATE_INSTANTIATION FALSE
 #else /* !BACK_END_IS_CP_GEN_BE */
 #if INSTANTIATE_TEMPLATES_EVERYWHERE_USED
@@ -960,7 +984,7 @@ instantiation process at link time.
 #else /* !INSTANTIATE_TEMPLATES_EVERYWHERE_USED */
 #define AUTOMATIC_TEMPLATE_INSTANTIATION TRUE
 #endif /* INSTANTIATE_TEMPLATES_EVERYWHERE_USED */
-#endif /* BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_IS_CP_GEN_BE || BACK_END_TYPE == BACK_END_TYPE_CIR */
 #endif /* ifndef AUTOMATIC_TEMPLATE_INSTANTIATION */
 
 #if AUTOMATIC_TEMPLATE_INSTANTIATION
@@ -1099,11 +1123,12 @@ of the predeclared class "type_info".  This is the initial value of the global
 variable pragma_define_type_info_is_required.
 */
 #ifndef PRAGMA_DEFINE_TYPE_INFO_IS_REQUIRED
-#if BACK_END_IS_CP_GEN_BE
+#if BACK_END_IS_CP_GEN_BE || BACK_END_TYPE == BACK_END_TYPE_CIR
+/* The CIR back end uses the type_info of the target's own library. */
 #define PRAGMA_DEFINE_TYPE_INFO_IS_REQUIRED FALSE  /* You can change this. */
-#else /* !BACK_END_IS_CP_GEN_BE */
+#else /* !(BACK_END_IS_CP_GEN_BE || BACK_END_TYPE == BACK_END_TYPE_CIR) */
 #define PRAGMA_DEFINE_TYPE_INFO_IS_REQUIRED TRUE   /* You can change this. */
-#endif /* BACK_END_IS_CP_GEN_BE */
+#endif /* BACK_END_IS_CP_GEN_BE || BACK_END_TYPE == BACK_END_TYPE_CIR */
 #endif /* ifndef PRAGMA_DEFINE_TYPE_INFO_IS_REQUIRED */
 
 /*
@@ -4380,6 +4405,28 @@ EXTERN_THREAD a_boolean
 		add_match_notes;
 			/* TRUE if notes should be added to error messages
 			   describing failures to match overload sets. */
+
+/*
+Requirements of the CIR back end that depend on macros defined throughout
+this header.  (DO_IL_LOWERING, IL_SHOULD_BE_WRITTEN_TO_FILE and
+FREE_MEMORY_REGIONS_EARLY are checked where they are defined.)
+*/
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+#if COMPILE_MULTIPLE_TRANSLATION_UNITS
+ #error -- COMPILE_MULTIPLE_TRANSLATION_UNITS cannot be used with the CIR \
+           back end.
+#endif /* COMPILE_MULTIPLE_TRANSLATION_UNITS */
+#if !IA64_ABI
+ #error -- The CIR back end requires IA64_ABI.
+#endif /* !IA64_ABI */
+#if AUTOMATIC_TEMPLATE_INSTANTIATION
+ #error -- AUTOMATIC_TEMPLATE_INSTANTIATION cannot be used with the CIR back \
+           end.
+#endif /* AUTOMATIC_TEMPLATE_INSTANTIATION */
+#if !NEED_NAME_MANGLING
+ #error -- The CIR back end requires NEED_NAME_MANGLING.
+#endif /* !NEED_NAME_MANGLING */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 /* Conditionally close the "edg" namespace. */
 END_EDG_NAMESPACE

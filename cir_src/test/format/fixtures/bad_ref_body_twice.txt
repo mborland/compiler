@@ -1,0 +1,17 @@
+; expect: format completes G-id 4 twice
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  TY_RECORD_DECL 4 0 nil
+  TY_RECORD_BODY 4 8 8 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 1 4 nil nil nil 0
+  TY_RECORD_BODY 4 8 8 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 1 4 nil nil nil 0
+frame END
+  END 2 0

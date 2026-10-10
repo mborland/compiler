@@ -1,0 +1,6 @@
+; Record layouts built from the front-end facts of 69 tricky C records match
+; clang's CIRGen exactly (member kinds and types, packed/padded, bit-field
+; units, global alignment, cir.record_layouts).  The facts come from
+; clang -fdump-record-layouts; zero-width bit-fields from the AST.
+; RUN: %python %scripts/cir-layout-compare.py --clang %clang --ecil-asm %ecil-asm --edg-cir %edg-cir %S/layout/corpus.c | %FileCheck %s
+; CHECK: 69 records, 0 differ

@@ -1,0 +1,185 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --gcc Test_name.c
+ecil 0.4 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 201112 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FLOAT 4 3 8 8
+  TY_FUNC 5 1 0 [1, 4]
+  STR 5 "callee"
+  DECL_FUNC 6 5 0 0 5
+  DECL_FUNC 6 5 0 1 5
+  STR 6 "x"
+  STR 7 "y"
+  STR 8 "ext"
+  DECL_FUNC 7 5 0 0 8
+  TY_PTR 8 5
+  STR 9 "fp"
+  DECL_VAR 9 8 0 0 0 9
+  FUNC_BEGIN 6 0
+  PARAM 1 1 1 6 0
+  PARAM 2 4 4 7 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  CALL 7 5 2 0
+  GREF 9
+  LOAD 0
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  CALL_INDIRECT 5 2 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 10 1 0 [1]
+  STR 10 "varcalls"
+  DECL_FUNC 11 10 0 0 10
+  DECL_FUNC 11 10 0 1 10
+  STR 11 "n"
+  TY_INT 12 8 true 1 1
+  TY_PTR 13 12
+  TY_FUNC 14 1 1 [13]
+  STR 12 "vfn"
+  DECL_FUNC 15 14 0 0 12
+  TY_ARRAY 16 12 5 0
+  STR 13 ".str"
+  DECL_VAR 17 16 2 11 0 13
+  C_STRING 16 "n=%d\x00"
+  VAR_INIT 17
+  TY_ARRAY 18 12 3 0
+  STR 14 ".str.1"
+  DECL_VAR 19 18 2 11 0 14
+  C_STRING 18 "%f\x00"
+  VAR_INIT 19
+  TY_FUNC 20 1 2 []
+  STR 15 "unproto"
+  DECL_FUNC 21 20 0 0 15
+  FUNC_BEGIN 11 0
+  PARAM 1 1 1 11 0
+  BLOCK_BEGIN
+  GREF 17
+  ADDR
+  ADDR_OFFSET 13 0
+  LREF 1
+  LOAD 0
+  CALL 15 14 2 1
+  GREF 19
+  ADDR
+  ADDR_OFFSET 13 0
+  CONST_FLOAT 4 f64:0x3ff8000000000000
+  CALL 15 14 2 1
+  ADD 1
+  LREF 1
+  LOAD 0
+  CONST_FLOAT 4 f64:0x4000000000000000
+  CALL 21 20 2 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FLOAT 22 2 4 4
+  STR 16 "kr"
+  DECL_FUNC 23 20 0 0 16
+  TY_FUNC 24 1 2 [1, 4]
+  DECL_FUNC 23 24 0 1 16
+  STR 17 "a"
+  STR 18 "b"
+  FUNC_BEGIN 23 0
+  PARAM 1 1 12 17 0
+  PARAM 2 4 22 18 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CAST 0 1
+  LREF 2
+  LOAD 0
+  CAST 7 1
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 25 1 1 [1]
+  STR 19 "sum"
+  DECL_FUNC 26 25 0 0 19
+  DECL_FUNC 26 25 0 1 19
+  STR 20 "__va_list_tag"
+  TY_RECORD_DECL 27 0 20
+  TY_INT 28 32 false 4 4
+  TY_VOID 29
+  TY_PTR 30 29
+  STR 21 "gp_offset"
+  STR 22 "fp_offset"
+  STR 23 "overflow_arg_area"
+  STR 24 "reg_save_area"
+  TY_RECORD_BODY 27 24 24 8 0 4
+  REC_FIELD 28 0 nil nil 21 0
+  REC_FIELD 28 4 nil nil 22 0
+  REC_FIELD 30 8 nil nil 23 0
+  REC_FIELD 30 16 nil nil 24 0
+  TY_ARRAY 31 27 1 0
+  STR 25 "ap"
+  STR 26 "s"
+  TY_PTR 32 27
+  FUNC_BEGIN 26 0
+  PARAM 1 1 1 11 0
+  BLOCK_BEGIN
+  LOCAL 2 31 25 0 0
+  LOCAL 3 1 26 0 0
+  LREF 3
+  C_INT 1 0
+  INIT_CONST
+  LREF 2
+  ADDR
+  CAST 12 32
+  VA_START
+  BLOCK_BEGIN
+  WHILE_BEGIN
+  LREF 1
+  INC_DEC 3 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  LREF 3
+  DUP
+  LOAD 0
+  LREF 2
+  ADDR
+  CAST 12 32
+  VA_ARG 1
+  ADD 1
+  STORE 0 0
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  LREF 2
+  ADDR
+  CAST 12 32
+  VA_END
+  LREF 3
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 9 8 0 33 0 9
+frame END
+  END 6 0

@@ -1,0 +1,73 @@
+# Filter list for edgy ("edgy @tests/.edgy/filters/<this file>"): one path
+# prefix per line, relative to the tests directory; "!" excludes.  Blank lines
+# and lines starting with "#" are ignored.
+#
+# The M2 C corpus of the CIR back end: the run and link tests (use with
+# "--types rp,lp") of the GNU C testsuite at the top level of
+# imported/gnu/c and in torture/, tree-ssa/ and ipa/.  Other subdirectories
+# (sanitizers, atomics, fixed point, decimal float, debug, ...) are excluded.
+imported/gnu/c/
+!imported/gnu/c/analyzer/
+!imported/gnu/c/asan/
+!imported/gnu/c/atomic/
+!imported/gnu/c/atomic-generic/
+!imported/gnu/c/atomic-lockfree/
+!imported/gnu/c/atomic-noinline/
+!imported/gnu/c/attr-weak-hidden-1/
+!imported/gnu/c/attr-weakref-1/
+!imported/gnu/c/attr-weakref-1-darwin/
+!imported/gnu/c/autopar/
+!imported/gnu/c/builtin-dynamic-object-size-5/
+!imported/gnu/c/c23-attr-reproducible-5/
+!imported/gnu/c/c23-attr-unsequenced-5/
+!imported/gnu/c/c23-constexpr-2a/
+!imported/gnu/c/c2x-constexpr-2a/
+!imported/gnu/c/charset/
+!imported/gnu/c/compat/
+!imported/gnu/c/cpp/
+!imported/gnu/c/debug/
+!imported/gnu/c/dfp/
+!imported/gnu/c/dll-10/
+!imported/gnu/c/dll-11/
+!imported/gnu/c/dll-12/
+!imported/gnu/c/dll-6/
+!imported/gnu/c/dll-7/
+!imported/gnu/c/dll-9/
+!imported/gnu/c/fixed-point/
+!imported/gnu/c/format/
+!imported/gnu/c/globalalias/
+!imported/gnu/c/goacc/
+!imported/gnu/c/gomp/
+!imported/gnu/c/graphite/
+!imported/gnu/c/guality/
+!imported/gnu/c/hwasan/
+!imported/gnu/c/localalias/
+!imported/gnu/c/lto/
+!imported/gnu/c/noncompile/
+!imported/gnu/c/params/
+!imported/gnu/c/pch/
+!imported/gnu/c/plugin/
+!imported/gnu/c/pr102892-1/
+!imported/gnu/c/pr31529-1/
+!imported/gnu/c/pr34003-1/
+!imported/gnu/c/pr34457-1/
+!imported/gnu/c/pr34668-1/
+!imported/gnu/c/pr38245-3/
+!imported/gnu/c/pr43557-1/
+!imported/gnu/c/pr51957-1/
+!imported/gnu/c/pr77587/
+!imported/gnu/c/rtl/
+!imported/gnu/c/sancov/
+!imported/gnu/c/sarif-output/
+!imported/gnu/c/simulate-thread/
+!imported/gnu/c/special/
+!imported/gnu/c/sso/
+!imported/gnu/c/tls/
+!imported/gnu/c/tm/
+!imported/gnu/c/tree-prof/
+!imported/gnu/c/tsan/
+!imported/gnu/c/ubsan/
+!imported/gnu/c/vect/
+!imported/gnu/c/vmx/
+!imported/gnu/c/vxworks/
+!imported/gnu/c/weak/

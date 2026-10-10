@@ -1,0 +1,9 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception */
+/* Only the C API is exported; everything else (LLVM, MLIR, clang, our C++)
+   stays local to the library. */
+EDG_CIR_1 {
+  global:
+    edg_cir_*;
+  local:
+    *;
+};

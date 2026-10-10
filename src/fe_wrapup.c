@@ -52,6 +52,17 @@ fe_wrapup.c - End of front end processing.
 #if BACK_END_TYPE == BACK_END_TYPE_CP_GEN
 #include "cp_gen_be.h"
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CP_GEN */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+#include "ecil_write.h"
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
+/* TRUE if the IL regions should be left intact after they are written or
+   streamed (for debugging, e.g. --il_display). */
+#if IL_SHOULD_BE_WRITTEN_TO_FILE
+#define KEEP_IL_REGIONS_FOR_DEBUGGING skip_il_read
+#else /* !IL_SHOULD_BE_WRITTEN_TO_FILE */
+#define KEEP_IL_REGIONS_FOR_DEBUGGING ecil_keep_regions
+#endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
 #if MICROSOFT_EXTENSIONS_ALLOWED
 #include "ms_metadata.h"
 #endif /* MICROSOFT_EXTENSIONS_ALLOWED */
@@ -809,6 +820,10 @@ and before the back end (if any) is executed.
   /* Finish writing the IL file, if there is one. */
   finish_il_file();
 #endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* Finish the ECIL stream (F_END, or nothing if it was aborted). */
+  ecil_stream_finish();
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
   /* Close the preprocessing output file, if needed. */
   close_output_file_with_error_handling(&f_pp_output, ec_preprocessing_output);
@@ -840,8 +855,8 @@ and before the back end (if any) is executed.
   /* Don't keep checking the stop token stack in db_enter/db_exit because
      the storage goes away when the front end memory region is freed. */
   curr_stop_token_stack_entry = NULL;
-#if IL_SHOULD_BE_WRITTEN_TO_FILE
-  if (skip_il_read) {
+#if IL_REGIONS_DISPOSED_INCREMENTALLY
+  if (KEEP_IL_REGIONS_FOR_DEBUGGING) {
     /* Leave the memory regions intact (mostly for debugging purposes). */
   } else {
     /* Free all memory regions.  Anything left in any of the IL memory regions
@@ -849,10 +864,10 @@ and before the back end (if any) is executed.
        end. */
     free_all_memory_regions();
   }  /* if */
-#else /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#else /* !IL_REGIONS_DISPOSED_INCREMENTALLY */
   /* Free front-end-only storage. */
   free_memory_region(FRONT_END_REGION_NUMBER);
-#endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#endif /* IL_REGIONS_DISPOSED_INCREMENTALLY */
 
   /* Clear the file index list maintained by the error routines (it was
      allocated in front-end storage). */
@@ -875,6 +890,10 @@ and after the back end (if any) is executed.
   /* Close the IL output file, be it a temporary or actual file. */
   close_il_output_file();
 #endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* Close the ECIL stream (after the back end has consumed it). */
+  ecil_stream_close();
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   /* Write a signoff message (with count of errors) if necessary. */
   write_signoff();
   /* Free the front end memory region, file-scope IL and all function scope
@@ -905,6 +924,9 @@ memory used by the compilation.
 #if IL_SHOULD_BE_WRITTEN_TO_FILE
   close_il_output_file();
 #endif /* IL_SHOULD_BE_WRITTEN_TO_FILE */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  ecil_stream_close();
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   error_cleanup();
   lexical_cleanup();
   modules_cleanup();

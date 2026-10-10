@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Measure peak memory (RSS) and wall time of the CIR front end on a big TU.
+
+For one input file, runs (each under GNU time, through eccp so that the
+options are the ones the tests use):
+
+  inproc      cpfe-cir streaming into the library, regions freed per function
+  keep        the same with --ecil_keep_regions (nothing freed)
+  2p-fe       cpfe-cir --ecil_output=<file> (the front end of the two-process
+              path)
+  2p-edg-cir  edg-cir --emit=asm on that file (the back end of the two-process
+              path)
+  cpfe        plain cpfe (the C-generating back end), for reference
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-cir (cpfe-cir; --fe-build selects another build, e.g.
+build/gcc-release-cir: the linux-gcc-release-cir preset, no ASan) and build/cir (edg-cir), and, for the cpfe row,
+build/gcc (cpfe):
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-rss big.c
+  edg-cir-rss --generate-functions 50000 -o big.c    # make an input first
+
+Output is a table of wall seconds and peak RSS in MB.
+'''
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+TIME_FORMAT = '%e %M'
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  '''Parse the `export NAME="value"` lines of a CMake environment.sh.'''
+  exports = {}
+  if not env_file.exists():
+    return exports
+  for line in env_file.read_text().splitlines():
+    match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+    if match:
+      exports[match.group(1)] = match.group(2)
+  return exports
+
+
+def generate_functions(count: int, out_path: Path) -> None:
+  '''Write a C file of count functions, with types and global data.'''
+  lines = [
+    'struct pt { int x; int y; };',
+    'struct box { struct pt lo, hi; int tag; };',
+    'int total;',
+    'int table[64] = { 1, 2, 3, 4, 5, 6, 7, 8 };'
+  ]
+  for index in range(count):
+    lines.append(
+      f"static struct box box_{index} = {{ {{ {index}, 1 }}, {{ 2, 3 }}, 7 }};"
+    )
+    lines.append(f"int f_{index}(int a, int b) {{")
+    lines.append(f"  int x = a * {index % 97 + 1} + b;")
+    lines.append(f"  struct box local = box_{index};")
+    lines.append('  int i;')
+    lines.append('  for (i = 0; i < 4; i++) {')
+    lines.append('    if (x > 100) x -= 7; else x += 3;')
+    lines.append('    x += table[(x + i) & 63] + local.lo.x;')
+    lines.append('  }')
+    if index > 0:
+      lines.append(f"  if (x == -1) x += f_{index - 1}(x, 1);")
+    lines.append('  total += x;')
+    lines.append('  return x;')
+    lines.append('}')
+  lines.append('int main(void) { return f_%d(1, 2) < 0; }' % (count - 1))
+  out_path.write_text('\n'.join(lines) + '\n')
+
+
+def run_timed(command: List[str], env: Dict[str, str], cwd: Path,
+              label: str) -> Tuple[Optional[float], Optional[float], int,
+                                   str]:
+  '''Run command under /usr/bin/time; return (seconds, MB, rc, stderr).'''
+  with tempfile.NamedTemporaryFile('r', suffix = '.time') as stats:
+    proc = subprocess.run(
+      ['/usr/bin/time', '-f', TIME_FORMAT, '-o', stats.name, *command],
+      cwd = cwd,
+      env = env,
+      stdout = subprocess.PIPE,
+      stderr = subprocess.STDOUT,
+      text = True
+    )
+    text = stats.read().strip().splitlines()
+  seconds: Optional[float] = None
+  megabytes: Optional[float] = None
+  if text:
+    parts = text[-1].split()
+    if len(parts) == 2:
+      seconds = float(parts[0])
+      megabytes = float(parts[1]) / 1024.0
+  return seconds, megabytes, proc.returncode, proc.stdout
+
+
+def make_wrapper(path: Path, body: str) -> Path:
+  path.write_text('#!/bin/sh\n' + body + '\n')
+  path.chmod(0o755)
+  return path
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(description = __doc__.split('\n')[0])
+  parser.add_argument('input', nargs = '?', help = 'the C file to compile')
+  parser.add_argument('--generate-functions', type = int, default = 0,
+                      help = 'write a generated input with this many '
+                             'functions to -o and exit')
+  parser.add_argument('-o', dest = 'output', default = 'big.c')
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir',
+                      help = 'build directory of the cpfe-cir to measure '
+                             '(build/gcc-release-cir: no ASan, '
+                             'OVERWRITE_FREED_MEM_BLOCKS off)')
+  parser.add_argument('--only', default = '',
+                      help = 'comma separated rows to run')
+  args = parser.parse_args()
+
+  if args.generate_functions:
+    generate_functions(args.generate_functions, Path(args.output))
+    print(f"wrote {args.output}")
+    return
+  if not args.input:
+    parser.error('an input file is required')
+
+  root = Path(args.root).resolve()
+  source = Path(args.input).resolve()
+  cir_env = load_exports(root / args.fe_build / 'environment.sh')
+  plain_env = load_exports(root / 'build/gcc/environment.sh')
+  cpfe_cir = cir_env.get('CPFE_CIR')
+  edg_cir = cir_env.get('EDG_CIR_TOOL')
+  rows = args.only.split(',') if args.only else [
+    'inproc', 'keep', '2p-fe', '2p-edg-cir', 'cpfe'
+  ]
+
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-rss.'))
+  results: List[Tuple[str, Optional[float], Optional[float], int]] = []
+  try:
+    base_env = dict(os.environ)
+    base_env.update(cir_env)
+    base_env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+    base_env['ECCP_LIBDIR'] = str(Path(cir_env.get('EDG_CIR_RT_LIBDIR', '')))
+    eccp = str(root / 'util/eccp.sh')
+    timed_fe = make_wrapper(
+      work / 'cpfe-cir-timed',
+      f"exec /usr/bin/time -f '{TIME_FORMAT}' -a -o {work}/fe.time "
+      f"{cpfe_cir} \"$@\""
+    )
+
+    def eccp_fe_only(env: Dict[str, str], extra: str = '') -> List[str]:
+      return [eccp, '-S', *extra.split(), str(source)]
+
+    for row in rows:
+      env = dict(base_env)
+      (work / 'fe.time').write_text('')
+      if row in ('inproc', 'keep'):
+        env['CPFE'] = str(timed_fe)
+        if row == 'keep':
+          env['EDG_CPFE_DEFAULT_OPTIONS'] = '--ecil_keep_regions'
+        proc = subprocess.run(eccp_fe_only(env), cwd = work, env = env,
+                              stdout = subprocess.PIPE,
+                              stderr = subprocess.STDOUT, text = True)
+        stats = (work / 'fe.time').read_text().strip().splitlines()
+        parts = stats[-1].split() if stats else []
+        results.append((row,
+                        float(parts[0]) if len(parts) == 2 else None,
+                        float(parts[1]) / 1024 if len(parts) == 2 else None,
+                        proc.returncode))
+      elif row == '2p-fe':
+        env['CPFE'] = str(timed_fe)
+        env['EDG_CPFE_DEFAULT_OPTIONS'] = f"--ecil_output={work}/x.ecil"
+        proc = subprocess.run(eccp_fe_only(env), cwd = work, env = env,
+                              stdout = subprocess.PIPE,
+                              stderr = subprocess.STDOUT, text = True)
+        stats = (work / 'fe.time').read_text().strip().splitlines()
+        parts = stats[-1].split() if stats else []
+        results.append((row,
+                        float(parts[0]) if len(parts) == 2 else None,
+                        float(parts[1]) / 1024 if len(parts) == 2 else None,
+                        proc.returncode))
+      elif row == '2p-edg-cir':
+        seconds, megabytes, rc, output = run_timed(
+          [edg_cir or 'edg-cir', '--emit=asm', '-o', str(work / 'x.s'),
+           str(work / 'x.ecil')], env, work, row
+        )
+        results.append((row, seconds, megabytes, rc))
+      elif row == 'cpfe':
+        cpfe = plain_env.get('CPFE')
+        if not cpfe or not Path(cpfe).exists():
+          print('cpfe row skipped: build/gcc/bin/cpfe is missing')
+          continue
+        env = dict(os.environ)
+        env.update(plain_env)
+        env['EDG_BASE'] = str(root / 'bases/docker/dev-env/gcc')
+        plain = make_wrapper(
+          work / 'cpfe-timed',
+          f"exec /usr/bin/time -f '{TIME_FORMAT}' -a -o {work}/fe.time "
+          f"{cpfe} \"$@\""
+        )
+        env['CPFE'] = str(plain)
+        proc = subprocess.run(eccp_fe_only(env), cwd = work, env = env,
+                              stdout = subprocess.PIPE,
+                              stderr = subprocess.STDOUT, text = True)
+        stats = (work / 'fe.time').read_text().strip().splitlines()
+        parts = stats[-1].split() if stats else []
+        results.append((row,
+                        float(parts[0]) if len(parts) == 2 else None,
+                        float(parts[1]) / 1024 if len(parts) == 2 else None,
+                        proc.returncode))
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+
+  lines = source.read_text().count('\n')
+  print(f"input: {source} ({lines} lines, "
+        f"{source.stat().st_size // 1024} KB)")
+  print(f"{'mode':<12} {'wall s':>8} {'peak RSS MB':>12} {'rc':>4}")
+  for row, seconds, megabytes, rc in results:
+    wall = f"{seconds:.2f}" if seconds is not None else 'n/a'
+    rss = f"{megabytes:.0f}" if megabytes is not None else 'n/a'
+    print(f"{row:<12} {wall:>8} {rss:>12} {rc:>4}")
+
+
+main()

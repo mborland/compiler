@@ -613,3 +613,369 @@ On the box (`~/edg-cir-writer`): `.tmp-sweep/m3tree` (patched copy),
 `build/w/m3/` (`hack.py`, `m3go.sh [-b] NAME...` runs a snippet on the box,
 `ilv.sh NAME FUNC [opts]` shows the unlowered IL of a function with
 `ilview.py`, `snips/`). Nothing under `src/` was modified for this document.
+
+## 6. S2 traversal design: ctors, dtors, lifetimes (cir-writer, planning note)
+
+Status: design only. No code is written until the orchestrator's go. It builds
+on the S1 writer (work stack `code_stack` in `ecil_code.c`, LIFO, children
+pushed above the parent, `done`/`phase` per item) and on the library side that
+cir-lib has implemented (cleanup scopes, region closing, FULLEXPR spill,
+conditional cleanups, `__retval` routing, `ARRAY_CTOR`/`ARRAY_DTOR`,
+`STRUCTOR` C1 strategy, `MEMINIT` markers). The contract is `ecil_format.md`
+§11.4 to §11.6 and §11.8. IL facts below were re-probed on the Mac cpfe-cp
+(`build/w/s1/s2a.cpp`).
+
+### 6.1 Additional IL facts (S2 probes)
+
+- **`init_expr_lifetime` replaces `enk_object_lifetime` for initializers.**
+  `int r = mk().v;` has no `enk_object_lifetime`. The full-expression
+  lifetime hangs on the variable's `dynamic_init` (`init_expr_lifetime`,
+  kind `olk_expr_temporary`); the temporaries inside it are `enk_temp_init`
+  with `destructor`, `has_temporary_lifetime=TRUE` and `lifetime` = that
+  lifetime. `enk_object_lifetime` (il_def.h:13592) occurs only at the top of
+  an expression statement, a return value, a condition, a `for` step and
+  similar, never nested, so FULLEXPR never nests.
+- **Locals.** `stmk_init` carries `di->destructor` and `di->lifetime`
+  (block). `dik_constructor` carries the constructor routine and `args`;
+  `dik_class_result_via_ctor` carries the call. No `enk_object_lifetime`
+  wraps a variable initializer; the FULLEXPR comes from `init_expr_lifetime`
+  when it is non-NULL (it may exist for an initializer that has no
+  temporaries: open a FULLEXPR only if the lifetime has a destruction list).
+- **Lifetime extension** (`const M &r = mk();`): the `enk_temp_init` has
+  `lifetime` = the block lifetime (kind `olk_block`), `has_temporary_lifetime`
+  FALSE, and sits in the block's destruction list, not in an expression
+  lifetime. This is the rule: a temporary whose `lifetime->kind != olk_expr_
+  temporary` is extended.
+- **Expression statement `mk();`** is `enk_object_lifetime` over
+  `enk_temp_init` with `result_is_not_used` (class has a destructor), or a
+  bare call (no destructor). The temporary needs a cleanup, so the DROP rule
+  of §11.6 applies: materialize.
+- **Condition variables.** `enk_condition` (scope, `dynamic_init`, `expr`) at
+  the top of an `if`/`while`/`for`/`switch` expression.
+- **Ctor inits** (D probe): list in construction order: `cik_direct_base_class`
+  (explicit `B(1)`, `destructor` set = EH-only), `cik_field` with
+  `compiler_generated` and `dik_constructor` (default-constructed member, has
+  `destructor` = EH-only), `cik_field` with `use_field_initializer` and no
+  `initializer` (NSDMI: the expression is `field->initializer` and refers to
+  `this` through `enk_param_ref`), and no entry for a trivially constructible
+  member without NSDMI. A delegating constructor has one `cik_delegation`
+  entry whose `initializer` is `dik_constructor` with `value_initialization`
+  for `D(): ...`, `destructor` = the class destructor (EH-only).
+- **Destructor** (`~D`): `constructor_inits` lists the members and then the
+  bases in destruction order (member `m` before base `B`), each as `dik_none`
+  with `destructor`. Trivially destructible ones are absent. The cleanup list
+  for the body is these entries reversed (construction order), as §11.4 says.
+- **Arrays of objects** (`M arr[3]`): `dik_nonconstant_aggregate` ->
+  `ck_aggregate` -> `ck_init_repeat count=N` -> `ck_dynamic_init` (the element
+  construction, `destruction_is_for_partially_constructed_aggregate` marks the
+  EH-only inner entry). The block-level destruction entry is the whole array
+  (`destructor` = the element destructor).
+
+### 6.2 Declarations: STRUCTOR pairs and the C1 rule
+
+- `ecil_function_id(rout)` for a constructor or destructor returns the
+  *complete* variant G-id (C1/D1) and creates the *base* variant (C2/D2) in
+  the same step: two G-ids, names from `cir_structor_name` (S1), same type,
+  linkage and flags. The pair is kept in `an_ecil_gid_info` (a `partner` field
+  next to `entity`). The `STRUCTOR(g_complete, g_base, flags{dtor,
+  has_vbases=0})` record is sent right after the second DECL_FUNC.
+- Call sites use `g_complete` for variables, temporaries, `new` and
+  by-value arguments; `g_base` for base-class subobjects (MEMINIT base calls,
+  destructor-body base cleanups) and `ARRAY_*` element calls (§11.4). A
+  delegating-constructor call and a ctor-init call of a *member* use the
+  complete variant (members are complete objects).
+- The body is streamed under `g_base` only. A defined `g_base` makes the writer
+  declare `g_complete` with **the same linkage and flags as `g_base`**,
+  including DEFINED_HERE and COMDAT, although it has no body (orchestrator
+  clarification of §11.4). If the body is dropped as unsupported, **both**
+  declarations are re-issued (external, no COMDAT, unsupported), as
+  `ecil_reissue_function` does for plain functions: it takes the pair.
+- Late names and retraction apply to the pair as one entity (one NAME_BIND
+  per G-id, `RETRACT` for both).
+- Not in S2: D0 (deleting destructor; virtual only), virtual bases, `C4`.
+
+### 6.3 Work stack: new item kinds (no recursion)
+
+All traversals stay on `code_stack`; each new kind is a cursor, not a call.
+Item fields reused: `entry` (IL pointer), `cursor` (next sibling or index),
+`a/b/c` (lids, types, bit flags), `phase`.
+
+| Kind | Entry / cursor | Purpose |
+|---|---|---|
+| `cik_meminit` | `entry` = ctor scope, `cursor` = next `constructor-init` | Ctor prologue: one visit per FE entry (phases below). Pushed by `emit_function` before the body statement, so the body runs after the last group |
+| `cik_dtor_prologue` | `entry` = dtor scope, `cursor` = the reversed list | Pushes `CLEANUP_BEGIN(all)` groups before the body. The FE list is in destruction order; the writer walks it from the end (index loop over a small heap array filled once; no recursion) |
+| `cik_cleanup` | `a` = lid (or 0), `b` = destructor routine, `c` = kind/flags | Emits `CLEANUP_BEGIN kind g_dtor? / <object address> CALL D / CLEANUP_BODY`. Pushed *below* the init item so it runs when the construction is complete (LIFO) |
+| `cik_fullexpr` | `entry` = lifetime, `phase` | `FULLEXPR_BEGIN`, then the wrapped work item (pushed above), then `FULLEXPR_END`, then the extension cleanups collected inside (6.6) |
+| `cik_array` | `entry` = dynamic init / constant (element), `a` = elem type gid, `b` = count | `ARRAY_CTOR_BEGIN(fixed)` with the array glv pushed first, the element body (ctor call with the element pointer as `this`), `ARRAY_CTOR_END`; and `ARRAY_DTOR_*` for the cleanup |
+| (existing) `cik_init` | extended: `dik_constructor`, `dik_bitwise_copy`, `dik_zero` (+`ZERO_BYTES`) | see 6.5 |
+
+`cik_stmt` for `stmk_init`, `stmk_if/while/for/switch` (condition variables),
+`stmk_return` and `stmk_expr` gain phases, not kinds. A `pending_extended`
+array (heap, grown like `code_stack`) records lifetime-extended temporaries
+awaiting their cleanup at the end of the current statement; its depth is the
+number of extended temporaries of one statement, not the nesting depth.
+
+`CHECKING` high-water statistics (`ecil_code_stack_high`) and
+`callgraph_check.py` (0 cycles) remain the evidence of non-recursion; the
+new functions are straight-line per visit.
+
+### 6.4 Constructors (`cik_meminit`)
+
+Prologue of the base-variant body, after `PARAM(THIS)` and the user
+parameters, before the body block:
+
+```
+for each entry in construction order:
+  MEMINIT_BEGIN(kind, idx, flags)        idx = REC_FIELD index (strictly increasing)
+    <initialize the member/base>
+  MEMINIT_END
+  [CLEANUP_BEGIN(eh) <D call> CLEANUP_BODY]   after MEMINIT_END, function scope
+```
+
+- `kind`: `cik_direct_base_class` -> base (1); `cik_field` -> field (2);
+  `cik_delegation` -> delegation (3, `idx` 0, the only group);
+  `cik_virtual_base_class` -> diagnose (v1). Group flags: `compiler_generated`
+  from the entry, `default_member_init` for `use_field_initializer`.
+- Destination: base: `LREF this LOAD BASE_CAST(D,B,off,nonnull)` (a pointer,
+  the `this` of the base call); field: `LREF this LOAD DEREF FIELD D idx`
+  (glv). Constructor call for a member: `... ADDR <args> CALL C1`; for a base:
+  `... <args> CALL C2` with the base cast as object argument.
+- Initializer kinds: `dik_constructor` (call), `dik_bitwise_copy`/zero/constant
+  (store into the glv with `STORE(INIT)`, DSIZE for an overlapping subobject),
+  `dik_expression` (`STORE(INIT)`), `dik_nonconstant_aggregate` (an `AGG_INIT`
+  or `ARRAY_CTOR` for array members), `use_field_initializer` (NSDMI:
+  translate `field->initializer` with `enk_param_ref(0)` mapped to the lid of
+  `this`: `LREF this LOAD`; a new `do_expr` case).
+- Implicit copy/move constructors: `is_copy_constructor_with_implied_source`
+  on members, no `source` for bitwise members: the writer builds the source
+  subobject (the same field of the parameter: `LREF param LOAD DEREF FIELD`,
+  or a base cast of the parameter) and emits `LOAD` -> `STORE(INIT)` (DSIZE for
+  an overlapping subobject), or the member's copy-constructor call with the
+  source address.
+- `eh` cleanups: only for entries whose initializer has `destructor != NULL`
+  (EH-only, §2.9), including the delegation target. They are begun at function
+  scope after `MEMINIT_END` so they protect the later initializers and the
+  body; the v1 library drops them, the stream stays valid for M4.
+- Group count check (CHECKING): `idx` strictly increasing, delegation alone;
+  the unit harness gets a MEMINIT order case.
+- Gates retired: "constructor" and "constructor initializers". Kept: virtual
+  bases (`any_virtual_base_classes`), `cik_virtual_base_class`, function-try-
+  block constructors.
+
+### 6.5 Destructors (`cik_dtor_prologue`)
+
+For each entry of the (reversed) list, in construction order:
+`CLEANUP_BEGIN(all) <member: LREF this LOAD DEREF FIELD idx ADDR | base: LREF
+this LOAD BASE_CAST> CALL D1 (member) / D2 (base) CLEANUP_BODY`. Array members
+use `ARRAY_DTOR` in the cleanup body (`fixed`). Then the body block. The
+library runs the user body, then the member and base destructors in reverse,
+including early returns. D1 and D2 follow the pair rule of 6.2 (body streamed
+under D2). No code for trivially destructible members (absent in the IL).
+
+### 6.6 Locals, temporaries and full expressions
+
+1. **`stmk_init` with `destructor`** (`di->destructor != NULL`, not the NRVO
+   variable): phase 0 pushes, bottom to top: the cleanup item (6.3), then the
+   init item. Phase order on the stream: `[FULLEXPR_BEGIN]` (when
+   `di->init_expr_lifetime` has destructions) -> initializer -> `[FULLEXPR_END]`
+   -> extension cleanups -> `CLEANUP_BEGIN(all) <LREF var ADDR CALL D1>
+   CLEANUP_BODY`. The destination glvalue is pushed *inside* the FULLEXPR
+   (values pushed before FULLEXPR_BEGIN are not consumed inside): so the
+   `LREF var` of `cik_init` is emitted after `FULLEXPR_BEGIN`.
+2. **`enk_object_lifetime`** (statement, return, condition): `cik_fullexpr`
+   emits `FULLEXPR_BEGIN`, translates the child, `FULLEXPR_END`. The child's
+   value (scalar or glvalue) is carried out; a record prvalue is never carried
+   out (consumed by `STORE INIT` or `DROP` inside).
+3. **`enk_temp_init` with `destructor`** (temporary, by-value argument, object
+   of a member call): `LOCAL(TEMPORARY)`, construct it (`dik_constructor`:
+   `LREF t ADDR <args> CALL C1`; `dik_class_result_via_ctor`: `STORE(INIT)`
+   as in S1), then `cik_cleanup` right away (the temporary is complete), then
+   the use (`LREF t` + `LOAD` for a NONTRIVIAL_ABI by-value argument, `ADDR`
+   for an object argument). Cleanups close at `FULLEXPR_END` in reverse
+   construction order, which is the IL's `destructions` order reversed; the
+   writer relies on emission order, not on the IL list (`unordered` flags
+   need no pre-scan, §1.3).
+4. **Conditional temporaries.** `inside_conditional_expression` (and, more
+   simply, "the construction is inside a TERN arm or a `&&`/`||` right
+   operand") is tracked by a depth counter in the items. The cleanup is still
+   `CLEANUP_BEGIN(all)` at the construction: the library defers it to the
+   enclosing FULLEXPR with a flag (spike 3). The writer's obligation: there is
+   always an enclosing FULLEXPR (the IL guarantees one via
+   `enk_object_lifetime`/`init_expr_lifetime`); if a conditional cleanup
+   would arise with none, diagnose.
+5. **`DROP`** of a prvalue of a class with `NONTRIVIAL_DTOR`: materialize it
+   (the `LOCAL(TEMPORARY)` of step 3), and the cleanup destroys it at
+   `FULLEXPR_END`: `mk();` becomes `FULLEXPR_BEGIN LOCAL t; LREF t <call>
+   STORE(INIT) CLEANUP_BEGIN... FULLEXPR_END`. Without `NONTRIVIAL_DTOR` the
+   S1 rule stays (call, `DROP`).
+6. **Lifetime extension.** A temporary with `lifetime->kind == olk_block` is
+   built inside the FULLEXPR like any other, but its `cik_cleanup` is
+   deferred: pushed onto `pending_extended` and emitted after `FULLEXPR_END`
+   of the statement (or after the init if there is no FULLEXPR), i.e. at
+   block scope, so it lives until the end of the block. Conditional
+   extension (`inside_conditional_expression` with a block lifetime) is
+   diagnosed "unsupported" (§11.5).
+7. **By-value arguments** are destroyed by the caller (item 3, confirmed in S1
+   on the callee/caller IL pair): the callee never pushes a cleanup for a
+   parameter, so `check_cxx_function`'s parameter handling does not change.
+8. **Condition variables** (`enk_condition`): `if`/`switch`: wrap the statement
+   in `BLOCK_BEGIN ... BLOCK_END`: `LOCAL`, init, `CLEANUP_BEGIN`, the
+   condition value from `enk_condition.expr`, then the statement. `while`:
+   `WHILE_BEGIN CONST_INT 1 TO_BOOL WHILE_BODY BLOCK_BEGIN <decl, init,
+   cleanup> <cond> TO_BOOL LOG_NOT IF_BEGIN BREAK_STMT IF_END <body>
+   BLOCK_END WHILE_END`. `for` with a condition declaration:
+   `FOR_BEGIN <init> FOR_COND false FOR_STEP <step?> FOR_BODY BLOCK_BEGIN
+   <decl, init, cleanup> <cond> LOG_NOT IF_BEGIN BREAK_STMT IF_END <body>
+   BLOCK_END FOR_END` (the per-iteration destruction comes from the block).
+   `continue` inside the body targets the loop and runs the block cleanups;
+   `break` likewise. These are phases of `do_stmt`, the body is pushed as a
+   child item.
+9. **Arrays of class objects**: `M arr[N]` with a constructor: after `LOCAL`,
+   `LREF arr` then `ARRAY_CTOR_BEGIN(t_elem, fixed)` body `CALL C1` (`this` =
+   the element pointer, pushed by the consumer) `ARRAY_CTOR_END`; the cleanup
+   is `CLEANUP_BEGIN(all) LREF arr ARRAY_DTOR_BEGIN(fixed) CALL D1
+   ARRAY_DTOR_END CLEANUP_BODY`. Multi-dimensional: `t_elem` innermost, count =
+   total. Element initializers with different values per element
+   (`ck_aggregate` of distinct `ck_dynamic_init`) use element-wise AGG_SEL
+   constructor calls (no ARRAY_CTOR). Partial-construction cleanups are not
+   sent (v1).
+
+### 6.7 Returns, NRVO runtime path, bitwise and zero initialization
+
+- **Return of a constructor-built or class-valued expression** uses
+  `RETURN_SLOT ... RETURN_FROM_SLOT` (S1 shapes). `dik_constructor`:
+  `RETURN_SLOT ADDR <args> CALL C1 RETURN_FROM_SLOT`. When the returned
+  expression carries temporaries (`enk_object_lifetime` or
+  `return_dynamic_init->init_expr_lifetime`): `FULLEXPR_BEGIN RETURN_SLOT
+  <expr> STORE(INIT) FULLEXPR_END RETURN_FROM_SLOT`; the slot is pushed inside
+  the FULLEXPR. A scalar return with temporaries is `FULLEXPR_BEGIN <expr>
+  FULLEXPR_END RETURN_STMT(true)` (the value is carried out).
+- **NRVO runtime path.** The `LOCAL(RETURN_SLOT)` variable is constructed in
+  place by `dik_constructor` (`LREF v ADDR <args> CALL C1`) or
+  `STORE(INIT)` of a call; it gets no cleanup (the stream has no exceptions,
+  §2.8); every `return` is `RETURN_FROM_SLOT`. Other variables of the function
+  still get their cleanups: the library runs them before the return.
+- **`dik_bitwise_copy`**: `LOAD` of the source glvalue then `STORE(INIT)`
+  (`DSIZE` when the type has `data_size < size`, the S1 helper
+  `class_copy_flags`). **`dik_zero`** for a class with tail padding:
+  `INIT_ZERO` of the object, and `ZERO_BYTES(bytes)` for a potentially
+  overlapping base (the padding bytes beyond `data_size`).
+- `return_dynamic_init` with a destructor (`destructor != NULL` on the
+  return init): never for NRVO; otherwise the temporary lifetime is the
+  full expression of the return, so the same FULLEXPR rule applies.
+
+### 6.8 `dik_*` mapping table (S2)
+
+| IL | Stream |
+|---|---|
+| `dik_none` | nothing (a destruction-only entry) |
+| `dik_zero` | `LREF v INIT_ZERO` (+ `ZERO_BYTES` for an overlapping base) |
+| `dik_constant` | S1 (`INIT_CONST`) |
+| `dik_expression` | S1 (`STORE`, DSIZE via the helper) |
+| `dik_class_result_via_ctor` | S1 (`STORE(INIT)`), now with cleanup |
+| `dik_constructor` | `LREF v ADDR <args> CALL C1` (complete variant); explicit-copy/move forms pass the source address; `value_initialization` with a trivial default constructor is `INIT_ZERO` |
+| `dik_bitwise_copy` | 6.7 |
+| `dik_nonconstant_aggregate` | S1 `AGG_INIT_*`; class-array elements via `cik_array` |
+| `dik_lambda` | S4 |
+
+### 6.9 Gates after S2
+
+Retired: constructor / destructor definitions, constructor initializers,
+`di->destructor` of locals, temporaries with destructors, `enk_object_lifetime`,
+`dik_constructor`/`dik_bitwise_copy`, `return_dynamic_init` built by a
+constructor, class-array construction, condition variables. Kept
+diagnosed: virtual functions and calls, virtual bases, try/throw/function-try-
+block, `new`/`delete` (including free-on-throw), statics with dynamic
+initialization or destructors (S3), lambdas (S4), conditional lifetime
+extension, a conditional cleanup without an enclosing FULLEXPR.
+
+### 6.10 Implementation order and tests
+
+S2a STRUCTOR pairs and the C1 declaration rule (declaration-only goldens, an
+undefined constructor stays a declaration); S2b destructor bodies and
+`stmk_init` cleanups (locals, NRVO exemption, early return); S2c
+`FULLEXPR`/temporaries/DROP/lifetime extension/conditional temporaries;
+S2d constructor bodies (`cik_meminit`, NSDMI `enk_param_ref`, delegation,
+implicit copy/move, `eh` cleanups); S2e returns through the slot with
+cleanups, NRVO run; S2f condition variables; S2g class arrays. Each step ends
+with: Mac fast loop + `ecil-dump`, stackcheck (the cleanup records are
+stack-neutral and the checker will be extended for `CLEANUP_*`, `FULLEXPR_*`,
+`MEMINIT_*`, `ARRAY_*`), the C corpus stream identity check
+(`build/w/mac_cmp.sh`, expected 0 diffs), and goldens `writer-cxx-structors`,
+`-cleanups`, `-temporaries`, `-ctor-inits`, `-conditions`, `-arrays`,
+`-return-slot`, plus a run program per step compared with g++ (a constructor
+that prints, so order of construction/destruction is observable).
+
+### 6.11 Open points to confirm
+
+1. `ecil_function_id` returning the complete variant for call sites and the
+   base variant for subobjects: the S1 library's STRUCTOR decoding must accept
+   the base-variant G-id used as a plain callee (`CALL g_base`).
+2. `ARRAY_CTOR_BEGIN(fixed)` element-call `this` convention (the element
+   pointer is pushed for the body: the body is `CALL C1` with 1 argument).
+3. The FULLEXPR carry-out of a bool for `if (cond)` with temporaries: the
+   writer emits `TO_BOOL` inside or outside the FULLEXPR? Proposal: inside
+   (the carried value is the bool, a scalar prvalue).
+4. `RETURN_SLOT` inside a FULLEXPR (pushed again after `FULLEXPR_BEGIN`)
+   assumed legal: it addresses the same `__retval`.
+
+### 6.12 S2 as built (differences from 6.3)
+
+- No `cik_cleanup` or `cik_dtor_prologue` item kinds: the cleanups and the
+  destructor prologue are straight-line emission (`emit_cleanup`,
+  `emit_dtor_prologue`), run at the point where the object is complete. The
+  new item kinds are `cik_ctor_call` (operands and CALL of a constructor,
+  also used for aggregate members and `MEMINIT` calls), `cik_meminit` (the
+  constructor-initializer cursor) and `cik_var_init` (initialization of a
+  declared variable, shared by `stmk_init` and condition variables, with the
+  FULLEXPR and the cleanup). A `pending_cleanups` heap array holds
+  lifetime-extended temporaries.
+- A class temporary is also the storage a member call or member selection
+  uses (`CIF_GLV`): a record prvalue is never taken apart with EXTRACT.
+- Class `?:` initializing a variable (`master_entry`): a void `TERN` whose
+  arms are `LREF var <call> STORE(INIT)`; an lvalue `?:` is a TERN of
+  pointers with `DEREF` after it.
+- Arrays of objects use `ARRAY_CTOR`/`ARRAY_DTOR(fixed)` with the complete
+  variant (C1/D1) of the element calls (the elements are complete objects); explicit elements use `AGG_SEL` +
+  constructor calls.
+- `STRUCTOR` pairs: the complete variant (C1/D1) is the one `ecil_function_id`
+  returns, the base variant a `partner` G-id; the body is streamed under the
+  base variant, both are re-issued together.
+- Not done in S2 (diagnosed): constructors, destructors and calls of classes
+  with virtual functions (also inherited) or virtual bases; `new`/`delete`;
+  conditional lifetime extension; a class aggregate constant used as a
+  value.
+
+### 6.13 S3 and S4 as built
+
+- **Static storage duration.** A variable with a dynamic initializer or a
+  destructor is defined without `VAR_INIT` (a constant initializer that an
+  object with a destructor carries as a dynamic initialization becomes the
+  `VAR_INIT`) and has a `STATIC_INIT` in the body section of F_GLOBALS, in the
+  order of the file scope's `dynamic_inits` list, each with a fresh L-id space
+  (`ecil_stream_static_init`, the `cik_var_init` item in static mode). It is
+  `GUARDED` if it is a static local or has vague linkage; a failure truncates
+  the region and re-issues the definition as unsupported. A destructor is
+  registered by `CLEANUP_BEGIN(exit, g)`; a temporary that a static reference
+  extends is an internal `_ZGR<name>[seq]_` definition constructed by its
+  owner's `STATIC_INIT`.
+- **new and delete** (`cik_new`): the allocation call, the cookie
+  (`NEW_ARRAY_SIZE`/`NEW_ARRAY_COOKIE` with the FE's padding rule), `DUP`
+  of the object pointer for the constructor, the initializer or
+  `ARRAY_CTOR`; `DELETE` with the operator the front end names or the one it
+  folded into the destructor. A non-throwing allocation function, a destroying
+  delete and the delete of an object with a virtual destructor are
+  diagnosed.
+- **Lambdas:** a closure object is built by `dik_lambda` (an aggregate of the
+  captures) or `enk_lambda` (a temporary); call operators are ordinary member
+  functions in their region. The static invoker of a non-capturing lambda is
+  synthesized after the function being translated (and for file-scope
+  references after F_GLOBALS): it calls the call operator with a null object
+  pointer, has the call operator's linkage and COMDAT, and works for generic
+  lambdas.
+- **RETRACT:** at the file-scope hand-off, for template instances that were
+  instantiated only to deduce a return type, per the front end's own rule
+  (`routine_instance_is_not_needed`), if internal, linkonce_odr or
+  unsupported. `extern template` members that the front end instantiated
+  anyway (inline) are not retracted.
+- Explicit instantiation definitions of static data members are weak_odr.

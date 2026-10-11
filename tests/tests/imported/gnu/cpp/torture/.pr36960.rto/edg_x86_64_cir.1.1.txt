@@ -1,0 +1,30 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 10: warning: CIR back end: the body of "Middle" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+      Middle(const int& ref) : Lower(ref) { }
+                                            ^
+
+"Test_name.c", line 13: warning: CIR back end: the body of "Upper" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+      Upper(const int& ref) : Lower(ref), Middle(ref) { }
+                                                        ^
+
+"Test_name.c", line 14: warning: CIR back end: the body of "get" uses a cast through an indirect base class, which the CIR back end does not support; the function is dropped
+      int get() { return ref; }
+                              ^
+
+"Test_name.c", line 24: warning: CIR back end: the body of "main" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN6MiddleC1ERKi' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6MiddleC2ERKi' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN5UpperC1ERKi' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN5UpperC2ERKi' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN5Upper3getEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

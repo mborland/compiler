@@ -1,0 +1,47 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"./cpp0x/bad_array_new1.C", line 17: warning: CIR back end: the body of "exception" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    catch (std::bad_array_new_length) { return 0; }
+           ^
+          detected during implicit generation of "std::bad_array_new_length::bad_array_new_length(const std::bad_array_new_length &)" at line 17
+
+"./cpp0x/bad_array_new1.C", line 17: warning: CIR back end: the body of "bad_alloc" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    catch (std::bad_array_new_length) { return 0; }
+           ^
+          detected during implicit generation of "std::bad_array_new_length::bad_array_new_length(const std::bad_array_new_length &)" at line 17
+
+"./cpp0x/bad_array_new1.C", line 17: warning: CIR back end: the body of "bad_array_new_length" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    catch (std::bad_array_new_length) { return 0; }
+           ^
+          detected during implicit generation of "std::bad_array_new_length::bad_array_new_length(const std::bad_array_new_length &)" at line 17
+
+"./cpp0x/bad_array_new1.C", line 19: warning: CIR back end: the body of "main" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

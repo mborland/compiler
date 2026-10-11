@@ -25,10 +25,13 @@ the output of its commands (the .rt.tar.gz files of the run):
   RUN_FAIL     it compiled and linked, but the program failed (wrong exit
                status or output, or a signal)
   TIMEOUT      the test was killed after a timeout
+  KILLED       the compiler was killed by a signal without any message (a
+               timeout kill, the OOM killer): never excused, like LIB_CRASH
   OTHER        none of the above (look at --list OTHER)
 
 The M2 gate needs the smoke list to be 100% PASS and FE_CRASH and LIB_CRASH to
-be 0 over the corpus.
+be 0 over the corpus; a crash that also fails in the reference configuration
+(--reference) is counted separately as pre-existing.
 
 C++ tests (the M3 corpus, .cpp/.cc/... sources) are bucketed the same way, and
 a run that has any also prints:
@@ -66,7 +69,7 @@ from typing import Dict, List, Optional, Tuple
 
 BUCKETS = (
   'PASS', 'FE_CRASH', 'LIB_CRASH', 'LIB_ERROR', 'UNSUPPORTED', 'FE_DIAG',
-  'ASM_ERROR', 'LINK_ERROR', 'RUN_FAIL', 'TIMEOUT', 'OTHER'
+  'ASM_ERROR', 'LINK_ERROR', 'RUN_FAIL', 'TIMEOUT', 'KILLED', 'OTHER'
 )
 
 _CRASH_REGEX = re.compile(
@@ -173,6 +176,7 @@ class TestResult:
                message: str, variant: str = '',
                test_type: str = '') -> None:
     self.ref_fail = False
+    self.ref_status = ''
     self.path = path
     self.status = status
     self.bucket = bucket
@@ -247,6 +251,9 @@ def classify(status: str, compile_output: str,
     return 'PASS', ''
   if 'TIMEOUT' in base or 'KILLED' in base:
     return 'TIMEOUT', base
+  if base == 'ABORT' and not compile_output.strip():
+    # No diagnostic at all: the process was killed, it did not fail.
+    return 'KILLED', 'killed by a signal without a message'
   if _LIB_INTERNAL_REGEX.search(all_text):
     return 'LIB_CRASH', message_of(all_text, _LIB_INTERNAL_REGEX)
   if base in ('ABORT', 'CATASTROPHE') or _CRASH_REGEX.search(compile_output):
@@ -298,6 +305,22 @@ def load_config_results(config_dir: Path) -> List[TestResult]:
                                 case['status'].get('variant', ''),
                                 case['status'].get('type', '')))
   return results
+
+
+def crash_class(status: str) -> str:
+  '''ABORT or CATASTROPHE: the kind of crash a status records ("" if none).'''
+  base = status.split('--')[0].split('(')[0]
+  return base if base in ('ABORT', 'CATASTROPHE') else ''
+
+
+def excused_crash(result: TestResult) -> bool:
+  '''A crash that the reference has too: a front end crash of the same class
+  (ABORT: a signal or assertion, CATASTROPHE) in the recorded status.  A
+  library crash is never excused (the reference does not run the library),
+  nor is one in the writer or the back end shim (ecil_*, cir_be*).'''
+  return (result.bucket == 'FE_CRASH' and bool(crash_class(result.status)) and
+          crash_class(result.status) == crash_class(result.ref_status) and
+          not re.search(r'\b(?:ecil_\w+|cir_be\w*)\b', result.message))
 
 
 def cxx_feature(result: TestResult) -> str:
@@ -371,9 +394,16 @@ def print_summary(config: str, results: List[TestResult], top: int) -> None:
   if any(r.language == 'cxx' for r in results):
     print_cxx_tables(results, top)
 
-  gate = counts['FE_CRASH'] + counts['LIB_CRASH']
-  print(f"  gate: crashes/assertions = {gate} (must be 0); "
-        f"pass rate = {counts['PASS']}/{total}")
+  crashes = [r for r in results if r.bucket in ('FE_CRASH', 'LIB_CRASH')]
+  gate = sum(1 for r in crashes if not excused_crash(r))
+  preexisting = len(crashes) - gate
+  killed = sum(1 for r in results if r.bucket in ('KILLED', 'TIMEOUT'))
+  print(f"  gate: crashes/assertions = {gate} (must be 0)"
+        + (f", {preexisting} more pre-existing in the reference (the same "
+           f"front end crash there)" if preexisting else '')
+        + (f", {killed} killed or timed out (never excused)" if killed
+           else '') +
+        f"; pass rate = {counts['PASS']}/{total}")
   ref_fails = [r for r in results if r.ref_fail and r.bucket != 'PASS']
   if any(r.ref_fail for r in results) or ref_fails:
     comparable = total - len(ref_fails)
@@ -387,25 +417,39 @@ def print_summary(config: str, results: List[TestResult], top: int) -> None:
                     if ref_counts[b]))
 
 
-def load_reference_failures(reference_dir: Path) -> Dict[str, set]:
+def load_reference_failures(reference_dir: Path) -> Dict[str, Dict[str, str]]:
   '''Return the failing cases of a reference configuration.
 
   reference_dir is a tests/expectations/<config> directory, whose <suite>.log
   files list the cases whose status is not a plain pass.  The result maps
-  "<suite>/<path>", like the run's metadata, to the set of the options of its
-  failing cases (the third field of a line, like the case's "variant").
+  "<suite>/<path>", like the run's metadata, to the options of its failing
+  cases (the third field of a line, like the case's "variant") with their
+  status (the fourth field).
   '''
-  failing: Dict[str, set] = defaultdict(set)
+  failing: Dict[str, Dict[str, str]] = defaultdict(dict)
   for log_file in reference_dir.glob('*.log'):
     suite = log_file.stem
     for line in log_file.read_text(errors = 'replace').splitlines():
       parts = line.split(':')
       if len(parts) >= 4 and not parts[3].startswith('PASS'):
-        failing[f"{suite}/{parts[0]}"].add(parts[2])
+        failing[f"{suite}/{parts[0]}"][parts[2]] = parts[3]
   return failing
 
 
-def fails_in_reference(result: TestResult, reference: Dict[str, set]) -> bool:
+def reference_status(result: TestResult,
+                     reference: Dict[str, Dict[str, str]]) -> str:
+  '''The status the reference recorded for the case of a result ("" if none:
+  it passes there).'''
+  variants = reference.get(result.path)
+  if not variants:
+    return ''
+  if result.language == 'c':
+    return next(iter(variants.values()))
+  return variants.get(result.variant, '')
+
+
+def fails_in_reference(result: TestResult,
+                       reference: Dict[str, Dict[str, str]]) -> bool:
   '''Whether the case of a result also fails in the reference.
 
   A C test (one case) fails if its path is listed.  A C++ test has a case per
@@ -458,7 +502,7 @@ def main() -> None:
     sorted(p.name for p in run_dir.iterdir()
            if p.is_dir() and 'cir' in p.name)
   )
-  reference: Dict[str, set] = {}
+  reference: Dict[str, Dict[str, str]] = {}
   if args.reference and Path(args.reference).is_dir():
     reference = load_reference_failures(Path(args.reference))
   all_results: Dict[str, List[TestResult]] = {}
@@ -472,6 +516,7 @@ def main() -> None:
       results = [r for r in results if r.test_type in wanted]
     for result in results:
       result.ref_fail = fails_in_reference(result, reference)
+      result.ref_status = reference_status(result, reference)
     all_results[config] = results
     print_summary(config, results, args.top)
     if args.list_bucket:

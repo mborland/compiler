@@ -1,0 +1,155 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=A, S2=A, M1=int, M2=int]" at line 38
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=A, S2=B, M1=int, M2=const int]" at line 42
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=C, S2=D, M1=int, M2=const int]" at line 46
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=C, S2=D, M1=unsigned int, M2=unsigned int]" at line 50
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=C, S2=D, M1=int, M2=int]" at line 54
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=C, S2=D, M1=A, M2=B]" at line 58
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=C, S2=D, M1=double, M2=double]" at line 66
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=E, S2=F, M1=int, M2=int]" at line 78
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=E, S2=F, M1=int, M2=const int]" at line 82
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=G, S2=H, M1=double, M2=const volatile double]" at line 86
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=G, S2=H, M1=double, M2=double]" at line 90
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=H, S2=I, M1=const volatile double, M2=const double]" at line 94
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=H, S2=I, M1=double, M2=const double]" at line 98
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=J, S2=B, M1=int, M2=const int]" at line 106
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=J, S2=L, M1=int, M2=const int]" at line 114
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=B, S2=B, M1=const int, M2=const int]" at line 118
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=L, S2=B, M1=const int, M2=const int]" at line 122
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=U, S2=U, M1=int, M2=int]" at line 126
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=V, S2=V, M1=void (), M2=void ()]" at line 142
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=W, S2=W, M1=int, M2=int]" at line 146
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_corresponding_member" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_corresponding_member(M1 S1::*, M2 S2::*) noexcept [with S1=Z, S2=Z, M1=int, M2=const int]" at line 158
+
+"Test_name.c", line 160: warning: CIR back end: the body of "main" uses the constant "pointer-to-member constant", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1AS0_iiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1A1BiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DjjEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DiiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1D1A1BEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DddEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1E1FiiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1E1FiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1G1HdVKdEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1G1HddEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1H1IVKdKdEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1H1IdKdEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1J1BiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1J1LiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1BS0_KiS1_EbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1L1BKiS2_EbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1US0_iiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1VS0_FvvES1_EbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1WS0_iiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1ZS0_iKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

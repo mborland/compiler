@@ -1,0 +1,32 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"Test_name.c", line 28: warning: structured bindings are a C++17 feature
+        auto [b,c,d,e,f,g] = a;		// { dg-warning "structured bindings only available with" "" { target c++14_down } }
+             ^
+
+"Test_name.c", line 39: warning: structured bindings are a C++17 feature
+  	auto&[ h, i, j, k, l, m ] = a;	// { dg-warning "structured bindings only available with" "" { target c++14_down } }
+  	     ^
+
+"Test_name.c", line 64: warning: structured bindings are a C++17 feature
+        auto [b,c,d,e,f,g] { a };		// { dg-warning "structured bindings only available with" "" { target c++14_down } }
+             ^
+
+"Test_name.c", line 75: warning: structured bindings are a C++17 feature
+  	auto&[ h, i, j, k, l, m ] {a};	// { dg-warning "structured bindings only available with" "" { target c++14_down } }
+  	     ^
+
+"Test_name.c", line 100: warning: structured bindings are a C++17 feature
+        auto [b,c,d,e,f,g] ( a );		// { dg-warning "structured bindings only available with" "" { target c++14_down } }
+             ^
+
+"Test_name.c", line 111: warning: structured bindings are a C++17 feature
+  	auto&[ h, i, j, k, l, m ] (a);	// { dg-warning "structured bindings only available with" "" { target c++14_down } }
+  	     ^
+
+"Test_name.c", line 130: warning: CIR back end: the body of "main" uses a non-constant initializer element, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

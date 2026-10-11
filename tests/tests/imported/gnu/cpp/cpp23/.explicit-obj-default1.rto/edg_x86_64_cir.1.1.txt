@@ -1,0 +1,12 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++23 Test_name.c
+"./cpp23/explicit-obj-default1.C", line 30: warning: CIR back end: the body of "operator<=>" uses the initialization of an undeclared local variable, which the CIR back end does not support; the function is dropped
+    if (a_10 < b_10)
+             ^
+
+Warning: CIR back end: the unused definition of '_ZSt23__is_constant_evaluatedv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt21is_constant_evaluatedv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1SssERKS_S1_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,34 @@
+eccp -DTEST_NUMBER=2 -r -x -tused Test_name.c
+"Test_name.c", line 11: remark: destructor for base class "base1" (declared at line 6) is not virtual
+  struct base2: base1 {
+                ^
+
+"Test_name.c", line 16: remark: destructor for base class "base1" (declared at line 6) is not virtual
+  struct base3: base1 {
+                ^
+
+"Test_name.c", line 21: remark: destructor for base class "base2" (declared at line 11) is not virtual
+  struct derived: base2, base3 {
+                  ^
+
+"Test_name.c", line 21: remark: destructor for base class "base3" (declared at line 16) is not virtual
+  struct derived: base2, base3 {
+                         ^
+
+"Test_name.c", line 26: warning: CIR back end: the body of "f" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  extern void f() { throw derived(); }
+                                     ^
+
+"Test_name.c", line 35: warning: CIR back end: the body of "g" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 37: remark: return type "int" omitted in declaration of function "main"
+  main()
+  ^
+
+Error: CIR back end: the definition of '_Z1fv' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z1gv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+2 errors detected in the compilation of "Test_name.c".

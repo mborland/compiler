@@ -1,0 +1,16 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"Test_name.c", line 17: warning: CIR back end: the body of "main" uses this kind of address constant, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "r" uses this kind of address constant, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "r2" uses this kind of address constant, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'r' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'r2' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

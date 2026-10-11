@@ -1,5 +1,5 @@
 ; expect: format HAS_SUPP
-ecil 0.6 features=0x2
+ecil 1.0 features=0x2
 frame HEADER
   STR 1 "x"
   .raw c7 02 01 c3

@@ -1,0 +1,4 @@
+./a.out
+after join: ctors=3 dtors=3
+main: ctors=4 dtors=3 id=4
+at exit: ctors=4 dtors=4

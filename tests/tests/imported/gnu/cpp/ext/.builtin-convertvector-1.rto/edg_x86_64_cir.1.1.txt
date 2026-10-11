@@ -1,0 +1,65 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 18: warning: CIR back end: the body of "f1" uses the builtin operation "__builtin_convertvector", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void f1<N>(v4usi *, v4si *) [with N=0]" at line 82
+
+"Test_name.c", line 25: warning: CIR back end: the body of "f2" uses the builtin operation "__builtin_convertvector", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void f2(T *, v4si *) [with T=v4sf]" at line 88
+
+"Test_name.c", line 32: warning: CIR back end: the body of "f3" uses the builtin operation "__builtin_convertvector", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void f3(v4si *, T *) [with T=v4sf]" at line 100
+
+"Test_name.c", line 39: warning: CIR back end: the body of "f4" uses the builtin operation "__builtin_convertvector", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void f4<N>(v4df *, v4si *) [with N=12]" at line 106
+
+"Test_name.c", line 39: warning: CIR back end: the body of "f4" uses the builtin operation "__builtin_convertvector", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void f4<N>(v4df *, v4si *) [with N=13]" at line 112
+
+"Test_name.c", line 46: warning: CIR back end: the body of "f5" uses the builtin operation "__builtin_convertvector", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void f5(T *, U *) [with T=v4si, U=v4df]" at line 118
+
+"Test_name.c", line 53: warning: CIR back end: the body of "f6" uses the builtin operation "__builtin_convertvector", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void f6(v256df *, T *) [with T=v256di]" at line 124
+
+"Test_name.c", line 60: warning: CIR back end: the body of "f7" uses the builtin operation "__builtin_convertvector", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void f7<N>(v256di *, v256df *) [with N=-1]" at line 130
+
+"Test_name.c", line 68: warning: CIR back end: the body of "f8" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void f8<N>(v4df *) [with N=5]" at line 134
+
+Error: CIR back end: the definition of '_Z2f1ILi0EEvPDv4_jPDv4_i' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z2f2IDv4_fEvPT_PDv4_i' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z2f3IDv4_fEvPDv4_iPT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z2f4ILi12EEvPDv4_dPDv4_i' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z2f4ILi13EEvPDv4_dPDv4_i' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z2f5IDv4_iDv4_dEvPT_PT0_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z2f6IDv256_xEvPDv256_dPT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z2f7ILin1EEvPDv256_xPDv256_d' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z2f8ILi5EEvPDv4_d' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+9 errors detected in the compilation of "Test_name.c".

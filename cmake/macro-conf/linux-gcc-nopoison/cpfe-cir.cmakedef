@@ -1,0 +1,6 @@
+# The linux-gcc debug configuration of cpfe-cir without the overwriting of
+# freed memory blocks: the same front end as linux-gcc, to tell whether the
+# output depends on what freed IL memory holds (edg-cir-poison-check).  Only
+# the preset linux-gcc-debug-cir-nopoison uses it.
+import <linux-gcc/cpfe-cir>
+OVERWRITE_FREED_MEM_BLOCKS=0

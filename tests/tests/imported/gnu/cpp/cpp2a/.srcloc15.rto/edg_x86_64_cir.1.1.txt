@@ -1,0 +1,18 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"Test_name.c", line 55: warning: CIR back end: the body of "S" uses the address of a non-string constant, which the CIR back end does not support; the function is dropped
+    {}
+     ^
+
+"Test_name.c", line 81: warning: variable "i" was declared but never referenced
+        int i= 0;
+            ^
+
+"Test_name.c", line 112: warning: CIR back end: the body of "bar" uses the address of a non-string constant, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 114: error: static assertion failed
+  static_assert (bar ());
+  ^
+
+1 error detected in the compilation of "Test_name.c".

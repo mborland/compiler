@@ -2,12 +2,12 @@
 # prefix per line, relative to the tests directory; "!" excludes.  Blank lines
 # and lines starting with "#" are ignored.
 #
-# cir-cpp-smoke: 53 small C++ run tests (use with "--types rp") for the M3
+# cir-cpp-smoke: 56 small C++ run tests (use with "--types rp") for the M3
 # (core C++) smoke list of the CIR back end, drawn from imported/gnu/cpp, edg/
 # and cwg/.  None uses exceptions, virtual functions, RTTI, member pointers,
 # coroutines, thread_local, inline assembly, vector or complex types, atomics,
 # or a library header (the GNU tests are preprocessed; these have no line
-# markers).  Each entry is a whole file name so that it matches exactly one
+# markers, except cpp1z/aligned-new3, which expands <new>).  Each entry is a whole file name so that it matches exactly one
 # test; the comment before it names the M3 feature it exercises.
 #
 # Features: classes/bases, ctor-initializers, dtors and cleanups, temporaries
@@ -38,12 +38,16 @@ imported/gnu/cpp/init/goto1.sft.cpp
 imported/gnu/cpp/opt/nrv3.sft.cpp
 # namespace-scope object: dynamic init and destructor registration, static data member
 imported/gnu/cpp/init/dtor3.sft.cpp
-# lifetime extension: reference bound to a member of a temporary
-imported/gnu/cpp/init/ref19.sft.cpp
+# const reference bound to a temporary made by a conversion operator (no copy)
+imported/gnu/cpp/init/ref22.sft.cpp
+# static const reference to a temporary: the destructor runs at exit
+imported/gnu/cpp/init/ref15.sft.cpp
 # lifetime extension: reference bound to an array element of a derived temporary
 imported/gnu/cpp/cpp0x/temp-extend1.sft.cpp
-# temporaries in mem-initializers of reference members (destroyed at end of the full-expression)
-imported/gnu/cpp/init/lifetime2.sft.cpp
+# const reference bound to a temporary of a class with a destructor (local and static)
+edg/rma/lifetime22.sft.cpp
+# destructor of a by-value argument and of a local at scope exit
+imported/gnu/cpp/init/cleanup4.sft.cpp
 # lifetime extension through calls of a static member function, operator->
 imported/gnu/cpp/init/lifetime3.sft.cpp
 # rvalue reference bound to a static_cast of a temporary
@@ -58,12 +62,14 @@ imported/gnu/cpp/opt/nrv9.sft.cpp
 imported/gnu/cpp/init/elide1.sft.cpp
 # non-trivially-copyable class passed by value (this-address identity)
 imported/gnu/cpp/init/byval1.sft.cpp
-# array element initialized from a temporary (copy ctor)
-imported/gnu/cpp/init/copy3.sft.cpp
+# copy ctor of a temporary class member passed by value (elision count)
+imported/gnu/cpp/init/elide2.sft.cpp
+# copy construction of a class with a class member and a bit-field base, new of a copy
+imported/gnu/cpp/init/copy5.sft.cpp
 # lambda capturing a class object (implicit copy and move ctors of the closure)
 imported/gnu/cpp/cpp0x/lambda/lambda-ctors.sft.cpp
-# conditional operator with class operands (derived and base), copy ctor
-imported/gnu/cpp/expr/cond6.sft.cpp
+# conditional expression as an array index
+imported/gnu/cpp/expr/cond1.sft.cpp
 # conditional expression with class lvalue operands, copy assignment of the result
 imported/gnu/cpp/expr/cond12.sft.cpp
 # guarded static local of class type in an inline function, namespace-scope dynamic init
@@ -80,8 +86,8 @@ imported/gnu/cpp/cpp0x/nsdmi-defer4.sft.cpp
 imported/gnu/cpp/init/new31.sft.cpp
 # new[]/delete[] of zero length for classes with and without ctors (cookies)
 imported/gnu/cpp/init/new42.sft.cpp
-# over-aligned new and delete
-imported/gnu/cpp/cpp1z/aligned-new6.sft.cpp
+# over-aligned new and delete through the library <new> (aligned operator new)
+imported/gnu/cpp/cpp1z/aligned-new3.sft.cpp
 # class-specific operator new with extra arguments (placement form)
 imported/gnu/cpp/init/new27.sft.cpp
 # placement new, delegating ctor, defaulted ctor, range-for over an array
@@ -110,8 +116,8 @@ imported/gnu/cpp/other/copy2.sft.cpp
 edg/rma/ctor_init06.sft.cpp
 # global arrays of classes (member of class type, base), static data members, ctor/dtor order
 edg/rma/ctor_array_init02.sft.cpp
-# break out of a for whose init declares a class object (cleanup on break)
-edg/rma/lifetime25.sft.cpp
+# switch fall-through between cases, break out of the switch (--strict)
+edg/rma/lifetime11.sft.cpp
 # guarded static local array of objects with a destructor
 edg/rma/init_static_local04.sft.cpp
 # static local in a destructor, temporaries in a global array initializer

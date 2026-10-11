@@ -196,6 +196,17 @@ body that uses a construct the CIR back end does not support).
 }  /* cir_be_warning */
 
 
+void cir_be_error(const char *message)
+/*
+Report that something that must exist in the object file could not be
+translated (a function with the constructor, destructor or used attribute: it
+is needed although nothing refers to it).  The compilation fails.
+*/
+{
+  str_error(ec_cir_error, message);
+}  /* cir_be_error */
+
+
 void cir_be_report_status(const char *what, int status)
 /*
 Report a failure of the CIR back end.  what describes the failing step.  A

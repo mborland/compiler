@@ -1,0 +1,52 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"./init/pm1.C", line 61: warning: CIR back end: the body of "C" uses the constant "pointer-to-member constant", which the CIR back end does not support; the function is dropped
+  C::C() : mp (&A::i) { gd.count++; }
+                                    ^
+
+"./init/pm1.C", line 67: warning: CIR back end: the body of "D" uses an operation on an unsupported scalar type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./init/pm1.C", line 88: warning: CIR back end: the body of "main" uses a value of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "gp_zero" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gp_dflt" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gp_cast" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gp_func" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gp_stat" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gp_impl" uses an operation on an unsupported scalar type, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gp_down" uses an operation on an unsupported scalar type, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of '_ZN1CC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1CC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1DC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1DC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gp_zero' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gp_dflt' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gp_cast' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gp_func' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gp_stat' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gp_impl' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gp_down' was dropped: it uses a construct the CIR back end cannot express
+
+12 errors detected in the compilation of "Test_name.c".

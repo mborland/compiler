@@ -101,6 +101,8 @@ Introduction checks (spec 7, id density): the writer verifies, from the
 records it writes, that G-ids and sids are introduced densely in increasing
 order at assignment time and that nothing it allocated is left unintroduced.
 */
+extern void ecil_check_begin_lids(void);
+
 extern void ecil_check_function_lids(uint32_t num_lids);
 
 extern void ecil_check_all_introduced(void);
@@ -253,6 +255,24 @@ typedef enum an_ecil_gid_kind {
 #define ECIL_GF_COMPLEX     0x80u   /* An opaque complex/imaginary type. */
 #define ECIL_GF_FAILED      0x100u  /* A record whose body could not be
                                        written (an unsupported member). */
+#define ECIL_GF_LATE_NAME   0x200u  /* Sent without a name that is still
+                                       to come (NAME_BIND). */
+#define ECIL_GF_NAME_BOUND  0x400u  /* The late name has been bound. */
+#define ECIL_GF_NEEDS_STATIC_INIT 0x1000u
+                                    /* A variable whose definition has a
+                                       STATIC_INIT (a dynamic initializer or
+                                       a destructor). */
+#define ECIL_GF_CONST_INIT  0x2000u /* ... with a constant (or no) initializer:
+                                       only its destructor is registered. */
+#define ECIL_GF_FUNCTION_LOCAL 0x800u
+                                    /* A routine of a function's memory
+                                       region: its IL entry is gone when
+                                       the file scope is complete. */
+
+/* The variant of a constructor or destructor G-id. */
+#define ECIL_VARIANT_NONE     0u
+#define ECIL_VARIANT_COMPLETE 1u  /* C1, D1: complete objects. */
+#define ECIL_VARIANT_BASE     2u  /* C2, D2: base subobjects. */
 
 /* Everything the writer remembers about a G-id. */
 typedef struct an_ecil_gid_info {
@@ -261,8 +281,10 @@ typedef struct an_ecil_gid_info {
   unsigned int  flags;            /* ECIL_GF_*. */
   unsigned int  bits;             /* Integers: width. */
   a_boolean     is_signed;
-  uint32_t      size;
+  uint64_t      size;
   uint32_t      align;
+  uint32_t      data_size;        /* Record: the data size sent (Itanium
+                                     dsize). */
   uint32_t      ref;              /* Pointer: pointee; array: element;
                                      function type: return type. */
   uint64_t      count;            /* Array: elements.  Record: members. */
@@ -275,6 +297,10 @@ typedef struct an_ecil_gid_info {
   unsigned int  decl_flags;
   unsigned int  decl_linkage;
   a_boolean     decl_emitted;
+  /* A constructor or destructor has two G-ids (spec 11.4): the complete
+     variant C1/D1 and the base variant C2/D2; each names the other. */
+  uint32_t      partner;
+  unsigned int  variant;          /* ECIL_VARIANT_*. */
 } an_ecil_gid_info;
 
 /* Why the current function or initializer cannot be expressed, or NULL.  The
@@ -393,6 +419,37 @@ extern void ecil_emit_decl_var(an_ecil_frame *frame,
                                uint32_t      alignment,
                                uint32_t      name_sid);
 
+/* Append the value of an integer constant (64 or 128 bits wide). */
+extern void ecil_arg_integer_constant(an_ecil_frame *frame,
+                                      a_constant_ptr c,
+                                      unsigned int  bits,
+                                      a_boolean     is_signed);
+
+/* The Itanium data size (dsize) of a type: its size, except for a non-POD
+   class, where tail padding is not counted (spec 11.3). */
+extern a_targ_size_t ecil_data_size_of_type(a_type_ptr type);
+
+/* Names of IL kinds for diagnostics (ecil_kind_names.h): NULL if unknown. */
+extern const char *ecil_expr_kind_name(int kind);
+extern const char *ecil_operator_name(int kind);
+extern const char *ecil_constant_kind_name(int kind);
+extern const char *ecil_builtin_operation_name(int kind);
+extern const char *ecil_statement_kind_name(int kind);
+
+/* Note why a use of a variable of a record type without a body cannot be
+   expressed. */
+extern void ecil_check_variable_use(uint32_t gid);
+
+/* Re-issue a variable whose definition is dropped (an unsupported
+   declaration). */
+extern void ecil_emit_dropped_decl_var(an_ecil_frame *frame,
+                                       uint32_t      gid,
+                                       uint32_t      type,
+                                       unsigned int  linkage,
+                                       unsigned int  flags,
+                                       uint32_t      alignment,
+                                       uint32_t      name_sid);
+
 extern uint32_t ecil_void_type(an_ecil_frame *frame);
 
 extern uint32_t ecil_bool_type(an_ecil_frame *frame);
@@ -407,7 +464,30 @@ extern uint32_t ecil_func_type_id(an_ecil_frame *frame,
 
 extern void ecil_complete_pending_records(an_ecil_frame *frame);
 
+extern void ecil_forget_local_pending_records(void);
+
+/* The static invokers of lambdas (spec 11.9): queued when first referenced,
+   synthesized into the frame after the function being translated. */
+extern void ecil_queue_invoker(a_routine_ptr entry_point);
+
+extern void ecil_drain_invokers(an_ecil_frame *frame);
+
+extern a_boolean ecil_invokers_pending(void);
+
+/* One dynamic initialization of the file scope (the body of F_GLOBALS). */
+extern void ecil_stream_static_init(an_ecil_frame *frame,
+                                    a_dynamic_init_ptr di);
+
 extern uint32_t ecil_function_id(an_ecil_frame *frame, a_routine_ptr rout);
+
+/* The G-id of the base variant (C2/D2) of a constructor or destructor, else
+   the routine's own (ecil_function_id returns the complete variant). */
+extern uint32_t ecil_function_base_id(an_ecil_frame *frame,
+                                      a_routine_ptr rout);
+
+/* The G-id whose body a routine's definition streams: the base variant of a
+   constructor or destructor, else gid itself. */
+extern uint32_t ecil_function_body_id(uint32_t gid);
 
 extern uint32_t ecil_array_of(an_ecil_frame *frame, uint32_t elem,
                               uint64_t count);
@@ -418,10 +498,24 @@ extern a_targ_alignment ecil_variable_alignment(a_variable_ptr var);
 
 extern void ecil_bind_symbol(uint32_t name_sid, uint32_t gid);
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+extern void ecil_cxx_variable_facts(an_ecil_frame *frame,
+                                    a_variable_ptr var,
+                                    a_boolean      defining,
+                                    unsigned int   *linkage,
+                                    unsigned int   *flags,
+                                    uint32_t       *name_sid);
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
+extern a_boolean ecil_variable_may_have_multiple_copies(a_variable_ptr var);
+
 extern uint32_t ecil_variable_symbol_gid(an_ecil_frame *frame,
                                          a_variable_ptr var);
 
 extern uint32_t ecil_variable_id(an_ecil_frame *frame, a_variable_ptr var);
+
+extern uint32_t ecil_global_variable_id(an_ecil_frame *frame,
+                                        a_variable_ptr var);
 
 extern void ecil_reissue_function(an_ecil_frame *frame,
                                   uint32_t      gid,
@@ -430,9 +524,29 @@ extern void ecil_reissue_function(an_ecil_frame *frame,
 
 extern a_boolean ecil_routine_is_filtered(a_routine_ptr rout);
 
+/* TRUE if the mangled name of a routine or variable may still change
+   (scope_stk.c): it is sent with a nil name and bound at the end. */
+extern a_boolean cir_name_may_change(a_source_correspondence *scp);
+
+/* C++ classes: passed and returned indirectly; has a non-trivial dtor. */
+extern a_boolean ecil_class_is_nontrivial_abi(a_type_ptr type);
+
+extern a_boolean ecil_class_has_nontrivial_dtor(a_type_ptr type);
+
 extern const char *ecil_entity_name(a_source_correspondence *scp);
 
 extern uint32_t ecil_intern_cstring(an_ecil_frame *frame, const char *text);
+
+extern const char *ecil_string_text(uint32_t sid);
+
+/* Late names (ecil_type.c): resolve the names that were not final when their
+   entities were sent (re-issuing declarations whose linkage changed), then
+   write the F_NAMES records. */
+extern void ecil_resolve_late_names(an_ecil_frame *frame);
+
+extern void ecil_emit_retractions(an_ecil_frame *frame);
+
+extern void ecil_emit_late_names(an_ecil_frame *frame);
 
 /* Constants, string literals and global variable definitions
    (ecil_const.c). */
@@ -466,6 +580,9 @@ typedef struct an_init_level {
   a_boolean     is_array;
   a_boolean     done;             /* A union that has its entry. */
   uint64_t      cur;              /* Index of the next member or element. */
+  uint64_t      lead;             /* Records: the entries (the base classes)
+                                     before the data members: the REC_FIELD
+                                     index of the first data member. */
   a_field_ptr   cur_field;        /* Records: the member at cur. */
   a_constant_ptr
                 next_const;       /* The next constant of the list. */
@@ -560,6 +677,13 @@ extern void ecil_emit_globals(an_ecil_frame *frame);
 extern void ecil_const_reset(void);
 
 extern void cir_be_warning(const char *message);
+
+/* The same for something that must exist although nothing refers to it: an
+   error. */
+extern void cir_be_error(const char *message);
+
+/* A variable that is needed although nothing refers to it (cir_be_error). */
+extern a_boolean ecil_variable_is_root(a_variable_ptr var);
 
 /* Function bodies (ecil_code.c). */
 

@@ -1,0 +1,52 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"./lookup/pr21802.C", line 24: warning: CIR back end: the body of "X" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    X () : m (1) { }
+                   ^
+
+"./lookup/pr21802.C", line 27: warning: CIR back end: the body of "operator>>" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual int operator>>(int x) { return m + x; }
+                                                  ^
+
+"./lookup/pr21802.C", line 34: warning: CIR back end: the body of "operator==" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+    friend int operator==(X o, int x) { return o.m + x; }
+                                                        ^
+
+"./lookup/pr21802.C", line 53: warning: CIR back end: the body of "operator&" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual int operator& () { return m + I; }
+                                             ^
+
+"./lookup/pr21802.C", line 59: warning: CIR back end: the body of "operator>>" uses a virtual function, which the CIR back end does not support; the function is dropped
+    int operator>>(int x) { return m + x + 1; }
+                                              ^
+
+"./lookup/pr21802.C", line 60: warning: CIR back end: the body of "operator&" uses a virtual function, which the CIR back end does not support; the function is dropped
+    int operator& () { return m + I + 1; }
+                                         ^
+
+"./lookup/pr21802.C", line 65: warning: CIR back end: the body of "operator==" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+    friend int operator==(Y o, int x) { return o.m + x + 1; }
+                                                            ^
+
+"./lookup/pr21802.C", line 66: warning: CIR back end: the body of "operator!=" uses a virtual base class, which the CIR back end does not support; the function is dropped
+    int operator!=(int x) { return m + x + 1; }
+                                              ^
+
+"./lookup/pr21802.C", line 76: warning: CIR back end: the body of "Y" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Y x;
+       ^
+          detected during implicit generation of "Y::Y()" at line 76
+
+"./lookup/pr21802.C", line 109: error: more than one operator "==" matches these operands:
+            function "operator==(Y, int)" (declared at line 65)
+            function "operator==(const Y &, int)" (declared at line 253)
+            operand types are: Y == int
+    { int t = x == I; 
+                ^
+"./lookup/pr21802.C", line 109: note: built-in operator==(<promoted arithmetic>, <promoted arithmetic>) does not match because argument #1 does not match parameter
+    { int t = x == I; 
+                ^
+"./lookup/pr21802.C", line 109: note: built-in operator==(<nullptr>, <nullptr>) does not match because argument #1 does not match parameter
+    { int t = x == I; 
+                ^
+
+1 error detected in the compilation of "Test_name.c".

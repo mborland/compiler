@@ -32,6 +32,9 @@ are visited, which breaks cycles.
 
 /* Additional header files. */
 #include "ecil_write.h"
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+#include "lower_name.h"
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 /* Defines builtin_libc_names: the libc/libm functions that are builtins,
    sorted and NULL-terminated, generated from the builtin tables. */
 #include "builtin_libc.h"
@@ -54,10 +57,16 @@ typedef struct a_type_work_item {
   enum an_type_phase
                 phase;
   a_boolean     ret_done;         /* Function: return type is known. */
+  a_boolean     this_done;        /* Function: this type is known. */
+  a_base_class_ptr
+                base_cursor;      /* Record: next direct base to visit. */
   a_param_type_ptr
                 param_cursor;     /* Function: next parameter to visit. */
   a_field_ptr   field_cursor;     /* Record: next field to visit. */
   a_boolean     promote_params;   /* Function: K&R promoted form. */
+  a_boolean     decl_only;        /* Record: only its declaration is needed
+                                     now (it is a pointee); the body comes
+                                     after the types in progress. */
 } a_type_work_item;
 
 /* A record declared while incomplete: its G-id and its IL type. */
@@ -78,7 +87,24 @@ STATIC_THREAD an_ecil_pending_record
 STATIC_THREAD size_t
                 num_pending_records;
 STATIC_THREAD size_t
+                num_deferred_records;  /* Pending only for the order. */
+STATIC_THREAD size_t
                 pending_records_capacity;
+
+/* A name bound at the end (NAME_BIND). */
+typedef struct a_late_binding {
+  uint32_t      gid;
+  uint32_t      sid;
+  unsigned int  linkage;
+} a_late_binding;
+
+STATIC_THREAD a_late_binding
+                *late_bindings;
+STATIC_THREAD size_t
+                num_late_bindings;
+STATIC_THREAD size_t
+                late_bindings_capacity;
+
 
 static void free_name_table(void);
 
@@ -89,11 +115,15 @@ Forget the writer's type state at the end of a compilation.
 {
   free(type_stack);
   free(pending_records);
+  free(late_bindings);
+  late_bindings = NULL;
+  num_late_bindings = late_bindings_capacity = 0;
   free_name_table();
   type_stack = NULL;
   pending_records = NULL;
   type_stack_size = type_stack_capacity = 0;
   num_pending_records = pending_records_capacity = 0;
+  num_deferred_records = 0;
 }  /* ecil_type_reset */
 
 
@@ -232,6 +262,31 @@ and remember its facts as the last ones emitted for the G-id.
   info->decl_name = name_sid;
   info->decl_emitted = TRUE;
 }  /* ecil_emit_decl_var */
+
+
+void ecil_emit_dropped_decl_var(an_ecil_frame *frame,
+                                uint32_t      gid,
+                                uint32_t      type,
+                                unsigned int  linkage,
+                                unsigned int  flags,
+                                uint32_t      alignment,
+                                uint32_t      name_sid)
+/*
+Re-issue a variable whose definition cannot be expressed as an unsupported
+declaration: it is no definition (no definition, tentative, COMDAT or guard
+flags), and a vague linkage becomes external as for a dropped function
+(spec 11.2).
+*/
+{
+  if (linkage == (unsigned int)elk_linkonce_odr ||
+      linkage == (unsigned int)elk_weak_odr) {
+    linkage = (unsigned int)elk_external;
+  }  /* if */
+  flags &= ~(unsigned int)(ECIL_DECL_VAR_DEFINITION | ECIL_DECL_VAR_TENTATIVE |
+                           ECIL_DECL_VAR_COMDAT | ECIL_DECL_VAR_GUARDED);
+  ecil_emit_decl_var(frame, gid, type, linkage,
+                     flags | ECIL_DECL_VAR_UNSUPPORTED, alignment, name_sid);
+}  /* ecil_emit_dropped_decl_var */
 
 
 /* Small introductions. */
@@ -429,7 +484,7 @@ layout.  One G-id per IL type entry.
     if (type->kind == tk_complex || type->kind == tk_imaginary) {
       info->flags |= ECIL_GF_COMPLEX;
     }  /* if */
-    info->size = (uint32_t)type->size;
+    info->size = (uint64_t)type->size;
     info->align = (uint32_t)(type->alignment == 0 ? 1 : type->alignment);
     saved = ecil_frame_enter_decl(frame);
     ecil_rec_begin(frame, eop_ty_opaque);
@@ -531,9 +586,12 @@ return NULL if the stack could not grow.
     item->type = skip_typerefs(type);
     item->phase = phase;
     item->ret_done = FALSE;
+    item->this_done = FALSE;
+    item->base_cursor = NULL;
     item->param_cursor = NULL;
     item->field_cursor = NULL;
     item->promote_params = FALSE;
+    item->decl_only = FALSE;
   } else {
     ecil_note_unsupported("out of memory in the ECIL writer");
   }  /* if */
@@ -553,17 +611,88 @@ known, since a qualified type shares the id of its unqualified type.
 }  /* known_type_id */
 
 
+static a_base_class_ptr record_direct_bases(a_type_ptr t);
+
+static a_boolean info_of_gid_is_bodyless_record(uint32_t gid)
+/*
+Return TRUE for a record that has been declared but whose body has not been
+sent (and did not fail).
+*/
+{
+  const an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+  return info->kind == egk_record &&
+         (info->flags & (ECIL_GF_COMPLETE | ECIL_GF_FAILED)) == 0 &&
+         info->entity != NULL;
+}  /* info_of_gid_is_bodyless_record */
+
+
+static a_boolean type_is_in_progress(a_type_ptr t)
+/*
+Return TRUE if a work item for the type is on the type stack: its body is
+being built (a record that a function type or a field mentions again must not
+be started a second time).
+*/
+{
+  size_t  i;
+  a_boolean  found = FALSE;
+
+  for (i = 0; i < type_stack_size && !found; i++) {
+    found = type_stack[i].type == t;
+  }  /* for */
+  return found;
+}  /* type_is_in_progress */
+
+
 static a_boolean need_type(a_type_ptr child)
 /*
 Return TRUE if the child type has an id; otherwise push it (and return FALSE)
 so the caller re-visits its own item afterwards.
 */
 {
-  a_boolean known = known_type_id(child) != 0;
+  uint32_t   gid = known_type_id(child);
+  a_boolean  known = gid != 0;
 
-  if (!known) (void)push_type(child, tph_start);
+  if (!known) {
+    (void)push_type(child, tph_start);
+  } else if (!C_mode() && info_of_gid_is_bodyless_record(gid)) {
+    /* A record that was only declared (a pointee seen first) is needed by
+       value: its body comes before its container's. */
+    a_type_ptr         t = skip_typerefs(child);
+    a_type_work_item   *item = (t->incomplete || type_is_in_progress(t)) ?
+                               NULL : push_type(t, tph_fields);
+
+    if (item != NULL) {
+      item->base_cursor = record_direct_bases(t);
+      item->field_cursor = t->variant.class_struct_union.field_list;
+      known = FALSE;
+    }  /* if */
+  }  /* if */
   return known;
 }  /* need_type */
+
+
+static a_boolean need_pointee(a_type_ptr child)
+/*
+Like need_type for the pointee of a pointer: a record only has to be
+declared (the pointer needs no body), so that a class that contains the
+pointer's own class by value does not wait for it (CRTP: E<B> has a W<B> member
+that points to B, and B derives from E<B>).  The body is sent after the
+types in progress (ecil_type_id).
+*/
+{
+  a_boolean  known = known_type_id(child) != 0;
+
+  if (!known) {
+    a_type_work_item  *item = push_type(child, tph_start);
+    a_type_ptr        t = skip_typerefs(child);
+
+    if (item != NULL && !C_mode() && is_immediate_class_type(t)) {
+      item->decl_only = TRUE;
+    }  /* if */
+  }  /* if */
+  return known;
+}  /* need_pointee */
 
 
 static uint32_t finish_pointer(an_ecil_frame *frame, a_type_ptr t)
@@ -603,7 +732,7 @@ is sent with a nil count.
 
       info->ref = elem;
       info->count = count;
-      info->size = (uint32_t)size;
+      info->size = (uint64_t)size;
       info->align = einfo->align;
       info->flags = einfo->flags & (ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE |
                                     ECIL_GF_FAILED);
@@ -693,10 +822,13 @@ parameter types (spec 8.2).
   a_param_type_ptr              p;
   a_boolean                     no_proto = !supp->prototyped;
   a_boolean                     list_params = !no_proto || promote_params;
+  a_boolean                     has_this = !C_mode() &&
+                                  routine_type_is_nonstatic_member_function(t);
 
   if (list_params) {
     for (p = supp->param_type_list; p != NULL; p = p->next) n++;
   }  /* if */
+  if (has_this) n++;
   key = (uint32_t *)malloc((n + 3) * sizeof(uint32_t));
   params = (uint32_t *)malloc((n + 1) * sizeof(uint32_t));
   if (key == NULL || params == NULL) {
@@ -706,6 +838,10 @@ parameter types (spec 8.2).
 
     if (supp->has_ellipsis) flags |= ECIL_FUNC_TYPE_VARIADIC;
     if (no_proto) flags |= ECIL_FUNC_TYPE_NO_PROTO;
+    if (has_this) {
+      /* The object pointer comes first (spec 11.3). */
+      params[i++] = known_type_id(f_implicit_this_param_type_of(t));
+    }  /* if */
     if (list_params) {
       for (p = supp->param_type_list; p != NULL; p = p->next) {
         uint32_t  pg = known_type_id(p->type);
@@ -783,31 +919,178 @@ Return TRUE if the field has no name.
 }  /* field_is_unnamed */
 
 
+static a_base_class_ptr record_direct_bases(a_type_ptr t)
+/*
+The first of the direct base classes of a C++ class in declaration order, or
+NULL (C records, and classes without bases).  The list of base classes also
+has the indirect ones: follow next_direct from here.
+*/
+{
+  a_base_class_ptr  bases = NULL;
+
+  if (!C_mode() && is_immediate_class_type(t) &&
+      class_type_supp(t) != NULL) {
+    bases = class_type_supp(t)->direct_base_classes;
+    while (bases != NULL && !bases->direct) bases = bases->next;
+  }  /* if */
+  return bases;
+}  /* record_direct_bases */
+
+
+a_targ_size_t ecil_data_size_of_type(a_type_ptr type)
+/*
+The Itanium C++ ABI data size of a type (dsize): the size, except for a class
+that is not POD for the purpose of layout, where it is the end of the last
+non-empty subobject: the vptr, a direct non-virtual base (by its own data
+size), or a data member (by its size, or by its data size for a
+[[no_unique_address]] member).  The front end's data_size_of_type recurses
+into every class-type member, which gives a short value for a member of a POD
+class type.  The data sizes of the subobject types are those sent already.
+*/
+{
+  a_type_ptr    t = skip_typerefs(type);
+  a_targ_size_t result = size_of_type(type);
+
+  if (!C_mode() && is_immediate_class_type(t) && !t->incomplete &&
+      class_type_supp(t) != NULL &&
+      !class_symbol_supp(symbol_for(t))->is_cpp03_POD) {
+    a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+    a_base_class_ptr             base;
+    a_field_ptr                  field;
+
+    result = 0;
+    if (t->variant.class_struct_union.any_virtual_functions &&
+        ctsp->virtual_function_info_base_class == NULL) {
+      result = (a_targ_size_t)ctsp->virtual_function_info_offset +
+               targ_sizeof_pointer;
+    }  /* if */
+    for (base = record_direct_bases(t); base != NULL;
+         base = base->next_direct) {
+      if (!base->is_virtual && !base->is_optimized_empty_base) {
+        uint32_t       bg = known_type_id(base->type);
+        a_targ_size_t  bsize = (bg != 0 && (ecil_gid_info(bg)->flags &
+                                            ECIL_GF_COMPLETE) != 0) ?
+                               ecil_gid_info(bg)->data_size :
+                               size_of_type(base->type);
+        a_targ_size_t  end = (a_targ_size_t)base->offset + bsize;
+
+        if (bsize != 0 && end > result) result = end;
+      }  /* if */
+    }  /* for */
+    for (field = t->variant.class_struct_union.field_list; field != NULL;
+         field = field->next) {
+      a_targ_size_t  size;
+      a_targ_size_t  end;
+
+      if (field->is_bit_field) {
+        size = (a_targ_size_t)((field->offset_bit_remainder +
+                                field->bit_size + 7) / 8);
+      } else if (field->has_no_unique_address_attribute &&
+                 is_immediate_class_type(field->type)) {
+        uint32_t  fg = known_type_id(field->type);
+
+        size = (fg != 0 && (ecil_gid_info(fg)->flags &
+                            ECIL_GF_COMPLETE) != 0) ?
+               ecil_gid_info(fg)->data_size : size_of_type(field->type);
+        if (field->is_optimized_empty_class) size = 0;
+      } else {
+        size = size_of_type(field->type);
+      }  /* if */
+      end = (a_targ_size_t)field->offset + size;
+      if (size != 0 && end > result) result = end;
+    }  /* for */
+  }  /* if */
+  return result;
+}  /* ecil_data_size_of_type */
+
+
+static uint32_t ecil_vptr_type(an_ecil_frame *frame)
+/*
+The G-id of the opaque pointer-sized type that stands for a vptr field.
+*/
+{
+  uint32_t  key[3];
+  uint32_t  gid;
+
+  key[0] = (uint32_t)egk_opaque;
+  key[1] = (uint32_t)targ_sizeof_pointer;
+  key[2] = 0x76707472u;                 /* "vptr". */
+  gid = ecil_word_lookup(key, 3);
+  if (gid == 0) {
+    gid = ecil_new_gid(egk_opaque);
+    if (gid != 0) {
+      an_ecil_gid_info  *info = ecil_gid_info(gid);
+      an_ecil_buffer    *saved;
+
+      info->flags = ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE;
+      info->size = (uint32_t)targ_sizeof_pointer;
+      info->align = (uint32_t)targ_sizeof_pointer;
+      ecil_word_register(key, 3, gid);
+      saved = ecil_frame_enter_decl(frame);
+      ecil_rec_begin(frame, eop_ty_opaque);
+      ecil_arg_uint(frame, gid);
+      ecil_arg_uint(frame, info->size);
+      ecil_arg_uint(frame, info->align);
+      ecil_rec_end(frame);
+      ecil_frame_leave_decl(frame, saved);
+    }  /* if */
+  }  /* if */
+  return gid;
+}  /* ecil_vptr_type */
+
+
 static void emit_record_fields(an_ecil_frame *frame, a_type_ptr t,
                                uint32_t gid)
 /*
 Emit TY_RECORD_BODY and the REC_FIELD records of a complete record whose
-field types all have ids; assign each field its member index.
+field types all have ids; assign each field its member index.  A C++ class
+lists its vptr (an opaque pointer-sized field) when it owns one, then its
+direct bases in declaration order, then its data members (spec 11.3); the
+members' indexes count the bases.
 */
 {
-  an_ecil_gid_info  *info = ecil_gid_info(gid);
+  an_ecil_gid_info  *info;
   a_field_ptr       field;
+  a_base_class_ptr  base;
+  a_base_class_ptr  bases = record_direct_bases(t);
   uint64_t          n = 0;
   uint64_t          idx = 0;
   unsigned int      body_flags = 0;
+  uint32_t          vptr_gid = 0;
+  a_targ_size_t     data_size = t->size;
   an_ecil_buffer    *saved;
 
   for (field = t->variant.class_struct_union.field_list; field != NULL;
        field = field->next) {
     n++;
   }  /* for */
+  if (!C_mode() && is_immediate_class_type(t) && class_type_supp(t) != NULL) {
+    a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+
+    for (base = bases; base != NULL; base = base->next_direct) n++;
+    if (t->variant.class_struct_union.any_virtual_functions &&
+        ctsp->virtual_function_info_base_class == NULL) {
+      vptr_gid = ecil_vptr_type(frame);
+      n++;
+    }  /* if */
+    data_size = ecil_data_size_of_type(t);
+    if (ecil_class_is_nontrivial_abi(t)) {
+      body_flags |= ECIL_RECORD_NONTRIVIAL_ABI;
+    }  /* if */
+    if (ecil_class_has_nontrivial_dtor(t)) {
+      body_flags |= ECIL_RECORD_NONTRIVIAL_DTOR;
+    }  /* if */
+  }  /* if */
   if (t->variant.class_struct_union.is_packed) {
     body_flags |= ECIL_RECORD_PACKED;
   }  /* if */
   if (t->variant.class_struct_union.contains_flexible_array_member) {
     body_flags |= ECIL_RECORD_FLEXIBLE_ARRAY;
   }  /* if */
+  info = ecil_gid_info(gid);
   info->count = n;
+  info->data_size = (uint32_t)data_size;
+  if (vptr_gid != 0) info->flags |= ECIL_GF_ABI_OPAQUE;
   /* Intern the names first: a STR must not fall between the body record and
      its REC_FIELD records. */
   for (field = t->variant.class_struct_union.field_list; field != NULL;
@@ -816,15 +1099,52 @@ field types all have ids; assign each field its member index.
       (void)ecil_intern_cstring(frame, field->source_corresp.name);
     }  /* if */
   }  /* for */
+  info = ecil_gid_info(gid);
   saved = ecil_frame_enter_decl(frame);
   ecil_rec_begin(frame, eop_ty_record_body);
   ecil_arg_uint(frame, gid);
   ecil_arg_uint(frame, (uint64_t)t->size);
-  ecil_arg_uint(frame, (uint64_t)t->size);
+  ecil_arg_uint(frame, (uint64_t)data_size);
   ecil_arg_uint(frame, (uint64_t)t->alignment);
   ecil_arg_uint(frame, body_flags);
   ecil_arg_uint(frame, n);
   ecil_rec_end(frame);
+  if (vptr_gid != 0) {
+    /* The vptr: an unnamed opaque field at the offset of the virtual
+       function information. */
+    ecil_rec_begin(frame, eop_rec_field);
+    ecil_arg_uint(frame, vptr_gid);
+    ecil_arg_uint(frame, (uint64_t)class_type_supp(t)->
+                                              virtual_function_info_offset);
+    ecil_arg_nil(frame);
+    ecil_arg_nil(frame);
+    ecil_arg_nil(frame);
+    ecil_arg_uint(frame, ECIL_FIELD_UNNAMED);
+    ecil_rec_end(frame);
+    idx++;
+  }  /* if */
+  for (base = bases; base != NULL; base = base->next_direct) {
+    uint32_t      bg = known_type_id(base->type);
+    unsigned int  flags = ECIL_FIELD_BASE | ECIL_FIELD_UNNAMED;
+
+    ecil_set_gid(base, (uint32_t)(idx + 1));
+    idx++;
+    if (bg != 0 && (ecil_gid_info(bg)->flags &
+                    (ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE)) != 0) {
+      /* A base with opaque storage (a vptr, a _BitInt member, ...) makes
+         the class ABI-opaque too (spec 8.11), whatever the depth. */
+      ecil_gid_info(gid)->flags |= ECIL_GF_ABI_OPAQUE;
+    }  /* if */
+    if (base->is_optimized_empty_base) flags |= ECIL_FIELD_EMPTY_FOR_ABI;
+    ecil_rec_begin(frame, eop_rec_field);
+    ecil_arg_uint(frame, bg);
+    ecil_arg_uint(frame, (uint64_t)base->offset);
+    ecil_arg_nil(frame);
+    ecil_arg_nil(frame);
+    ecil_arg_nil(frame);
+    ecil_arg_uint(frame, flags);
+    ecil_rec_end(frame);
+  }  /* for */
   for (field = t->variant.class_struct_union.field_list; field != NULL;
        field = field->next) {
     uint32_t      fg = known_type_id(field->type);
@@ -844,11 +1164,18 @@ field types all have ids; assign each field its member index.
     if (fg != 0) {
       an_ecil_gid_info  *finfo = ecil_gid_info(fg);
 
+      info = ecil_gid_info(gid);
       if (finfo->flags & (ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE)) {
         info->flags |= ECIL_GF_ABI_OPAQUE;
       }  /* if */
-      if (finfo->kind == egk_record && finfo->size == 0 &&
-          (finfo->flags & ECIL_GF_COMPLETE)) {
+      if (field->has_no_unique_address_attribute && !C_mode() &&
+          finfo->kind == egk_record) {
+        /* A [[no_unique_address]] member is laid out with the base-subobject
+           type; an empty one is empty for the ABI as well. */
+        flags |= ECIL_FIELD_POTENTIALLY_OVERLAPPING;
+        if (field->is_optimized_empty_class) flags |= ECIL_FIELD_EMPTY_FOR_ABI;
+      } else if (finfo->kind == egk_record && finfo->size == 0 &&
+                 (finfo->flags & ECIL_GF_COMPLETE) && C_mode()) {
         flags |= ECIL_FIELD_EMPTY_FOR_ABI;
       }  /* if */
       if (finfo->kind == egk_array && finfo->size == 0) {
@@ -877,25 +1204,44 @@ field types all have ids; assign each field its member index.
     ecil_rec_end(frame);
   }  /* for */
   ecil_frame_leave_decl(frame, saved);
-  info->flags |= ECIL_GF_COMPLETE;
+  ecil_gid_info(gid)->flags |= ECIL_GF_COMPLETE;
 }  /* emit_record_fields */
 
 
 static void emit_record_body(an_ecil_frame *frame, a_type_ptr t, uint32_t gid)
 /*
 Emit the body of a complete record whose field types all have ids, unless
-a member is a record that failed: then this record fails too (it keeps its
-declaration only, and uses that need it complete are unsupported).
+a member or base is a record that failed, or the class has a virtual base
+(M4): then this record fails too (it keeps its declaration only, and uses
+that need it complete are unsupported).
 */
 {
-  a_field_ptr  field;
-  a_boolean    failed = FALSE;
+  a_field_ptr       field;
+  a_base_class_ptr  base;
+  a_boolean         failed = FALSE;
 
+  if (!C_mode() && is_immediate_class_type(t) &&
+      t->variant.class_struct_union.any_virtual_base_classes) {
+    failed = TRUE;
+  }  /* if */
+  for (base = record_direct_bases(t); base != NULL && !failed;
+       base = base->next_direct) {
+    uint32_t  bg = known_type_id(base->type);
+
+    failed = bg != 0 && (ecil_gid_info(bg)->flags & ECIL_GF_FAILED) != 0;
+  }  /* for */
   for (field = t->variant.class_struct_union.field_list;
        field != NULL && !failed; field = field->next) {
     uint32_t  fg = known_type_id(field->type);
 
     failed = fg != 0 && (ecil_gid_info(fg)->flags & ECIL_GF_FAILED) != 0;
+    if (!failed && !C_mode() && field->has_no_unique_address_attribute &&
+        fg != 0 && is_union_type(field->type) &&
+        ecil_data_size_of_type(field->type) < ecil_gid_info(fg)->size) {
+      /* A union with reusable tail padding laid out as a base-subobject
+         type is not supported in v1 (spec 11.3). */
+      failed = TRUE;
+    }  /* if */
   }  /* for */
   if (failed) {
     ecil_gid_info(gid)->flags |= ECIL_GF_FAILED | ECIL_GF_ABI_OPAQUE;
@@ -981,12 +1327,8 @@ Process the work stack down to depth base.
           type_stack_size--;
           break;
         case tk_pointer:
-          if (t->variant.pointer.is_reference) {
-            ecil_set_gid(t, ecil_opaque_type(frame, t));
-            type_stack_size--;
-          } else {
-            type_stack[idx].phase = tph_children;
-          }  /* if */
+          /* A reference is a pointer to its referent (spec 11.3). */
+          type_stack[idx].phase = tph_children;
           break;
         case tk_array:
           if (t->variant.array.is_vla ||
@@ -1023,7 +1365,7 @@ Process the work stack down to depth base.
                           *saved;
 
             info->entity = t;
-            info->size = (uint32_t)t->size;
+            info->size = (uint64_t)t->size;
             info->align = (uint32_t)t->alignment;
             ecil_set_gid(t, gid);
             if (t->source_corresp.name != NULL) {
@@ -1044,11 +1386,13 @@ Process the work stack down to depth base.
             }  /* if */
             ecil_rec_end(frame);
             ecil_frame_leave_decl(frame, saved);
-            if (t->incomplete) {
+            if (t->incomplete || type_stack[idx].decl_only) {
+              if (!t->incomplete) num_deferred_records++;
               note_pending_record(gid, t);
               type_stack_size--;
             } else {
               type_stack[idx].phase = tph_fields;
+              type_stack[idx].base_cursor = record_direct_bases(t);
               type_stack[idx].field_cursor =
                                   t->variant.class_struct_union.field_list;
             }  /* if */
@@ -1061,7 +1405,7 @@ Process the work stack down to depth base.
       }  /* switch */
     } else if (type_stack[idx].phase == tph_children) {
       if (t->kind == tk_pointer) {
-        if (need_type(t->variant.pointer.type)) {
+        if (need_pointee(t->variant.pointer.type)) {
           idx = type_stack_size - 1;
           ecil_set_gid(t, finish_pointer(frame, t));
           type_stack_size--;
@@ -1077,15 +1421,27 @@ Process the work stack down to depth base.
         a_boolean complete = TRUE;
 
         if (!type_stack[idx].ret_done) {
-          if (need_type(t->variant.routine.return_type)) {
+          if (need_pointee(t->variant.routine.return_type)) {
             idx = type_stack_size - 1;
             type_stack[idx].ret_done = TRUE;
           } else {
             complete = FALSE;
           }  /* if */
         }  /* if */
+        if (complete && !type_stack[idx].this_done) {
+          if (!C_mode() && routine_type_is_nonstatic_member_function(t)) {
+            if (need_pointee(f_implicit_this_param_type_of(t))) {
+              idx = type_stack_size - 1;
+              type_stack[idx].this_done = TRUE;
+            } else {
+              complete = FALSE;
+            }  /* if */
+          } else {
+            type_stack[idx].this_done = TRUE;
+          }  /* if */
+        }  /* if */
         while (complete && type_stack[idx].param_cursor != NULL) {
-          if (need_type(type_stack[idx].param_cursor->type)) {
+          if (need_pointee(type_stack[idx].param_cursor->type)) {
             idx = type_stack_size - 1;
             type_stack[idx].param_cursor =
                                       type_stack[idx].param_cursor->next;
@@ -1102,6 +1458,15 @@ Process the work stack down to depth base.
       /* tph_fields: visit each field type, then emit the body. */
       a_boolean complete = TRUE;
 
+      while (complete && type_stack[idx].base_cursor != NULL) {
+        if (need_type(type_stack[idx].base_cursor->type)) {
+          idx = type_stack_size - 1;
+          type_stack[idx].base_cursor =
+                                  type_stack[idx].base_cursor->next_direct;
+        } else {
+          complete = FALSE;
+        }  /* if */
+      }  /* while */
       while (complete && type_stack[idx].field_cursor != NULL) {
         if (need_type(type_stack[idx].field_cursor->type)) {
           idx = type_stack_size - 1;
@@ -1150,6 +1515,12 @@ ecil_unsupported_reason set) if the type cannot be represented.
     if (push_type(type, tph_start) != NULL) run_type_stack(frame, base);
     gid = known_type_id(type);
     if (gid != 0 && skip_typerefs(type) != type) ecil_set_gid(type, gid);
+    if (base == 0 && num_deferred_records != 0 &&
+        ecil_unsupported_reason == NULL) {
+      /* Records that were only declared (pointees) get their bodies now. */
+      num_deferred_records = 0;
+      ecil_complete_pending_records(frame);
+    }  /* if */
   }  /* if */
   return gid;
 }  /* ecil_type_id */
@@ -1176,6 +1547,41 @@ Return TRUE if a member of the record has an _Atomic-qualified type.
 }  /* record_has_atomic_member */
 
 
+static a_boolean type_is_function_local(a_type_ptr type)
+/*
+Return TRUE for a class that lives in a function's memory region: local to a
+function, or nested in a class that is.
+*/
+{
+  a_boolean  local = type->source_corresp.is_local_to_function;
+
+  while (!local && type->source_corresp.is_class_member) {
+    type = parent_class_of(type);
+    local = type->source_corresp.is_local_to_function;
+  }  /* while */
+  return local;
+}  /* type_is_function_local */
+
+
+void ecil_forget_local_pending_records(void)
+/*
+A function's memory region is about to be freed: forget the incomplete
+records that were declared in it (they cannot be completed later, and their
+IL entries are gone).
+*/
+{
+  size_t  i;
+  size_t  kept = 0;
+
+  for (i = 0; i < num_pending_records; i++) {
+    if (!type_is_function_local(pending_records[i].type)) {
+      pending_records[kept++] = pending_records[i];
+    }  /* if */
+  }  /* for */
+  num_pending_records = kept;
+}  /* ecil_forget_local_pending_records */
+
+
 void ecil_complete_pending_records(an_ecil_frame *frame)
 /*
 Emit the body of every record that was declared incomplete and has been
@@ -1199,6 +1605,9 @@ record's an_ecil_gid_info is looked up again after it.
 
       if (t->incomplete) {
         pending_records[kept++] = pending_records[i];
+      } else if ((ecil_gid_info(gid)->flags &
+                  (ECIL_GF_COMPLETE | ECIL_GF_FAILED)) != 0) {
+        /* Its body was sent already (it was needed by value first). */
       } else if (has_bit_precise_bit_field(t) || record_has_atomic_member(t)) {
         ecil_gid_info(gid)->flags |= ECIL_GF_FAILED | ECIL_GF_ABI_OPAQUE;
       } else {
@@ -1206,6 +1615,7 @@ record's an_ecil_gid_info is looked up again after it.
         a_type_work_item  *item = push_type(t, tph_fields);
 
         if (item != NULL) {
+          item->base_cursor = record_direct_bases(t);
           item->field_cursor = t->variant.class_struct_union.field_list;
           run_type_stack(frame, base);
         }  /* if */
@@ -1266,6 +1676,73 @@ ignore_routine_in_back_end, which is FALSE without IL lowering).
 }  /* ecil_routine_is_filtered */
 
 
+static a_boolean class_copy_move_ctors_all_deleted(a_type_ptr type)
+/*
+Return TRUE if the class declares copy or move constructors and every one of
+them is deleted (Itanium C++ ABI 3.1.2.3: such a class is non-trivial for the
+purposes of calls).
+*/
+{
+  a_class_type_supplement_ptr ctsp = class_type_supp(type);
+  a_routine_ptr               rp;
+  a_boolean                   seen = FALSE;
+  a_boolean                   usable = FALSE;
+
+  if (ctsp != NULL && ctsp->assoc_scope != NULL) {
+    for (rp = ctsp->assoc_scope->routines; rp != NULL; rp = rp->next) {
+      a_type_qualifier_set  qualifiers;
+
+      if (rp->special_kind == (a_special_function_kind)sfk_constructor &&
+          is_copy_constructor(rp, type, &qualifiers, /*include_move_ctors=*/
+                              TRUE, /*is_declarative_context=*/FALSE)) {
+        seen = TRUE;
+        if (!rp->is_deleted) usable = TRUE;
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return seen && !usable;
+}  /* class_copy_move_ctors_all_deleted */
+
+
+a_boolean ecil_class_is_nontrivial_abi(a_type_ptr type)
+/*
+Return TRUE if the type is a class that is passed and returned indirectly:
+not bitwise copyable, a deleted or non-trivial destructor, or all copy and
+move constructors deleted (ECIL spec 11.3).  The type must be complete to
+answer TRUE.
+*/
+{
+  a_boolean                      result = FALSE;
+  a_class_symbol_supplement_ptr  cssp;
+
+  type = skip_typerefs(type);
+  if (is_immediate_class_type(type) && !type->incomplete &&
+      (cssp = symbol_supplement_for_class(type)) != NULL) {
+    result = !cssp->construction_by_bitwise_copy_allowed ||
+             has_deleted_or_nontrivial_destructor(cssp) ||
+             class_copy_move_ctors_all_deleted(type);
+  }  /* if */
+  return result;
+}  /* ecil_class_is_nontrivial_abi */
+
+
+a_boolean ecil_class_has_nontrivial_dtor(a_type_ptr type)
+/*
+Return TRUE if the type is a class with a non-trivial destructor.
+*/
+{
+  a_boolean                      result = FALSE;
+  a_class_symbol_supplement_ptr  cssp;
+
+  type = skip_typerefs(type);
+  if (is_immediate_class_type(type) && !type->incomplete &&
+      (cssp = symbol_supplement_for_class(type)) != NULL) {
+    result = has_nontrivial_destructor(cssp);
+  }  /* if */
+  return result;
+}  /* ecil_class_has_nontrivial_dtor */
+
+
 /* The libc/libm functions that are also builtins are listed in
    builtin_libc_names (builtin_libc.h, included above): a call to __builtin_X
    of one of them is an ordinary CALL of X (design.md P2). */
@@ -1293,6 +1770,7 @@ static const a_special_name special_names[] = {
   { "bswap16", (unsigned int)ebi_bswap },
   { "bswap32", (unsigned int)ebi_bswap },
   { "bswap64", (unsigned int)ebi_bswap },
+  { "bswap128", (unsigned int)ebi_bswap },
   SPECIAL_INT_FAMILY("clz", (unsigned int)ebi_clz),
   SPECIAL_INT_FAMILY("ctz", (unsigned int)ebi_ctz),
   SPECIAL_INT_FAMILY("popcount", (unsigned int)ebi_popcount),
@@ -1447,21 +1925,98 @@ typedef struct a_func_state {
   unsigned int  linkage;
   unsigned int  flags;
   uint32_t      name;
+  a_boolean     late;             /* The name is not final: nil for now. */
 } a_func_state;
 
+/* TRUE while the late names are being resolved (the file scope is complete,
+   so every name is final). */
+STATIC_THREAD a_boolean
+                resolving_late_names;
 
-static uint32_t routine_name_sid(an_ecil_frame *frame, a_routine_ptr rout)
+
+static a_boolean routine_is_function_local(a_routine_ptr rout)
 /*
-Return the sid of the symbol name of a routine (its asm name if it has one).
+Return TRUE for a routine that lives in a function's memory region: a
+function local to a function, or a member of a (possibly nested) class that
+is local to one.  Such an entity is gone when the file scope is complete.
+*/
+{
+  a_source_correspondence  *scp = &rout->source_corresp;
+  a_boolean                result = scp->is_local_to_function;
+
+  if (!result && scp->is_class_member) {
+    a_type_ptr  cls = parent_class_of(rout);
+
+    while (!cls->source_corresp.is_local_to_function &&
+           cls->source_corresp.is_class_member) {
+      cls = parent_class_of(cls);
+    }  /* while */
+    result = cls->source_corresp.is_local_to_function;
+  }  /* if */
+  return result;
+}  /* routine_is_function_local */
+
+
+static const char *routine_symbol_text(a_routine_ptr rout,
+                                       unsigned int  variant)
+/*
+Return the symbol name of a routine: its asm name if it has one, else its
+Itanium mangled name in C++ (the plain name for main and extern "C"
+routines), else the C name.  For the base variant of a constructor or
+destructor it is the C2/D2 name.  The text may be in a temporary buffer: copy
+it at once.
 */
 {
   const char  *name = ecil_entity_name(&rout->source_corresp);
+  a_boolean   has_asm_name = FALSE;
 
 #if GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED
   if (rout->gnu_extra_info != NULL && rout->gnu_extra_info->asm_name != NULL) {
     name = rout->gnu_extra_info->asm_name;
+    has_asm_name = TRUE;
   }  /* if */
 #endif /* GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  if (!C_mode() && !has_asm_name &&
+      (name != NULL || variant != ECIL_VARIANT_NONE) &&
+      !ecil_routine_is_filtered(rout)) {
+    /* (The special members of a closure type have no source name.) */
+    if (variant == ECIL_VARIANT_BASE) {
+      name = cir_structor_name(rout, cdk_subobject);
+    } else {
+      name = get_mangled_function_name_full(rout, /*force_primary_name=*/FALSE,
+                                      /*externalize_if_necessary=*/FALSE);
+    }  /* if */
+  }  /* if */
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
+  (void)has_asm_name;
+  (void)variant;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+  return name;
+}  /* routine_symbol_text */
+
+
+static uint32_t routine_name_sid(an_ecil_frame *frame,
+                                 a_routine_ptr rout,
+                                 unsigned int  variant,
+                                 a_boolean     *late)
+/*
+Return the sid of the symbol name of a routine, or 0 if it has none or it
+may still change (*late is then TRUE).
+*/
+{
+  const char  *name;
+
+  *late = FALSE;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  if (!C_mode() && !resolving_late_names &&
+      !(rout->gnu_extra_info != NULL &&
+        rout->gnu_extra_info->asm_name != NULL) &&
+      cir_name_may_change(&rout->source_corresp)) {
+    *late = TRUE;
+  }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+  name = *late ? NULL : routine_symbol_text(rout, variant);
   if (name != NULL && strncmp(name, "__builtin_", 10) == 0) {
     an_ecil_name_class  cls;
 
@@ -1530,6 +2085,23 @@ Record, for other modules, that the symbol name is bound to the G-id.
 }  /* ecil_bind_symbol */
 
 
+static a_boolean routine_is_multiversioned(a_routine_ptr rout)
+/*
+Return TRUE for a routine of GNU function multiversioning (the "target"
+attribute): the representative of the versions or one of them.
+*/
+{
+#if GNU_FUNCTION_MULTIVERSIONING
+  return has_gnu_routine_supp(rout) &&
+         (gnu_routine_supp(rout)->is_representative ||
+          gnu_routine_supp(rout)->is_target_specific_version);
+#else /* !GNU_FUNCTION_MULTIVERSIONING */
+  (void)rout;
+  return FALSE;
+#endif /* GNU_FUNCTION_MULTIVERSIONING */
+}  /* routine_is_multiversioned */
+
+
 static void check_routine_attributes(a_routine_ptr rout)
 /*
 Note as unsupported the GNU routine attributes whose meaning the code
@@ -1544,6 +2116,8 @@ ignorable and need no code here.
     ecil_note_unsupported("a constructor or destructor attribute");
   } else if (rout->is_gnu_alias || rout->is_ifunc || rout->is_weakref) {
     ecil_note_unsupported("an alias, ifunc or weakref attribute");
+  } else if (routine_is_multiversioned(rout)) {
+    ecil_note_unsupported("GNU function multiversioning");
   }  /* if */
 #else /* !GNU_EXTENSIONS_ALLOWED */
   (void)rout;
@@ -1554,7 +2128,7 @@ ignorable and need no code here.
 void ecil_check_variable_attributes(a_variable_ptr var)
 /*
 Note as unsupported the GNU variable attributes that cannot be ignored
-(cleanup, alias, weakref).
+(cleanup, alias, weakref, init_priority).
 */
 {
 #if GNU_EXTENSIONS_ALLOWED
@@ -1562,6 +2136,10 @@ Note as unsupported the GNU variable attributes that cannot be ignored
     ecil_note_unsupported("a cleanup attribute");
   } else if (var->is_gnu_alias || var->is_weakref) {
     ecil_note_unsupported("an alias or weakref attribute");
+#if GNU_INIT_PRIORITY_ATTRIBUTE_ALLOWED
+  } else if (var->init_priority != 0) {
+    ecil_note_unsupported("an init_priority attribute");
+#endif /* GNU_INIT_PRIORITY_ATTRIBUTE_ALLOWED */
   }  /* if */
 #else /* !GNU_EXTENSIONS_ALLOWED */
   (void)var;
@@ -1569,25 +2147,80 @@ Note as unsupported the GNU variable attributes that cannot be ignored
 }  /* ecil_check_variable_attributes */
 
 
+static a_boolean routine_is_explicit_instantiation_definition(
+                                                         a_routine_ptr rout)
+/*
+Return TRUE for a function template instance defined by an explicit
+instantiation (not an extern template).
+*/
+{
+  a_boolean     result = FALSE;
+  a_symbol_ptr  sym = (a_symbol_ptr)rout->source_corresp.assoc_info;
+
+  if (!C_mode() && sym != NULL &&
+      (symbol_is(sym, sk_routine) || symbol_is(sym, sk_member_function)) &&
+      sym->variant.routine.instance_ptr != NULL) {
+    a_template_instance_ptr  tip = sym->variant.routine.instance_ptr;
+
+    result = tip->explicit_instantiation && !tip->explicit_do_not_instantiate;
+  }  /* if */
+  return result;
+}  /* routine_is_explicit_instantiation_definition */
+
+
 static void compute_func_state(an_ecil_frame *frame,
                                a_routine_ptr rout,
+                               uint32_t      gid,
+                               unsigned int  variant,
                                a_boolean     defining,
                                a_boolean     unsupported,
                                a_func_state  *state)
 /*
-Compute the DECL_FUNC facts for a routine as they are now.
+Compute the DECL_FUNC facts for a routine as they are now.  gid is 0 for a
+routine that has no G-id yet (or while the late names are resolved: the name
+is computed); otherwise, in C++, the name sent before is kept (the routine's
+entities may be gone, and a C++ name does not change after it is sent).
 */
 {
-  a_type_ptr  t = skip_typerefs(rout->type);
+  a_type_ptr    t = skip_typerefs(rout->type);
+  /* The static invoker of a lambda has the linkage of its call operator
+     (spec 11.9). */
+  a_routine_ptr lrout = rout;
 
+  if (!C_mode() && rout->special_kind ==
+                          (a_special_function_kind)sfk_lambda_entry_point &&
+      rout->variant.lambda_call_operator != NULL) {
+    lrout = rout->variant.lambda_call_operator;
+  }  /* if */
   check_routine_attributes(rout);
   state->type = ecil_func_type_id(frame, rout->type,
                                   defining && !rout_type_supp(t)->prototyped);
-  state->linkage = ecil_linkage_for(rout->storage_class,
-                                    rout->source_corresp.name_linkage,
-                                    rout->is_weak);
+  state->linkage = ecil_linkage_for(lrout->storage_class,
+                                    lrout->source_corresp.name_linkage,
+                                    lrout->is_weak);
   state->flags = 0;
   if (defining && !unsupported) state->flags |= ECIL_DECL_FUNC_DEFINED_HERE;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  if (!C_mode() && state->linkage == (unsigned int)elk_external &&
+      cir_entity_is_tu_local(iek_routine, lrout)) {
+    /* Its name would be the same in another translation unit, where it is
+       another entity (spec 11.2). */
+    state->linkage = (unsigned int)elk_internal;
+  }  /* if */
+  if (!C_mode() && defining && !unsupported &&
+      state->linkage == (unsigned int)elk_external &&
+      lrout->storage_class == (a_storage_class)sc_unspecified) {
+    /* Vague linkage (spec 11.2): internal wins, and a declaration is
+       external. */
+    if (routine_is_explicit_instantiation_definition(lrout)) {
+      state->linkage = (unsigned int)elk_weak_odr;
+      state->flags |= ECIL_DECL_FUNC_COMDAT;
+    } else if (routine_might_exist_in_multiple_copies(lrout)) {
+      state->linkage = (unsigned int)elk_linkonce_odr;
+      state->flags |= ECIL_DECL_FUNC_COMDAT;
+    }  /* if */
+  }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   if (rout->is_inline) state->flags |= ECIL_DECL_FUNC_INLINE;
   if (rout_type_supp(t)->does_not_return) {
     state->flags |= ECIL_DECL_FUNC_NORETURN;
@@ -1598,7 +2231,19 @@ Compute the DECL_FUNC facts for a routine as they are now.
     state->flags |= ECIL_DECL_FUNC_INLINE_ONLY;
   }  /* if */
   if (unsupported) state->flags |= ECIL_DECL_FUNC_UNSUPPORTED;
-  state->name = routine_name_sid(frame, rout);
+  if (gid != 0 && !C_mode()) {
+    an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+    state->name = info->decl_name;
+    state->late = (info->flags & ECIL_GF_LATE_NAME) != 0 &&
+                  (info->flags & ECIL_GF_NAME_BOUND) == 0;
+  } else {
+    state->name = routine_name_sid(frame, rout, variant, &state->late);
+  }  /* if */
+  if (state->late && routine_is_function_local(rout)) {
+    /* The entity will not be there to name at the end. */
+    ecil_note_unsupported("a local entity whose name is not final");
+  }  /* if */
   if (state->name != 0 && state->linkage != (unsigned int)elk_internal) {
     ecil_mark_symbol_name(state->name);
   }  /* if */
@@ -1653,12 +2298,69 @@ one emitted (spec 8.2: a re-issue updates the entity).
 }  /* emit_func_decl_if_changed */
 
 
+static a_boolean routine_is_structor(a_routine_ptr rout)
+/*
+Return TRUE for a C++ constructor or destructor: it has a complete and a
+base variant (spec 11.4).
+*/
+{
+  return !C_mode() &&
+         (rout->special_kind == (a_special_function_kind)sfk_constructor ||
+          rout->special_kind == (a_special_function_kind)sfk_destructor);
+}  /* routine_is_structor */
+
+
+static void introduce_base_variant(an_ecil_frame *frame,
+                                   a_routine_ptr rout,
+                                   uint32_t      complete_gid)
+/*
+Introduce the base variant (C2/D2) of the constructor or destructor whose
+complete variant has just been sent, with the same type, linkage and flags,
+and pair the two with STRUCTOR (declaration section).
+*/
+{
+  a_func_state  state;
+  uint32_t      base_gid;
+
+  compute_func_state(frame, rout, 0, ECIL_VARIANT_BASE, FALSE, FALSE, &state);
+  if (ecil_unsupported_reason == NULL) {
+    base_gid = ecil_new_gid(egk_func);
+    if (base_gid != 0) {
+      an_ecil_gid_info  *info = ecil_gid_info(base_gid);
+      an_ecil_buffer    *saved;
+
+      info->entity = rout;
+      info->variant = ECIL_VARIANT_BASE;
+      info->partner = complete_gid;
+      info->flags |= ecil_gid_info(complete_gid)->flags &
+                     ECIL_GF_FUNCTION_LOCAL;
+      if (state.late) info->flags |= ECIL_GF_LATE_NAME;
+      ecil_gid_info(complete_gid)->partner = base_gid;
+      emit_func_decl_if_changed(frame, base_gid, &state);
+      if (state.name != 0 && state.linkage != (unsigned int)elk_internal) {
+        symbol_binding_register(state.name, base_gid);
+      }  /* if */
+      saved = ecil_frame_enter_decl(frame);
+      ecil_rec_begin(frame, eop_structor);
+      ecil_arg_uint(frame, complete_gid);
+      ecil_arg_uint(frame, base_gid);
+      ecil_arg_uint(frame, rout->special_kind ==
+                    (a_special_function_kind)sfk_destructor ?
+                    ECIL_STRUCTOR_DTOR : 0u);
+      ecil_rec_end(frame);
+      ecil_frame_leave_decl(frame, saved);
+    }  /* if */
+  }  /* if */
+}  /* introduce_base_variant */
+
+
 uint32_t ecil_function_id(an_ecil_frame *frame, a_routine_ptr rout)
 /*
 Return the G-id of a routine, introducing it with DECL_FUNC at its first
 reference (as a declaration: the definition's facts are re-issued before
 FUNC_BEGIN).  The type is introduced first, so ids appear in the stream in
-increasing order.
+increasing order.  A constructor or destructor is introduced with both its
+variants and the result is the complete one.
 */
 {
   uint32_t  gid = ecil_gid_of(rout);
@@ -1666,7 +2368,9 @@ increasing order.
   if (gid == 0 && ecil_unsupported_reason == NULL) {
     a_func_state  state;
 
-    compute_func_state(frame, rout, FALSE, FALSE, &state);
+    compute_func_state(frame, rout, 0, routine_is_structor(rout) ?
+                       ECIL_VARIANT_COMPLETE : ECIL_VARIANT_NONE, FALSE, FALSE,
+                       &state);
     if (ecil_unsupported_reason == NULL &&
         state.linkage != (unsigned int)elk_internal && state.name != 0) {
       gid = symbol_binding_lookup(state.name, egk_func);
@@ -1687,10 +2391,25 @@ increasing order.
       gid = ecil_new_gid(egk_func);
       if (gid != 0) {
         ecil_gid_info(gid)->entity = rout;
+        if (state.late) ecil_gid_info(gid)->flags |= ECIL_GF_LATE_NAME;
+        if (routine_is_structor(rout)) {
+          ecil_gid_info(gid)->variant = ECIL_VARIANT_COMPLETE;
+        }  /* if */
+        if (!C_mode() && routine_is_function_local(rout)) {
+          ecil_gid_info(gid)->flags |= ECIL_GF_FUNCTION_LOCAL;
+        }  /* if */
+        if (!C_mode() && rout->special_kind ==
+                          (a_special_function_kind)sfk_lambda_entry_point) {
+          /* Its body is synthesized after the function being translated. */
+          ecil_queue_invoker(rout);
+        }  /* if */
         ecil_set_gid(rout, gid);
         emit_func_decl_if_changed(frame, gid, &state);
         if (state.name != 0 && state.linkage != (unsigned int)elk_internal) {
           symbol_binding_register(state.name, gid);
+        }  /* if */
+        if (routine_is_structor(rout)) {
+          introduce_base_variant(frame, rout, gid);
         }  /* if */
       }  /* if */
     }  /* if */
@@ -1699,19 +2418,51 @@ increasing order.
 }  /* ecil_function_id */
 
 
-void ecil_reissue_function(an_ecil_frame *frame,
-                           uint32_t      gid,
-                           a_boolean     defining,
-                           a_boolean     unsupported)
+uint32_t ecil_function_base_id(an_ecil_frame *frame, a_routine_ptr rout)
 /*
-Re-issue DECL_FUNC for a function whose definition is about to start (or was
-dropped as unsupported), if its facts changed.
+The G-id of the base variant of a constructor or destructor (C2/D2), which
+the calls for base subobjects and the body use; any other routine's own.
+*/
+{
+  uint32_t  gid = ecil_function_id(frame, rout);
+
+  if (gid != 0 && ecil_gid_info(gid)->partner != 0) {
+    gid = ecil_gid_info(gid)->partner;
+  }  /* if */
+  return gid;
+}  /* ecil_function_base_id */
+
+
+uint32_t ecil_function_body_id(uint32_t gid)
+/*
+The G-id a definition streams its body under: the base variant of a
+constructor or destructor (C1/D1 never has a body of its own).
+*/
+{
+  an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+  return (info->variant == ECIL_VARIANT_COMPLETE && info->partner != 0) ?
+         info->partner : gid;
+}  /* ecil_function_body_id */
+
+
+static void reissue_one_function(an_ecil_frame *frame,
+                                 uint32_t      gid,
+                                 a_boolean     defining,
+                                 a_boolean     unsupported)
+/*
+Re-issue DECL_FUNC of one G-id (see ecil_reissue_function).
 */
 {
   a_func_state  state;
   a_routine_ptr rout = (a_routine_ptr)ecil_gid_info(gid)->entity;
 
-  compute_func_state(frame, rout, defining, unsupported, &state);
+  compute_func_state(frame, rout, gid, ecil_gid_info(gid)->variant, defining,
+                     unsupported, &state);
+  if (ecil_gid_info(gid)->flags & ECIL_GF_LATE_NAME) {
+    /* Keep the (nil or bound) name; NAME_BIND supplies it. */
+    state.name = ecil_gid_info(gid)->decl_name;
+  }  /* if */
   if (ecil_unsupported_reason == NULL) {
     if ((ecil_gid_info(gid)->flags & ECIL_GF_DEFINED) && !unsupported) {
       /* Once the body has been streamed its type must not change (a K&R
@@ -1726,7 +2477,222 @@ dropped as unsupported), if its facts changed.
       ecil_gid_info(gid)->flags &= ~ECIL_GF_DEFINED;
     }  /* if */
   }  /* if */
+}  /* reissue_one_function */
+
+
+void ecil_reissue_function(an_ecil_frame *frame,
+                           uint32_t      gid,
+                           a_boolean     defining,
+                           a_boolean     unsupported)
+/*
+Re-issue DECL_FUNC for a function whose definition is about to start (or was
+dropped as unsupported), if its facts changed.  The two variants of a
+constructor or destructor are re-issued together, with the same facts (the
+complete variant is defined through the base one: spec 11.4).
+*/
+{
+  uint32_t  partner = ecil_gid_info(gid)->partner;
+
+  reissue_one_function(frame, gid, defining, unsupported);
+  if (partner != 0) {
+    reissue_one_function(frame, partner, defining, unsupported);
+  }  /* if */
 }  /* ecil_reissue_function */
+
+
+static a_boolean routine_instance_is_not_needed(a_routine_ptr rout)
+/*
+Return TRUE for a template instance that was instantiated only to know the
+deduced return type of a function (nothing used it) or that is covered by an
+extern template: the front end's remove_unneeded_instantiations would clear
+its body, but it never learns of it once the region is freed (spec 11.10).
+*/
+{
+  a_boolean     result = FALSE;
+  a_symbol_ptr  sym = (a_symbol_ptr)rout->source_corresp.assoc_info;
+
+  if (!C_mode() && sym != NULL &&
+      (symbol_is(sym, sk_routine) || symbol_is(sym, sk_member_function)) &&
+      sym->variant.routine.instance_ptr != NULL) {
+    a_template_instance_ptr  tip = sym->variant.routine.instance_ptr;
+    a_master_instance_ptr    mip = master_instance_of(tip);
+
+    result = mip->already_instantiated && !mip->automatically_instantiated &&
+             !tip->explicit_instantiation &&
+             (mip->instance_required_count == 0 ||
+              tip->explicit_do_not_instantiate);
+  }  /* if */
+  return result;
+}  /* routine_instance_is_not_needed */
+
+
+void ecil_emit_retractions(an_ecil_frame *frame)
+/*
+In F_GLOBALS: RETRACT every streamed template instance that is not needed
+(see routine_instance_is_not_needed), if it is internal or linkonce_odr, or
+if its definition was dropped as unsupported (whatever its linkage: such an
+instance must not turn an unsupported body into an error).  For a structor
+pair the base variant is named.
+*/
+{
+  uint32_t  gid;
+  uint32_t  last = ecil_num_gids();
+
+  if (!C_mode()) {
+    for (gid = 1; gid <= last; gid++) {
+      an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+      if (info->kind == egk_func && info->entity != NULL &&
+          (info->flags & ECIL_GF_FUNCTION_LOCAL) == 0 &&
+          info->variant != ECIL_VARIANT_COMPLETE &&
+          ((info->flags & ECIL_GF_DEFINED) != 0 ||
+           (info->decl_flags & ECIL_DECL_FUNC_UNSUPPORTED) != 0)) {
+        a_routine_ptr  rout = (a_routine_ptr)info->entity;
+        a_boolean      unsupported = (info->decl_flags &
+                                      ECIL_DECL_FUNC_UNSUPPORTED) != 0;
+
+        if (routine_instance_is_not_needed(rout) &&
+            (unsupported || info->decl_linkage ==
+                                         (unsigned int)elk_internal ||
+             info->decl_linkage == (unsigned int)elk_linkonce_odr)) {
+          an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
+
+          ecil_rec1(frame, eop_retract, gid);
+          ecil_frame_leave_decl(frame, saved);
+          info = ecil_gid_info(gid);
+          info->flags &= ~ECIL_GF_DEFINED;
+          if (rout->function_def_number != NULL_function_def_number) {
+            ecil_set_function_state(rout, efs_retracted);
+          }  /* if */
+        }  /* if */
+      }  /* if */
+    }  /* for */
+  }  /* if */
+}  /* ecil_emit_retractions */
+
+
+static void add_late_binding(uint32_t gid, uint32_t sid, unsigned int linkage)
+/*
+Remember a binding for ecil_emit_late_names.
+*/
+{
+  if (num_late_bindings == late_bindings_capacity) {
+    size_t          new_capacity = (late_bindings_capacity == 0) ?
+                                   16 : late_bindings_capacity * 2;
+    a_late_binding  *new_list = (a_late_binding *)realloc(late_bindings,
+                                   new_capacity * sizeof(a_late_binding));
+
+    if (new_list != NULL) {
+      late_bindings = new_list;
+      late_bindings_capacity = new_capacity;
+    }  /* if */
+  }  /* if */
+  if (num_late_bindings < late_bindings_capacity) {
+    late_bindings[num_late_bindings].gid = gid;
+    late_bindings[num_late_bindings].sid = sid;
+    late_bindings[num_late_bindings].linkage = linkage;
+    num_late_bindings++;
+  } else {
+    ecil_note_unsupported("out of memory in the ECIL writer");
+  }  /* if */
+}  /* add_late_binding */
+
+
+void ecil_resolve_late_names(an_ecil_frame *frame)
+/*
+The file scope is complete: every name is final.  Give each function that
+was sent without a name its name (re-issuing its declaration if its linkage
+or COMDAT changed, with a nil name), and remember the binding for
+ecil_emit_late_names.  In CHECKING builds re-mangle every function that was
+named when it was sent and assert that the name did not change.
+*/
+{
+  uint32_t  gid;
+  uint32_t  last = ecil_num_gids();
+
+  if (!C_mode()) {
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+    cir_tu_local_names_are_final();
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+    resolving_late_names = TRUE;
+    for (gid = 1; gid <= last; gid++) {
+      an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+      if (info->kind == egk_func && (info->flags & ECIL_GF_LATE_NAME) != 0 &&
+          (info->flags & ECIL_GF_NAME_BOUND) == 0 && info->entity != NULL) {
+        a_routine_ptr  rout = (a_routine_ptr)info->entity;
+        a_func_state   state;
+        uint32_t       final_sid;
+
+        compute_func_state(frame, rout, 0, info->variant,
+                           (info->flags & ECIL_GF_DEFINED) != 0,
+                           (info->decl_flags &
+                                ECIL_DECL_FUNC_UNSUPPORTED) != 0, &state);
+        info = ecil_gid_info(gid);
+        final_sid = state.name;
+        state.name = info->decl_name;
+        emit_func_decl_if_changed(frame, gid, &state);
+        info = ecil_gid_info(gid);
+        info->flags |= ECIL_GF_NAME_BOUND;
+        if (final_sid != 0) {
+          info->decl_name = final_sid;
+          add_late_binding(gid, final_sid, state.linkage);
+          if (state.linkage != (unsigned int)elk_internal) {
+            symbol_binding_register(final_sid, gid);
+          }  /* if */
+        }  /* if */
+      }  /* if */
+    }  /* for */
+    resolving_late_names = FALSE;
+#if CHECKING
+    /* After an error the mangler gives every type a bogus encoding, so the
+       names cannot be compared: the compilation fails anyway. */
+    for (gid = 1; !is_at_least_one_error() && gid <= last; gid++) {
+      an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+      if (info->kind == egk_func && (info->flags & ECIL_GF_LATE_NAME) == 0 &&
+          (info->flags & ECIL_GF_FUNCTION_LOCAL) == 0 &&
+          info->entity != NULL && info->decl_name != 0) {
+        a_routine_ptr  rout = (a_routine_ptr)info->entity;
+
+        if (!ecil_routine_is_filtered(rout) &&
+            !routine_is_multiversioned(rout)) {
+          const char  *now = routine_symbol_text(rout, info->variant);
+          const char  *sent = ecil_string_text(info->decl_name);
+
+          if (now != NULL && sent != NULL &&
+              strncmp(now, "__builtin_", 10) != 0 &&
+              strcmp(now, sent) != 0) {
+            fprintf(stderr, "ECIL: the name of a function changed after it "
+                            "was sent: \"%s\" is now \"%s\"\n", sent, now);
+            check_assertion_str(FALSE, "an ECIL function name changed after "
+                                       "it was sent");
+          }  /* if */
+        }  /* if */
+      }  /* if */
+    }  /* for */
+#endif /* CHECKING */
+  }  /* if */
+}  /* ecil_resolve_late_names */
+
+
+void ecil_emit_late_names(an_ecil_frame *frame)
+/*
+Write the NAME_BIND records of the names resolved by
+ecil_resolve_late_names.
+*/
+{
+  size_t  i;
+
+  for (i = 0; i < num_late_bindings; i++) {
+    ecil_rec_begin(frame, eop_name_bind);
+    ecil_arg_uint(frame, late_bindings[i].gid);
+    ecil_arg_uint(frame, late_bindings[i].sid);
+    ecil_arg_uint(frame, late_bindings[i].linkage);
+    ecil_rec_end(frame);
+  }  /* for */
+  num_late_bindings = 0;
+}  /* ecil_emit_late_names */
 
 
 static const char *var_symbol_name(a_variable_ptr var)
@@ -1738,15 +2704,167 @@ The symbol name of an external-linkage variable, or NULL.
 
   if (var->storage_class != (a_storage_class)sc_static &&
       var->source_corresp.name_linkage != (a_name_linkage_kind)nlk_internal) {
+    a_boolean  has_asm_name = FALSE;
+
     name = ecil_entity_name(&var->source_corresp);
 #if GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED
     if (var->asm_name_is_valid && var->asm_name_or_reg.name != NULL) {
       name = var->asm_name_or_reg.name;
+      has_asm_name = TRUE;
     }  /* if */
 #endif /* GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED */
+    (void)has_asm_name;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+    if (!C_mode() && name != NULL && !has_asm_name) {
+      /* The Itanium name; a name that is not final has no symbol yet. */
+      if (var->source_corresp.is_local_to_function ||
+          cir_name_may_change(&var->source_corresp)) {
+        name = NULL;
+      } else if (variable_name_mangling_needed(var)) {
+        name = get_mangled_variable_name(var);
+      }  /* if */
+    }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   }  /* if */
   return name;
 }  /* var_symbol_name */
+
+
+a_boolean ecil_variable_may_have_multiple_copies(a_variable_ptr var)
+/*
+Return TRUE for a C++ variable that may be defined in several translation
+units: an inline variable, a variable template, or a static data member of
+a class template instance.
+*/
+{
+  a_symbol_ptr  sym = (a_symbol_ptr)var->source_corresp.assoc_info;
+
+  return !C_mode() && (!var->is_specialized || var->is_inline) &&
+         (var->is_inline || var->is_template_variable ||
+          (var->source_corresp.is_class_member && sym != NULL &&
+           symbol_is(sym, sk_static_data_member) &&
+           sym->variant.static_data_member.instance_ptr != NULL));
+}  /* ecil_variable_may_have_multiple_copies */
+
+
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+
+void ecil_cxx_variable_facts(an_ecil_frame *frame,
+                             a_variable_ptr var,
+                             a_boolean      defining,
+                             unsigned int   *linkage,
+                             unsigned int   *flags,
+                             uint32_t       *name_sid)
+/*
+The symbol name, linkage and DECL_VAR flags (STATIC_LOCAL, COMDAT) of a C++
+variable at namespace, class or function scope (spec 11.2): its Itanium name
+(the local-entity name for a static local), internal linkage winning over
+the vague-linkage rules, and linkonce_odr with COMDAT for what may exist in
+several translation units (inline variables, template static data members,
+the statics of such a function) when it is defined here.
+*/
+{
+  const char  *name = NULL;
+  a_boolean   has_asm_name = FALSE;
+  char        unique[1024];
+
+  unique[0] = '\0';
+  *flags = 0;
+  *linkage = ecil_linkage_for(var->storage_class,
+                              var->source_corresp.name_linkage, var->is_weak);
+  if (var->source_corresp.is_local_to_function) {
+    a_routine_ptr  fn = var->source_corresp.enclosing_routine;
+
+    *flags |= ECIL_DECL_VAR_STATIC_LOCAL;
+    *linkage = (unsigned int)elk_internal;
+    if (fn == NULL || var->source_corresp.name == NULL) {
+      /* Compiler-generated (__func__ and the like): an internal symbol
+         that no other translation unit can name. */
+      (void)snprintf(unique, sizeof(unique), "%.400s.%.400s",
+                     (fn != NULL && fn->source_corresp.name != NULL) ?
+                              fn->source_corresp.name : "static",
+                     var->source_corresp.name != NULL ?
+                              var->source_corresp.name : "var");
+    } else if (cir_name_may_change(&fn->source_corresp)) {
+      ecil_note_unsupported("a static local of a function whose name is not "
+                            "final");
+    } else {
+      name = cir_local_static_name(var);
+      if (defining &&
+          ecil_linkage_for(fn->storage_class, fn->source_corresp.name_linkage,
+                           FALSE) != (unsigned int)elk_internal &&
+          fn->storage_class == (a_storage_class)sc_unspecified &&
+          !cir_entity_is_tu_local(iek_routine, fn) &&
+          routine_might_exist_in_multiple_copies(fn)) {
+        *linkage = (unsigned int)elk_linkonce_odr;
+        *flags |= ECIL_DECL_VAR_COMDAT;
+      }  /* if */
+    }  /* if */
+  } else {
+    name = ecil_entity_name(&var->source_corresp);
+#if GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED
+    if (var->asm_name_is_valid && var->asm_name_or_reg.name != NULL) {
+      name = var->asm_name_or_reg.name;
+      has_asm_name = TRUE;
+    }  /* if */
+#endif /* GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED */
+    if (name == NULL && !has_asm_name) {
+      /* The object of an anonymous union at namespace scope (it has
+         internal linkage): a symbol that nothing else can name. */
+      (void)snprintf(unique, sizeof(unique), "%s", "anonymous");
+      *linkage = (unsigned int)elk_internal;
+    }  /* if */
+    if (name != NULL && !has_asm_name) {
+      if (cir_name_may_change(&var->source_corresp)) {
+        ecil_note_unsupported("a variable whose name is not final");
+        name = NULL;
+      } else if (variable_name_mangling_needed(var)) {
+        name = get_mangled_variable_name(var);
+      }  /* if */
+    }  /* if */
+    if (*linkage == (unsigned int)elk_external &&
+        cir_entity_is_tu_local(iek_variable, var)) {
+      /* Its name would be the same in another translation unit, where it
+         is another entity (spec 11.2). */
+      *linkage = (unsigned int)elk_internal;
+    }  /* if */
+    if (defining && *linkage == (unsigned int)elk_external &&
+        ecil_variable_may_have_multiple_copies(var)) {
+      a_symbol_ptr  sym = (a_symbol_ptr)var->source_corresp.assoc_info;
+      a_boolean     explicit_definition = FALSE;
+
+      if (var->explicit_instantiation && !var->explicit_do_not_instantiate) {
+        explicit_definition = TRUE;
+      } else if (sym != NULL && symbol_is(sym, sk_static_data_member) &&
+                 sym->variant.static_data_member.instance_ptr != NULL) {
+        a_template_instance_ptr  tip =
+                              sym->variant.static_data_member.instance_ptr;
+
+        explicit_definition = tip->explicit_instantiation &&
+                              !tip->explicit_do_not_instantiate;
+      }  /* if */
+      /* An explicit instantiation definition is weak_odr (spec 11.2). */
+      *linkage = (unsigned int)(explicit_definition ? elk_weak_odr :
+                                                      elk_linkonce_odr);
+      *flags |= ECIL_DECL_VAR_COMDAT;
+    }  /* if */
+  }  /* if */
+  if (unique[0] != '\0' && ecil_unsupported_reason == NULL) {
+    uint32_t  gid = ecil_gid_of(var);
+
+    if (gid != 0 && ecil_gid_info(gid)->decl_emitted &&
+        ecil_gid_info(gid)->decl_name != 0) {
+      *name_sid = ecil_gid_info(gid)->decl_name;      /* Keep its name. */
+    } else {
+      *name_sid = ecil_unique_symbol_name(frame, unique);
+    }  /* if */
+  } else {
+    *name_sid = (name != NULL && ecil_unsupported_reason == NULL) ?
+                                    ecil_intern_cstring(frame, name) : 0;
+  }  /* if */
+}  /* ecil_cxx_variable_facts */
+
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 
 a_targ_alignment ecil_variable_alignment(a_variable_ptr var)
@@ -1780,23 +2898,16 @@ The G-id already bound to this variable's symbol name, or 0.
 }  /* ecil_variable_symbol_gid */
 
 
-uint32_t ecil_variable_id(an_ecil_frame *frame, a_variable_ptr var)
+uint32_t ecil_global_variable_id(an_ecil_frame *frame, a_variable_ptr var)
 /*
-Return the G-id of a file-scope or static variable, introducing it with
-DECL_VAR (as a declaration) at its first reference.  A static local with no
-declaration statement (__func__, a compound literal) that is first reached
-here is introduced as a definition and queued: its initializer follows when
-the queue is drained (ecil_drain_variable_definitions), so that building one
-constant never builds another.
+Return the G-id of a file-scope variable (or a static local that has its
+declaration statement), introducing it with DECL_VAR (as a declaration) at
+its first reference.
 */
 {
   uint32_t  gid = ecil_gid_of(var);
 
-  if (gid == 0 && var->source_corresp.is_local_to_function &&
-      var->storage_class == (a_storage_class)sc_static &&
-      ecil_unsupported_reason == NULL) {
-    gid = ecil_queue_variable_definition(frame, var);
-  } else if (gid == 0 && ecil_unsupported_reason == NULL) {
+  if (gid == 0 && ecil_unsupported_reason == NULL) {
     uint32_t  type;
 
     ecil_check_variable_attributes(var);
@@ -1820,20 +2931,81 @@ constant never builds another.
         ecil_set_gid(var, gid);
         if (is_const_qualified_type(var->type)) flags |= ECIL_DECL_VAR_CONST;
         if (is_effective_thread_local(var)) flags |= ECIL_DECL_VAR_TLS;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+        if (!C_mode()) {
+          unsigned int  cxx_flags = 0;
+
+          ecil_cxx_variable_facts(frame, var, FALSE, &linkage, &cxx_flags,
+                                  &name_sid);
+          flags |= cxx_flags;
+          name = NULL;
+        } else
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+        /* Do not insert code here. */
+        {
 #if GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED
-        if (var->asm_name_is_valid && var->asm_name_or_reg.name != NULL) {
-          name = var->asm_name_or_reg.name;
-        }  /* if */
+          if (var->asm_name_is_valid && var->asm_name_or_reg.name != NULL) {
+            name = var->asm_name_or_reg.name;
+          }  /* if */
 #endif /* GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED */
-        if (name != NULL) name_sid = ecil_intern_cstring(frame, name);
+          if (name != NULL) name_sid = ecil_intern_cstring(frame, name);
+        }
         if (name_sid != 0 && linkage != (unsigned int)elk_internal) {
           ecil_mark_symbol_name(name_sid);
           symbol_binding_register(name_sid, gid);
+        }  /* if */
+        if (name_sid == 0 && !C_mode() && ecil_unsupported_reason != NULL) {
+          /* The name could not be made: the entity is introduced as an
+             unsupported unnamed one, so that a use of it that survives is
+             reported by the consumer instead of binding to private
+             storage. */
+          linkage = (unsigned int)elk_internal;
+          flags |= ECIL_DECL_VAR_UNSUPPORTED;
         }  /* if */
         ecil_emit_decl_var(frame, gid, type, linkage, flags,
                            (uint32_t)ecil_variable_alignment(var), name_sid);
       }  /* if */
     }  /* if */
+  }  /* if */
+  return gid;
+}  /* ecil_global_variable_id */
+
+
+void ecil_check_variable_use(uint32_t gid)
+/*
+A use of the object of a variable whose record type was sent without a body
+(a class that is not supported) cannot be expressed: note why.
+*/
+{
+  if (gid != 0 && ecil_unsupported_reason == NULL) {
+    uint32_t  t = ecil_gid_info(gid)->decl_type;
+
+    if (t != 0 && (ecil_gid_info(t)->flags & ECIL_GF_FAILED) != 0) {
+      ecil_note_unsupported_type(t, "a variable of a record type that is "
+                                    "not supported");
+    }  /* if */
+  }  /* if */
+}  /* ecil_check_variable_use */
+
+
+uint32_t ecil_variable_id(an_ecil_frame *frame, a_variable_ptr var)
+/*
+Return the G-id of a file-scope or static variable, introducing it with
+DECL_VAR (as a declaration) at its first reference.  A static local with no
+declaration statement (__func__, a compound literal) that is first reached
+here is introduced as a definition and queued: its initializer follows when
+the queue is drained (ecil_drain_variable_definitions), so that building one
+constant never builds another.
+*/
+{
+  uint32_t  gid = ecil_gid_of(var);
+
+  if (gid == 0 && var->source_corresp.is_local_to_function &&
+      var->storage_class == (a_storage_class)sc_static &&
+      ecil_unsupported_reason == NULL) {
+    gid = ecil_queue_variable_definition(frame, var);
+  } else {
+    gid = ecil_global_variable_id(frame, var);
   }  /* if */
   return gid;
 }  /* ecil_variable_id */

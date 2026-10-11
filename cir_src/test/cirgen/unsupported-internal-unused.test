@@ -1,11 +1,11 @@
 ; Unsupported policy: an unreferenced internal definition that was dropped
-; vanishes under --keep-going (and is an error by default).
+; vanishes in both modes (a warning in the default mode, spec 8.11 F5).
 ; RUN: cat %S/Inputs/header.txt %s > %t.txt
 ; RUN: %ecil-asm %t.txt -o %t.ecil
-; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck --check-prefix=DEFAULT %s
+; RUN: %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck --check-prefix=DEFAULT %s
 ; RUN: %edg-cir --keep-going --emit=cir %t.ecil 2>&1 | %FileCheck --check-prefix=KEEP %s
-; DEFAULT: error [1003]: the definition of 'unused_static' was dropped
-; KEEP-NOT: unused_static
+; DEFAULT: warning [1003]: the unused definition of 'unused_static' was dropped and erased
+; KEEP-NOT: cir.func {{.*}}@unused_static
 ; KEEP: cir.func {{.*}}@main
 
 frame DECLS

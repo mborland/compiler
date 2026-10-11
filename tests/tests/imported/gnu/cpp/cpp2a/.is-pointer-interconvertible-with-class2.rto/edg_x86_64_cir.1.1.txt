@@ -1,0 +1,155 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=B, M=int]" at line 39
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=B, M=double]" at line 42
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=F, M=int]" at line 51
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=G, M=int]" at line 54
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=I, M=int]" at line 63
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=J, M=int]" at line 66
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=L, M=int]" at line 81
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=M, M=D]" at line 87
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=M, M=E]" at line 90
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=M, M=int]" at line 93
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=U, M=int]" at line 96
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=U, M=double]" at line 99
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=U, M=long long]" at line 102
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=V, M=int]" at line 105
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=V, M=long]" at line 108
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=X, M=int]" at line 114
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=X, M=short]" at line 117
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=X, M=long]" at line 120
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=X, M=long long]" at line 123
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=Y, M=void ()]" at line 129
+
+"Test_name.c", line 13: warning: CIR back end: the body of "is_pointer_interconvertible_with_class" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool std::is_pointer_interconvertible_with_class(M S::*) noexcept [with S=Z, M=int]" at line 132
+
+"Test_name.c", line 137: warning: CIR back end: the body of "main" uses the constant "pointer-to-member constant", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1BiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1BdEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1FiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1GiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1IiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1JiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1LiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1M1DEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1M1EEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1MiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1UiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1UdEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1UxEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1ViEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1VlEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XsEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XlEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XxEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1YFvvEEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1ZiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

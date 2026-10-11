@@ -1,0 +1,63 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 16: warning: CIR back end: the body of "FuncB" uses a virtual function, which the CIR back end does not support; the function is dropped
+   virtual void FuncB() {}
+                         ^
+
+"Test_name.c", line 22: warning: CIR back end: the body of "FuncA" uses a virtual function, which the CIR back end does not support; the function is dropped
+   void FuncA() {}
+                 ^
+
+"Test_name.c", line 28: warning: CIR back end: the body of "XBase" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+   X2(XBase &xb) : m_xb(xb) { }
+                            ^
+          detected during implicit generation of "XBase::XBase() noexcept" at line 28
+
+"Test_name.c", line 28: warning: CIR back end: the body of "X2" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+   X2(XBase &xb) : m_xb(xb) { }
+                              ^
+
+"Test_name.c", line 32: warning: CIR back end: the body of "FuncA" uses a virtual function, which the CIR back end does not support; the function is dropped
+   }
+   ^
+
+"Test_name.c", line 41: warning: CIR back end: the body of "Y" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+   X1 x1;
+        ^
+          detected during:
+            implicit generation of "Y::Y() noexcept" at line 41
+            implicit generation of "X1::X1() noexcept" at line 41
+
+"Test_name.c", line 41: warning: CIR back end: the body of "X1" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+   X1 x1;
+        ^
+          detected during implicit generation of "X1::X1() noexcept" at line 41
+
+"Test_name.c", line 45: warning: CIR back end: the body of "main" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1Y5FuncBEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2X15FuncAEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN5XBaseC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN5XBaseC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2X2C1ER5XBase' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2X2C2ER5XBase' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2X25FuncAEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1YC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1YC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2X1C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2X1C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

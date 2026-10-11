@@ -1,0 +1,70 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 31: warning: CIR back end: the body of "Base" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Derived<void> a;
+                   ^
+          detected during:
+            implicit generation of "Base::Base() noexcept" at line 31
+            implicit generation of "Derived<T>::Derived() noexcept [with T=void]" at line 31
+            instantiation of class "Derived<T> [with T=void]" at line 31
+
+"Test_name.c", line 31: warning: CIR back end: the body of "MiddleA" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Derived<void> a;
+                   ^
+          detected during:
+            implicit generation of "MiddleA<T>::MiddleA() noexcept [with T=void]" at line 31
+            instantiation of class "MiddleA<T> [with T=void]" at line 31
+            implicit generation of "Derived<T>::Derived() noexcept [with T=void]" at line 31
+            instantiation of class "Derived<T> [with T=void]" at line 31
+
+"Test_name.c", line 31: warning: CIR back end: the body of "MiddleB" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Derived<void> a;
+                   ^
+          detected during:
+            implicit generation of "MiddleB::MiddleB() noexcept" at line 31
+            implicit generation of "Derived<T>::Derived() noexcept [with T=void]" at line 31
+            instantiation of class "Derived<T> [with T=void]" at line 31
+
+"Test_name.c", line 31: warning: CIR back end: the body of "Derived" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Derived<void> a;
+                   ^
+          detected during:
+            implicit generation of "Derived<T>::Derived() noexcept [with T=void]" at line 31
+            instantiation of class "Derived<T> [with T=void]" at line 31
+
+"Test_name.c", line 33: warning: CIR back end: the body of "main" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 14: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
+          virtual void foo() {}
+                              ^
+          detected during instantiation of "void MiddleA<T>::foo() [with T=void]" 
+
+"Test_name.c", line 26: warning: CIR back end: the body of "bar" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+          }
+          ^
+          detected during instantiation of "void Derived<T>::bar() [with T=void]" at line 32
+
+Warning: CIR back end: the unused definition of '_ZN4BaseC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN4BaseC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7MiddleAIvEC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7MiddleAIvEC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7MiddleBC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7MiddleBC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7DerivedIvEC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7DerivedIvEC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7MiddleAIvE3fooEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7DerivedIvE3barEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

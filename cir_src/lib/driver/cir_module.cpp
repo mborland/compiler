@@ -95,6 +95,9 @@ report the problem through session.fail and return nullptr.
           : session.opt_level == 2 ? llvm::CodeGenOptLevel::Default
                                    : llvm::CodeGenOptLevel::Aggressive;
       llvm::TargetOptions target_options;
+      /* Static initializers go in .init_array (clang's default on Linux),
+         not in the reverse-ordered .ctors. */
+      target_options.UseInitArray = true;
       /* Assembly text must be GNU-as compatible: LLVM 24 emits .prefalign
          only when it assumes the integrated assembler will read the text,
          so for --emit=asm pretend it will not (plain .p2align results). */

@@ -33,6 +33,6 @@ Error: CIR back end: the definition of 'test4' was dropped: it uses a construct 
 
 Error: CIR back end: the definition of 'test5' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'do_test' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'do_test' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 6 errors detected in the compilation of "Test_name.c".

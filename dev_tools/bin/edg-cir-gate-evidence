@@ -29,8 +29,13 @@ Steps (names for --only/--skip):
              --dump_configuration identical to the M0 capture (4 presets)
   isolation  edg-cir-check-isolation
   smoke      cir-c-smoke is 100% PASS in edg_x86_64_cir and edg_x86_64_cir_2p
+  cir-suite  tests/tests/cir (writer goldens, cirgen run tests) in both CIR
+             configs: all pass, no difference from the recorded expectations
   corpus     the C corpus in edg_x86_64_cir: summary, CIR-specific failures
-             against edg_x86_64's expectations; 0 FE_CRASH and 0 LIB_CRASH, and
+             against edg_x86_64's expectations; no CIR-specific FE_CRASH or
+             LIB_CRASH (only a front end crash of the same class, ABORT or
+             CATASTROPHE, that edg_x86_64 records for the case is excused and
+             listed as INFO; a LIB_CRASH never is), no KILLED/TIMEOUT test, and
              no difference from the recorded edg_x86_64_cir expectations
              (unless --allow-status-changes)
   modes      in-process and two-process output identical over the corpus
@@ -42,6 +47,26 @@ Steps (names for --only/--skip):
   cpp-corpus the cir-cpp-corpus list (--types rp,lp), the same tables
   cpp-modes  edg-cir-compare-modes --cxx over the C++ corpus
   cpp-writer-stress  edg-cir-writer-stress --cxx
+  release-smoke  the C smoke and C++ smoke lists through the release cpfe-cir
+             (--posture cir-release, build/gcc-release-cir, the shipping macro
+             configuration), both configs: the C list must pass completely,
+             no C++ test may pass in the debug front end and not in the
+             release one, no crash
+  poison     edg-cir-poison-check: region-lifetime safety.  The debug front
+             end (freed IL blocks overwritten with 0xdb, expensive checking),
+             the same without the overwriting (build/gcc-cir-nopoison, made
+             by the step) and the release front end must show no crash or
+             assertion and write byte-identical streams (poison vs. none) for
+             the C corpus, the C and C++ smoke lists and tests/tests/cir
+             (writer and cirgen); the release front end is compared as INFO
+  cpp-stress  cir_src/scripts/box_stress.sh over the synthetic C++ streams
+             (cxx_locals ... cxx_funcs) through edg-cir under a 256 KiB
+             stack: every case rc=0 and run=0 (the streams are self-checking
+             programs), within --cpp-stress-seconds (30) and
+             --cpp-stress-rss-mb (400)
+  cpp-stress-asan  the same with the ASan library build (build/cir-asan,
+             built by the step), smaller sizes and --cpp-stress-asan-rss-mb
+             (1200)
   writer-stress  edg-cir-writer-stress: the ASan debug front end with
              ECIL_GID_STRESS=1 over the C smoke list and tests/tests/cir/
              writer: same exit status and byte-identical streams as without
@@ -103,11 +128,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-STEPS = ('build', 'identity', 'isolation', 'smoke', 'corpus', 'modes',
+STEPS = ('build', 'identity', 'isolation', 'smoke', 'cir-suite', 'corpus',
+         'modes',
          'stress', 'writer-stress', 'rss', 'day', 'ctest', 'asm-diff', 'perf',
-         'cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress')
+         'cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
+         'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke')
 # The steps of the C++ milestones; they run only with --with-cpp or --only.
-CPP_STEPS = ('cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress')
+CPP_STEPS = ('cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
+             'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke')
+# The synthetic C++ stress streams (cir_src/scripts/ecil-stress-gen.py) of
+# the cpp-stress steps: normal sizes, and the smaller ASan sizes.
+CPP_STRESS_CASES = ('cxx_locals:2000 cxx_temps:5000 cxx_meminit:2000 '
+                    'cxx_cond_chain:1000 cxx_cond_seq:500 cxx_blocks:500 '
+                    'cxx_array:1000 cxx_array_nest:100 cxx_funcs:6000')
+CPP_STRESS_ASAN_CASES = ('cxx_locals:500 cxx_temps:1000 cxx_meminit:500 '
+                         'cxx_cond_chain:300 cxx_cond_seq:300 '
+                         'cxx_blocks:300 cxx_array:1000 cxx_array_nest:50 '
+                         'cxx_funcs:1000')
 PRESETS = ('linux-gcc-debug', 'linux-gcc-release', 'linux-clang-debug',
            'linux-i686-gcc-debug')
 BUILD_JOBS = 12  # overridden by --jobs
@@ -216,12 +253,16 @@ def summarize_run(ctx: Context, step: str, run: Path, config: str,
   return results, proc.stdout
 
 
+# The per-test limit (-T) is above the 120 s limit of a compiled program
+# (edgtest.exec): a program that hangs is a normal FAIL (status 124) and not a
+# test that edgy cancelled (an "X" line), as torture/ssp-1 does in every config.
 def edgy_run(ctx: Context, step: str, config: str, filters: str,
-             types: str, timeout: int = 120) -> Optional[Path]:
+             types: str, timeout: int = 180, posture: str = 'cir'
+             ) -> Optional[Path]:
   before = runs_before(ctx)
   command = [
     str(ctx.tree / 'dev_tools/bin/edg-docker-test'), '--non-interactive',
-    '--posture', 'cir', '--only-configs', config, '-T', str(timeout)
+    '--posture', posture, '--only-configs', config, '-T', str(timeout)
   ]
   if types:
     command += ['--types', types]
@@ -288,6 +329,68 @@ def step_isolation(ctx: Context) -> Tuple[bool, str]:
   return code == 0, f"{passes} checks passed, {fails} failed"
 
 
+def _crash_class(status: str) -> str:
+  base = status.split('--')[0].split('(')[0]
+  return base if base in ('ABORT', 'CATASTROPHE') else ''
+
+
+# A crash or assertion in the CIR writer (ecil_*) or the back end shim
+# (cir_be*) is never pre-existing: the reference does not run that code.
+_CIR_CODE_REGEX = re.compile(r'\b(?:ecil_\w+|cir_be\w*)\b')
+
+
+def _in_cir_code(message: str) -> bool:
+  return _CIR_CODE_REGEX.search(message) is not None
+
+
+def reference_message(ctx: Context, test_path: str) -> str:
+  '''The crash message in the reference's recording of a test: the first
+  line of tests/tests/<test>'s .rto directory (edg_x86_64 or default
+  recording) that looks like a crash, else its first output line.'''
+  path = ctx.tree / 'tests' / 'tests' / test_path
+  rto = path.parent / f".{path.name.split('.')[0]}.rto"
+  files = sorted(rto.glob('edg_x86_64.*.txt')) + sorted(
+    rto.glob('default.*.txt'))
+  for file in files[:1]:
+    lines = file.read_text(errors = 'replace').splitlines()[1:]
+    for line in lines:
+      if re.search(r'assert|internal error|Segmentation|Abort|catastrophic',
+                   line, re.I):
+        return line.strip()[:120]
+    return (lines[0].strip()[:120] if lines else '')
+  return ''
+
+
+def split_crashes(results: List[dict]) -> Tuple[List[dict], List[dict]]:
+  '''The crashes of a summary: (CIR-specific ones, pre-existing ones).
+
+  Only a front end crash (FE_CRASH) of the same class (ABORT or CATASTROPHE)
+  that the edg_x86_64 reference recorded for the case is pre-existing.  A
+  library crash (LIB_CRASH) is never excused: the reference does not run the
+  library.  Kills and timeouts (KILLED, TIMEOUT) are not crashes of this kind
+  and are counted by killed_tests; they are never excused either.
+  '''
+  crashes = [r for r in results if r['bucket'] in ('FE_CRASH', 'LIB_CRASH')]
+  def excused(r: dict) -> bool:
+    return (r['bucket'] == 'FE_CRASH' and bool(_crash_class(r['status'])) and
+            _crash_class(r['status']) == _crash_class(r.get('ref_status', ''))
+            and not _in_cir_code(r.get('message', '')))
+  return ([r for r in crashes if not excused(r)],
+          [r for r in crashes if excused(r)])
+
+
+def killed_tests(ctx: Context, step: str, results: List[dict]) -> List[str]:
+  '''Tests killed by a signal or a timeout: the KILLED and TIMEOUT buckets
+  and the tests edgy cancelled (an "X <test>" line of the run's log).'''
+  names = [r['path'] for r in results if r['bucket'] in ('KILLED', 'TIMEOUT')]
+  log = ctx.out / step / 'log.txt'
+  if log.exists():
+    names += [l[2:].strip() for l in log.read_text(errors = 'replace'
+                                                    ).splitlines()
+              if l.startswith('X ')]
+  return names
+
+
 def _config_step(ctx: Context, step: str, filters: str, types: str,
                  configs: Tuple[str, ...]) -> Dict[str, Tuple[Path, List[dict]]]:
   out = {}
@@ -313,6 +416,30 @@ def step_smoke(ctx: Context) -> Tuple[bool, str]:
   return ok, ', '.join(parts)
 
 
+def step_cir_suite(ctx: Context) -> Tuple[bool, str]:
+  '''The cir suite (tests/tests/cir: the writer goldens and the cirgen run
+  tests) in both configs: every case passes and nothing differs from the
+  recorded expectations.'''
+  parts = []
+  ok = True
+  for config in ('edg_x86_64_cir', 'edg_x86_64_cir_2p'):
+    run = edgy_run(ctx, 'cir-suite', config, 'cir', '')
+    if run is None:
+      return False, f"no run for {config}"
+    results, _ = summarize_run(ctx, 'cir-suite', run, config,
+                               f"{config}.json")
+    failing = [r for r in results if r['bucket'] != 'PASS']
+    log = (ctx.out / 'cir-suite' / 'log.txt').read_text(errors = 'replace')
+    parts.append(f"{config} {len(results) - len(failing)}/{len(results)} pass")
+    ok = ok and bool(results) and not failing
+  changes = [l for l in log.splitlines() if re.match(r'^[+-] \S', l)]
+  (ctx.out / 'cir-suite' / 'status-changes.txt').write_text(
+    '\n'.join(changes) + ('\n' if changes else ''))
+  return ok and not changes, '; '.join(parts) + (
+    f"; {len(changes)} lines differ from the recorded expectations"
+    if changes else '')
+
+
 def step_corpus(ctx: Context) -> Tuple[bool, str]:
   data = _config_step(ctx, 'corpus', ctx.args.corpus_filter, ctx.args.types,
                       ('edg_x86_64_cir',))
@@ -322,7 +449,8 @@ def step_corpus(ctx: Context) -> Tuple[bool, str]:
   counts: Dict[str, int] = {}
   for result in results:
     counts[result['bucket']] = counts.get(result['bucket'], 0) + 1
-  crashes = counts.get('FE_CRASH', 0) + counts.get('LIB_CRASH', 0)
+  crashes, preexisting = split_crashes(results)
+  killed = killed_tests(ctx, 'corpus', results)
   specific = [r for r in results if not r['ref_fail'] and
               r['bucket'] != 'PASS']
   total = len(results)
@@ -332,13 +460,24 @@ def step_corpus(ctx: Context) -> Tuple[bool, str]:
   changes = [l for l in log_text.splitlines() if re.match(r'^[+-] \S', l)]
   (ctx.out / 'corpus' / 'status-changes.txt').write_text(
     '\n'.join(changes) + ('\n' if changes else ''))
+  info = ''
+  if preexisting:
+    names = '; '.join(
+      f"{r['path']} [{r['status']}] {r.get('message', '')[:60]} | reference "
+      f"{r.get('ref_status', '')} {reference_message(ctx, r['path'])[:60]}"
+      for r in preexisting[:5])
+    info = (f" INFO: {len(preexisting)} front end crash(es) of the same class "
+            f"in the reference: {names};")
   detail = (f"{counts.get('PASS', 0)}/{total} pass; FE_CRASH "
             f"{counts.get('FE_CRASH', 0)}, LIB_CRASH "
-            f"{counts.get('LIB_CRASH', 0)}; CIR-specific failures "
+            f"{counts.get('LIB_CRASH', 0)} ({len(crashes)} CIR-specific);"
+            f"{info} CIR-specific failures "
             f"{len(specific)} (the rest also fail in edg_x86_64); "
             f"{len(changes)} lines differ from the recorded expectations "
             f"(status-changes.txt)")
-  return crashes == 0 and (
+  if killed:
+    detail += f"; KILLED/TIMEOUT {len(killed)}: {', '.join(killed[:3])}"
+  return not crashes and not killed and (
     not changes or ctx.args.allow_status_changes), detail
 
 
@@ -372,10 +511,20 @@ def _cpp_run_step(ctx: Context, step: str, filters: str, types: str,
     counts: Dict[str, int] = {}
     for result in results:
       counts[result['bucket']] = counts.get(result['bucket'], 0) + 1
-    crashes = counts.get('FE_CRASH', 0) + counts.get('LIB_CRASH', 0)
+    crashes, preexisting = split_crashes(results)
+    killed = killed_tests(ctx, step, results)
+    with open(ctx.out / step / 'excused-crashes.txt', 'a') as excused_log:
+      for r in preexisting:
+        excused_log.write(
+          f"{config} {r['path']} [{r['status']}] {r.get('message', '')} | "
+          f"reference {r.get('ref_status', '')}: "
+          f"{reference_message(ctx, r['path'])}\n")
     passed = counts.get('PASS', 0)
-    parts.append(f"{config} {passed}/{len(results)} pass, {crashes} crashes")
-    ok = ok and bool(results) and crashes == 0 and (
+    parts.append(f"{config} {passed}/{len(results)} pass, {len(crashes)} "
+                 f"crashes" + (f" (+{len(preexisting)} same FE crash in the "
+                               f"reference)" if preexisting else '') +
+                 (f", {len(killed)} killed/timeout" if killed else ''))
+    ok = ok and bool(results) and not crashes and not killed and (
       not require_all or passed == len(results))
   return ok, '; '.join(parts) + ' (summary-<config>.txt)'
 
@@ -398,6 +547,151 @@ def step_cpp_modes(ctx: Context) -> Tuple[bool, str]:
   text = (ctx.out / 'cpp-modes' / 'log.txt').read_text()
   match = re.search(r'\d+ identical, .* different', text)
   return code == 0, match.group(0) if match else 'no result line'
+
+
+def _run_cpp_stress(ctx: Context, step: str, cases: str,
+                    build: str) -> Tuple[bool, str]:
+  '''box_stress.sh over synthetic C++ streams, under a 256 KiB stack.
+
+  Every case must have rc=0 and (the streams are self-checking programs that
+  the script runs) run=0, in at most --cpp-stress-seconds and
+  --cpp-stress-rss-mb of peak memory.
+  '''
+  command = (f"EDG_CIR_BUILD={build} bash cir_src/scripts/box_stress.sh "
+             f"{cases}")
+  # The tools and the library must be those of this tree (the sanitizer build
+  # is not made by the build step).
+  preset = ('linux-cir-relwithdebinfo' if build == 'build/cir' else
+            Path(build).name.replace('cir-', 'linux-cir-'))
+  in_cir_env(ctx, step, f"cd cir_src && cmake --preset {preset} && "
+             f"cmake --build ../{build} -j{BUILD_JOBS}")
+  limit_mb = (ctx.args.cpp_stress_asan_rss_mb if build != 'build/cir'
+              else ctx.args.cpp_stress_rss_mb)
+  in_cir_env(ctx, step, command)
+  text = (ctx.out / step / 'log.txt').read_text()
+  rows = re.findall(r'^(\S+:\d+)\s+(.*)$', text, re.M)
+  expected = len(cases.split())
+  problems = []
+  for name, rest in rows:
+    rc = re.search(r'rc=(\d+)', rest)
+    millis = re.search(r'(\d+) ms', rest)
+    peak = re.search(r'(\d+) KB', rest)
+    run = re.search(r'run=(\d+)', rest)
+    if rc is None or rc.group(1) != '0' or (run and run.group(1) != '0'):
+      problems.append(f"{name}: {rest.strip()[:80]}")
+    elif millis and int(millis.group(1)) > ctx.args.cpp_stress_seconds * 1000:
+      problems.append(f"{name}: {millis.group(1)} ms")
+    elif peak and int(peak.group(1)) > limit_mb * 1024:
+      problems.append(f"{name}: {int(peak.group(1)) // 1024} MB")
+  if len(rows) != expected:
+    problems.append(f"{len(rows)} result lines for {expected} cases")
+  return not problems, (f"{len(rows)} cases within "
+                        f"{ctx.args.cpp_stress_seconds} s / "
+                        f"{limit_mb} MB" if not problems
+                        else '; '.join(problems[:4]))
+
+
+def step_release_smoke(ctx: Context) -> Tuple[bool, str]:
+  '''The C and C++ smoke lists through the release cpfe-cir.
+
+  The CIR test configurations use the debug front end (macro configuration
+  linux-gcc); the shipping one is linux-gcc-release, whose macros differ
+  (NEW_CAN_BE_FOLDED_INTO_CTOR, PRAGMA_WEAK_ALLOWED, ...), so release-only IL
+  shapes are exercised here (--posture cir-release: build/gcc-release-cir).
+  The C smoke list must pass completely; no C++ smoke test may pass in the
+  debug front end and fail in the release one, and none may crash.
+  '''
+  problems: List[str] = []
+  parts: List[str] = []
+  preexisting_keys: set = set()
+  for config in ctx.args.cpp_configs.split(','):
+    results: Dict[str, Dict[str, str]] = {}
+    for kind, filters, types in (
+        ('c', ctx.args.smoke_filter, 'rp,lp'),
+        ('c++', ctx.args.cpp_smoke_filter, 'rp')):
+      for flavor, posture in (('release', 'cir-release'), ('debug', 'cir')):
+        if kind == 'c' and flavor == 'debug':
+          continue
+        run = edgy_run(ctx, 'release-smoke', config, filters, types,
+                       posture = posture)
+        if run is None:
+          return False, f"no run for {config} {kind} {flavor}"
+        json_name = f"{config}-{kind}-{flavor}.json".replace('+', 'x')
+        extra = ['--language', 'cxx', '--types', types] if kind == 'c++' \
+          else []
+        rows, _ = summarize_run(ctx, 'release-smoke', run, config, json_name,
+                                extra)
+        results[f"{kind}-{flavor}"] = {
+          f"{r['path']} {r['variant']}": r['bucket'] for r in rows}
+        if kind == 'c++' and flavor == 'release':
+          # A front end crash of the same class in the reference does not
+          # count.
+          preexisting_keys.update(
+            f"{r['path']} {r['variant']}" for r in rows
+            if r['bucket'] == 'FE_CRASH' and _crash_class(r['status']) and
+            _crash_class(r['status']) == _crash_class(r.get('ref_status', '')))
+    c_rel = results['c-release']
+    c_bad = [t for t, b in c_rel.items() if b != 'PASS']
+    cx_rel, cx_dbg = results['c++-release'], results['c++-debug']
+    regress = [t for t, b in cx_dbg.items()
+               if b == 'PASS' and cx_rel.get(t) != 'PASS']
+    crashes = [t for t, b in cx_rel.items()
+               if b in ('FE_CRASH', 'LIB_CRASH') and
+               t not in preexisting_keys]
+    gained = sum(1 for t, b in cx_rel.items()
+                 if b == 'PASS' and cx_dbg.get(t) != 'PASS')
+    problems += [f"{config} C smoke: {t}" for t in c_bad[:3]]
+    problems += [f"{config} C++ debug PASS, release not: {t}"
+                 for t in regress[:3]]
+    problems += [f"{config} C++ crash: {t}" for t in crashes[:3]]
+    parts.append(
+      f"{config}: C {len(c_rel) - len(c_bad)}/{len(c_rel)}, C++ release "
+      f"{sum(1 for b in cx_rel.values() if b == 'PASS')}/{len(cx_rel)} "
+      f"(debug {sum(1 for b in cx_dbg.values() if b == 'PASS')}, "
+      f"{gained} only in release)")
+  return not problems, '; '.join(parts) + (
+    f"; PROBLEMS {problems[:4]}" if problems else '')
+
+
+def step_poison(ctx: Context) -> Tuple[bool, str]:
+  '''The writer must not depend on freed front-end memory (region lifetime).
+
+  edg-cir-poison-check compiles with the debug front end (freed IL blocks
+  overwritten with 0xdb, expensive checking), the same front end without the
+  overwriting (preset linux-gcc-debug-cir-nopoison, built here) and the release
+  front end, and requires no crash or assertion and identical streams: first
+  the C corpus, then the C and C++ smoke lists and tests/tests/cir (writer and
+  cirgen).
+  '''
+  build = (f"export EDG_BASE=/edg/workspace/bases/docker/cir-env/gcc; cmake "
+           f"--preset linux-gcc-debug-cir-nopoison -DEDG_CIR_LINK_LIBRARY=ON "
+           f"&& cmake --build build/gcc-cir-nopoison --target cpfe-cir "
+           f"edg_prelink edg_decode -j{BUILD_JOBS}")
+  if in_cir_env(ctx, 'poison', build) != 0:
+    return False, 'could not build build/gcc-cir-nopoison'
+  commands = [
+    f"python3 dev_tools/bin/edg-cir-poison-check -j {BUILD_JOBS} --filters "
+    f"{shlex.quote(ctx.args.corpus_filter)} "
+    f"--types {ctx.args.types or 'rp,lp'}",
+    f"python3 dev_tools/bin/edg-cir-poison-check -j {BUILD_JOBS} --filters "
+    f"{shlex.quote(ctx.args.smoke_filter)},"
+    f"{shlex.quote(ctx.args.cpp_smoke_filter)},cir/"
+  ]
+  codes = [in_cir_env(ctx, 'poison', c) for c in commands]
+  text = (ctx.out / 'poison' / 'log.txt').read_text()
+  results = re.findall(r'RESULT: .*', text)
+  counts = re.findall(r'checking (\d+) tests', text)
+  detail = ' + '.join(counts) + ' tests; ' + '; '.join(results)
+  return not any(codes) and len(results) == 2, detail
+
+
+def step_cpp_stress(ctx: Context) -> Tuple[bool, str]:
+  return _run_cpp_stress(ctx, 'cpp-stress', CPP_STRESS_CASES, 'build/cir')
+
+
+def step_cpp_stress_asan(ctx: Context) -> Tuple[bool, str]:
+  return _run_cpp_stress(ctx, 'cpp-stress-asan', CPP_STRESS_ASAN_CASES,
+                         'build/cir-asan')
 
 
 def step_cpp_writer_stress(ctx: Context) -> Tuple[bool, str]:
@@ -802,6 +1096,20 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
   command = (f"python3 dev_tools/bin/edg-cir-perf -j {BUILD_JOBS} "
              f"--big-functions {ctx.args.rss_functions} "
              f"--json {shlex.quote(rel(ctx, new_json))}")
+  only = ['big', 'corpus']
+  if (ctx.tree / 'cir_src/scripts/ecil-stress-gen.py').exists():
+    # The library on a generated C++ stream (a first look at C++ shapes).
+    only.append('streams')
+    command += ' --stream cxx_funcs:6000'
+  if 'cxx' in ctx.args.perf_only:
+    # A generated C++ file through the front end (four configurations) and
+    # through the default C generating front end and gcc.  The default
+    # front end of build/gcc-release must be built first.
+    in_cir_env(ctx, 'perf', "cmake --preset linux-gcc-release && cmake "
+               f"--build build/gcc-release --target cpfe edg_decode "
+               f"edg_prelink -j{BUILD_JOBS}")
+    only.append('cxx')
+  command += f" --only {','.join(only)}"
   if ctx.args.perf_sample > 1:
     command += f" --sample {ctx.args.perf_sample}"
   if in_cir_env(ctx, 'perf', command) != 0 or not new_json.exists():
@@ -829,6 +1137,14 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
     old = before.get('big', {}).get(name, {}).get('ir')
     if old:
       worst = max(worst, 100.0 * (entry['ir'] - old) / old)
+  for name, entry in after.get('big_cxx', {}).items():
+    old = before.get('big_cxx', {}).get(name, {}).get('ir')
+    if old and entry['ir']:
+      worst = max(worst, 100.0 * (entry['ir'] - old) / old)
+  for name, entry in after.get('streams', {}).items():
+    old = before.get('streams', {}).get(name, {}).get('ir')
+    if old:
+      worst = max(worst, 100.0 * (entry['ir'] - old) / old)
   for key in ('fe_ir', 'cir_ir'):
     old = before.get('corpus', {}).get(key)
     if old and 'corpus' in after:
@@ -844,6 +1160,7 @@ STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'writer-stress': step_writer_stress,
   'cpp-smoke': step_cpp_smoke, 'cpp-corpus': step_cpp_corpus,
   'cpp-modes': step_cpp_modes, 'cpp-writer-stress': step_cpp_writer_stress,
+  'cir-suite': step_cir_suite, 'poison': step_poison, 'release-smoke': step_release_smoke, 'cpp-stress': step_cpp_stress, 'cpp-stress-asan': step_cpp_stress_asan,
   'rss': step_rss,
   'day': step_day, 'ctest': step_ctest, 'asm-diff': step_asm_diff,
   'perf': step_perf
@@ -885,6 +1202,10 @@ def main() -> None:
   parser.add_argument('--perf-max-regression', type = float, default = None,
                       help = 'step perf fails if an instruction count grows '
                              'by more than this many percent')
+  parser.add_argument('--perf-only', default = 'cxx',
+                      help = 'extra measurements of the perf step: cxx (a '
+                             'generated 6000-function C++ file, with the C '
+                             'generating baseline); "" for none')
   parser.add_argument('--perf-sample', type = int, default = 1,
                       help = 'step perf measures every Nth corpus case only '
                              '(for trying the script)')
@@ -904,6 +1225,13 @@ def main() -> None:
                       default = '@tests/.edgy/filters/cir-cpp-smoke.txt')
   parser.add_argument('--cpp-corpus-filter',
                       default = '@tests/.edgy/filters/cir-cpp-corpus.txt')
+  parser.add_argument('--cpp-stress-seconds', type = int, default = 30,
+                      help = 'time limit of a case of the cpp-stress steps')
+  parser.add_argument('--cpp-stress-rss-mb', type = int, default = 400,
+                      help = 'peak memory limit of a case of cpp-stress')
+  parser.add_argument('--cpp-stress-asan-rss-mb', type = int, default = 1200,
+                      help = 'peak memory limit of a case of cpp-stress-asan '
+                             '(the sanitizer inflates memory about 3x)')
   parser.add_argument('--cpp-smoke-all-pass', action = 'store_true',
                       help = 'cpp-smoke fails unless every test passes (the '
                              'M3 gate)')

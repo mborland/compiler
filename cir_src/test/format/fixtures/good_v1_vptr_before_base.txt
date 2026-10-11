@@ -1,0 +1,22 @@
+; The vptr of a polymorphic class is an unnamed opaque field at its offset, in
+; front of the bases (a class "D : B" with virtual functions: vptr at 0, B at 8):
+; it does not end the run of BASE fields.
+ecil 1.0 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame REGION
+  TY_INT 1 32 true 4 4
+  TY_OPAQUE 2 8 8
+  STR 2 "B"
+  STR 3 "D"
+  TY_RECORD_DECL 3 0 2
+  TY_RECORD_BODY 3 4 4 4 4 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_RECORD_DECL 4 0 3
+  TY_RECORD_BODY 4 16 12 8 12 2
+  REC_FIELD 2 0 nil nil nil 1
+  REC_FIELD 3 8 nil nil nil 16
+frame END
+  END 2 0

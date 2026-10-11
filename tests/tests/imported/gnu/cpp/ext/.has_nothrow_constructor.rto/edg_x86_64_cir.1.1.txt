@@ -1,0 +1,17 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++17 --c++11 Test_name.c
+"./ext/has_nothrow_constructor.C", line 37: warning: CIR back end: the body of "E1" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+    E1() throw(int) { throw int(); }
+                                   ^
+
+"./ext/has_nothrow_constructor.C", line 47: warning: CIR back end: the body of "G" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+    G(const G&) throw(int) { throw int(); }
+                                          ^
+
+Warning: CIR back end: the unused definition of '_ZN2E1C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2E1C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1GC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1GC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+

@@ -19,3 +19,7 @@ Everything runs inside the cir-env image (toolchain in `/edg/llvm-cir/bin`,
   ctor/dtor, `main*.cpp` the drivers). A hand variant is the clang raw CIR
   with one function body replaced; the replaced bodies are quoted in the
   report.
+- `s1lib/` - the class, elision, `[[no_unique_address]]` and static-init
+  snippets of spike 1 that `doc/research/cxx_cir_differential.md` and
+  `m3_ecil_v1_design.md` cite; they are inputs of the C++ shape differential
+  (`scripts/box_diff.sh`).

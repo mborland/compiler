@@ -1,0 +1,22 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"Test_name.c", line 29: warning: CIR back end: the body of "main" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 18: warning: CIR back end: the body of "MlasShuffleFloat32x4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "V4SF MlasShuffleFloat32x4<I0,I1,I2,I3>(V4SF) [with I0=1U, I1=1U, I2=1U, I3=1U]" at line 24
+
+"Test_name.c", line 18: warning: CIR back end: the body of "MlasShuffleFloat32x4" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "V4SF MlasShuffleFloat32x4<I0,I1,I2,I3>(V4SF) [with I0=3U, I1=3U, I2=3U, I3=3U]" at line 26
+
+Warning: CIR back end: the unused definition of '_Z20MlasShuffleFloat32x4ILj1ELj1ELj1ELj1EEDv4_fS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z20MlasShuffleFloat32x4ILj3ELj3ELj3ELj3EEDv4_fS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

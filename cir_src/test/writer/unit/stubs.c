@@ -1,4 +1,5 @@
 #include "fe_common.h"
+#include "overload.h"
 USING_NAMESPACE_EDG
 char *ecil_output_file_name;
 bool ecil_keep_regions;
@@ -55,3 +56,44 @@ a_symbol_ptr find_macro_symbol_by_name(a_const_char *identifier,
   (void)locator;
   return (length == 9 && memcmp(identifier, "__linux__", 9) == 0) ?
          (a_symbol_ptr)&fake_translation_unit : NULL; }
+
+/* The C++ queries of the type and class writers (not used by the C cases). */
+a_type_ptr skip_array_types(a_type_ptr t) { (void)t; abort(); }
+a_targ_size_t f_size_of_type(a_type_ptr t) { (void)t; abort(); }
+a_boolean gcc_mode;
+a_boolean use_nonstandard_for_init_scope;
+a_boolean is_reference_type(a_type_ptr t) { (void)t; abort(); }
+a_boolean is_union_type(a_type_ptr t) { (void)t; abort(); }
+a_type_ptr f_implicit_this_param_type_of(a_type_ptr t) { (void)t; abort(); }
+a_targ_size_t data_size_of_type(a_type_ptr t) { (void)t; abort(); }
+a_boolean is_copy_constructor(a_routine_ptr r, a_type_ptr t,
+                              a_type_qualifier_set *q, a_boolean a,
+                              a_boolean b) {
+  (void)r; (void)t; (void)q; (void)a; (void)b; abort(); }
+a_boolean is_void_type(a_type_ptr t) { (void)t; abort(); }
+/* new and delete (not used by the C cases). */
+a_targ_alignment f_alignment_of_type(a_type_ptr t) { (void)t; abort(); }
+a_symbol_ptr find_default_operator_new_sym(a_symbol_ptr s, a_boolean *a) {
+  (void)s; (void)a; abort(); }
+a_boolean is_default_operator_delete(a_routine_ptr r, a_boolean *a,
+                                     a_boolean *b, a_boolean *c) {
+  (void)r; (void)a; (void)b; (void)c; abort(); }
+a_boolean is_void_star_type(a_type_ptr t) { (void)t; abort(); }
+a_boolean new_or_delete_type_requires_array_handling(a_type_ptr t,
+                                                     a_boolean c) {
+  (void)t; (void)c; abort(); }
+a_symbol_ptr opname_function_symbol(an_opname_kind k) { (void)k; abort(); }
+a_symbol_ptr set_up_overload_set_traversal(a_symbol_ptr s,
+                    a_candidate_function **c, a_symbol_ptr *p,
+                    an_overload_set_traversal_block *b) {
+  (void)s; (void)c; (void)p; (void)b; abort(); }
+a_symbol_ptr next_symbol_in_overload_set(an_overload_set_traversal_block *b) {
+  (void)b; abort(); }
+/* Structured bindings (not used by the C cases). */
+an_expr_node_ptr copy_expr_tree(an_expr_node_ptr n, int o) {
+  (void)n; (void)o; abort(); }
+an_expr_node_ptr rvalue_expr_for_lvalue(an_expr_node_ptr n) {
+  (void)n; abort(); }
+an_expr_node_ptr add_address_of_to_node(an_expr_node_ptr n) {
+  (void)n; abort(); }
+a_type_ptr type_pointed_to(a_type_ptr t) { (void)t; abort(); }

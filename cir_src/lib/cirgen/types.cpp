@@ -366,8 +366,10 @@ Handle one type introduction record (TY_*, except the body records).
     uint_operand(r.ops[4], b);
     t->is_signed = r.ops[2].kind == ecil::an_operand_kind::boolean
                      ? r.ops[2].u != 0 : (uint_operand(r.ops[2], c) && c != 0);
-    if (bits == 0 || bits > 128 || !cir::isValidFundamentalIntWidth(
-                                       static_cast<unsigned>(bits))) {
+    /* The widths of C and C++ integer types: 8 to 64 and __int128. */
+    if (bits == 0 || bits > 128 ||
+        (bits != 128 && !cir::isValidFundamentalIntWidth(
+                            static_cast<unsigned>(bits)))) {
       ok = unsupported("integer type of " + std::to_string(bits) +
                        " bits is not supported");
     } else {
@@ -477,6 +479,8 @@ Handle one type introduction record (TY_*, except the body records).
       a_record_info &info = records_.back();
       info.is_union = a == erk_union;
       info.is_class = a == erk_class;
+      info.nontrivial_abi = false;
+      info.nontrivial_dtor = false;
       info.complete = false;
       info.packed = false;
       info.size = info.data_size = 0;
@@ -527,10 +531,7 @@ TY_RECORD_BODY: remember the layout facts and await the REC_FIELD records.
 
   uint_operand(r.ops[0], gid);
   t = type_at(gid);
-  if (!v1_flags(r.ops[4], ECIL_RECORD_NONTRIVIAL_ABI |
-                          ECIL_RECORD_NONTRIVIAL_DTOR, "TY_RECORD_BODY"))
-    ok = false;
-  else if (t == nullptr)
+  if (t == nullptr)
     ok = false;
   else if (pending_body_gid_ != 0 || t->kind != a_type_kind::record_type ||
            t->record->complete)
@@ -541,10 +542,18 @@ TY_RECORD_BODY: remember the layout facts and await the REC_FIELD records.
     uint_operand(r.ops[3], align);
     uint_operand(r.ops[4], flags);
     uint_operand(r.ops[5], n);
+    if (data_size > size)
+      ok = format_error("TY_RECORD_BODY: data_size " +
+                        std::to_string(data_size) + " exceeds size " +
+                        std::to_string(size));
+  }
+  if (ok) {
     a_record_info &info = *t->record;
     info.size = size;
     info.data_size = data_size;
     info.align = align == 0 ? 1 : align;
+    info.nontrivial_abi = (flags & ECIL_RECORD_NONTRIVIAL_ABI) != 0;
+    info.nontrivial_dtor = (flags & ECIL_RECORD_NONTRIVIAL_DTOR) != 0;
     info.fields.clear();
     info.pending_fields = static_cast<uint32_t>(n);
     t->size = size;
@@ -589,15 +598,28 @@ REC_FIELD: append to the record being defined; complete it with the last one.
     f.empty_for_abi = (flags & ECIL_FIELD_EMPTY_FOR_ABI) != 0;
     f.bitfield_signed = (flags & ECIL_FIELD_BITFIELD_SIGNED) != 0;
     f.flexible_array = (flags & ECIL_FIELD_FLEXIBLE_ARRAY) != 0;
+    f.is_base = (flags & ECIL_FIELD_BASE) != 0;
+    f.overlapping = (flags & (ECIL_FIELD_BASE |
+                              ECIL_FIELD_POTENTIALLY_OVERLAPPING)) != 0;
+    f.omitted = f.overlapping && f.empty_for_abi;
     if (!good || type_at(f.type) == nullptr)
-      ok = false;
-    else if (!v1_flags(r.ops[5], ECIL_FIELD_BASE |
-                                 ECIL_FIELD_POTENTIALLY_OVERLAPPING,
-                       "REC_FIELD"))
       ok = false;
     else if (f.is_bitfield &&
              !mlir::isa<cir::IntType, cir::BoolType>(type_at(f.type)->cir))
       ok = internal("bit-field member of a non-integer type");
+    else if (f.overlapping &&
+             (f.is_bitfield || type_at(f.type)->kind !=
+                                   a_type_kind::record_type ||
+              !type_at(f.type)->record->complete))
+      ok = format_error("REC_FIELD: a BASE or POTENTIALLY_OVERLAPPING "
+                        "member must be a complete record");
+    else if (f.is_base && t->record->is_union)
+      ok = format_error("REC_FIELD: a union has no base class");
+    else if (f.overlapping && type_at(f.type)->record->is_union &&
+             type_at(f.type)->record->data_size <
+                 type_at(f.type)->record->size)
+      ok = unsupported("a union with reusable tail padding as a base "
+                       "subobject or [[no_unique_address]] member");
     else {
       t->record->fields.push_back(f);
       if (--t->record->pending_fields == 0)
@@ -620,6 +642,36 @@ struct a_member {
 
 }  /* anonymous namespace */
 
+uint64_t a_emitter::consistent_data_size(const a_record_info &rec)
+/*
+The record's data size, raised to the end of its last non-overlapping member
+or base when the front end reported less.  The Itanium data size of a class
+ends after every data member (whole, tail padding included) and every base
+(its data size only); a smaller value cannot be right and would, among other
+things, make the record look packed.  (The front end's own data size of a class
+whose last member is itself a class with tail padding, "struct D2 : B { B x;
+};", falls 3 bytes short of the layout it uses for derived classes.)
+*/
+{
+  uint64_t end = rec.data_size;
+
+  for (const a_field &f : rec.fields) {
+    const a_type *ft = type_at(f.type);
+    uint64_t f_end;
+
+    if (f.omitted || (f.empty_for_abi && f.overlapping))
+      continue;
+    if (f.is_bitfield)
+      f_end = (field_bit_offset(f) + f.bit_width + 7) / 8;
+    else if (f.overlapping && ft->record != nullptr)
+      f_end = f.byte_offset + ft->record->data_size;
+    else
+      f_end = f.byte_offset + ft->size;
+    end = std::max(end, f_end);
+  }
+  return std::min(end, rec.size);
+}  /* a_emitter::consistent_data_size */
+
 bool a_emitter::complete_record_layout(uint64_t gid, a_type &t)
 /*
 All fields have arrived: lower the record and complete its CIR type.
@@ -629,7 +681,9 @@ All fields have arrived: lower the record and complete its CIR type.
   bool ok = true;
 
   (void)gid;
-  rec.member_index.assign(rec.fields.size(), 0);
+  if (!rec.is_union && !c_language_)
+    rec.data_size = consistent_data_size(rec);
+  rec.member_index.assign(rec.fields.size(), no_member);
   rec.bitfields.assign(rec.fields.size(), a_bitfield_info());
   rec.members.clear();
   rec.kinds.clear();
@@ -637,13 +691,76 @@ All fields have arrived: lower the record and complete its CIR type.
   if (rec.is_union)
     lower_union(t, rec);
   else
-    lower_struct(t, rec);
+    lower_struct(t, rec, false, false);
   compat::complete_record(mlir::cast<cir::RecordType>(t.cir), rec.members,
                           rec.packed, rec.union_padding, rec.kinds);
   rec.complete = true;
   pending_body_gid_ = 0;
   return ok;
 }  /* a_emitter::complete_record_layout */
+
+const a_record_info *a_emitter::record_info_of(mlir::Type t) const
+/*
+The record info of a complete CIR record type (null for other types and for
+base-subobject types).
+*/
+{
+  const a_record_info *result = nullptr;
+
+  if (auto record = mlir::dyn_cast<cir::RecordType>(t)) {
+    auto found = record_of_type_.find(record.getAsOpaquePointer());
+    if (found != record_of_type_.end())
+      result = found->second;
+  }
+  return result;
+}  /* a_emitter::record_info_of */
+
+bool a_emitter::is_indirect_class(mlir::Type t) const
+/*
+True for a record that is passed and returned indirectly (NONTRIVIAL_ABI).
+*/
+{
+  const a_record_info *info = record_info_of(t);
+
+  return info != nullptr && info->nontrivial_abi;
+}  /* a_emitter::is_indirect_class */
+
+mlir::Type a_emitter::base_subobject_type(a_type &t)
+/*
+The CIR type of a base subobject or potentially-overlapping member of record
+type t (CIRGenRecordLayout::getBaseSubobjectCIRType).  A record whose data
+size is smaller than its size has a distinct "<name>.base" record of that
+size, lowered from the same fields; it is created the first time something
+needs it.  Otherwise the complete type serves.
+*/
+{
+  a_record_info &rec = *t.record;
+  mlir::Type result = t.cir;
+
+  if (rec.data_size < rec.size) {
+    if (!rec.base_type) {
+      a_record_info scratch = rec;
+      std::string name = unique_record_name(rec.name + ".base");
+      /* CIRGen's base-subobject record is a plain struct, also for a
+         class. */
+      cir::RecordType base = compat::incomplete_struct(ctx_, name, false);
+
+      scratch.size = rec.data_size;
+      scratch.name = name;
+      scratch.member_index.assign(scratch.fields.size(), no_member);
+      scratch.bitfields.assign(scratch.fields.size(), a_bitfield_info());
+      scratch.members.clear();
+      scratch.kinds.clear();
+      scratch.union_padding = mlir::Type();
+      lower_struct(t, scratch, true, rec.packed);
+      compat::complete_record(base, scratch.members, scratch.packed,
+                              scratch.union_padding, scratch.kinds);
+      rec.base_type = base;
+    }
+    result = rec.base_type;
+  }
+  return result;
+}  /* a_emitter::base_subobject_type */
 
 void a_emitter::lower_union(a_type &t, a_record_info &rec)
 /*
@@ -712,22 +829,27 @@ the rest of the size is the union's tail-padding type.
       rec.union_padding = pad == 1
           ? byte : static_cast<mlir::Type>(compat::array_of(byte, pad));
     }
+    rec.packed = layout_size % type_align(storage, true) != 0;
   }
 }  /* a_emitter::lower_union */
 
-void a_emitter::lower_struct(a_type &t, a_record_info &rec)
+void a_emitter::lower_struct(a_type &t, a_record_info &rec, bool as_base,
+                             bool force_packed)
 /*
-Port of CIRRecordLowering::lower for C structs: accumulate fields and bit-field
-access units, sort by offset, determine packedness, insert padding, and number
-the members.
+Port of CIRRecordLowering::lower for structs and classes: accumulate fields
+(bases after them, as CIRGen does) and bit-field access units, sort by
+offset, determine packedness, insert padding, and number the members.  With
+as_base the record is laid out as its base subobject (rec.size is its data
+size, and force_packed carries the packedness of the complete type).
 */
 {
   std::vector<a_member> members;
+  std::vector<a_member> base_members;
   mlir::Type byte = compat::int_type(ctx_, 8, false);
   const size_t count = rec.fields.size();
   const uint64_t reg_size = reg_bits_ / 8;
   const uint64_t record_align = rec.align;
-  bool packed = false;
+  bool packed = force_packed;
 
   (void)t;
 
@@ -762,10 +884,22 @@ the members.
   auto is_empty_for_layout = [&](const a_field &f) {
     bool result;
     mlir::Type ft = type_at(f.type)->cir;
-    if (f.is_bitfield)
+    if (f.is_bitfield) {
       result = f.bit_width == 0;
-    else
-      result = mlir::isa<cir::RecordType>(ft) && type_size(ft) == 0;
+    } else if (f.omitted) {
+      result = true;
+    } else {
+      /* A record with no data (an empty class) counts as empty. */
+      const a_record_info *info = record_info_of(ft);
+      bool no_data = false;
+      if (info != nullptr && !info->is_union) {
+        no_data = true;
+        for (const a_field &member : info->fields)
+          no_data = no_data && member.omitted;
+      }
+      result = mlir::isa<cir::RecordType>(ft) &&
+               (type_size(ft) == 0 || no_data);
+    }
     return result;
   };
 
@@ -773,11 +907,15 @@ the members.
   for (size_t i = 0; i < count;) {
     const a_field &f = rec.fields[i];
     if (!f.is_bitfield) {
-      a_member m = {f.byte_offset, type_at(f.type)->cir,
-                    f.empty_for_abi ? cir::RecordMemberKind::Empty
-                                    : cir::RecordMemberKind::Data,
-                    static_cast<int>(i)};
-      members.push_back(m);
+      if (!f.omitted) {
+        mlir::Type data = f.overlapping ? base_subobject_type(*type_at(f.type))
+                                        : type_at(f.type)->cir;
+        a_member m = {f.byte_offset, data,
+                      f.empty_for_abi ? cir::RecordMemberKind::Empty
+                                      : cir::RecordMemberKind::Data,
+                      static_cast<int>(i)};
+        (f.is_base ? base_members : members).push_back(m);
+      }
       ++i;
       continue;
     }
@@ -895,6 +1033,7 @@ the members.
     i = field;
   }
 
+  members.insert(members.end(), base_members.begin(), base_members.end());
   std::stable_sort(members.begin(), members.end(),
                    [](const a_member &x, const a_member &y) {
                      return x.offset < y.offset;
@@ -903,17 +1042,24 @@ the members.
   members.push_back({rec.size, uint_type(8), cir::RecordMemberKind::Data, -1});
 
   /* determinePacked */
-  {
+  if (!packed) {
     uint64_t alignment = 1;
+    uint64_t nv_alignment = 1;
+    /* The non-virtual size of a C++ class is its data size. */
+    uint64_t nv_size = !as_base && !c_language_ ? rec.data_size : 0;
     for (const a_member &m : members) {
       if (!owns_bytes(m))
         continue;
       uint64_t ma = member_align(m.data);
       if (m.offset % ma != 0)
         packed = true;
+      if (m.offset < nv_size)
+        nv_alignment = std::max(nv_alignment, ma);
       alignment = std::max(alignment, ma);
     }
     if (members.back().offset % alignment != 0)
+      packed = true;
+    if (nv_size % nv_alignment != 0)
       packed = true;
     if (!packed)
       members.back().data = uint_type(alignment * 8);

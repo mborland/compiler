@@ -1,0 +1,4 @@
+eccp -DTEST_NUMBER=1 --c++20 -w --no_exceptions Test_name.c
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

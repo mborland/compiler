@@ -6,8 +6,8 @@ M3a spike 7 (base subobjects).  Like cir-layout-compare.py, but for classes
 with bases, empty bases and tail padding: the facts (size, dsize, align,
 offsets, base lists) come from clang -fdump-record-layouts; every class is
 encoded as ECIL, a class used as a base whose dsize is smaller than its size
-gets a second record "<name>.base" of size dsize (what ECIL v1 expresses with
-REC_FIELD BASE/POTENTIALLY_OVERLAPPING and the library synthesizes), and the
+is a REC_FIELD with BASE (empty ones also EMPTY_FOR_ABI: they get no storage);
+the library synthesizes the "<name>.base" record of size dsize; and the
 CIR record types edg-cir produces are compared with the ones clang -fclangir
 -emit-cir produces for the same file.  Only scalar members, nested classes
 and (empty) bases are supported.
@@ -20,7 +20,7 @@ CLANG = "/edg/llvm-cir/bin/clang"
 TRIPLE = "x86_64-unknown-linux-gnu"
 BUILD = os.environ.get("EDG_CIR_BUILD", "build/cir")
 HEADER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                      "..", "test", "cirgen", "Inputs", "header.txt")
+                      "..", "test", "cirgen", "Inputs", "header08_cxx.txt")
 SCALARS = {"char": 4, "signed char": 4, "unsigned char": 5, "short": 6,
            "unsigned short": 7, "int": 1, "unsigned int": 8, "long": 3,
            "unsigned long": 2, "float": 9, "double": 10, "_Bool": 15}
@@ -88,26 +88,24 @@ def encode(recs):
             sids[text] = new()
             lines.append('  STR %d "%s"' % (sids[text], text))
         return sids[text]
-    used_as_base = {i["type"] for r in recs.values() for i in r["items"]
-                    if i["kind"] in ("base", "empty_base")}
-    base_gid = {}
 
     def body(name, g, rec, size, dsize, align):
-        lines.append("  TY_RECORD_DECL %d 0 %d" % (g, sid(name)))
+        lines.append("  TY_RECORD_DECL %d %d %d" %
+                     (g, {"struct": 0, "union": 1, "class": 2}[rec["kind"]],
+                      sid(name)))
         fields = []
         for it in rec["items"]:
-            if it["kind"] == "empty_base":
-                continue
-            if it["kind"] == "base":
-                b = it["type"]
-                t = base_gid.get(b, gid[b])
-                fields.append("  REC_FIELD %d %d nil nil nil 0" %
-                              (t, it["offset"]))
+            if it["kind"] in ("base", "empty_base"):
+                # BASE 0x10, EMPTY_FOR_ABI 0x02 (no storage in CIR)
+                fl = 0x12 if it["kind"] == "empty_base" else 0x10
+                fields.append("  REC_FIELD %d %d nil nil nil %d" %
+                              (gid[it["type"]], it["offset"], fl))
             elif it["kind"] == "member":
-                fl = 2 if it.get("empty") else 0
-                fields.append("  REC_FIELD %d %d nil nil %d %d" %
+                # a member of class type is an ordinary field (v1: only
+                # empty bases and [[no_unique_address]] members are empty)
+                fields.append("  REC_FIELD %d %d nil nil %d 0" %
                               (gid[it["type"]], it["offset"],
-                               sid(it["name"]), fl))
+                               sid(it["name"])))
             else:
                 fields.append("  REC_FIELD %d %d nil nil %d 0" %
                               (SCALARS[it["type"]], it["offset"],
@@ -121,14 +119,11 @@ def encode(recs):
             # an empty class: one byte of padding, no fields
             g = new()
             gid[name] = g
-            lines.append("  TY_RECORD_DECL %d 0 %d" % (g, sid(name)))
+            lines.append("  TY_RECORD_DECL %d %d %d" %
+                         (g, {"struct": 0, "union": 1, "class": 2}[rec["kind"]],
+                          sid(name)))
             lines.append("  TY_RECORD_BODY %d 1 0 1 0 0" % g)
             continue
-        if name in used_as_base and rec["dsize"] < rec["size"]:
-            bg = new()
-            body(name + ".base", bg, rec, rec["dsize"], rec["dsize"],
-                 rec["align"])
-            base_gid[name] = bg
         g = new()
         gid[name] = g
         body(name, g, rec, rec["size"], rec["dsize"], rec["align"])
@@ -141,10 +136,10 @@ def encode(recs):
 
 def cir_types(text):
     out = {}
-    for m in re.finditer(r'^!rec_\w+ = !cir\.struct<"([^"]+)" (.*)>$', text,
-                         re.M):
-        body = re.sub(r"!rec_(\w+)", lambda x: x.group(1), m.group(2))
-        out[m.group(1)] = body
+    for m in re.finditer(r'^!rec_\w+ = !cir\.struct<(class )?"([^"]+)" (.*)>$',
+                         text, re.M):
+        body = re.sub(r"!rec_(\w+)", lambda x: x.group(1), m.group(3))
+        out[m.group(2)] = (m.group(1) or "") + body
     return out
 
 

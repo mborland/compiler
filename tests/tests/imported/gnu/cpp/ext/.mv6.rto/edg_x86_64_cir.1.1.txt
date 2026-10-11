@@ -1,0 +1,16 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --gnu_version=80200 -tused -e 200 --no_wrap Test_name.c
+"Test_name.c", line 18: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+    }
+    ^
+
+"Test_name.c", line 24: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+    }
+    ^
+
+"Test_name.c", line 31: warning: CIR back end: the body of "main" uses an alias, ifunc or weakref attribute, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

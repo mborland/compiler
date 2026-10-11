@@ -1,0 +1,28 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"./cpp2a/spaceship-synth1a.C", line 45: warning: CIR back end: the body of "operator<=>" uses the initialization of an undeclared local variable, which the CIR back end does not support; the function is dropped
+    return is_eq (d <=> d2)
+                    ^
+          detected during:
+            instantiation of class "D<T> [with T=int]" at line 45
+            instantiation of "bool check_eq(T, U) [with T=D<int>, U=D<int>]" at line 101
+
+"./cpp2a/spaceship-synth1a.C", line 45: warning: CIR back end: the body of "operator<=>" uses the initialization of an undeclared local variable, which the CIR back end does not support; the function is dropped
+    return is_eq (d <=> d2)
+                    ^
+          detected during:
+            instantiation of class "E<T> [with T=float]" at line 45
+            instantiation of "bool check_eq(T, U) [with T=E<float>, U=E<float>]" at line 106
+
+"./cpp2a/spaceship-synth1a.C", line 36: warning: CIR back end: the body of "operator<=>" uses the operator "three-way comparison (<=>)", which the CIR back end does not support; the function is dropped
+    constexpr auto operator<=>(T x) const { return i<=>x; }
+                                                          ^
+          detected during:
+            instantiation of "auto F<T>::operator<=>(T) const [with T=char]" at line 45
+            instantiation of "bool check_eq(T, U) [with T=F<char>, U=char]" at line 110
+
+Warning: CIR back end: the unused definition of '_ZNK1DIiEssERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNK1EIfEssERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNK1FIcEssEc' was dropped and erased: it uses a construct the CIR back end cannot express
+

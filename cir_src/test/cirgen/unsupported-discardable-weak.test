@@ -1,0 +1,30 @@
+; Unsupported policy: "was linkonce_odr once" makes only an entity that carries
+; UNSUPPORTED discardable.  `g` was first sent linkonce_odr and then got a
+; supported weak_odr definition; it is a root, so the dropped internal function
+; it calls is referenced and stays an error (it used to be erased with g).
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: error [1003]: the definition of 'dropped' was dropped: {{.*}}(and it is referenced)
+
+frame DECLS
+  STR 11 "dropped"
+  STR 12 "g"
+  STR 13 "main"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 41 21 1 32 11
+  DECL_FUNC 42 21 3 67 12
+  DECL_FUNC 42 21 4 67 12
+  DECL_FUNC 43 21 0 9 13
+frame REGION
+  FUNC_BEGIN 42 0
+  CALL 41 21 0 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

@@ -1,0 +1,454 @@
+; C++ (ECIL v1, slice S3): static storage duration.  Globals with dynamic
+; initialization in the F_GLOBALS body section (ctor and dtor regions, module
+; order = initialization order), guarded vague-linkage variables (an inline
+; variable, a template static member), a lifetime-extended _ZGR temporary
+; (cir.register_exit_dtor), constant-initialized objects with a destructor
+; (dtor-only regions), and function-local statics (cir.local_init) including
+; one with a parameter in its initializer.  The program prints the order of
+; the initializers and the destructors, which is the order the pin's clang
+; produces for the same C++ (spike/cxx-shapes/s1lib/static_init.cpp).
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe | %FileCheck %s --check-prefix=OUT
+
+; CHECK-DAG: dynamic_init_guard<"_ZGV2iv"> @iv
+; CHECK-DAG: dynamic_init_info<local = false, tls = none, is_inline = true, tsk = undeclared>
+; CHECK-DAG: dynamic_init_guard<"_ZGVN2TVIiE1vE"> @_ZN2TVIiE1vE
+; CHECK-DAG: tsk = implicit_instantiation
+; CHECK-DAG: dynamic_init_guard<"_ZGVZ1hvE1x"> @_ZZ1hvE1x
+; CHECK-DAG: dynamic_init_info<local = true, tls = none, is_inline = false, tsk = undeclared>
+; CHECK-DAG: cir.get_global static_local @_ZZ1hvE1x
+; CHECK-DAG: cir.local_init static_local @_ZZ1hvE2ls ctor
+; CHECK-DAG: } dtor {
+; CHECK-DAG: cir.register_exit_dtor @_ZGR2sr_
+; CHECK-DAG: cir.register_exit_dtor @_ZGRZ2h2vE2lr_
+; CHECK-DAG: cir.local_init static_local @_ZZ2h4vE2lz dtor {
+; CHECK-DAG: cir.global linkonce_odr comdat dso_local dynamic_init_guard<"_ZGV2iz"> @iz = #cir.const_record
+
+; OUT: 7812346190212|8
+; OUT-NEXT: GLJKFEH
+
+frame DECLS
+  STR 100 "S"
+  STR 101 "Z"
+  STR 102 "g_log"
+  STR 103 "g_n"
+  STR 104 "a"
+  STR 105 "b"
+  STR 106 "s"
+  STR 107 "iv"
+  STR 108 "_ZN2TVIiE1vE"
+  STR 109 "sr"
+  STR 110 "_ZGR2sr_"
+  STR 111 "z"
+  STR 112 "iz"
+  STR 113 "_ZZ1hvE1x"
+  STR 114 "_ZZ1hvE2ls"
+  STR 115 "_ZZ2h2vE2lr"
+  STR 116 "_ZGRZ2h2vE2lr_"
+  STR 117 "_ZZ2h3iE1y"
+  STR 118 "_ZZ2h4vE2lz"
+  STR 119 "lg"
+  STR 120 "_ZN1SC2Ei"
+  STR 121 "_ZN1SC1Ei"
+  STR 122 "_ZN1SD2Ev"
+  STR 123 "_ZN1SD1Ev"
+  STR 124 "f"
+  STR 125 "_Z1hv"
+  STR 126 "_Z2h2v"
+  STR 127 "_Z2h3i"
+  STR 128 "_Z2h4v"
+  STR 129 "_ZN1ZD2Ev"
+  STR 130 "_ZN1ZD1Ev"
+  STR 131 "putchar"
+  STR 132 "main"
+  TY_RECORD_DECL 41 0 100
+  TY_RECORD_BODY 41 4 4 4 12 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_RECORD_DECL 51 0 101
+  TY_RECORD_BODY 51 4 4 4 12 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 42 41
+  TY_ARRAY 43 1 64 0
+  TY_FUNC 44 11 0 [1]
+  TY_FUNC 45 11 0 [42, 1]
+  TY_FUNC 46 11 0 [42]
+  TY_FUNC 47 11 0 []
+  TY_FUNC 48 1 0 [1]
+  TY_FUNC 49 1 0 []
+  TY_PTR 52 51
+  TY_FUNC 53 11 0 [52]
+  DECL_VAR 301 43 0 1 4 102
+  DECL_VAR 302 1 0 1 4 103
+  DECL_VAR 310 1 0 1 4 104
+  DECL_VAR 311 1 0 1 4 105
+  DECL_VAR 312 41 0 1 4 106
+  DECL_VAR 313 1 3 385 4 107
+  DECL_VAR 314 1 3 385 4 108
+  DECL_VAR 315 42 0 1 8 109
+  DECL_VAR 316 41 1 1 4 110
+  DECL_VAR 317 51 0 1 4 111
+  C_AGG_BEGIN 51
+  C_SEL 0
+  C_INT 1 5
+  C_AGG_END
+  VAR_INIT 317
+  DECL_VAR 330 51 3 385 4 112
+  C_AGG_BEGIN 51
+  C_SEL 0
+  C_INT 1 8
+  C_AGG_END
+  VAR_INIT 330
+  DECL_VAR 320 1 1 273 4 113
+  DECL_VAR 321 41 1 273 4 114
+  DECL_VAR 322 42 1 273 8 115
+  DECL_VAR 323 41 1 1 4 116
+  DECL_VAR 324 1 1 273 4 117
+  DECL_VAR 325 51 1 273 4 118
+  C_AGG_BEGIN 51
+  C_SEL 0
+  C_INT 1 7
+  C_AGG_END
+  VAR_INIT 325
+  DECL_FUNC 100 44 0 1 119
+  DECL_FUNC 101 45 0 1 120
+  DECL_FUNC 102 45 0 0 121
+  DECL_FUNC 103 46 0 1 122
+  DECL_FUNC 104 46 0 0 123
+  DECL_FUNC 105 48 0 1 124
+  DECL_FUNC 106 49 0 1 125
+  DECL_FUNC 107 49 0 1 126
+  DECL_FUNC 108 48 0 1 127
+  DECL_FUNC 109 49 0 1 128
+  DECL_FUNC 111 53 0 1 129
+  DECL_FUNC 112 53 0 0 130
+  STRUCTOR 102 101 0
+  STRUCTOR 104 103 1
+  STRUCTOR 112 111 1
+  DECL_FUNC 110 48 0 0 131
+  DECL_FUNC 120 49 0 9 132
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 1 1 nil 0
+  GREF 301
+  ADDR
+  CAST 12 14
+  GREF 302
+  LOAD 0
+  PTR_STRIDE 0
+  DEREF
+  LREF 1
+  LOAD 0
+  STORE 0 0
+  GREF 302
+  DUP
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  FUNC_END 1
+  FUNC_BEGIN 101 0
+  PARAM 1 42 42 nil 1
+  PARAM 2 1 1 nil 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 41 0
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  LREF 2
+  LOAD 0
+  CALL 100 44 1 0
+  FUNC_END 1
+  FUNC_BEGIN 103 0
+  PARAM 1 42 42 nil 1
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 41 0
+  LOAD 0
+  CONST_INT 1 64
+  ADD 1
+  CALL 110 48 1 0
+  DROP
+  FUNC_END 1
+  FUNC_BEGIN 111 0
+  PARAM 1 52 52 nil 1
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 51 0
+  LOAD 0
+  CONST_INT 1 64
+  ADD 1
+  CALL 110 48 1 0
+  DROP
+  FUNC_END 1
+  FUNC_BEGIN 105 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CALL 100 44 1 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 106 0
+  STATIC_INIT_BEGIN 320 0
+  GREF 320
+  CONST_INT 1 9
+  CALL 105 48 1 0
+  STORE 2 0
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 321 0
+  GREF 321
+  ADDR
+  CONST_INT 1 10
+  CALL 102 45 2 0
+  CLEANUP_BEGIN 4 321 0
+  GREF 321
+  ADDR
+  CALL 104 46 1 0
+  CLEANUP_BODY
+  STATIC_INIT_END
+  GREF 320
+  LOAD 0
+  GREF 321
+  FIELD 41 0
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 107 0
+  STATIC_INIT_BEGIN 322 0
+  GREF 323
+  ADDR
+  CONST_INT 1 12
+  CALL 102 45 2 0
+  CLEANUP_BEGIN 4 323 0
+  GREF 323
+  ADDR
+  CALL 104 46 1 0
+  CLEANUP_BODY
+  GREF 322
+  GREF 323
+  ADDR
+  STORE 2 0
+  STATIC_INIT_END
+  GREF 322
+  LOAD 0
+  DEREF
+  FIELD 41 0
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 108 0
+  PARAM 1 1 1 nil 0
+  STATIC_INIT_BEGIN 324 0
+  GREF 324
+  LREF 1
+  LOAD 0
+  TO_BOOL
+  LAND_BEGIN
+  CONST_INT 1 1
+  CALL 105 48 1 0
+  CONST_INT 1 0
+  CMP 2
+  LAND_END
+  TERN_BEGIN 1
+  CONST_INT 1 2
+  CALL 105 48 1 0
+  TERN_ELSE
+  CONST_INT 1 3
+  CALL 105 48 1 0
+  TERN_END
+  STORE 2 0
+  STATIC_INIT_END
+  GREF 324
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 109 0
+  STATIC_INIT_BEGIN 325 0
+  CLEANUP_BEGIN 4 325 0
+  GREF 325
+  ADDR
+  CALL 112 53 1 0
+  CLEANUP_BODY
+  STATIC_INIT_END
+  GREF 325
+  FIELD 51 0
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 120 0
+  LOCAL 1 1 nil 4 0
+  LOCAL 2 1 nil 4 0
+  LREF 1
+  GREF 302
+  LOAD 0
+  STORE 0 0
+  GREF 314
+  LOAD 0
+  GREF 313
+  LOAD 0
+  ADD 1
+  DROP
+  GREF 317
+  FIELD 51 0
+  LOAD 0
+  DROP
+  GREF 330
+  FIELD 51 0
+  LOAD 0
+  DROP
+  CALL 106 49 0 0
+  DROP
+  CALL 106 49 0 0
+  DROP
+  CALL 107 49 0 0
+  DROP
+  CONST_INT 1 1
+  CALL 108 48 1 0
+  DROP
+  CONST_INT 1 0
+  CALL 108 48 1 0
+  DROP
+  CALL 109 49 0 0
+  DROP
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  FOR_BEGIN
+  FOR_COND 1
+  LREF 2
+  LOAD 0
+  GREF 302
+  LOAD 0
+  CMP 0
+  FOR_STEP 1
+  LREF 2
+  DUP
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  FOR_BODY
+  CONST_INT 1 48
+  GREF 301
+  ADDR
+  CAST 12 14
+  LREF 2
+  LOAD 0
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  CONST_INT 1 10
+  REM 0
+  ADD 1
+  CALL 110 48 1 0
+  DROP
+  FOR_END
+  CONST_INT 1 124
+  CALL 110 48 1 0
+  DROP
+  CONST_INT 1 48
+  LREF 1
+  LOAD 0
+  CONST_INT 1 10
+  REM 0
+  ADD 1
+  CALL 110 48 1 0
+  DROP
+  CONST_INT 1 10
+  CALL 110 48 1 0
+  DROP
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  STATIC_INIT_BEGIN 317 0
+  CLEANUP_BEGIN 4 317 0
+  GREF 317
+  ADDR
+  CALL 112 53 1 0
+  CLEANUP_BODY
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 330 1
+  CLEANUP_BEGIN 4 330 0
+  GREF 330
+  ADDR
+  CALL 112 53 1 0
+  CLEANUP_BODY
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 310 0
+  GREF 310
+  CONST_INT 1 1
+  CALL 105 48 1 0
+  STORE 2 0
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 311 0
+  GREF 311
+  CONST_INT 1 2
+  CALL 105 48 1 0
+  CONST_INT 1 0
+  CMP 2
+  LAND_BEGIN
+  CONST_INT 1 3
+  CALL 105 48 1 0
+  CONST_INT 1 0
+  CMP 2
+  LAND_END
+  TERN_BEGIN 1
+  CONST_INT 1 4
+  CALL 105 48 1 0
+  TERN_ELSE
+  CONST_INT 1 5
+  CALL 105 48 1 0
+  TERN_END
+  STORE 2 0
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 312 0
+  GREF 312
+  ADDR
+  CONST_INT 1 6
+  CALL 102 45 2 0
+  CLEANUP_BEGIN 4 312 0
+  GREF 312
+  ADDR
+  CALL 104 46 1 0
+  CLEANUP_BODY
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 313 1
+  GREF 313
+  CONST_INT 1 7
+  CALL 105 48 1 0
+  STORE 2 0
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 314 2
+  GREF 314
+  CONST_INT 1 8
+  CALL 105 48 1 0
+  STORE 2 0
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 315 0
+  GREF 316
+  ADDR
+  CONST_INT 1 11
+  CALL 102 45 2 0
+  CLEANUP_BEGIN 4 316 0
+  GREF 316
+  ADDR
+  CALL 104 46 1 0
+  CLEANUP_BODY
+  GREF 315
+  GREF 316
+  ADDR
+  STORE 2 0
+  STATIC_INIT_END
+frame END
+  END auto 0

@@ -11,11 +11,13 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: integer type of 128 bits is not supported
-
 "Test_name.c", line 68: warning: unknown attribute "noipa"
   __attribute__((noipa)) void
                  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "test575" uses an operation on an unsupported scalar type, which the CIR back end does not support; the function is dropped
+  }
+  ^
 
 "Test_name.c", line 102: error: integer constant is too large
       -159047363318536960484353065517373654721104396757490314295wb,
@@ -161,4 +163,4 @@ Error: CIR back end: integer type of 128 bits is not supported
       -10288638308173362696633233706439807781761277611815792314525923347956953720054374840733498198399501888078817738532473821245337293721068994241744635656437058172223152460622488wb
        ^
 
-37 errors detected in the compilation of "Test_name.c".
+36 errors detected in the compilation of "Test_name.c".

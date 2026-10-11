@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Check that the ECIL writer does not depend on freed front-end memory.
+
+AddressSanitizer cannot see a front end that reads an IL memory region after
+it was freed: the memory blocks of a region are pooled, so they are not
+returned to malloc.  What does catch it is OVERWRITE_FREED_MEM_BLOCKS: a
+freed block is overwritten with 0xdb (free_mem_block in mem_manage.c), so a
+stale pointer reads garbage, and EXPENSIVE_CHECKING adds the front end's own
+assertions.  Both are on in the debug cpfe-cir (build/gcc-cir, the
+linux-gcc-debug-cir preset: the debug build type sets
+OVERWRITE_FREED_MEM_BLOCKS=1 and EXPENSIVE_CHECKING is 1 in debug builds).
+The preset linux-gcc-debug-cir-nopoison (build/gcc-cir-nopoison, macro
+configuration linux-gcc-nopoison) is the same front end with
+OVERWRITE_FREED_MEM_BLOCKS=0, and build/gcc-release-cir is the release one.
+This tool checks the configurations (--dump_configuration) and then compiles
+every case of the selected tests with the front ends, writing an ECIL stream
+(--ecil_output), and requires:
+
+  - the poisoning front end shows no crash, assertion or sanitizer report,
+  - all front ends have the same exit status, and
+  - the streams are byte-identical: poisoning vs. not poisoning (the writer
+    depends on freed memory if these differ).
+
+The release front end (--release-build, "" skips it) is compared as
+information only: the release macro configuration (linux-gcc-release) differs
+from the debug one (linux-gcc) in macros that change what the front end
+builds (PRAGMA_WEAK_ALLOWED, NEW_CAN_BE_FOLDED_INTO_CTOR,
+ASSIGNMENT_TO_THIS_ALLOWED, ...), so its streams may differ legitimately; the
+cases are listed as `INFO` lines and do not fail.  The release front end is
+tested by the release-smoke gate step.
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-cir and build/gcc-release-cir:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-poison-check \\
+      [-j 8] [--filters @tests/.edgy/filters/cir-c-smoke.txt,cir/] [--types rp]
+
+C tests are compiled as C, C++ tests (.cpp, .cc, .C, .cxx) as C++, with the
+options edgy gives them.  Exit status 1 and a line per failing case if any
+case fails; the last line is `RESULT: PASS` or `RESULT: n case(s) FAILED`.
+'''
+
+import argparse
+import concurrent.futures
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import edgtest
+import edgtest.runtest as runtest
+
+STANDARD_OPTIONS = [
+  '-DTEST_NUMBER=1', '--gnu_version=999999', '-e', '200', '--no_wrap',
+  '--no_wrap_diagnostics', '--gcc'
+]
+STANDARD_CXX_OPTIONS = [
+  '-DTEST_NUMBER=1', '--gnu_version=999999', '-tused', '-e', '200',
+  '--no_wrap', '--no_wrap_diagnostics'
+]
+CXX_SUFFIXES = ('.cpp', '.cc', '.C', '.cxx')
+DEFAULT_FILTERS = ('@tests/.edgy/filters/cir-c-smoke.txt,'
+                   '@tests/.edgy/filters/cir-cpp-smoke.txt,cir/')
+_BAD_OUTPUT_REGEX = re.compile(
+  r'AddressSanitizer|LeakSanitizer|Assertion failed|assertion failed at|'
+  r'internal error|Segmentation fault|SIGSEGV|SIGABRT|SIGILL'
+)
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  '''Parse the `export NAME="value"` lines of a CMake environment.sh.'''
+  exports = {}
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  return exports
+
+
+def read_filter_list(spec: str, root: Path) -> List[str]:
+  '''The lines of "@file" filters, or the comma separated prefixes.'''
+  lines: List[str] = []
+  for part in spec.split(','):
+    if part.startswith('@'):
+      for line in (root / part[1:]).read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith('#'):
+          lines.append(line)
+    elif part:
+      lines.append(part)
+  return lines
+
+
+def find_tests(tests_dir: Path, filters: List[str]) -> List[Path]:
+  # A "!" line excludes a prefix; the lists of several files may be joined,
+  # so an exclusion only applies to the lines of its own file: when "@" lists
+  # are joined, a test of another list is not excluded by this list's "!".
+  positive = [l for l in filters if not l.startswith('!')]
+  negative = [l[1:] for l in filters if l.startswith('!')]
+  found = []
+  for suite in sorted(p for p in tests_dir.iterdir()
+                      if p.is_dir() and not p.name.startswith('.')):
+    for path in sorted(edgtest.walk_test_directory(
+        suite, edgtest.DEFAULT_TEST_EXTENSIONS)):
+      rel = f"{suite.name}/{path.relative_to(suite).as_posix()}"
+      if positive and not any(rel.startswith(p) for p in positive):
+        continue
+      if any(rel.startswith(n) for n in negative):
+        continue
+      found.append(path)
+  return found
+
+
+def configuration(fe: str, env: Dict[str, str]) -> Dict[str, str]:
+  '''The OVERWRITE_FREED_MEM_BLOCKS and EXPENSIVE_CHECKING of a front end.'''
+  proc = subprocess.run([fe, '--dump_configuration'], env = env, text = True,
+                        stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+  values = {}
+  for name in ('OVERWRITE_FREED_MEM_BLOCKS', 'EXPENSIVE_CHECKING', 'CHECKING'):
+    match = re.search(rf"#define {name} (\w+)", proc.stdout)
+    values[name] = match.group(1) if match else 'undefined'
+  return values
+
+
+def compile_to_stream(source: Path, options: List[str], env: Dict[str, str],
+                      work: Path) -> Tuple[int, str, Optional[bytes]]:
+  '''Run the front end on a copy of the source; return (rc, output, stream).'''
+  work.mkdir(parents = True, exist_ok = True)
+  local = work / source.name
+  shutil.copy2(source, local)
+  for extra in source.parent.glob('*.h'):
+    shutil.copy2(extra, work / extra.name)
+  stream = work / 'out.ecil'
+  run_env = dict(env)
+  run_env['EDG_CPFE_DEFAULT_OPTIONS'] = f"--ecil_output={stream}"
+  try:
+    proc = subprocess.run(
+      [env['ECCP'], '-S', *options, local.name], cwd = work, env = run_env,
+      stdout = subprocess.PIPE, stderr = subprocess.STDOUT, text = True,
+      timeout = 600
+    )
+    rc, output = proc.returncode, proc.stdout
+  except subprocess.TimeoutExpired:
+    return 124, 'timeout', None
+  return rc, output, stream.read_bytes() if stream.exists() else None
+
+
+def check_test(test: Path, tests_dir: Path, env_debug: Dict[str, str],
+               env_clean: Dict[str, str],
+               env_release: Optional[Dict[str, str]]) -> List[str]:
+  '''The problems of every case of a test (empty if none).'''
+  problems: List[str] = []
+  top = tests_dir / test.relative_to(tests_dir).parts[0]
+  description = runtest.load_description(test, top_dir = top)
+  name = test.relative_to(tests_dir).as_posix()
+  standard = (STANDARD_CXX_OPTIONS if test.suffix in CXX_SUFFIXES
+              else STANDARD_OPTIONS)
+  for number, (mode, base_options, case_options) in enumerate(
+      description.traverse_cases()):
+    options = [*standard, *base_options, *case_options]
+    work = Path(tempfile.mkdtemp(prefix = 'poison-check.'))
+    try:
+      rc_debug, out_debug, stream_debug = compile_to_stream(
+        test, options, env_debug, work / 'debug')
+      rc_clean, out_clean, stream_clean = compile_to_stream(
+        test, options, env_clean, work / 'clean')
+      rc_rel, stream_rel = rc_clean, stream_clean
+      if env_release is not None:
+        rc_rel, _, stream_rel = compile_to_stream(
+          test, options, env_release, work / 'release')
+    finally:
+      shutil.rmtree(work, ignore_errors = True)
+    tag = f"{name}#{number}"
+    bad = _BAD_OUTPUT_REGEX.search(out_debug)
+    if bad:
+      problems.append(f"{tag}: {bad.group(0)} in the poisoning front end")
+    if rc_debug != rc_clean:
+      problems.append(f"{tag}: exit status {rc_debug} (poisoning), "
+                      f"{rc_clean} (not poisoning)")
+    if stream_debug != stream_clean:
+      problems.append(f"{tag}: the streams differ with and without poison")
+    if env_release is not None and (rc_debug != rc_rel or
+                                    stream_debug != stream_rel):
+      problems.append(f"INFO {tag}: debug and release differ (exit status "
+                      f"{rc_debug}/{rc_rel}, streams "
+                      f"{'differ' if stream_debug != stream_rel else 'same'})")
+  return problems
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(description = __doc__.split('\n')[0])
+  parser.add_argument('--root', default = '.')
+  parser.add_argument('--filters', default = DEFAULT_FILTERS,
+                      help = '"@file" lists and path prefixes, comma '
+                             'separated')
+  parser.add_argument('--types', default = '',
+                      help = 'only tests with a case of these types')
+  parser.add_argument('--debug-build', default = 'build/gcc-cir',
+                      help = 'the front end with OVERWRITE_FREED_MEM_BLOCKS')
+  parser.add_argument('--clean-build', default = 'build/gcc-cir-nopoison',
+                      help = 'the same front end without it')
+  parser.add_argument('--release-build', default = 'build/gcc-release-cir',
+                      help = 'the release front end ("" to skip it)')
+  parser.add_argument('-j', dest = 'jobs', type = int,
+                      default = os.cpu_count() or 1)
+  args = parser.parse_args()
+
+  root = Path(args.root).resolve()
+  tests_dir = root / 'tests' / 'tests'
+  envs = {}
+  builds = [('debug', args.debug_build), ('clean', args.clean_build)]
+  if args.release_build:
+    builds.append(('release', args.release_build))
+  for key, build in builds:
+    exports = load_exports(root / build / 'environment.sh')
+    env = dict(os.environ)
+    env.update(exports)
+    env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+    env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+    env['ECCP'] = str(root / 'util/eccp.sh')
+    env['CPFE'] = exports['CPFE_CIR']
+    envs[key] = env
+  config_debug = configuration(envs['debug']['CPFE'], envs['debug'])
+  config_clean = configuration(envs['clean']['CPFE'], envs['clean'])
+  print(f"poisoning front end {args.debug_build}: {config_debug}")
+  print(f"front end without poison {args.clean_build}: {config_clean}")
+  if config_clean['OVERWRITE_FREED_MEM_BLOCKS'] != '0':
+    print('FAIL the front end to compare with poisons too')
+    print('RESULT: 1 case(s) FAILED')
+    sys.exit(1)
+  if config_debug['OVERWRITE_FREED_MEM_BLOCKS'] != '1':
+    print('FAIL the poisoning front end does not have '
+          'OVERWRITE_FREED_MEM_BLOCKS 1')
+    print('RESULT: 1 case(s) FAILED')
+    sys.exit(1)
+
+  tests = find_tests(tests_dir, read_filter_list(args.filters, root))
+  if args.types:
+    wanted = set(args.types.split(','))
+    selected = []
+    for test in tests:
+      description = runtest.load_description(
+        test, top_dir = tests_dir / test.relative_to(tests_dir).parts[0])
+      if any(runtest.test_type_to_string(m) in wanted
+             for m, _, _ in description.traverse_cases()):
+        selected.append(test)
+    tests = selected
+  print(f"checking {len(tests)} tests with {args.jobs} jobs", flush = True)
+
+  problems: List[str] = []
+  with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+    for result in pool.map(
+        lambda t: check_test(t, tests_dir, envs['debug'], envs['clean'],
+                             envs.get('release')),
+        tests):
+      problems.extend(result)
+  failures = [p for p in problems if not p.startswith('INFO ')]
+  for problem in sorted(problems):
+    print(problem if problem.startswith('INFO ') else f"FAIL {problem}")
+  print('RESULT:', 'PASS' if not failures else
+        f"{len(failures)} case(s) FAILED", f"({len(problems) - len(failures)} "
+        f"INFO)")
+  sys.exit(1 if failures else 0)
+
+
+main()

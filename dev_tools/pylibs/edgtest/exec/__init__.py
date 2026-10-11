@@ -65,8 +65,11 @@ _TARGET_OPTION_REGEX = re.compile(
 # joined option strings.  The Microsoft options are --microsoft...; the GNU
 # options are --gnu..., --g++, --gcc..., and --clang....
 _MODE_OPTION_REGEXES = {
+  # Microsoft mode, also through the --ms_ options and C++/CLI or C++/CX
+  # (--c++cli, --cppcx, ...), which a front end built without Microsoft
+  # extensions (cpfe-cir, by design) does not accept.
   MICROSOFT_MODE: re.compile(
-    r'(^|(?<=\s))--(no_)?microsoft\w*'
+    r'(^|(?<=\s))--(no_)?(microsoft\w*|ms_|c\+\+cli|c\+\+cx|cppcli|cppcx)'
   ),
   GNU_MODE: re.compile(
     r'(^|(?<=\s))--(no_)?(gnu\w*|g\+\+|gcc\w*|clang\w*)'

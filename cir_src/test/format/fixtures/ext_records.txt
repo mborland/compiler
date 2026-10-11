@@ -1,5 +1,5 @@
 ; EXT records, extension frames and an unknown ignorable feature bit.
-ecil 0.6 features=0x00000012
+ecil 1.0 features=0x00000012
 frame HEADER supp
   STR 1 "x86_64-unknown-linux-gnu"
   EXT 7 "header extension"

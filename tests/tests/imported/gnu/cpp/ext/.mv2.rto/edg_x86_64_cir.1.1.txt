@@ -1,0 +1,56 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --gnu_version=80200 -tused -e 200 --no_wrap Test_name.c
+"./ext/mv2.C", line 55: warning: CIR back end: the body of "main" uses an alias, ifunc or weakref attribute, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 61: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 67: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 73: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 79: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 85: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 91: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 97: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 103: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 109: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 115: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 121: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/mv2.C", line 127: warning: CIR back end: the body of "foo" uses GNU function multiversioning, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,62 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 28: warning: CIR back end: the body of "OnProv" uses a virtual function, which the CIR back end does not support; the function is dropped
+      void OnProv() {}
+                     ^
+
+"Test_name.c", line 33: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+      D x;
+         ^
+          detected during:
+            implicit generation of "FOO::A<T>::A() noexcept [with T=char]" at line 33
+            instantiation of class "FOO::A<T> [with T=char]" at line 33
+            implicit generation of "D::D() noexcept" at line 33
+
+"Test_name.c", line 33: warning: CIR back end: the body of "~D" uses a virtual function, which the CIR back end does not support; the function is dropped
+      D x;
+         ^
+          detected during:
+            implicit generation of "D::~D() noexcept" at line 33
+            implicit generation of "D::D() noexcept" at line 33
+
+"Test_name.c", line 33: warning: CIR back end: the body of "D" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+      D x;
+         ^
+          detected during implicit generation of "D::D() noexcept" at line 33
+
+"Test_name.c", line 36: warning: CIR back end: the body of "main" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 21: warning: CIR back end: the body of "Enum" uses a virtual call, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void FOO::A<T>::Enum() [with T=char]" at line 34
+
+"Test_name.c", line 13: warning: CIR back end: the body of "~A" uses a virtual function, which the CIR back end does not support; the function is dropped
+      virtual ~A() { }
+                     ^
+          detected during instantiation of "FOO::A<T>::~A() [with T=char]" at line 26
+
+Warning: CIR back end: the unused definition of '_ZN1D6OnProvEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3FOO1AIcEC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3FOO1AIcEC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3FOO1AIcE4EnumEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3FOO1AIcED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3FOO1AIcED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

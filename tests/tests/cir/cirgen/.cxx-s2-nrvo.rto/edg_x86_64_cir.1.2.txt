@@ -1,0 +1,2 @@
+./a.out
+5 6 10 12 copies=0 bad=0

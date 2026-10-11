@@ -1,0 +1,55 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF32_E8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF32_E9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF32_E13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF64_E8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF64_E9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF64_E13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF128_E3minEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF128_E3maxEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF128_E6lowestEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF128_E7epsilonEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF128_E11round_errorEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF128_E8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF128_E9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF128_E13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIDF128_E10denorm_minEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE3minEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE3maxEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE7epsilonEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE11round_errorEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE10denorm_minEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE10_S_1pm4088Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE11_S_1pm16352Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE9_S_1p4064Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE10_S_1p16256Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+

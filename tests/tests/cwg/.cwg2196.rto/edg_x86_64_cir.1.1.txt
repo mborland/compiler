@@ -1,0 +1,29 @@
+eccp -DTEST_NUMBER=1 --c++17 -tused -A Test_name.c
+"Test_name.c", line 7: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    B() : V{123}, A() {}
+                   ^
+          detected during implicit generation of "A::A() noexcept" at line 7
+
+"Test_name.c", line 7: warning: CIR back end: the body of "B" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    B() : V{123}, A() {}
+                       ^
+
+"Test_name.c", line 13: warning: CIR back end: the body of "main" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "b" uses a record type that is not supported, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the unused definition of '_ZN1AC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1AC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1BC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1BC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

@@ -1,0 +1,28 @@
+; Unsupported policy (spec 8.11 F5): a dropped definition with discardable
+; linkage (internal or linkonce_odr) that nothing references is erased with a
+; warning in the default mode; the translation unit still compiles.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; CHECK-DAG: warning [1003]: the unused definition of 'lo_dropped' was dropped and erased
+; CHECK-DAG: warning [1003]: the unused definition of 'st_dropped' was dropped and erased
+; CHECK-NOT: cir.func {{.*}}@lo_dropped
+; CHECK-NOT: cir.func {{.*}}@st_dropped
+; CHECK: cir.func {{.*}}@main
+
+frame DECLS
+  STR 11 "lo_dropped"
+  STR 12 "st_dropped"
+  STR 13 "main"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 41 21 3 67 11
+  DECL_FUNC 41 21 0 34 11
+  DECL_FUNC 42 21 1 32 12
+  DECL_FUNC 43 21 0 9 13
+frame REGION
+  FUNC_BEGIN 43 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

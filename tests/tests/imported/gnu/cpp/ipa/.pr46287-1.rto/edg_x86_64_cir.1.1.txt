@@ -1,0 +1,69 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 12: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void foo () {abort();}
+                                 ^
+
+"Test_name.c", line 19: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void foo () {abort();}
+                                 ^
+
+"Test_name.c", line 29: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void foo () {abort();}
+                                 ^
+
+"Test_name.c", line 35: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    D () : C(), B()
+            ^
+          detected during:
+            implicit generation of "A::A() noexcept" at line 35
+            implicit generation of "C::C() noexcept" at line 35
+
+"Test_name.c", line 35: warning: CIR back end: the body of "C" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    D () : C(), B()
+            ^
+          detected during implicit generation of "C::C() noexcept" at line 35
+
+"Test_name.c", line 35: warning: CIR back end: the body of "B" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    D () : C(), B()
+                 ^
+          detected during implicit generation of "B::B() noexcept" at line 35
+
+"Test_name.c", line 44: warning: CIR back end: the body of "D" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    }
+    ^
+
+"Test_name.c", line 53: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 59: warning: CIR back end: the body of "bar" uses a virtual call, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1A3fooEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1B3fooEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1C3fooEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1AC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1AC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1CC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1CC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1BC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1BC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1D3fooEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1DC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1DC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZL3barR1B' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+3 errors detected in the compilation of "Test_name.c".

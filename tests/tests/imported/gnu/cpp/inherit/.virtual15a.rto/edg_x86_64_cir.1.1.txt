@@ -1,0 +1,105 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 7: warning: CIR back end: the body of "~S1" uses a virtual function, which the CIR back end does not support; the function is dropped
+  struct S1 { virtual ~S1() {} };
+                             ^
+
+"Test_name.c", line 10: warning: CIR back end: the body of "f1" uses a virtual function, which the CIR back end does not support; the function is dropped
+      void f1() { f2(); }
+                        ^
+
+"Test_name.c", line 15: warning: CIR back end: the body of "f2" uses a virtual function, which the CIR back end does not support; the function is dropped
+    void f2() { ok = true; }
+                           ^
+
+"Test_name.c", line 19: warning: CIR back end: the body of "S2" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    S4().f1();
+    ^
+          detected during:
+            implicit generation of "S2::S2() noexcept" at line 19
+            implicit generation of "S4::S4() noexcept" at line 19
+
+"Test_name.c", line 19: warning: CIR back end: the body of "SX" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    S4().f1();
+    ^
+          detected during:
+            implicit generation of "SX::SX() noexcept" at line 19
+            implicit generation of "S4::S4() noexcept" at line 19
+
+"Test_name.c", line 19: warning: CIR back end: the body of "S1" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    S4().f1();
+    ^
+          detected during:
+            implicit generation of "S1::S1() noexcept" at line 19
+            implicit generation of "S3::S3() noexcept" at line 19
+            implicit generation of "S4::S4() noexcept" at line 19
+
+"Test_name.c", line 19: warning: CIR back end: the body of "~S3" uses a virtual function, which the CIR back end does not support; the function is dropped
+    S4().f1();
+    ^
+          detected during:
+            implicit generation of "S3::~S3() noexcept" at line 19
+            implicit generation of "S3::S3() noexcept" at line 19
+            implicit generation of "S4::S4() noexcept" at line 19
+
+"Test_name.c", line 19: warning: CIR back end: the body of "S3" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    S4().f1();
+    ^
+          detected during:
+            implicit generation of "S3::S3() noexcept" at line 19
+            implicit generation of "S4::S4() noexcept" at line 19
+
+"Test_name.c", line 19: warning: CIR back end: the body of "~S4" uses a virtual function, which the CIR back end does not support; the function is dropped
+    S4().f1();
+    ^
+          detected during:
+            implicit generation of "S4::~S4() noexcept" at line 19
+            implicit generation of "S4::S4() noexcept" at line 19
+
+"Test_name.c", line 19: warning: CIR back end: the body of "S4" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    S4().f1();
+    ^
+          detected during implicit generation of "S4::S4() noexcept" at line 19
+
+"Test_name.c", line 21: warning: CIR back end: the body of "main" uses a virtual call, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN2S1D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S1D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S32f1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S42f2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S2C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S2C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2SXC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2SXC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S1C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S1C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S3D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S3D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S3C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S3C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S4D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S4D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S4C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2S4C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,17 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"./cpp0x/constexpr-initlist11.C", line 7: warning: variable "c" was declared but never referenced
+    static constexpr std::initializer_list<int> c{ 42 };
+                                                ^
+
+"./cpp0x/constexpr-initlist11.C", line 8: warning: variable "l" was declared but never referenced
+    constexpr std::initializer_list<int> l { };
+                                         ^
+
+"./cpp0x/constexpr-initlist11.C", line 9: warning: CIR back end: the body of "b" uses this kind of address constant, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void b<<unnamed>>() [with <unnamed>=int]" at line 11
+
+Error: CIR back end: the definition of '_Z1bIiEvv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,258 @@
+; C++ (ECIL v1, slice S1): the consumer's C1 strategy for STRUCTOR pairs.
+;   external linkage:   C1 is an alias of C2.
+;   weak_odr:           C2 in comdat C5 (D5 for destructors), C1 a weak_odr alias.
+;   linkonce_odr and internal: no C1 symbol; every use of C1 refers to C2.
+; The body is streamed under the base variant (C2/D2) only; the program calls
+; the complete variants (C1/D1) and checks the constructors and destructors ran.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil > %t.cir
+; RUN: %FileCheck %s < %t.cir
+; RUN: %not grep -e _ZN1IC1Ei -e _ZN1ID1Ev -e _ZN1PC1Ei %t.cir
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
+
+; CHECK-DAG: cir.func private @_ZN1EC1Ei(!cir.ptr<!rec_E>, !s32i) alias(@_ZN1EC2Ei)
+; CHECK-DAG: cir.func private @_ZN1ED1Ev(!cir.ptr<!rec_E>) alias(@_ZN1ED2Ev)
+; CHECK-DAG: cir.func comdat("_ZN1WC5Ei") weak_odr dso_local @_ZN1WC2Ei
+; CHECK-DAG: cir.func weak_odr private @_ZN1WC1Ei(!cir.ptr<!rec_W>, !s32i) alias(@_ZN1WC2Ei)
+; CHECK-DAG: cir.func comdat("_ZN1WD5Ev") weak_odr dso_local @_ZN1WD2Ev
+; CHECK-DAG: cir.func weak_odr private @_ZN1WD1Ev(!cir.ptr<!rec_W>) alias(@_ZN1WD2Ev)
+; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_ZN1IC2Ei
+; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_ZN1ID2Ev
+; CHECK-DAG: cir.func internal private dso_local @_ZL1PC2Ei
+; CHECK-DAG: cir.call @_ZN1IC2Ei({{.*}}) nothrow
+; CHECK-DAG: cir.call @_ZN1ID2Ev({{.*}}) nothrow
+; CHECK-DAG: cir.call @_ZN1EC1Ei({{.*}}) nothrow
+
+; SYMS-DAG: {{[Ww]}} _ZN1WC1Ei
+; SYMS-DAG: {{[Ww]}} _ZN1WC2Ei
+; SYMS-DAG: T _ZN1EC1Ei
+; SYMS-DAG: T _ZN1EC2Ei
+
+
+frame DECLS
+  STR 11 "E"
+  STR 12 "W"
+  STR 13 "I"
+  STR 14 "P"
+  STR 20 "_ZN1EC2Ei"
+  STR 21 "_ZN1EC1Ei"
+  STR 22 "_ZN1ED2Ev"
+  STR 23 "_ZN1ED1Ev"
+  STR 24 "_ZN1WC2Ei"
+  STR 25 "_ZN1WC1Ei"
+  STR 26 "_ZN1WD2Ev"
+  STR 27 "_ZN1WD1Ev"
+  STR 28 "_ZN1IC2Ei"
+  STR 29 "_ZN1IC1Ei"
+  STR 30 "_ZN1ID2Ev"
+  STR 31 "_ZN1ID1Ev"
+  STR 32 "_ZL1PC2Ei"
+  STR 33 "_ZL1PC1Ei"
+  STR 34 "main"
+  STR 35 "this"
+  STR 36 "x"
+  STR 37 "g_dtors"
+
+  TY_RECORD_DECL 41 0 11
+  TY_RECORD_BODY 41 4 4 4 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 51 41
+  TY_FUNC 61 11 0 [51, 1]
+  TY_FUNC 71 11 0 [51]
+  TY_RECORD_DECL 42 0 12
+  TY_RECORD_BODY 42 4 4 4 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 52 42
+  TY_FUNC 62 11 0 [52, 1]
+  TY_FUNC 72 11 0 [52]
+  TY_RECORD_DECL 43 0 13
+  TY_RECORD_BODY 43 4 4 4 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 53 43
+  TY_FUNC 63 11 0 [53, 1]
+  TY_FUNC 73 11 0 [53]
+  TY_RECORD_DECL 44 0 14
+  TY_RECORD_BODY 44 4 4 4 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 54 44
+  TY_FUNC 64 11 0 [54, 1]
+  TY_FUNC 74 11 0 [54]
+  TY_FUNC 90 1 0 []
+  DECL_FUNC 100 61 0 1 20
+  DECL_FUNC 101 61 0 1 21
+  STRUCTOR 101 100 0
+  DECL_FUNC 102 71 0 1 22
+  DECL_FUNC 103 71 0 1 23
+  STRUCTOR 103 102 1
+  DECL_FUNC 110 62 4 65 24
+  DECL_FUNC 111 62 4 65 25
+  STRUCTOR 111 110 0
+  DECL_FUNC 112 72 4 65 26
+  DECL_FUNC 113 72 4 65 27
+  STRUCTOR 113 112 1
+  DECL_FUNC 120 63 3 65 28
+  DECL_FUNC 121 63 3 65 29
+  STRUCTOR 121 120 0
+  DECL_FUNC 122 73 3 65 30
+  DECL_FUNC 123 73 3 65 31
+  STRUCTOR 123 122 1
+  DECL_FUNC 130 64 1 1 32
+  DECL_FUNC 131 64 1 1 33
+  STRUCTOR 131 130 0
+  DECL_FUNC 140 90 0 9 34
+  DECL_VAR 150 1 0 1 4 37
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 51 51 35 1
+  PARAM 2 1 1 36 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 41 0
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  FUNC_END 1
+  FUNC_BEGIN 102 0
+  PARAM 1 51 51 35 1
+  GREF 150
+  GREF 150
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  FUNC_END 1
+  FUNC_BEGIN 110 0
+  PARAM 1 52 52 35 1
+  PARAM 2 1 1 36 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 42 0
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  FUNC_END 1
+  FUNC_BEGIN 112 0
+  PARAM 1 52 52 35 1
+  GREF 150
+  GREF 150
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  FUNC_END 1
+  FUNC_BEGIN 120 0
+  PARAM 1 53 53 35 1
+  PARAM 2 1 1 36 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 43 0
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  FUNC_END 1
+  FUNC_BEGIN 122 0
+  PARAM 1 53 53 35 1
+  GREF 150
+  GREF 150
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  FUNC_END 1
+  FUNC_BEGIN 130 0
+  PARAM 1 54 54 35 1
+  PARAM 2 1 1 36 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 44 0
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  FUNC_END 1
+  FUNC_BEGIN 140 0
+  LOCAL 1 41 nil 4 0
+  LOCAL 2 42 nil 4 0
+  LOCAL 3 43 nil 4 0
+  LOCAL 4 44 nil 4 0
+  LREF 1
+  ADDR
+  CONST_INT 1 10
+  CALL 101 61 2 0
+  LREF 2
+  ADDR
+  CONST_INT 1 20
+  CALL 111 62 2 0
+  LREF 3
+  ADDR
+  CONST_INT 1 30
+  CALL 121 63 2 0
+  LREF 4
+  ADDR
+  CONST_INT 1 40
+  CALL 131 64 2 0
+  LREF 1
+  FIELD 41 0
+  LOAD 0
+  CONST_INT 1 10
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  LREF 2
+  FIELD 42 0
+  LOAD 0
+  CONST_INT 1 20
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  LREF 3
+  FIELD 43 0
+  LOAD 0
+  CONST_INT 1 30
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  LREF 4
+  FIELD 44 0
+  LOAD 0
+  CONST_INT 1 40
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  LREF 1
+  ADDR
+  CALL 103 71 1 0
+  LREF 2
+  ADDR
+  CALL 113 72 1 0
+  LREF 3
+  ADDR
+  CALL 123 73 1 0
+  GREF 150
+  LOAD 0
+  CONST_INT 1 3
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 5
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

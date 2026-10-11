@@ -46,6 +46,10 @@ enum class a_type_kind : uint8_t {
   array_type, function_type, record_type, opaque_type
 };  /* a_type_kind */
 
+/* The CIR member index of a field that has no storage of its own (an empty
+   base, an empty potentially-overlapping member). */
+static const uint32_t no_member = 0xFFFFFFFFu;
+
 struct a_field {
   uint64_t     type;         /* Type gid of the declared field type. */
   uint64_t     byte_offset;  /* Offset in bytes (bit-fields: of the byte). */
@@ -56,6 +60,9 @@ struct a_field {
   bool         empty_for_abi;
   bool         bitfield_signed;
   bool         flexible_array;
+  bool         is_base;       /* A direct non-virtual base (BASE). */
+  bool         overlapping;   /* POTENTIALLY_OVERLAPPING: base subobject. */
+  bool         omitted;       /* Empty base or member: no storage in CIR. */
   std::string  name;
 };  /* a_field */
 
@@ -74,6 +81,8 @@ struct a_bitfield_info {
 struct a_record_info {
   bool                     is_union;
   bool                     is_class;
+  bool                     nontrivial_abi;  /* Passed/returned indirectly. */
+  bool                     nontrivial_dtor;
   bool                     complete;
   bool                     packed;        /* As derived by the lowering. */
   std::string              name;
@@ -91,6 +100,9 @@ struct a_record_info {
   std::vector<cir::RecordMemberKind>
                            kinds;
   mlir::Type               union_padding;
+  /* The base-subobject type "<name>.base" (sized to data_size) when
+     data_size < size and a base or overlapping member needed it. */
+  mlir::Type               base_type;
   uint32_t                 pending_fields;  /* REC_FIELD records awaited. */
 };  /* a_record_info */
 
@@ -131,12 +143,27 @@ struct a_entity {
   bool                       has_body = false;
   bool                       has_init = false;
   bool                       referenced = false;
+  bool                       had_linkonce = false;  /* Was linkonce_odr. */
+  bool                       in_structor = false;  /* In a STRUCTOR pair. */
+  bool                       is_alias = false;     /* C1 as aliasee of C2. */
+  bool                       retracted = false;    /* RETRACT seen. */
+  bool                       dyn_init = false;     /* Has a STATIC_INIT. */
+  bool                       init_inline = false;  /* STATIC_INIT inline_var. */
+  bool                       init_template = false;
+  bool                       init_exit_only = false;
   std::vector<cir::CallOp>   calls;      /* Direct calls created. */
   std::vector<cir::GetGlobalOp>
                              addresses;  /* get_global ops created. */
 };  /* a_entity */
 
-/* A symbol to rename at finish. */
+/* A STRUCTOR pair: the complete (C1/D1) and the base (C2/D2) variant. */
+struct a_structor_pair {
+  a_entity  *complete;
+  a_entity  *base;
+  bool       is_dtor;
+};  /* a_structor_pair */
+
+/* A symbol to rename at finish (a null op: only references are redirected). */
 struct a_symbol_change {
   mlir::Operation  *op;
   mlir::StringAttr  from;
@@ -162,13 +189,22 @@ struct a_value {
                                       field: the address of the access unit. */
   uint32_t         align = 1;      /* glv/bit-field: derived alignment. */
   const a_bitfield_info *bitfield = nullptr;
+  bool             omitted = false;  /* glv: the address of an omitted empty
+                                        field or base, which may share its
+                                        bytes with another member: nothing
+                                        is ever written through it. */
 };  /* a_value */
 
 /* Frames. */
 
 enum class a_frame_kind : uint8_t {
   function, scope, if_stmt, while_stmt, do_stmt, for_stmt, switch_stmt,
-  ternary, land, lor, agg_init
+  ternary, land, lor, agg_init, meminit,
+  cleanup,    /* CLEANUP_BEGIN .. CLEANUP_BODY: the cleanup code. */
+  fullexpr,   /* FULLEXPR_BEGIN .. FULLEXPR_END. */
+  array_body, /* ARRAY_CTOR/DTOR body. */
+  static_init, /* STATIC_INIT_BEGIN .. STATIC_INIT_END. */
+  dropped     /* A construct the library drops (eh cleanups). */
 };  /* a_frame_kind */
 
 struct a_frame {
@@ -181,7 +217,37 @@ struct a_frame {
   bool             has_cond = false;   /* for. */
   mlir::Type       switch_type;        /* switch condition type. */
   size_t           target_base = 0;    /* agg_init target stack height. */
+  /* cleanup code */
+  uint8_t          cleanup_mode = 0;   /* 0 normal, 1 conditional. */
+  mlir::OpBuilder::InsertPoint
+                   saved_ip;           /* conditional: back to the arm. */
+  mlir::Value      flag;               /* conditional: the cleanup.cond. */
+  mlir::Operation *cleanup_op = nullptr; /* normal: the scope; conditional:
+                                            the cir.if of the cleanup. */
+  mlir::Operation *nrvo_guard = nullptr; /* normal: the cir.if that skips the
+                                            destruction of the NRVO
+                                            variable once it is returned. */
+  /* static_init */
+  a_entity        *init_entity = nullptr;
+  mlir::Block     *saved_entry = nullptr;     /* Global: the function-level
+                                                 state it replaced. */
+  mlir::Operation *saved_last_alloca = nullptr;
+  bool             global_init = false;       /* In F_GLOBALS (no function). */
+  /* fullexpr */
+  size_t           cleanups_base = 0;  /* Open cleanup scopes at its start. */
+  /* Outermost conditional frame: the flag-guarded scope that wraps it. */
+  size_t           cond_scope = static_cast<size_t>(-1);  /* cleanups_ index. */
 };  /* a_frame */
+
+/* An open cir.cleanup.scope: its body is being emitted, and it closes with the
+   scope region it was begun in (owner frame and phase) or, for a conditional
+   scope, with its FULLEXPR. */
+struct a_cleanup_scope {
+  cir::CleanupScopeOp  op;
+  size_t               owner;        /* frames_ index of the region frame. */
+  uint8_t              owner_phase;
+  bool                 conditional;
+};  /* a_cleanup_scope */
 
 /* An entry of the constant stack: the attribute and whether it is all-zero
    (tracked so that zero detection never recurses through nested attrs). */
@@ -213,6 +279,7 @@ struct a_local {
   mlir::Value  address;
   uint32_t     align = 1;
   uint64_t     type = 0;
+  bool         nrvo = false;   /* The NRVO variable (LOCAL RETURN_SLOT). */
 };  /* a_local */
 
 class a_emitter {
@@ -223,10 +290,18 @@ public:
                  const ecil::a_record_context &context);
   /* Process one record; false means the session now holds an error. */
 
+  bool dispatch_record(const ecil::a_record &record,
+                       const ecil::a_record_context &context);
+
   bool on_frame_end(uint8_t frame_kind);
   /* Check the empty-stack and balanced-state rules at the end of a frame. */
 
   bool finish();
+  bool is_discardable(const a_entity &e) const;
+  bool is_dropped_definition(const a_entity &e) const;
+  void entity_liveness(
+      std::unordered_set<const a_entity *> &live,
+      std::unordered_map<const a_entity *, std::vector<a_entity *>> &uses);
   /*
   Run at finish on the worker thread: final names and their one-pass
   substitution, record layout metadata, inline-only and unsupported-entity
@@ -264,8 +339,19 @@ private:
   bool record_body(const ecil::a_record &r);
   bool record_field(const ecil::a_record &r);
   bool complete_record_layout(uint64_t gid, a_type &t);
-  void lower_struct(a_type &t, a_record_info &rec);
+  void lower_struct(a_type &t, a_record_info &rec, bool as_base,
+                    bool force_packed);
   void lower_union(a_type &t, a_record_info &rec);
+  mlir::Type base_subobject_type(a_type &t);
+  /* The type a base or potentially-overlapping member of type t occupies:
+     t's ".base" record when its data size is smaller than its size (created
+     on first use), else t itself. */
+  const a_record_info *record_info_of(mlir::Type t) const;
+  bool is_indirect_class(mlir::Type t) const;
+  /* True for a record with NONTRIVIAL_ABI. */
+  mlir::Attribute constant_for_member(mlir::Attribute attr,
+                                      mlir::Type member_type);
+  uint64_t consistent_data_size(const a_record_info &rec);
   uint64_t type_size(mlir::Type t);
   uint64_t type_align(mlir::Type t, bool natural = false);
   bool type_is_complete(mlir::Type t) const;
@@ -282,6 +368,7 @@ private:
   bool decl_variable(const ecil::a_record &r);
   bool var_init(const ecil::a_record &r);
   bool name_bind(const ecil::a_record &r);
+  bool retract_record(const ecil::a_record &r);
   bool constant_record(const ecil::a_record &r);
   bool scalar_constant_record(const ecil::a_record &r, a_type *t,
                               uint64_t tgid);
@@ -322,8 +409,24 @@ private:
   void start_new_block();
   mlir::Value pop_bool_condition();
   bool emit_return(const ecil::a_record &r);
+  bool return_from_slot();
+  bool cleanup_record(const ecil::a_record &r);
+  bool static_init_record(const ecil::a_record &r);
+  void apply_dynamic_init();
+  bool fullexpr_record(const ecil::a_record &r);
+  bool array_record(const ecil::a_record &r);
+  void close_cleanups(size_t owner, int phase);
+  void close_cleanups_down_to(size_t count);
+  bool in_conditional_region(size_t &outermost) const;
+  void open_conditional_scope(size_t outermost);
+  size_t region_owner() const;
+  bool structor_record(const ecil::a_record &r);
+  void apply_structors();
+  void finish_structors();
+  void apply_comdats();
   void implicit_return(bool is_main);
   mlir::Value return_slot();
+  mlir::Value nrvo_flag();
   mlir::Value alloca_in(mlir::Block *block, mlir::Type type,
                         const std::string &name, uint32_t align);
   mlir::Value alloca_here(mlir::Type type, const std::string &name,
@@ -345,7 +448,12 @@ private:
   void push_glvalue(mlir::Value address, uint32_t align);
   mlir::Value load_value(const a_value &v, bool is_volatile);
   bool store_value(const a_value &target, mlir::Value value, bool is_volatile,
-                   mlir::Value *result);
+                   mlir::Value *result, uint32_t store_flags = 0);
+  bool class_cast(const ecil::a_record &r);
+  bool new_array_record(const ecil::a_record &r);
+  bool delete_record(const ecil::a_record &r);
+  bool zero_bytes(const ecil::a_record &r);
+  bool check_class_arguments(const llvm::SmallVectorImpl<mlir::Value> &args);
   bool field_address(const a_value &base, uint64_t rec_gid, uint64_t index,
                      a_value &out);
   bool element_address(const a_value &base, uint64_t array_gid,
@@ -396,6 +504,8 @@ private:
   std::unordered_set<std::string_view>    symbols_;
   std::vector<a_entity *>                 entity_order_;
   std::vector<a_generated_symbol>         generated_;
+  std::vector<a_structor_pair>            structors_;
+  std::vector<a_entity *>                 redirected_;  /* C1s to erase. */
   std::vector<a_symbol_change>            symbol_changes_;
   uint64_t                                renames_applied_ = 0;
   uint64_t                                walks_done_ = 0;
@@ -407,6 +517,9 @@ private:
   std::vector<a_const_aggregate>          const_aggs_;
   std::vector<a_frame>                    frames_;
   std::vector<a_init_target>              targets_;
+  std::vector<a_cleanup_scope>            cleanups_;   /* Open scopes. */
+  size_t                                  drop_depth_ = 0;
+  size_t                                  record_depth_ = 0;
   /* Attributes built once (their uniquing lookups are not free). */
   mlir::UnitAttr                          unit_attr_;
   mlir::StringAttr                        nothrow_name_;
@@ -424,6 +537,7 @@ private:
   unsigned                                temp_counter_ = 0;
   uint64_t                                fn_return_type_ = 0;
   mlir::Value                             fn_retval_;  /* __retval slot */
+  mlir::Value                             fn_nrvo_flag_;  /* "nrvo" flag. */
 };  /* a_emitter */
 
 }  /* namespace edg_cir */

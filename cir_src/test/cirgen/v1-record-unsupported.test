@@ -1,21 +1,20 @@
-; ECIL v1 (C++) records are decoded and validated but not implemented yet:
-; the emitter reports "not supported" (status 4), never a crash or a silent
-; miscompile.
-; RUN: cat %S/Inputs/header08.txt %s > %t.txt
+; The one ECIL v1 construct still not supported: a union with reusable tail
+; padding (data size below size) as a base subobject or [[no_unique_address]]
+; member.  The emitter reports "not supported" (status 4), never a crash or a
+; silent miscompile.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
 ; RUN: %ecil-asm %t.txt -o %t.ecil
 ; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
 ; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 4'
 
-; CHECK: FULLEXPR_BEGIN: C++ records (ECIL v1) are not supported yet
+; CHECK: a union with reusable tail padding as a base subobject or
 
 frame DECLS
-  STR 10 "f"
-  TY_FUNC 21 11 0 []
-  DECL_FUNC 40 21 0 1 10
-frame REGION
-  FUNC_BEGIN 40 0
-  FULLEXPR_BEGIN
-  FULLEXPR_END
-  FUNC_END 1
-frame END
-  END auto 0
+  STR 10 "U"
+  STR 11 "X"
+  TY_RECORD_DECL 21 1 10
+  TY_RECORD_BODY 21 8 5 4 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_RECORD_DECL 22 0 11
+  TY_RECORD_BODY 22 8 8 4 0 1
+  REC_FIELD 21 0 nil nil nil 32

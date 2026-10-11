@@ -1,0 +1,72 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"./cpp0x/variadic-mem_fn.C", line 50: warning: CIR back end: the body of "main" uses the constant kind "pointer-to-member constant", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./cpp0x/variadic-mem_fn.C", line 11: warning: CIR back end: the body of "Mem_fn" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+    explicit Mem_fn(R (Class::*pmf)(Args...)) : pmf(pmf) { }
+                                                           ^
+          detected during:
+            instantiation of "Mem_fn<R, Class, Args...>::Mem_fn(R (Class::*)(Args...)) [with R=int, Class=X, Args=<int>]" at line 30
+            instantiation of "Mem_fn<R, Class, Args...> mem_fn(R (Class::*)(Args...)) [with R=int, Class=X, Args=<int>]" at line 44
+
+"./cpp0x/variadic-mem_fn.C", line 31: warning: CIR back end: the body of "mem_fn" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "Mem_fn<R, Class, Args...> mem_fn(R (Class::*)(Args...)) [with R=int, Class=X, Args=<int>]" at line 44
+
+"./cpp0x/variadic-mem_fn.C", line 16: warning: CIR back end: the body of "operator()" uses the operator "call through a pointer to member (.*)", which the CIR back end does not support; the function is dropped
+    }
+    ^
+          detected during instantiation of "R Mem_fn<R, Class, Args...>::operator()(Class &, Args...) [with R=int, Class=X, Args=<int>]" at line 44
+
+"./cpp0x/variadic-mem_fn.C", line 21: warning: CIR back end: the body of "operator()" uses the operator "call through a pointer to member (->*)", which the CIR back end does not support; the function is dropped
+    }
+    ^
+          detected during instantiation of "R Mem_fn<R, Class, Args...>::operator()(Class *, Args...) [with R=int, Class=X, Args=<int>]" at line 45
+
+"./cpp0x/variadic-mem_fn.C", line 11: warning: CIR back end: the body of "Mem_fn" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+    explicit Mem_fn(R (Class::*pmf)(Args...)) : pmf(pmf) { }
+                                                           ^
+          detected during:
+            instantiation of "Mem_fn<R, Class, Args...>::Mem_fn(R (Class::*)(Args...)) [with R=int, Class=X, Args=<int, int>]" at line 30
+            instantiation of "Mem_fn<R, Class, Args...> mem_fn(R (Class::*)(Args...)) [with R=int, Class=X, Args=<int, int>]" at line 46
+
+"./cpp0x/variadic-mem_fn.C", line 31: warning: CIR back end: the body of "mem_fn" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "Mem_fn<R, Class, Args...> mem_fn(R (Class::*)(Args...)) [with R=int, Class=X, Args=<int, int>]" at line 46
+
+"./cpp0x/variadic-mem_fn.C", line 16: warning: CIR back end: the body of "operator()" uses the operator "call through a pointer to member (.*)", which the CIR back end does not support; the function is dropped
+    }
+    ^
+          detected during instantiation of "R Mem_fn<R, Class, Args...>::operator()(Class &, Args...) [with R=int, Class=X, Args=<int, int>]" at line 46
+
+"./cpp0x/variadic-mem_fn.C", line 21: warning: CIR back end: the body of "operator()" uses the operator "call through a pointer to member (->*)", which the CIR back end does not support; the function is dropped
+    }
+    ^
+          detected during instantiation of "R Mem_fn<R, Class, Args...>::operator()(Class *, Args...) [with R=int, Class=X, Args=<int, int>]" at line 47
+
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEclERS0_i' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z6mem_fnIi1XJiEE6Mem_fnIT_T0_JDpT1_EEMS3_FS2_S5_E' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEC1EMS0_FiiE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEC2EMS0_FiiE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEclEPS0_i' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEC1EMS0_FiiiE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEC2EMS0_FiiiE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z6mem_fnIi1XJiiEE6Mem_fnIT_T0_JDpT1_EEMS3_FS2_S5_E' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEclERS0_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEclEPS0_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

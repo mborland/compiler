@@ -1,0 +1,50 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 11: warning: CIR back end: the body of "S" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    S () : c (0) {}
+                  ^
+
+"Test_name.c", line 12: warning: CIR back end: the body of "f1" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void f1 () { c += 1; }
+                                 ^
+
+"Test_name.c", line 13: warning: CIR back end: the body of "f2" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void f2 () { c += 16; }
+                                  ^
+
+"Test_name.c", line 26: warning: CIR back end: the body of "test1" uses the operator "call through a pointer to member (.*)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void test1<P>(T *) [with P=&S::f1]" at line 39
+
+"Test_name.c", line 26: warning: CIR back end: the body of "test1" uses the operator "call through a pointer to member (.*)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void test1<P>(T *) [with P=&S::f2]" at line 42
+
+"Test_name.c", line 33: warning: CIR back end: the body of "test2" uses the operator "call through a pointer to member (.*)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void test2<P>(T *) [with P=&S::f1]" at line 45
+
+"Test_name.c", line 33: warning: CIR back end: the body of "test2" uses the operator "call through a pointer to member (.*)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void test2<P>(T *) [with P=&S::f2]" at line 48
+
+Warning: CIR back end: the unused definition of '_ZN1S2f1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1S2f2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1SC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1SC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z5test1IXadL_ZN1S2f1EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z5test1IXadL_ZN1S2f2EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z5test2IXadL_ZN1S2f1EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z5test2IXadL_ZN1S2f2EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+6 errors detected in the compilation of "Test_name.c".

@@ -84,6 +84,84 @@ def generate_functions(count: int, out_path: Path) -> None:
   out_path.write_text('\n'.join(lines) + '\n')
 
 
+# The functions a unit of generate_cxx_functions defines (constructors,
+# destructor, members, template instances, lambda call operators and the
+# initialization function of the namespace-scope variable included).
+CXX_FUNCTIONS_PER_UNIT = 20
+
+
+def generate_cxx_functions(count: int, out_path: Path) -> None:
+  '''Write a C++ file of about count functions, M3 features only.
+
+  Every unit has a namespace with a base and a derived class (constructors,
+  copy constructor, destructor, member functions), a function template used
+  with three types, an inline function, a function with a static local, a
+  namespace-scope variable with a dynamic initializer, a lambda, and new and
+  delete (single objects and arrays).  No virtual functions, no exceptions.
+  main() prints a checksum that does not depend on the compiler.
+  '''
+  units = max(1, count // CXX_FUNCTIONS_PER_UNIT)
+  lines = [
+    'extern "C" int printf(const char *, ...);',
+    'long g_live = 0;',
+    'long g_sum = 0;'
+  ]
+  for index in range(units):
+    lines += [
+      f"namespace ns{index} {{",
+      '  struct B {',
+      '    int a;',
+      '    B(int x) : a(x) { ++g_live; }',
+      '    B(const B &o) : a(o.a) { ++g_live; }',
+      '    ~B() { --g_live; g_sum += a; }',
+      '    int get() const { return a; }',
+      '  };',
+      '  struct D : B {',
+      '    int b;',
+      '    D(int x) : B(x), b(x + 1) { }',
+      '    int sum() const { return get() + b; }',
+      '  };',
+      '  template <class T> T twice(T v) { return v + v; }',
+      f"  inline int inl(int x) {{ return x * 3 + {index % 101}; }}",
+      f"  int stat(int x) {{ static int n = {index % 97}; n += x; return n; }}",
+      '  int make(int x) {',
+      '    D d(x);',
+      '    B e(d);',
+      '    return d.sum() + e.get() + twice(x) + (int)twice(2L) + '
+      '(int)twice((short)3);',
+      '  }',
+      f"  int dyn_init() {{ return {index % 89} * 2; }}",
+      '  int gdyn = dyn_init();',
+      '  int lam(int x) {',
+      f"    auto f = [x](int y) {{ return x + y + {index % 83}; }};",
+      '    return f(2) + f(3);',
+      '  }',
+      '  int heap(int x) {',
+      '    D *p = new D(x);',
+      '    int r = p->sum();',
+      '    delete p;',
+      '    int *a = new int[4];',
+      '    for (int k = 0; k < 4; k++) a[k] = x + k;',
+      '    r += a[3];',
+      '    delete[] a;',
+      '    return r;',
+      '  }',
+      '  int run(int x) { return make(x) + inl(x) + stat(x) + lam(x) + '
+      'heap(x) + gdyn; }',
+      '}'
+    ]
+  lines.append('int main() {')
+  lines.append('  long total = 0;')
+  for index in range(units):
+    lines.append(f"  total += ns{index}::run({index % 7});")
+  lines += [
+    '  printf("%ld %ld %ld\\n", total, g_live, g_sum);',
+    '  return 0;',
+    '}'
+  ]
+  out_path.write_text('\n'.join(lines) + '\n')
+
+
 def run_timed(command: List[str], env: Dict[str, str], cwd: Path,
               label: str) -> Tuple[Optional[float], Optional[float], int,
                                    str]:
@@ -120,7 +198,15 @@ def main() -> None:
   parser.add_argument('--generate-functions', type = int, default = 0,
                       help = 'write a generated input with this many '
                              'functions to -o and exit')
+  parser.add_argument('--generate-cxx-functions', type = int, default = 0,
+                      help = 'write a generated C++ input (M3 features: '
+                             'classes with constructors, bases, templates, '
+                             'statics, dynamic initialization, lambdas, '
+                             'new/delete) with about this many functions '
+                             'to -o and exit')
   parser.add_argument('-o', dest = 'output', default = 'big.c')
+  parser.add_argument('--cxx', action = 'store_true',
+                      help = 'the input is C++ (compile it with --c++17)')
   parser.add_argument('--root', default = '.', help = 'repository root')
   parser.add_argument('--fe-build', default = 'build/gcc-cir',
                       help = 'build directory of the cpfe-cir to measure '
@@ -130,6 +216,10 @@ def main() -> None:
                       help = 'comma separated rows to run')
   args = parser.parse_args()
 
+  if args.generate_cxx_functions:
+    generate_cxx_functions(args.generate_cxx_functions, Path(args.output))
+    print(f"wrote {args.output}")
+    return
   if args.generate_functions:
     generate_functions(args.generate_functions, Path(args.output))
     print(f"wrote {args.output}")
@@ -162,8 +252,9 @@ def main() -> None:
     )
 
     def eccp_fe_only(env: Dict[str, str], extra: str = '') -> List[str]:
-      # C mode: cpfe-cir rejects C++ for now.
-      return [eccp, '-S', '--c11', *extra.split(), str(source)]
+      # C mode (C++ with --cxx: use a file of --generate-cxx-functions).
+      return [eccp, '-S', '--c++17' if args.cxx else '--c11',
+              *extra.split(), str(source)]
 
     for row in rows:
       env = dict(base_env)

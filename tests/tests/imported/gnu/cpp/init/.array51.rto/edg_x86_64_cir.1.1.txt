@@ -1,0 +1,70 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"Test_name.c", line 22: warning: unknown attribute "noipa"
+  NOIPA B f__   () { return B{ }; }
+  ^
+
+"Test_name.c", line 22: warning: CIR back end: the body of "f__" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  NOIPA B f__   () { return B{ }; }
+                                  ^
+
+"Test_name.c", line 23: warning: unknown attribute "noipa"
+  NOIPA B f0_   () { return B{ 0 }; }
+  ^
+
+"Test_name.c", line 23: warning: CIR back end: the body of "f0_" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  NOIPA B f0_   () { return B{ 0 }; }
+                                    ^
+
+"Test_name.c", line 24: warning: unknown attribute "noipa"
+  NOIPA B f00   () { return B{ 0, 0 }; }
+  ^
+
+"Test_name.c", line 24: warning: CIR back end: the body of "f00" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  NOIPA B f00   () { return B{ 0, 0 }; }
+                                       ^
+
+"Test_name.c", line 42: warning: unknown attribute "noipa"
+  NOIPA void init_allones ()
+  ^
+
+"Test_name.c", line 47: warning: unknown attribute "noipa"
+  NOIPA int test_allones (const pam_t *p, unsigned n)
+  ^
+
+"Test_name.c", line 88: warning: CIR back end: the body of "main" uses an operation on an unsupported scalar type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "apam0_" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "apam00" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "c0_" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "c00" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "b0_" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "b00" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of '_Z3f__v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z3f0_v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z3f00v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'apam0_' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'apam00' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL3c0_' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL3c00' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'b0_' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'b00' was dropped: it uses a construct the CIR back end cannot express
+
+10 errors detected in the compilation of "Test_name.c".

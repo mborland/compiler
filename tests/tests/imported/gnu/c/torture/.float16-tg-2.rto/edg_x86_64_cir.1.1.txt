@@ -25,22 +25,22 @@ Warning: CIR back end: the initializer of "max" uses a floating constant of this
 
 Warning: CIR back end: the initializer of "negmax" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'inf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'inf' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'neginf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'neginf' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'nanval' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'nanval' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'negnanval' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'negnanval' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'zero' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'zero' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'negzero' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'negzero' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'one' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'one' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'max' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'max' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'negmax' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'negmax' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 9 errors detected in the compilation of "Test_name.c".

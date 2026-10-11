@@ -1,0 +1,22 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"Test_name.c", line 84: warning: variable "i" was declared but never referenced
+        int i= 0;
+            ^
+
+"Test_name.c", line 57: warning: CIR back end: the body of "S" uses the address of a non-string constant, which the CIR back end does not support; the function is dropped
+    {}
+     ^
+          detected during:
+            instantiation of "S<N>::S(double) [with N=0]" at line 97
+            instantiation of "bool bar<N>() [with N=0]" at line 117
+
+"Test_name.c", line 115: warning: CIR back end: the body of "bar" uses the address of a non-string constant, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool bar<N>() [with N=0]" at line 117
+
+"Test_name.c", line 117: error: static assertion failed
+  static_assert (bar<0> ());
+  ^
+
+1 error detected in the compilation of "Test_name.c".

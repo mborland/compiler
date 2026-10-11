@@ -11,16 +11,16 @@ Warning: CIR back end: the initializer of "t5" uses an initializer of a flexible
 
 Warning: CIR back end: the initializer of "t6" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 't1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 't1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 't2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 't2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 't3' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 't3' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 't4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 't4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 't5' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 't5' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 't6' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 't6' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 6 errors detected in the compilation of "Test_name.c".

@@ -28,14 +28,14 @@ POP1_PUSH1 = {'load', 'field', 'extract', 'deref', 'addr', 'addr_offset',
 POP2_PUSH1 = {'add', 'sub', 'mul', 'div', 'rem', 'shl', 'shr', 'bit_and',
               'bit_or', 'bit_xor', 'cmp', 'ptr_stride', 'ptr_diff'}
 PUSH1 = {'lref', 'gref', 'const_int', 'const_float', 'const_null',
-         'const_ptr'}
+         'const_ptr', 'return_slot'}
 POP1 = {'va_start', 'va_end', 'drop', 'if_begin', 'while_body', 'do_end',
         'switch_begin', 'init_const', 'init_zero', 'agg_init_begin'}
 BOUNDARY = {'block_begin', 'block_end', 'if_else', 'if_end', 'while_begin',
             'while_end', 'do_begin', 'do_cond', 'for_begin', 'for_body',
             'for_end', 'switch_end', 'break_stmt', 'continue_stmt',
             'goto_stmt', 'label', 'case_value', 'case_range', 'case_default',
-            'unreachable', 'func_end'}
+            'unreachable', 'func_end', 'return_from_slot'}
 
 
 def args_of(text):

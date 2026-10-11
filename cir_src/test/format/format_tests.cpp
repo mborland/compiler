@@ -340,7 +340,7 @@ Deep nesting and large arrays must not use the call stack.
 */
 {
   const int depth = 300000;
-  std::string text = "ecil 0.6 features=0x00000000\nframe HEADER\n"
+  std::string text = "ecil 1.0 features=0x00000000\nframe HEADER\n"
                      "  STR 1 \"x\"\nframe REGION\n  TY_INT 1 32 true 4 4\n"
                      "  TY_FUNC 2 1 0 []\n  DECL_FUNC 3 2 0 1 1\n"
                      "  FUNC_BEGIN 3 0\n";
@@ -361,7 +361,7 @@ Deep nesting and large arrays must not use the call stack.
                               stream_error))
     report("stress", "deep nesting rejected: " + stream_error.message);
 
-  std::string wide = "ecil 0.6 features=0x00000000\nframe HEADER\n"
+  std::string wide = "ecil 1.0 features=0x00000000\nframe HEADER\n"
                      "  STR 1 \"x\"\nframe DECLS\n  TY_INT 1 32 true 4 4\n"
                      "  TY_FUNC 2 1 0 [";
   for (int k = 0; k < 100000; ++k)

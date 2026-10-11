@@ -476,6 +476,73 @@ Return true and the value if operand is an integer in [0, 2^64).
   return result;
 }  /* operand_u64 */
 
+namespace {
+
+bool magnitude_below_pow2(uint64_t lo, uint64_t hi, uint64_t k)
+/* True if the 128-bit magnitude hi:lo is below 2^k. */
+{
+  bool result;
+
+  if (k >= 128)
+    result = true;
+  else if (k >= 64)
+    result = hi < (uint64_t(1) << (k - 64)) || (k == 64 && hi == 0);
+  else
+    result = hi == 0 && (k == 0 ? lo == 0 : lo < (uint64_t(1) << k));
+  return result;
+}  /* magnitude_below_pow2 */
+
+}  /* anonymous namespace */
+
+bool operand_fits_int_width(const an_operand &operand, uint64_t bits)
+/*
+Return true if the integer operand is within [-2^(bits-1), 2^bits): the
+signed or the unsigned range of an integer type of that many bits (the writer
+sends the value of a signed type signed and of an unsigned type unsigned; both
+are accepted for either).  Operands of other kinds fit.
+*/
+{
+  uint64_t lo = 0;
+  uint64_t hi = 0;
+  bool negative = false;
+  bool result = true;
+
+  switch (operand.kind) {
+  case an_operand_kind::uint:
+    lo = operand.u;
+    break;
+  case an_operand_kind::sint:
+    negative = operand.i < 0;
+    lo = negative ? uint64_t(0) - static_cast<uint64_t>(operand.i)
+                  : static_cast<uint64_t>(operand.i);
+    break;
+  case an_operand_kind::u128:
+  case an_operand_kind::i128:
+    lo = read_u64(operand.data);
+    hi = read_u64(operand.data + 8);
+    if (operand.kind == an_operand_kind::i128 && (hi >> 63) != 0) {
+      negative = true;
+      lo = ~lo + 1;
+      hi = ~hi + (lo == 0 ? 1 : 0);
+    }
+    break;
+  default:
+    return true;
+  }
+  if (bits != 0 && bits < 128) {
+    if (!negative) {
+      result = magnitude_below_pow2(lo, hi, bits);
+    } else {
+      /* magnitude <= 2^(bits-1)  <=>  magnitude - 1 < 2^(bits-1) */
+      uint64_t mlo = lo - 1;
+      uint64_t mhi = hi - (lo == 0 ? 1 : 0);
+
+      result = magnitude_below_pow2(mlo, mhi, bits - 1);
+    }
+  }
+  return result;
+}  /* operand_fits_int_width */
+
 bool operand_i64(const an_operand &operand, int64_t &value)
 /*
 Return true and the value if operand is an integer in the int64 range.

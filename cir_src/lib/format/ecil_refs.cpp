@@ -93,6 +93,28 @@ A string id operand: it must have been introduced by STR.
   return ok;
 }  /* a_ref_checker::need_sid */
 
+bool a_ref_checker::check_int_value(const an_operand &type,
+                                    const an_operand &value, const char *what,
+                                    std::string &problem)
+/*
+CONST_INT / C_INT of an integer type: the value is within the signed or the
+unsigned range of the type's width.
+*/
+{
+  uint64_t t = 0;
+  const a_gid_entry *e = operand_id(type, t) ? ids_.find_gid(t) : nullptr;
+  bool ok = true;
+
+  if (e != nullptr && e->kind == gk_int &&
+      !operand_fits_int_width(value, e->extent)) {
+    problem = std::string(what) + " value does not fit the " +
+              std::to_string(e->extent) + "-bit integer type G-id " +
+              std::to_string(t);
+    ok = false;
+  }
+  return ok;
+}  /* a_ref_checker::check_int_value */
+
 bool a_ref_checker::need_type(const an_operand &op, bool optional,
                               std::string &problem)
 /*
@@ -701,20 +723,29 @@ Apply the reference rules of one record.
   }
   case eop_retract: {
     const a_gid_entry *g = nullptr;
+    bool unsupported;
     ok = operand_id(r.ops[0], v) && (g = ids_.find_gid(v)) != nullptr &&
          is_declaration(g);
+    /* A definition dropped as unsupported may be retracted at any linkage
+       (ECIL spec 11.10): it clears the obligation to report it. */
+    unsupported = ok && (g->decl_flags &
+        (g->kind == gk_func ? ECIL_DECL_FUNC_UNSUPPORTED
+                            : ECIL_DECL_VAR_UNSUPPORTED)) != 0;
     if (!ok) {
       problem = "unknown declaration: RETRACT names a G-id that is not a "
                 "declared function or variable";
-    } else if (g->linkage != elk_internal && g->linkage != elk_linkonce_odr) {
+    } else if (!unsupported && g->linkage != elk_internal &&
+               g->linkage != elk_linkonce_odr) {
       problem = "RETRACT of G-id " + number(v) + ": only internal or "
-                "linkonce_odr entities can be retracted";
+                "linkonce_odr entities can be retracted (unless their "
+                "definition was dropped as unsupported)";
       ok = false;
     } else if ((g->role & sr_complete) && g->kind == gk_func) {
       problem = "RETRACT of a STRUCTOR pair names g_base (G-id " +
                 number(v) + " is the complete variant)";
       ok = false;
-    } else if (!(g->kind == gk_func ? (g->flags & gf_defined) != 0
+    } else if (!unsupported &&
+               !(g->kind == gk_func ? (g->flags & gf_defined) != 0
                                     : (g->decl_flags & 1) != 0)) {
       problem = "RETRACT of G-id " + number(v) + ", which is not defined";
       ok = false;
@@ -863,7 +894,11 @@ Apply the reference rules of one record.
               operand_u64(r.ops[1], w);
               ids_.add_base(cur_record_, static_cast<uint32_t>(v), w);
             }
-          } else {
+          } else if (e->kind != gk_opaque ||
+                     r.ops[3].kind != an_operand_kind::nil ||
+                     !(fflags & ECIL_FIELD_UNNAMED)) {
+            /* The vptr (an unnamed opaque field) is laid out first, ahead of
+               the bases, so it does not end the run of bases. */
             members_seen_ = true;
           }
         }
@@ -1093,17 +1128,22 @@ Apply the reference rules of one record.
                 " (use CONST_PTR or CONST_NULL)";
       ok = false;
     }
+    if (ok)
+      ok = check_int_value(r.ops[0], r.ops[1], "CONST_INT", problem);
     break;
   case eop_const_float:
   case eop_const_null:
   case eop_const_ptr:
-  case eop_c_int:
   case eop_c_float:
   case eop_c_null:
   case eop_c_zero:
   case eop_c_string:
   case eop_c_ptr:
     ok = need_type(r.ops[0], false, problem);
+    break;
+  case eop_c_int:
+    ok = need_type(r.ops[0], false, problem) &&
+         check_int_value(r.ops[0], r.ops[1], "C_INT", problem);
     break;
   case eop_c_addr:
     ok = need_type(r.ops[0], false, problem);

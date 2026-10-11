@@ -1,0 +1,19 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 44: warning: CIR back end: the body of "Tp" uses the initializer of a member of an anonymous union or struct, which the CIR back end does not support; the function is dropped
+   : index_(index), segment_(segment), type_(t) {}
+                                                 ^
+
+"Test_name.c", line 71: warning: CIR back end: the body of "Tp" uses the initializer of a member of an anonymous union or struct, which the CIR back end does not support; the function is dropped
+    return position_;
+           ^
+          detected during implicit generation of "Tp::Tp(const Tp &) noexcept" at line 71
+
+Warning: CIR back end: the unused definition of '_ZN2TpC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2TpC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN2TpC1Eiii' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN2TpC2Eiii' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+2 errors detected in the compilation of "Test_name.c".

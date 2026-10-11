@@ -1,0 +1,3 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++26 Test_name.c
+Warning: CIR back end: the unused definition of '_ZSt23__is_constant_evaluatedv' was dropped and erased: it uses a construct the CIR back end cannot express
+

@@ -1,0 +1,150 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 19: warning: CIR back end: the body of "~C7" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 46: warning: CIR back end: the body of "C1" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 54: warning: CIR back end: the body of "~C8" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual ~C8 () {}
+                    ^
+
+"Test_name.c", line 65: warning: CIR back end: the body of "xx14" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 75: warning: CIR back end: the body of "xx2" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 86: warning: CIR back end: the body of "C7" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    static C2 c2;
+                ^
+          detected during:
+            implicit generation of "C7::C7() noexcept" at line 86
+            implicit generation of "C2::C2() noexcept" at line 86
+
+"Test_name.c", line 86: warning: CIR back end: the body of "~C2" uses a virtual function, which the CIR back end does not support; the function is dropped
+    static C2 c2;
+                ^
+          detected during:
+            implicit generation of "C2::~C2() noexcept" at line 86
+            implicit generation of "C2::C2() noexcept" at line 86
+
+"Test_name.c", line 86: warning: CIR back end: the body of "C2" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    static C2 c2;
+                ^
+          detected during implicit generation of "C2::C2() noexcept" at line 86
+
+"Test_name.c", line 88: warning: CIR back end: the body of "xx10" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 111: warning: CIR back end: the body of "xx4" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 121: warning: CIR back end: the body of "xx13" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 127: warning: CIR back end: the body of "xx15" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 135: warning: CIR back end: the body of "xx16" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 143: warning: CIR back end: the body of "xx1" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 156: warning: CIR back end: the body of "xx7" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 194: warning: CIR back end: the body of "f2" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 213: warning: CIR back end: the body of "main" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 35: warning: CIR back end: the body of "~C13" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "C13<X>::~C13() [with X=C7]" at line 168
+
+"Test_name.c", line 35: warning: CIR back end: the body of "~C13" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "C13<X>::~C13() [with X=C1]" at line 180
+
+"Test_name.c", line 35: warning: CIR back end: the body of "~C13" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "C13<X>::~C13() [with X=C14]" at line 191
+
+Warning: CIR back end: the unused definition of '_ZN2C8D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2C8D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2C7C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2C7C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2C2D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2C2D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2C2C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2C2C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3C13I2C7ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3C13I2C7ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3C13I2C1ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3C13I2C1ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3C13I3C14ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3C13I3C14ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN2C7D1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN2C7D2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN2C1C1ERK2C3S2_S2_RPS1_' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN2C1C2ERK2C3S2_S2_RPS1_' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z4xx14v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z3xx2v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z4xx10v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z3xx4v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z4xx13v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z4xx15R2C3R3C13I2C1E' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z4xx16PKv' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z3xx13C13I3C14E' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z3xx7v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN2C52f2ER2C3PKvP2C8' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+15 errors detected in the compilation of "Test_name.c".

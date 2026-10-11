@@ -1,0 +1,14 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"./torture/stackalign/throw-2.C", line 25: warning: CIR back end: the body of "bar" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/stackalign/throw-2.C", line 53: warning: CIR back end: the body of "main" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of '_Z3barv' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

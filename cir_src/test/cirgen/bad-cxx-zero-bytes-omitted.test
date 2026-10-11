@@ -1,0 +1,58 @@
+; C++ (ECIL v1): ZERO_BYTES of more than one byte through the glvalue of an
+; omitted empty field is an error (0 or 1 write nothing, see
+; cxx-omitted-empty-store.test).  R is { int n; [[no_unique_address]] E e; }.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: error [1001]: ZERO_BYTES of more than one byte through an omitted empty field
+
+frame DECLS
+  STR 11 "E"
+  STR 12 "R"
+  STR 13 "n"
+  STR 14 "e"
+  STR 15 "main"
+  TY_RECORD_DECL 21 0 11
+  TY_RECORD_BODY 21 1 0 1 0 0
+  TY_RECORD_DECL 22 0 12
+  TY_RECORD_BODY 22 4 4 4 0 2
+  REC_FIELD 1 0 nil nil 13 0
+  REC_FIELD 21 0 nil nil 14 34
+  TY_FUNC 23 1 0 []
+  DECL_FUNC 100 23 0 9 15
+frame REGION
+  FUNC_BEGIN 100 0
+  BLOCK_BEGIN
+  LOCAL 1 22 nil 0 0
+  LOCAL 2 21 nil 0 0
+  LREF 1
+  FIELD 22 0
+  CONST_INT 1 42
+  STORE 0 0
+  LREF 1
+  FIELD 22 1
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  LREF 1
+  FIELD 22 1
+  INIT_ZERO
+  LREF 1
+  FIELD 22 1
+  ZERO_BYTES 2
+  LREF 1
+  FIELD 22 0
+  LOAD 0
+  CONST_INT 1 42
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame END
+  END auto 0

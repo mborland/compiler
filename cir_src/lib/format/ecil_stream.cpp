@@ -218,7 +218,7 @@ Track FUNC_BEGIN/FUNC_END, the BEGIN/ELSE/END brackets and the scope regions
 */
 {
   std::string problem;
-  bool result = tracker_.check(record, preamble_.minor, problem, event);
+  bool result = tracker_.check(record, problem, event);
 
   if (!result)
     result = fail(an_error_kind::format, problem, offset_);
@@ -316,7 +316,7 @@ Decode and check every record of the frame and pass it to the handler.
         } else if (options_.check) {
           /* After the handler: the closed scopes' locals die and a finished
              function's L-ids go, so the handler saw them intact. */
-          tracker_.commit(ids_, preamble_.minor >= 7);
+          tracker_.commit(ids_);
         }
       }
     }

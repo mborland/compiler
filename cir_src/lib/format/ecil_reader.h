@@ -108,6 +108,10 @@ value (the acceptance rules of operand_u64).  False at the end.
 */
 
 bool operand_u64(const an_operand &operand, uint64_t &value);
+
+bool operand_fits_int_width(const an_operand &operand, uint64_t bits);
+/* True if an integer operand is in [-2^(bits-1), 2^bits) (CONST_INT/C_INT
+   against the width of its type). */
 /* Return true and the value if operand is an integer in [0, 2^64). */
 
 bool operand_i64(const an_operand &operand, int64_t &value);
@@ -145,7 +149,7 @@ enum an_opcode_section : uint8_t {
   eos_const    = 32, /* C_* records: declaration sections and bodies. */
   eos_stmt     = 64, /* With eos_body: a statement record (the rest of the
                         body records are expression records). */
-  eos_v1       = 128 /* A C++ (ECIL v1, minor 8) record. */
+  eos_v1       = 128 /* A C++ (ECIL v1) record. */
 };  /* an_opcode_section */
 
 struct an_opcode_info {
@@ -280,15 +284,15 @@ public:
   a_bracket_tracker();
 
   void begin_frame();
-  bool check(const a_record &record, uint16_t stream_minor,
-             std::string &problem, a_scope_event &event);
+  bool check(const a_record &record, std::string &problem,
+             a_scope_event &event);
   /* Apply the record's bracket rules.  False with a message in problem. */
   void note_local(size_t lid_index);
   /* A value L-id (at this index of the L-id table) belongs to the innermost
      open scope region. */
-  void commit(a_id_tables &ids, bool kill_locals);
+  void commit(a_id_tables &ids);
   /* After the handler: mark the locals of the regions the record closed as
-     dead (when kill_locals) and drop a finished function's L-ids. */
+     dead and drop a finished function's L-ids. */
 
   size_t function_depth() const
     { return function_bases_.size(); }
@@ -333,8 +337,9 @@ private:
   bool apply_regions(uint8_t opcode, std::string &problem,
                      a_scope_event &event);
   bool check_v1(const a_record &record, std::string &problem);
-  /* The structural rules of the C++ (minor 8) records. */
+  /* The structural rules of the C++ records. */
   bool conditional_without_fullexpr() const;
+  bool in_loop_condition() const;
 
   std::vector<a_bracket>   brackets_;
   std::vector<size_t>      function_bases_;  /* Bracket depth at each
@@ -381,6 +386,9 @@ private:
   bool need_sid(const an_operand &op, bool optional, const char *what,
                 std::string &problem);
   bool need_type(const an_operand &op, bool optional, std::string &problem);
+  bool check_int_value(const an_operand &type, const an_operand &value,
+                       const char *what, std::string &problem);
+  /* An integer constant fits the width of its integer type. */
   bool need_complete(const an_operand &op, std::string &problem,
                      const a_gid_entry *&out);
   bool need_object(const an_operand &op, const char *what,
@@ -395,8 +403,8 @@ private:
   bool check_selector(uint64_t index, uint64_t repeat, bool is_const,
                       std::string &problem);
 
-  /* The function whose body is being read (a stack: minor-6 streams may
-     nest bodies). */
+  /* The function whose body is being read (a stack; nested bodies are
+     rejected). */
   struct a_fn_state {
     uint32_t  ret_type;   /* Return type G-id. */
     uint32_t  params;     /* PARAM records so far. */

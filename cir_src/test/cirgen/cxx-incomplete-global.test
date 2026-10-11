@@ -1,0 +1,29 @@
+; A variable of a record type that never got a body (the writer describes no
+; class with virtual bases) has no layout.  Declared and unused it is simply
+; left out of the module (this used to abort in the MLIR data layout), and a
+; use in a function body gets a clean error where it used to crash.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: cat %S/Inputs/header08_cxx.txt %S/Inputs/cxx_incomplete_global_used.txt > %t2.txt
+; RUN: %ecil-asm %t2.txt -o %t2.ecil
+; RUN: %not %edg-cir --emit=cir %t2.ecil 2>&1 | %FileCheck %s --check-prefix=USED
+
+; CHECK-NOT: @e
+; CHECK-LABEL: cir.func {{.*}}@f
+; USED: error [1003]: the variable 'e' has a record type without a body and is used
+
+frame DECLS
+  STR 10 "f"
+  STR 11 "e"
+  TY_RECORD_DECL 20 0 nil
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 30 21 0 1 10
+  DECL_VAR 33 20 0 0 0 11
+frame REGION
+  FUNC_BEGIN 30 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

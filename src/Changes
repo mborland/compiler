@@ -1,5 +1,55 @@
 Version 7.1
 
+10/11/26
+The CIR back end configuration accepts C++
+
+The CIR back end configuration (BACK_END_TYPE_CIR) now compiles C++ programs
+of the supported subset (classes without virtual functions or virtual bases,
+templates, lambdas, new and delete, static initialization, ...); constructs
+that the back end cannot express are diagnosed per function as before.  The
+command-line error "C++ is not supported yet" and the undocumented option
+--ecil_allow_cxx, which allowed C++ during development, are removed.  The other
+configurations are not affected.
+
+10/10/26
+C++ in the CIR back end configuration
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it, the
+ECIL writer now streams C++ (classes with bases and members, member and
+special member functions with their C1/C2 and D1/D2 variants, constructor
+initializers and destructor cleanups, object lifetimes and full-expression
+temporaries, condition variables, copy elision through the return slot and
+named return values, arrays of objects, new and delete, lambdas with their
+static invokers, templates, namespaces and static storage duration with
+guarded initialization, exit-time destruction and lifetime-extended
+temporaries).  Entities that are local to a translation unit although their
+linkage is external (for example members of unnamed namespaces, unnamed types
+and the lambdas and local classes of static functions, also as template
+arguments) get internal linkage, entities that may exist in several
+translation units get linkonce_odr or weak_odr linkage in a COMDAT group, and
+names are the Itanium names of the Itanium C++ ABI; names that are not final
+when an entity is written are bound when the file scope is complete.
+Constructs that are not supported yet (virtual functions and bases, exception
+handling, thread_local variables with dynamic initialization at namespace or
+class scope, coroutines, ...) cause the function or variable to be dropped
+with a diagnostic: a function or variable that nothing refers to and that may
+be discarded is erased with a cir_warning, but dropping a function or variable
+that must exist (one with the constructor, destructor or used attribute, an
+init_priority variable, or one that something refers to) is a cir_error and
+the compilation fails.  To support this the mangler has CIR-only entry points
+for the constructor and destructor variants, for the names of local statics
+and for deciding that an entity is local to the translation unit, the memory
+regions of lambda call operators, of prototype instantiations and of functions
+that hold expressions that file scope template arguments refer to are kept,
+and the scope code has CIR-only helpers for names that may still change.  In
+the checking configurations the memory of freed regions is poisoned for
+AddressSanitizer, so that a use of the IL of a function after its region was
+freed is reported.  128-bit integer constants are streamed with all their
+bits, structured bindings are streamed as the lvalues that they name,
+range-based for statements as the loop that the standard defines, and in
+C++17 the right operand of an assignment is evaluated before the left one.
+The other configurations are unchanged.
+
 10/10/26
 Template instantiation default and a developer option in the CIR configuration
 

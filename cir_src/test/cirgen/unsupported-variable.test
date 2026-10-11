@@ -1,0 +1,28 @@
+; Unsupported policy: only functions are erased when unused.  A dropped
+; internal variable (its initializer could not be expressed) stays an error in
+; the default mode even when nothing names it, because the dropped
+; initialization may have had effects (a constructor); with --keep-going it is
+; erased.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: %edg-cir --keep-going --emit=cir %t.ecil 2>&1 | %FileCheck %s --check-prefix=KEEP
+
+; CHECK: error [1003]: the definition of 'unused_var' was dropped
+; KEEP-NOT: @unused_var
+; KEEP: cir.func {{.*}}@main
+
+frame DECLS
+  STR 10 "main"
+  STR 11 "unused_var"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 30 21 0 9 10
+  DECL_VAR 33 1 1 1 4 11
+  DECL_VAR 33 1 1 64 4 11
+frame REGION
+  FUNC_BEGIN 30 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

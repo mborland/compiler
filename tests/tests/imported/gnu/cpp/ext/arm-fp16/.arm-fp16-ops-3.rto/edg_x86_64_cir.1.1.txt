@@ -1,0 +1,28 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"./ext/arm-fp16/arm-fp16-ops.h", line 132: warning: expression has no effect
+   ((h0, h1)) == 1.0
+     ^
+
+"./ext/arm-fp16/arm-fp16-ops.h", line 135: warning: CIR back end: the body of "main" uses a floating constant of this format, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "h0" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "h1" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "h42" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "hm2" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'h1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'h0' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'h42' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'hm2' was dropped: it uses a construct the CIR back end cannot express
+
+5 errors detected in the compilation of "Test_name.c".

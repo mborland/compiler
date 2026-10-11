@@ -630,8 +630,9 @@ and are ignored until M4. Consequences for the tests:
 
 ### 9.7 First end-to-end run (M3a, 2026-10-10)
 
-With `--ecil_allow_cxx` (a dev-only option of `cpfe-cir`, undocumented; the
-default still rejects C++), `DEFAULT_INSTANTIATION_MODE=tim_used` in the
+Until the M3 freeze (when C++ became the default of `cpfe-cir` and the option
+was removed), with `--ecil_allow_cxx` (a dev-only option of `cpfe-cir`,
+undocumented; the default then rejected C++), `DEFAULT_INSTANTIATION_MODE=tim_used` in the
 cpfe-cir cmakedef, and the option injected through `EDG_CPFE_DEFAULT_OPTIONS`
 of the cir-env base (to be removed at the M3 gate), C++ goes through `eccp`
 in both configs (`edg_x86_64_cir` and `edg_x86_64_cir_2p`):
@@ -688,11 +689,191 @@ since been replaced in the smoke list by expr/cond12 and init/goto1),
 and copied in `main` gives the wrong result, a wrong-code bug)**.
 
 
-**Two reminders for the M3 gate.** (1) The `--ecil_allow_cxx` injection in
-`bases/docker/cir-env/gcc/edg_eccp_config` (the line that prepends it to
-`EDG_CPFE_DEFAULT_OPTIONS`) must be removed at the M3 gate, together with the
-option itself (`cmd_line.c`/`cmd_line.h`), once C++ is accepted by default.
+**Two reminders for the M3 gate (done at the M3 freeze).** (1) The
+`--ecil_allow_cxx` injection in `bases/docker/cir-env/gcc/edg_eccp_config` and
+the option itself (`cmd_line.c`/`cmd_line.h`) were removed once C++ was
+accepted by default (section 11.2).
 (2) **Before slice S1 the C++ smoke PASS counts mean little:** names are not
 mangled yet (section 9.7), so a test passes when its functions and symbols
 happen to link with plain C names; the four current PASS tests are of that
 kind. Judge progress after S1.
+
+## 10. Slice checkpoints (M3b)
+
+`dev_tools/bin/edg-cir-checkpoint`, run on the Mac from the repository root
+with the SSH master socket open, syncs the working tree to the box
+(`rsync -a --checksum --no-times`, so changed sources get new modification
+times), wipes the CIR build directories, runs `edg-cir-gate-evidence` there
+and prints the table. Default steps: build, identity, smoke, corpus, asm-diff,
+writer-stress, cpp-smoke, cpp-writer-stress, ctest (about 15 minutes);
+`--quick` is build, smoke and cpp-smoke (about 2 minutes). The C assembly is
+compared with `~/edg-cir-config/m3a-base-asm` (the corpus assembly of commit
+908f7b680a, 1835 files plus manifest.json, deterministic): every difference is
+listed with its class (order, labels, layout, symbols, other, status) and a
+source hint. The C smoke and corpus must show no differences from the
+recorded expectations (the corpus step fails on any). The C++ smoke step fails
+on a crash (`--smoke-all-pass` makes any non-passing test a failure); its
+tables, per configuration, are in `summary-<config>.txt` of the evidence
+directory. The box tree is `~/edg-cir-config/m3b-int` (`--tree` selects
+another). Evidence of a run: `~/edg-cir-config/m3b-int/.tmp/checkpoint-<stamp>/`.
+
+Note on re-recording: when `-W` finds that a new output equals the `default`
+recording, edgy deletes the per-config file; delete it in the Mac tree too
+(this happened for `torture/c23-stdarg-split-1a` and `c2x-stdarg-split-1a`).
+
+The C++ stress steps (`cpp-stress`, `cpp-stress-asan`; select them with
+`--steps`, they are off in the default checkpoint) run
+`cir_src/scripts/box_stress.sh` over the synthetic C++ streams
+(`ecil-stress-gen.py cxx_locals ... cxx_funcs`) through `edg-cir` under a
+256 KiB stack, building `build/cir` (or `build/cir-asan`) first: every case
+must have rc=0 and run=0 (the streams are self-checking programs), in at most
+30 s and 400 MB (ASan build: 1200 MB, smaller sizes). First numbers
+(2026-10-11, m3b-int): cxx_locals:2000 2.0 s / 93 MB, cxx_temps:5000 7.3 s /
+111 MB, cxx_funcs:6000 1.8 s / 181 MB; the ASan variant's largest is
+cxx_funcs:1000 at 452 MB. `edg-cir-perf --stream FILE|KIND:N` measures the
+library alone on such a stream (instructions, CPU time, peak RSS), and the
+gate's perf step now includes `cxx_funcs:6000` (first measurement: 19,061M
+instructions, 1.8 s, 170 MB; a baseline from the M3a library is not possible,
+because that library cannot read the C++ opcodes of the stream).
+
+The `poison` step (`edg-cir-poison-check`; region-lifetime safety, on for the
+M3 gate): ASan cannot see a front end that reads an IL region after it was
+freed, because the blocks of a region are pooled (`free_mem_block` puts them
+on `reusable_blocks_list`). What does see it is `OVERWRITE_FREED_MEM_BLOCKS`
+(the freed block is filled with 0xdb) plus `EXPENSIVE_CHECKING`. **Both are
+already on in the debug `cpfe-cir`** (`build/gcc-cir`; `--dump_configuration`
+shows `OVERWRITE_FREED_MEM_BLOCKS 1`, `EXPENSIVE_CHECKING 1`; the debug
+build-type fragment and `default/cpfe-cir.cmakedef` set the first, debug
+builds the second) and off in `build/gcc-release-cir`. To tell what the
+poisoning changes, there is a preset `linux-gcc-debug-cir-nopoison`
+(`build/gcc-cir-nopoison`, macro configuration `linux-gcc-nopoison`: the same
+front end with `OVERWRITE_FREED_MEM_BLOCKS=0`); the default presets are
+unchanged. The step compiles the C corpus (`--types rp,lp`), the C and C++
+smoke lists and `tests/tests/cir` (writer and cirgen) with the poisoning
+build, the non-poisoning build and the release build, and requires no crash,
+assertion or sanitizer report and byte-identical streams (poison vs. not, and
+debug vs. release: the second is information only, see below).
+
+**Debug and release front ends differ in their macro configuration, and the
+CIR test configurations use the debug one.** `build/gcc-cir` (the preset
+`linux-gcc-debug-cir`, macro configuration `linux-gcc`) is what
+`edg_x86_64_cir`/`_2p` and the checkpoints run; `build/gcc-release-cir`
+(`linux-gcc-release-cir`, configuration `linux-gcc-release`) is the shipping
+one. `cpfe-cir --dump_configuration` differs in these macros (debug / release):
+the ones that change what the front end builds are `PRAGMA_WEAK_ALLOWED` (1 / 0),
+`NEW_CAN_BE_FOLDED_INTO_CTOR` (0 / 1), `ASSIGNMENT_TO_THIS_ALLOWED` (0 / 1),
+`TARG_ZERO_WIDTH_BIT_FIELD_AFFECTS_STRUCT_ALIGNMENT` (1 / 0),
+`USE_INLINE_EXPANSION` (0 / 1), `USE_INLINING_HINTS` (0 / 1),
+`USE_EDG_NAMESPACE` (0 / 1), `MICROSOFT_MODE_TYPE_INFO_IN_NAMESPACE_STD`
+(1 / 0), `SUPPRESS_MICROSOFT_ATTRIBUTE_PROCESSING` (0 / 1),
+`DEFAULT_MAX_DEPTH_CONSTEXPR_CALL` (256 / 512) and `CHECK_SWITCH_DEFAULT_UNEXPECTED`
+(0 / 1); the rest are checking and test aids (`DEBUG`, `CHECKING` is 1 in both,
+`EXPENSIVE_CHECKING` 1 / 0, `OVERWRITE_FREED_MEM_BLOCKS` 1 / 0,
+`NEED_IL_DISPLAY` 1 / 0, `INCLUDE_EDG_TEST_*`, `SEQUENCING_DIAGNOSTICS_ENABLED`,
+`ABORT_ON_INIT_COMPONENT_LEAKAGE`, `ADD_CHECKING_PRAGMAS_FOR_INTERNAL_TESTING`,
+`ENABLE_TRANS_UNIT_TEST_MODE`, `INCLUDE_COMMENTS_IN_ASM_FUNC_BODY`,
+`DEFAULT_DISPLAY_ERROR_CONTEXT_ON_CATASTROPHE`, `NUM_NAMED_REGISTERS`). So
+streams of the two builds can legitimately differ (e.g. `#pragma weak _exit`
+and the builtin's noreturn in torture/builtin-noret-1, or the placement of the
+`operator new` declaration in cirgen/cxx-s4-new-delete, with
+`NEW_CAN_BE_FOLDED_INTO_CTOR`), and release-only IL shapes need their own test:
+the `release-smoke` gate step runs the C and C++ smoke lists through the
+release front end (`edg-docker-test --posture cir-release`, which builds
+`linux-gcc-release-cir` into `build/gcc-release-cir`) in both modes: the C list
+must pass completely and no C++ test may pass in the debug front end and not in
+the release one. First run (S3/S4 tree): C 40/40 in both configs; C++ 34/53 in
+both builds, none only in release.
+
+## 11. M3c: C++ performance input, the freeze patch, the expectations procedure
+
+### 11.1 C++ perf/RSS input
+`edg-cir-rss --generate-cxx-functions N -o big.cpp` writes a C++ file of about
+N functions (20 per unit: a namespace with a base and a derived class
+(constructors, copy constructor, destructor, members), a function template used
+with three types, an inline function, a function with a static local, a
+namespace-scope variable with a dynamic initializer, a lambda, new/delete of
+objects and arrays; no virtuals, no exceptions). `main()` prints a checksum:
+with 6000 functions (300 units, 12,008 lines) `g++ -std=c++17` and
+`eccp --c++17` through `cpfe-cir` give the same output (`94935 0 2691`) and no
+diagnostics. `edg-cir-perf --only cxx` (and the gate's perf step, `--perf-only
+cxx`, default) measures it with the release preset in the four configurations
+(`2p-fe`, `2p-edg-cir`, `inproc`, `keep`) and the C generating path
+(`cgen-fe`: the default release `cpfe` (`build/gcc-release`, built by the step)
+on the C++ source; `cgen-total`: `eccp -c` = that front end plus gcc on the
+generated C). `edg-cir-rss --cxx FILE` does the same for time and RSS.
+
+First table (2026-10-11, tree m3b-int, S1-S5 state, solo run; instruction
+counts are deterministic, times and RSS vary with the load):
+
+| configuration | instructions (M) | CPU s | peak RSS MB |
+| --- | ---: | ---: | ---: |
+| two-process, front end | 556.5 | 0.15 | 60 |
+| two-process, edg-cir | 11,757.7 | 1.30 | 147 |
+| in-process | 12,298.4 | 1.48 | 185 |
+| `--ecil_keep_regions` | 12,316.7 | 1.57 | 197 |
+| C generating: front end (`cpfe`) | 868.2 | 0.20 | 85 |
+| C generating: front end + gcc (`eccp -c`) | | 1.54 | 172 |
+
+So for this input the CIR path is as fast as the C generating path with gcc
+(1.48 s vs 1.54 s) and uses 7% more memory in process (185 vs 172 MB); the
+front end alone is lighter in CIR mode (60 vs 85 MB, 0.15 vs 0.20 s) because of
+per-function streaming.
+
+### 11.2 The freeze patch (applied at the M3 freeze, 2026-10-11)
+`build/m3-freeze-accept-cxx.patch` (a `git apply` patch) accepted C++ by
+default and removed `--ecil_allow_cxx`; it was applied at the M3 freeze: in `src/cmd_line.c` the option description, its `case`,
+its reset and the "C++ is not supported yet" check; in `src/cmd_line.h` the
+enumerator and the flag; the injection in
+`bases/docker/cir-env/gcc/edg_eccp_config`; and a new `src/Changes` entry
+(dated 10/11/26). The fp goldens' `//options:` lines that named
+`--ecil_allow_cxx` were changed by cir-writer in the same commit.
+
+### 11.3 Recording the C++ expectations (done at the M3 gate)
+`dev_tools/bin/edg-cir-record` does the whole procedure on the box and copies
+the result back (see its docstring):
+
+1. Sync and build the tree (`edg-cir-checkpoint --steps build`), so the box tree
+   equals the Mac tree (the copy back replaces `tests/expectations/<config>/`
+   and the changed `.rto` directories).
+2. `edg-cir-record --filter @tests/.edgy/filters/cir-cpp-smoke.txt --types rp
+   --configs edg_x86_64_cir,edg_x86_64_cir_2p` (both configs for the smoke
+   list, whose output differs per config), then `--filter
+   @tests/.edgy/filters/cir-cpp-corpus.txt --types rp,lp --configs
+   edg_x86_64_cir` (the corpus in the one-process config only).
+3. The tool records with `-W` (log lines `gnu/cpp/...`, `edg/...`, `cwg/...` in
+   `tests/expectations/edg_x86_64_cir/imported.log`, `edg.log`, `cwg.log`, and
+   per-config recordings `.<test>.rto/edg_x86_64_cir.<case>.<command>.txt`).
+   A test without a per-config file compares with the `default` recording (the
+   C generating output); edgy deletes a per-config file that equals it.
+4. Recordings over 100 KB are deleted (M2's rule: 26 tests of the C corpus),
+   and the tool patches the log lines of those tests to `--OUTPUT MISMATCH`
+   (a second run without `-W`). Check that only a few C++ tests are affected
+   (the libstdc++-expanded tests have big diagnostics).
+5. Review: `git status --short tests/ | head`, `git diff --stat tests/`; the
+   per-config recordings are text, so look at a few; commit nothing here.
+6. Verify with the checkpoint: the C++ smoke and the corpus step must show 0
+   differences from the recorded expectations (run `edg-cir-gate-evidence
+   --only cpp-corpus` for the C++ corpus). Per-config recordings are legitimate
+   where output differs between the configs (the library's diagnostics appear
+   in a different order in the two modes); status differences between the two
+   modes are not (the `cpp-modes` step must stay at 0 different).
+
+Tested on the C side (one test, limit 1 KB): the recording was deleted and its
+log line changed to `FAIL--OUTPUT MISMATCH`, the copy back worked.
+
+### 11.4 Smoke list for the M3 gate; Microsoft-mode cases
+`cir-cpp-smoke.txt` (56 tests) holds only tests expected to pass within the M3
+scope, each also passing in `edg_x86_64` (no reference failure): the tests that
+failed there too or hit documented limits were replaced (aligned-new6 by
+aligned-new3, copy3 by elide2 and copy5, ref19 by ref22 and ref15, expr/cond6 by
+cond1, init/lifetime2 by edg/rma/lifetime22 and init/cleanup4). First run with
+the S6 tree: 56/56 in both configurations, in the debug and the release front
+end.
+
+A test case whose options select Microsoft mode, C++/CLI or C++/CX
+(`--microsoft*` also abbreviated as `--microsoft_v=1930`, `--ms_*`,
+`--c++cli`, `--c++cx`) is reported as `REQUIREMENTS NOT MET` when the front end
+was built without Microsoft extensions (`MICROSOFT_EXTENSIONS_ALLOWED 0` in its
+`--dump_configuration`, as `cpfe-cir` is): `edgtest.exec._case_requests_unsupported_mode`.
+The other configurations have the macro set to 1, so nothing changes for them
+(46 such cases in the C++ corpus run).

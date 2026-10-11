@@ -1,0 +1,57 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 9: warning: CIR back end: the body of "getThis" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual A* getThis() { return this; }
+                                        ^
+
+"Test_name.c", line 15: warning: CIR back end: the body of "getThis" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual B* getThis() { return this; }
+                                        ^
+
+"Test_name.c", line 20: warning: CIR back end: the body of "getThis" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual AB* getThis() { return this; }
+                                         ^
+
+"Test_name.c", line 25: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    AB* ab = new AB();
+                   ^
+          detected during:
+            implicit generation of "A::A() noexcept" at line 25
+            implicit generation of "AB::AB() noexcept" at line 25
+
+"Test_name.c", line 25: warning: CIR back end: the body of "B" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    AB* ab = new AB();
+                   ^
+          detected during:
+            implicit generation of "B::B() noexcept" at line 25
+            implicit generation of "AB::AB() noexcept" at line 25
+
+"Test_name.c", line 25: warning: CIR back end: the body of "AB" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    AB* ab = new AB();
+                   ^
+          detected during implicit generation of "AB::AB() noexcept" at line 25
+
+"Test_name.c", line 35: warning: CIR back end: the body of "main" uses a virtual call, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1A7getThisEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1B7getThisEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2AB7getThisEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1AC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1AC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1BC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1BC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2ABC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2ABC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

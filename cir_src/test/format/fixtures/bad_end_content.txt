@@ -1,5 +1,5 @@
 ; expect: format F_END must contain exactly one END
-ecil 0.6 features=0x0
+ecil 1.0 features=0x0
 frame HEADER
   STR 1 "x"
 frame END

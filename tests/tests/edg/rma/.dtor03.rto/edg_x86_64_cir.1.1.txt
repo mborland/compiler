@@ -1,0 +1,147 @@
+eccp -DTEST_NUMBER=1 -r -x -tused --set_flag=no_checking_pragmas --cfront_3.0 Test_name.c
+"Test_name.c", line 37: remark: destructor for base class "A" (declared at line 28) is not virtual
+  struct D : virtual public A, virtual public B
+                            ^
+
+"Test_name.c", line 37: remark: destructor for base class "B" (declared at line 32) is not virtual
+  struct D : virtual public A, virtual public B
+                                              ^
+
+"Test_name.c", line 39: warning: CIR back end: the body of "~D" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  	~D() { ieq(++dtor, ivalue(2)); }
+  	                               ^
+
+"Test_name.c", line 43: remark: destructor for base class "D" (declared at line 37) is not virtual
+  struct G : virtual public D, public E
+                            ^
+
+"Test_name.c", line 43: remark: destructor for base class "E" (declared at line 41) is not virtual
+  struct G : virtual public D, public E
+                                      ^
+
+"Test_name.c", line 45: warning: CIR back end: the body of "~E" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  	~G() { ieq(++dtor, ivalue(1)); }
+  	     ^
+          detected during implicit generation of "E::~E()" at line 45
+
+"Test_name.c", line 45: warning: CIR back end: the body of "~G" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  	~G() { ieq(++dtor, ivalue(1)); }
+  	                               ^
+
+"Test_name.c", line 52: warning: CIR back end: the body of "D" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  		H h;
+  		   ^
+          detected during:
+            implicit generation of "D::D()" at line 52
+            implicit generation of "H::H()" at line 52
+
+"Test_name.c", line 52: warning: CIR back end: the body of "E" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  		H h;
+  		   ^
+          detected during:
+            implicit generation of "E::E()" at line 52
+            implicit generation of "G::G()" at line 52
+            implicit generation of "H::H()" at line 52
+
+"Test_name.c", line 52: warning: CIR back end: the body of "G" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  		H h;
+  		   ^
+          detected during:
+            implicit generation of "G::G()" at line 52
+            implicit generation of "H::H()" at line 52
+
+"Test_name.c", line 52: warning: CIR back end: the body of "C" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  		H h;
+  		   ^
+          detected during:
+            implicit generation of "C::C()" at line 52
+            implicit generation of "F::F()" at line 52
+            implicit generation of "H::H()" at line 52
+
+"Test_name.c", line 52: warning: CIR back end: the body of "~C" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  		H h;
+  		   ^
+          detected during:
+            implicit generation of "C::~C()" at line 52
+            implicit generation of "F::F()" at line 52
+            implicit generation of "H::H()" at line 52
+
+"Test_name.c", line 52: warning: CIR back end: the body of "F" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  		H h;
+  		   ^
+          detected during:
+            implicit generation of "F::F()" at line 52
+            implicit generation of "H::H()" at line 52
+
+"Test_name.c", line 52: warning: CIR back end: the body of "~F" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  		H h;
+  		   ^
+          detected during:
+            implicit generation of "F::~F()" at line 52
+            implicit generation of "H::H()" at line 52
+
+"Test_name.c", line 52: warning: CIR back end: the body of "H" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  		H h;
+  		   ^
+          detected during implicit generation of "H::H()" at line 52
+
+"Test_name.c", line 52: warning: CIR back end: the body of "~H" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  		H h;
+  		   ^
+          detected during implicit generation of "H::~H()" at line 52
+
+"Test_name.c", line 56: warning: CIR back end: the body of "main" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1DD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1GD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1GD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1EC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1EC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1GC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1GC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1CC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1CC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1CD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1CD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1FC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1FC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1FD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1FD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1HC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1HC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1HD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1HD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

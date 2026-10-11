@@ -1,0 +1,93 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+ecil 1.0 features=0x00000008
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FUNC 4 1 0 []
+  STR 5 "main"
+  DECL_FUNC 5 4 0 8 5
+  DECL_FUNC 5 4 0 9 5
+  STR 6 "S"
+  TY_RECORD_DECL 6 0 6
+  TY_FUNC 7 6 0 []
+  TY_PTR 8 7
+  STR 7 "clone"
+  STR 8 "x"
+  TY_RECORD_BODY 6 16 16 8 0 2
+  REC_FIELD 8 0 nil nil 7 0
+  REC_FIELD 1 8 nil nil 8 0
+  STR 9 "g"
+  DECL_VAR 9 6 0 0 0 9
+  STR 10 "N"
+  TY_RECORD_DECL 10 0 10
+  TY_FUNC 11 10 0 [10]
+  TY_PTR 12 11
+  TY_PTR 13 10
+  STR 11 "next"
+  STR 12 "p"
+  STR 13 "v"
+  TY_RECORD_BODY 10 24 24 8 0 3
+  REC_FIELD 12 0 nil nil 11 0
+  REC_FIELD 13 8 nil nil 12 0
+  REC_FIELD 1 16 nil nil 13 0
+  STR 14 "n"
+  DECL_VAR 14 10 0 0 0 14
+  STR 15 "Node"
+  TY_RECORD_DECL 15 0 15
+  STR 16 "Fn"
+  TY_RECORD_DECL 16 0 16
+  TY_FUNC 17 15 0 []
+  TY_PTR 18 17
+  STR 17 "f"
+  TY_RECORD_BODY 16 8 8 8 0 1
+  REC_FIELD 18 0 nil nil 17 0
+  STR 18 "k"
+  TY_RECORD_BODY 15 16 16 8 0 2
+  REC_FIELD 16 0 nil nil 11 0
+  REC_FIELD 1 8 nil nil 18 0
+  STR 19 "nd"
+  DECL_VAR 19 15 0 0 0 19
+  FUNC_BEGIN 5 0
+  BLOCK_BEGIN
+  GREF 9
+  FIELD 6 1
+  LOAD 0
+  GREF 14
+  FIELD 10 2
+  LOAD 0
+  ADD 1
+  GREF 19
+  FIELD 15 1
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 9 6 0 33 0 9
+  STR 20 "S2"
+  TY_RECORD_DECL 20 0 20
+  TY_VOID 21
+  TY_FUNC 22 21 0 [20]
+  TY_PTR 23 22
+  TY_RECORD_BODY 20 8 8 8 0 1
+  REC_FIELD 23 0 nil nil 17 0
+  STR 21 "g2"
+  DECL_VAR 24 20 0 33 0 21
+  DECL_VAR 14 10 0 33 0 14
+  DECL_VAR 19 15 0 33 0 19
+frame NAMES
+frame END
+  END 4 0

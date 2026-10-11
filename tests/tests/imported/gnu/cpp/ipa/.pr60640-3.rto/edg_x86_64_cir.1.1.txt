@@ -1,0 +1,85 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 10: warning: CIR back end: the body of "return_self" uses a virtual function, which the CIR back end does not support; the function is dropped
+    { return this; }
+                   ^
+
+"Test_name.c", line 16: warning: unknown attribute "noclone"
+  static A * __attribute__ ((noinline, noclone)) get_an_A ();
+                                       ^
+
+"Test_name.c", line 24: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    A () : fi(777) {}
+                    ^
+
+"Test_name.c", line 25: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    A (int pi) : fi (pi) {}
+                          ^
+
+"Test_name.c", line 30: warning: unknown attribute "noclone"
+  static B * __attribute__ ((noinline, noclone)) get_a_B ();
+                                       ^
+
+"Test_name.c", line 34: warning: CIR back end: the body of "Distraction" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    B () : Distraction(), A() { }
+                      ^
+          detected during implicit generation of "Distraction::Distraction() noexcept" at line 34
+
+"Test_name.c", line 34: warning: CIR back end: the body of "B" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    B () : Distraction(), A() { }
+                                ^
+
+"Test_name.c", line 35: warning: CIR back end: the body of "B" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    B (int pi) : Distraction (), A (pi) {}
+                                         ^
+
+"Test_name.c", line 44: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
+    }
+    ^
+
+"Test_name.c", line 49: warning: unknown attribute "noclone"
+  static B * __attribute__ ((noinline, noclone))
+                                       ^
+
+"Test_name.c", line 55: warning: unknown attribute "noclone"
+  static A * __attribute__ ((noinline, noclone))
+                                       ^
+
+"Test_name.c", line 63: warning: unknown attribute "noclone"
+  static int __attribute__ ((noinline, noclone))
+                                       ^
+
+"Test_name.c", line 83: warning: CIR back end: the body of "main" uses a virtual call, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 34: warning: function "<unnamed>::B::B()" was declared but never referenced
+    B () : Distraction(), A() { }
+    ^
+
+Warning: CIR back end: the unused definition of '_ZN11Distraction11return_selfEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC1Ei' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC2Ei' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN11DistractionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN11DistractionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11BC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11BC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11B3fooEi' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN12_GLOBAL__N_11BC1Ei' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN12_GLOBAL__N_11BC2Ei' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

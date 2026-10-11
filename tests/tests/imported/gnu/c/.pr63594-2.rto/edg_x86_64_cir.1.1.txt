@@ -379,186 +379,186 @@ Error: CIR back end: the definition of 'test1char64' was dropped: it uses a cons
 
 Error: CIR back end: the definition of 'test2char64' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3char64' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3char64' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1char32' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2char32' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3char32' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3char32' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1char16' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2char16' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3char16' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3char16' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1char8' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2char8' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3char8' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3char8' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1char4' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2char4' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3char4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3char4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1char2' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2char2' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3char2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3char2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1char1' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2char1' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3char1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3char1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1short32' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2short32' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3short32' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3short32' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1short16' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2short16' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3short16' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3short16' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1short8' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2short8' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3short8' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3short8' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1short4' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2short4' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3short4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3short4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1short2' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2short2' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3short2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3short2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1short1' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2short1' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3short1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3short1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1int16' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2int16' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3int16' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3int16' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1int8' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2int8' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3int8' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3int8' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1int4' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2int4' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3int4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3int4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1int2' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2int2' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3int2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3int2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1int1' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2int1' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3int1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3int1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1float16' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2float16' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3float16' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3float16' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1float8' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2float8' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3float8' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3float8' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1float4' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2float4' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3float4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3float4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1float2' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2float2' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3float2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3float2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1float1' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2float1' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3float1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3float1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1llong8' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2llong8' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3llong8' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3llong8' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1llong4' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2llong4' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3llong4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3llong4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1llong2' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2llong2' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3llong2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3llong2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1llong1' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2llong1' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3llong1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3llong1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1double8' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2double8' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3double8' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3double8' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1double4' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2double4' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3double4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3double4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1double2' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2double2' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3double2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3double2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 Error: CIR back end: the definition of 'test1double1' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test2double1' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test3double1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test3double1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 93 errors detected in the compilation of "Test_name.c".

@@ -62,6 +62,7 @@ struct a_spec_row {
 #define SD eos_decl
 #define SB eos_body
 #define SC eos_const
+#define SS (eos_body | eos_stmt)
 
 /* One row per opcode; the operand count must equal the table arity. */
 const a_spec_row spec_rows[] = {
@@ -94,37 +95,37 @@ const a_spec_row spec_rows[] = {
   {eop_decl_var, SD, {s_id, s_id, s_enum(0, elk_common), s_flags(0x7F),
                       s_uint, s_idn}},
   {eop_var_init, SD, {s_id}},
-  {eop_func_begin, SB, {s_id, s_flags(0)}},
-  {eop_func_end, SB, {s_flags(1)}},
-  {eop_param, SB, {s_id, s_id, s_id, s_idn, s_flags(0)}},
-  {eop_local, SB, {s_id, s_id, s_idn, s_uint, s_flags(0)}},
-  {eop_block_begin, SB, {}},
-  {eop_block_end, SB, {}},
-  {eop_if_begin, SB, {s_bool}},
-  {eop_if_else, SB, {}},
-  {eop_if_end, SB, {}},
-  {eop_while_begin, SB, {}},
-  {eop_while_body, SB, {}},
-  {eop_while_end, SB, {}},
-  {eop_do_begin, SB, {}},
-  {eop_do_cond, SB, {}},
-  {eop_do_end, SB, {}},
-  {eop_for_begin, SB, {}},
-  {eop_for_cond, SB, {s_bool}},
-  {eop_for_step, SB, {s_bool}},
-  {eop_for_body, SB, {}},
-  {eop_for_end, SB, {}},
-  {eop_switch_begin, SB, {}},
-  {eop_case_value, SB, {s_int}},
-  {eop_case_range, SB, {s_int, s_int}},
-  {eop_case_default, SB, {}},
-  {eop_switch_end, SB, {}},
-  {eop_break_stmt, SB, {}},
-  {eop_continue_stmt, SB, {}},
-  {eop_return_stmt, SB, {s_bool}},
-  {eop_goto_stmt, SB, {s_id, s_uint}},
-  {eop_label, SB, {s_id, s_idn}},
-  {eop_unreachable, SB, {}},
+  {eop_func_begin, SS, {s_id, s_flags(0)}},
+  {eop_func_end, SS, {s_flags(1)}},
+  {eop_param, SS, {s_id, s_id, s_id, s_idn, s_flags(0)}},
+  {eop_local, SS, {s_id, s_id, s_idn, s_uint, s_flags(0)}},
+  {eop_block_begin, SS, {}},
+  {eop_block_end, SS, {}},
+  {eop_if_begin, SS, {s_bool}},
+  {eop_if_else, SS, {}},
+  {eop_if_end, SS, {}},
+  {eop_while_begin, SS, {}},
+  {eop_while_body, SS, {}},
+  {eop_while_end, SS, {}},
+  {eop_do_begin, SS, {}},
+  {eop_do_cond, SS, {}},
+  {eop_do_end, SS, {}},
+  {eop_for_begin, SS, {}},
+  {eop_for_cond, SS, {s_bool}},
+  {eop_for_step, SS, {s_bool}},
+  {eop_for_body, SS, {}},
+  {eop_for_end, SS, {}},
+  {eop_switch_begin, SS, {}},
+  {eop_case_value, SS, {s_int}},
+  {eop_case_range, SS, {s_int, s_int}},
+  {eop_case_default, SS, {}},
+  {eop_switch_end, SS, {}},
+  {eop_break_stmt, SS, {}},
+  {eop_continue_stmt, SS, {}},
+  {eop_return_stmt, SS, {s_bool}},
+  {eop_goto_stmt, SS, {s_id, s_uint}},
+  {eop_label, SS, {s_id, s_idn}},
+  {eop_unreachable, SS, {}},
   {eop_init_const, SB, {}},
   {eop_init_zero, SB, {}},
   {eop_agg_init_begin, SB, {s_id, s_flags(1)}},
@@ -198,6 +199,7 @@ const a_spec_row spec_rows[] = {
 #undef SD
 #undef SB
 #undef SC
+#undef SS
 
 struct a_schema {
   an_opcode_info info[256];

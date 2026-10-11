@@ -16,36 +16,76 @@ metadata, inline-only bodies, unsupported entities).
 #include <algorithm>
 #include <cstring>
 
+#include "mlir/IR/AttrTypeSubElements.h"
+
 #include "emitter.h"
 
 namespace edg_cir {
 
 /* Entities. */
 
-std::string a_emitter::unique_symbol(const std::string &base)
+std::string_view a_emitter::keep_string(std::string_view text)
 /*
-Return base if no symbol of that name was created, else base.N.
+Copy text into the string arena (views of it stay valid for the session).
 */
 {
-  unsigned &count = symbol_names_[base];
-  std::string result = count == 0 ? base : base + "." + std::to_string(count);
+  return ids_.store_string(text);
+}  /* a_emitter::keep_string */
 
-  ++count;
-  if (result != base)
-    ++symbol_names_[result];
-  return result;
-}  /* a_emitter::unique_symbol */
-
-a_entity *a_emitter::entity_for(uint64_t gid, bool is_function)
+std::string_view a_emitter::claim_symbol(std::string_view want, uint64_t gid)
 /*
-Find the entity for gid (of the given kind), or nullptr.
+Claim an MLIR symbol name that no op has (want must live in the arena).  When
+it is taken, a unique placeholder takes its place; the final name is chosen
+at finish (assign_final_names), which is also where every name collision is
+resolved.
+*/
+{
+  std::string_view result = want;
+
+  if (!symbols_.insert(result).second) {
+    std::string base = "__ecil." + std::to_string(gid);
+    unsigned n = 0;
+
+    for (;;) {
+      std::string candidate = n == 0 ? base : base + "." + std::to_string(n);
+      result = keep_string(candidate);
+      if (symbols_.insert(result).second)
+        break;
+      ++n;
+    }
+  }
+  return result;
+}  /* a_emitter::claim_symbol */
+
+a_entity *a_emitter::entity_at(uint64_t gid)
+/*
+The function or variable entity of a G-id.  The validator checked that the
+G-id was declared, so a miss is an internal error.
 */
 {
   a_entity *result = nullptr;
-  auto found = entities_.find(gid);
+  const ecil::a_gid_entry *entry = ids_.find_gid(gid);
 
-  if (found != entities_.end() && found->second.is_function == is_function)
-    result = &found->second;
+  if (entry == nullptr || entry->payload == nullptr ||
+      (entry->kind != ecil::gk_func && entry->kind != ecil::gk_var))
+    internal("G-id " + std::to_string(gid) + " has no declaration object");
+  else
+    result = static_cast<a_entity *>(entry->payload);
+  return result;
+}  /* a_emitter::entity_at */
+
+a_entity *a_emitter::entity_for(uint64_t gid, bool is_function)
+/*
+Find the entity for gid, which must be of the given kind.
+*/
+{
+  a_entity *result = entity_at(gid);
+
+  if (result != nullptr && result->is_function != is_function) {
+    internal("G-id " + std::to_string(gid) + " is not a " +
+             (is_function ? "function" : "variable"));
+    result = nullptr;
+  }
   return result;
 }  /* a_emitter::entity_for */
 
@@ -58,13 +98,12 @@ Set the function's attributes from the latest DECL_FUNC.
   cir::GlobalLinkageKind kind = compat::linkage_kind(e.linkage, ok);
   const a_type *t = type_at(e.type);
 
-  fn.setLinkageAttr(cir::GlobalLinkageKindAttr::get(ctx_, kind));
+  fn.setLinkageAttr(linkage_attr(kind));
   fn.setNoProto(t != nullptr && t->no_proto);
   if (e.flags & ECIL_DECL_FUNC_NORETURN)
-    fn->setAttr(cir::CIRDialect::getNoReturnAttrName(),
-                builder_.getUnitAttr());
+    fn->setAttr(noreturn_name_, unit_attr_);
   else
-    fn->removeAttr(cir::CIRDialect::getNoReturnAttrName());
+    fn->removeAttr(noreturn_name_);
   if (e.flags & ECIL_DECL_FUNC_INLINE)
     fn.setInlineKind(cir::InlineKind::InlineHint);
   mlir::SymbolTable::setSymbolVisibility(
@@ -213,7 +252,8 @@ and fix earlier get_globals.  The initializer is reset; a VAR_INIT follows.
 
 bool a_emitter::decl_function(const ecil::a_record &r)
 /*
-Create or update a function entity.
+Create or update a function entity.  A re-issue with another non-nil name
+renames the entity (spec 7); the new name is applied at finish.
 */
 {
   bool ok = true;
@@ -222,8 +262,9 @@ Create or update a function entity.
   uint64_t linkage = 0;
   uint64_t flags = 0;
   bool good = true;
-  std::string name;
+  std::string_view name;
   a_type *t;
+  ecil::a_gid_entry *entry;
 
   uint_operand(r.ops[0], gid);
   uint_operand(r.ops[1], tgid);
@@ -231,16 +272,16 @@ Create or update a function entity.
   uint_operand(r.ops[3], flags);
   name = string_for(r.ops[4], good);
   t = type_at(tgid);
-  auto found = entities_.find(gid);
-  if (!good) {
-    ok = format_error("DECL_FUNC uses an unknown string id");
-  } else if (t == nullptr || t->kind != a_type_kind::function_type) {
-    ok = format_error("DECL_FUNC type is not a function type");
-  } else if (found == entities_.end()) {
-    bool known = true;
-    cir::GlobalLinkageKind kind = compat::linkage_kind(
-                                      static_cast<unsigned>(linkage), known);
-    a_entity e;
+  entry = ids_.find_gid(gid);
+  if (!good || t == nullptr || entry == nullptr ||
+      entry->kind != ecil::gk_func) {
+    ok = good && t != nullptr ? internal("DECL_FUNC out of step with the "
+                                         "validator") : false;
+  } else if (t->kind != a_type_kind::function_type) {
+    ok = internal("DECL_FUNC type is not a function type");
+  } else if (entry->payload == nullptr) {
+    entity_store_.emplace_back();
+    a_entity &e = entity_store_.back();
     cir::FuncOp fn;
 
     e.is_function = true;
@@ -249,20 +290,21 @@ Create or update a function entity.
     e.linkage = static_cast<unsigned>(linkage);
     e.flags = static_cast<uint32_t>(flags);
     e.named = r.ops[4].kind != ecil::an_operand_kind::nil;
-    e.name = e.named ? name : "__ecil." + std::to_string(gid);
-    if (!compat::linkage_is_local(kind) || e.named)
-      e.name = unique_symbol(e.name);
-    e.placeholder = e.name;
-    fn = compat::create_function(builder_, module_, loc(), e.name, t->cir);
+    if (e.named)
+      e.want = name;
+    e.symbol = claim_symbol(e.named ? name
+                                    : keep_string("__ecil." +
+                                                  std::to_string(gid)), gid);
+    fn = compat::create_function(builder_, module_, loc(), e.symbol, t->cir);
     e.op = fn.getOperation();
     apply_function_attributes(e, fn);
-    entity_order_.push_back(gid);
-    entities_.emplace(gid, std::move(e));
+    entity_order_.push_back(&e);
+    entry->payload = &e;
   } else {
-    a_entity &e = found->second;
+    a_entity &e = *static_cast<a_entity *>(entry->payload);
     cir::FuncOp fn;
     if (!e.is_function) {
-      ok = format_error("DECL_FUNC re-issues a variable's id");
+      ok = internal("DECL_FUNC re-issues a variable's id");
     } else if (e.type != tgid && e.has_body) {
       ok = format_error("a function's type changed after its body was "
                         "emitted");
@@ -270,10 +312,10 @@ Create or update a function entity.
       fn = mlir::cast<cir::FuncOp>(e.op);
       e.linkage = static_cast<unsigned>(linkage);
       e.flags = static_cast<uint32_t>(flags);
-      ++e.reissue_count;
-      if (r.ops[4].kind != ecil::an_operand_kind::nil && !e.named) {
+      if (r.ops[4].kind != ecil::an_operand_kind::nil &&
+          (!e.named || e.want != name)) {
         e.named = true;
-        renames_.push_back({gid, name});
+        e.want = name;
       }
       if (e.type != tgid) {
         a_type *old_type = type_at(e.type);
@@ -299,9 +341,10 @@ Create or update a variable entity (a cir.global).
   uint64_t flags = 0;
   uint64_t align = 0;
   bool good = true;
-  std::string name;
+  std::string_view name;
   a_type *t;
   bool is_definition;
+  ecil::a_gid_entry *entry;
 
   uint_operand(r.ops[0], gid);
   uint_operand(r.ops[1], tgid);
@@ -311,19 +354,22 @@ Create or update a variable entity (a cir.global).
   name = string_for(r.ops[5], good);
   t = type_at(tgid);
   is_definition = (flags & ECIL_DECL_VAR_DEFINITION) != 0;
-  auto found = entities_.find(gid);
-  if (!good) {
-    ok = format_error("DECL_VAR uses an unknown string id");
-  } else if (t == nullptr || t->kind == a_type_kind::function_type ||
+  entry = ids_.find_gid(gid);
+  if (!good || t == nullptr) {
+    ok = false;
+  } else if (entry == nullptr || entry->kind != ecil::gk_var) {
+    ok = internal("DECL_VAR out of step with the validator");
+  } else if (t->kind == a_type_kind::function_type ||
              t->kind == a_type_kind::void_type) {
-    ok = format_error("DECL_VAR type is not an object type");
+    ok = internal("DECL_VAR type is not an object type");
   } else if (is_definition && !type_is_complete(t->cir)) {
-    ok = format_error("DECL_VAR definition of an incomplete record type");
-  } else if (found == entities_.end()) {
+    ok = internal("DECL_VAR definition of an incomplete record type");
+  } else if (entry->payload == nullptr) {
     bool known = true;
     cir::GlobalLinkageKind kind = compat::linkage_kind(
                                       static_cast<unsigned>(linkage), known);
-    a_entity e;
+    entity_store_.emplace_back();
+    a_entity &e = entity_store_.back();
     cir::GlobalOp g;
     bool is_string = (flags & ECIL_DECL_VAR_STRING_LITERAL) != 0;
 
@@ -333,11 +379,15 @@ Create or update a variable entity (a cir.global).
     e.flags = static_cast<uint32_t>(flags);
     e.align = static_cast<uint32_t>(align);
     e.named = r.ops[5].kind != ecil::an_operand_kind::nil;
-    e.name = e.named ? name : (is_string ? ".str"
-                                         : "__ecil." + std::to_string(gid));
-    e.name = unique_symbol(e.name);
-    e.placeholder = e.name;
-    g = compat::create_global(builder_, module_, loc(), e.name, t->cir,
+    /* An unnamed string literal is named ".str" (made unique at finish). */
+    if (e.named)
+      e.want = name;
+    else if (is_string)
+      e.want = ".str";
+    e.symbol = claim_symbol(e.want.empty()
+                                ? keep_string("__ecil." + std::to_string(gid))
+                                : e.want, gid);
+    g = compat::create_global(builder_, module_, loc(), e.symbol, t->cir,
                               (flags & ECIL_DECL_VAR_CONST) != 0 || is_string,
                               kind);
     e.op = g.getOperation();
@@ -346,54 +396,54 @@ Create or update a variable entity (a cir.global).
       compat::set_dso_local(g.getOperation(), true);
     }
     if (align != 0)
-      g.setAlignmentAttr(builder_.getI64IntegerAttr(
-                              static_cast<int64_t>(align)));
+      g.setAlignmentAttr(alignment_attr(align));
     if (flags & ECIL_DECL_VAR_TLS)
       g.setTlsModel(cir::TLSModel::GeneralDynamic);
     mlir::SymbolTable::setSymbolVisibility(
         g, compat::symbol_visibility(kind, !is_definition));
-    entity_order_.push_back(gid);
-    entities_.emplace(gid, std::move(e));
-  } else if (found->second.is_function) {
-    ok = format_error("DECL_VAR re-issues a function's id");
+    entity_order_.push_back(&e);
+    entry->payload = &e;
   } else {
-    a_entity &e = found->second;
+    a_entity &e = *static_cast<a_entity *>(entry->payload);
     cir::GlobalOp g;
     bool known = true;
     cir::GlobalLinkageKind kind = compat::linkage_kind(
                                       static_cast<unsigned>(linkage), known);
 
-    g = mlir::cast<cir::GlobalOp>(e.op);
-    e.linkage = static_cast<unsigned>(linkage);
-    e.flags = static_cast<uint32_t>(flags);
-    if (align != 0) {
-      e.align = static_cast<uint32_t>(align);
-      g.setAlignmentAttr(builder_.getI64IntegerAttr(
-                              static_cast<int64_t>(align)));
+    if (e.is_function) {
+      ok = internal("DECL_VAR re-issues a function's id");
+    } else {
+      g = mlir::cast<cir::GlobalOp>(e.op);
+      e.linkage = static_cast<unsigned>(linkage);
+      e.flags = static_cast<uint32_t>(flags);
+      if (align != 0) {
+        e.align = static_cast<uint32_t>(align);
+        g.setAlignmentAttr(alignment_attr(align));
+      }
+      if (r.ops[5].kind != ecil::an_operand_kind::nil &&
+          (!e.named || e.want != name)) {
+        e.named = true;
+        e.want = name;
+      }
+      if (e.type != tgid) {
+        a_type *old_type = type_at(e.type);
+        if (old_type == nullptr || old_type->cir != t->cir)
+          retype_variable(e, t->cir);
+        e.type = tgid;
+      }
+      g.setLinkageAttr(linkage_attr(kind));
+      g.setConstant((flags & ECIL_DECL_VAR_CONST) != 0 ||
+                    (flags & ECIL_DECL_VAR_STRING_LITERAL) != 0);
+      if (is_definition && !g.getInitialValue().has_value()) {
+        g.setInitialValueAttr(zero_attribute(t->cir));
+        compat::set_dso_local(g.getOperation(), true);
+      } else if (!is_definition && g.getInitialValue().has_value() &&
+                 (flags & ECIL_DECL_VAR_UNSUPPORTED)) {
+        compat::clear_initial_value(g);
+      }
+      mlir::SymbolTable::setSymbolVisibility(
+          g, compat::symbol_visibility(kind, !is_definition));
     }
-    ++e.reissue_count;
-    if (r.ops[5].kind != ecil::an_operand_kind::nil && !e.named) {
-      e.named = true;
-      renames_.push_back({gid, name});
-    }
-    if (e.type != tgid) {
-      a_type *old_type = type_at(e.type);
-      if (old_type == nullptr || old_type->cir != t->cir)
-        retype_variable(e, t->cir);
-      e.type = tgid;
-    }
-    g.setLinkageAttr(cir::GlobalLinkageKindAttr::get(ctx_, kind));
-    g.setConstant((flags & ECIL_DECL_VAR_CONST) != 0 ||
-                  (flags & ECIL_DECL_VAR_STRING_LITERAL) != 0);
-    if (is_definition && !g.getInitialValue().has_value()) {
-      g.setInitialValueAttr(zero_attribute(t->cir));
-      compat::set_dso_local(g.getOperation(), true);
-    } else if (!is_definition && g.getInitialValue().has_value() &&
-               (flags & ECIL_DECL_VAR_UNSUPPORTED)) {
-      g->removeAttr("initial_value");
-    }
-    mlir::SymbolTable::setSymbolVisibility(
-        g, compat::symbol_visibility(kind, !is_definition));
   }
   return ok;
 }  /* a_emitter::decl_variable */
@@ -410,9 +460,9 @@ VAR_INIT: the constant on top of the constant stack initializes the variable.
   uint_operand(r.ops[0], gid);
   e = entity_for(gid, false);
   if (e == nullptr) {
-    ok = format_error("VAR_INIT for an unknown variable");
+    ok = false;
   } else if (!type_is_complete(type_at(e->type)->cir)) {
-    ok = format_error("VAR_INIT of an incomplete record type");
+    ok = internal("VAR_INIT of an incomplete record type");
   } else if (consts_.empty() || !const_aggs_.empty()) {
     ok = format_error("VAR_INIT without a constant");
   } else {
@@ -432,41 +482,37 @@ VAR_INIT: the constant on top of the constant stack initializes the variable.
 
 bool a_emitter::name_bind(const ecil::a_record &r)
 /*
-NAME_BIND: bind a late name.  Unreferenced entities are renamed at once;
-others at finish (the rename needs a symbol-use rewrite).
+NAME_BIND: bind a late name or rename the entity (its effective name, spec
+7).  The entity keeps its symbol until finish, which applies all names in one
+pass.
 */
 {
   bool ok = true;
   uint64_t gid = 0;
   uint64_t linkage = 0;
   bool good = true;
-  std::string name;
-  auto found = entities_.end();
+  std::string_view name;
+  a_entity *e;
 
   uint_operand(r.ops[0], gid);
   name = string_for(r.ops[1], good);
   uint_operand(r.ops[2], linkage);
-  found = entities_.find(gid);
-  if (!good) {
-    ok = format_error("NAME_BIND uses an unknown string id");
-  } else if (found == entities_.end()) {
-    ok = format_error("NAME_BIND for an unknown entity");
+  e = good ? entity_at(gid) : nullptr;
+  if (e == nullptr) {
+    ok = false;
   } else {
-    a_entity &e = found->second;
     bool known = true;
     cir::GlobalLinkageKind kind = compat::linkage_kind(
                                       static_cast<unsigned>(linkage), known);
 
-    e.linkage = static_cast<unsigned>(linkage);
-    if (e.is_function)
-      mlir::cast<cir::FuncOp>(e.op).setLinkageAttr(
-          cir::GlobalLinkageKindAttr::get(ctx_, kind));
+    e->linkage = static_cast<unsigned>(linkage);
+    if (e->is_function)
+      mlir::cast<cir::FuncOp>(e->op).setLinkageAttr(linkage_attr(kind));
     else
-      mlir::cast<cir::GlobalOp>(e.op).setLinkageAttr(
-          cir::GlobalLinkageKindAttr::get(ctx_, kind));
-    if (!e.named) {
-      e.named = true;
-      renames_.push_back({gid, name});
+      mlir::cast<cir::GlobalOp>(e->op).setLinkageAttr(linkage_attr(kind));
+    if (!e->named || e->want != name) {
+      e->named = true;
+      e->want = name;
     }
   }
   return ok;
@@ -644,7 +690,7 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
       out.is_zero = false;
   }
   if (t == nullptr) {
-    ok = format_error("C_AGG_BEGIN names an unknown type");
+    ok = false;
   } else if (t->kind == a_type_kind::array_type) {
     uint64_t count = t->count;
     std::vector<mlir::Attribute> elements;
@@ -653,7 +699,7 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
 
     for (const auto &entry : agg.entries) {
       if (entry.index + entry.count > count && count != 0)
-        ok = format_error("C_SEL index past the end of the array");
+        ok = internal("C_SEL index past the end of the array");
       if (!entry.value.is_zero)
         listed = std::max(listed, entry.index + entry.count);
     }
@@ -684,7 +730,7 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
         out.attr = cir::ZeroAttr::get(t->cir);
         out.is_zero = true;
       } else if (agg.entries[0].index >= rec.fields.size()) {
-        ok = format_error("C_SEL index past the union's fields");
+        ok = internal("C_SEL index past the union's fields");
       } else {
         const auto &entry = agg.entries[0];
         size_t index = static_cast<size_t>(entry.index);
@@ -725,7 +771,7 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
           size_t index = static_cast<size_t>(entry.index + k);
           uint32_t member = 0;
           if (index >= rec.fields.size()) {
-            ok = format_error("C_SEL index past the record's fields");
+            ok = internal("C_SEL index past the record's fields");
             continue;
           }
           member = rec.member_index[index];
@@ -787,7 +833,7 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
       }
     }
   } else {
-    ok = format_error("C_AGG_BEGIN type is not a complete record or array");
+    ok = internal("C_AGG_BEGIN type is not a complete record or array");
   }
   return ok;
 }  /* a_emitter::build_constant_aggregate */
@@ -801,7 +847,7 @@ C_AGG_END: build the aggregate and push it as one constant.
   a_const result;
 
   if (const_aggs_.empty())
-    ok = format_error("C_AGG_END without C_AGG_BEGIN");
+    ok = internal("C_AGG_END without C_AGG_BEGIN");
   else
     ok = commit_pending(const_aggs_.back()) &&
          build_constant_aggregate(const_aggs_.back(), result);
@@ -827,7 +873,7 @@ Handle a C_* record.
     uint64_t index = 0;
     uint64_t count = 1;
     if (const_aggs_.empty())
-      ok = format_error("C_SEL outside C_AGG_BEGIN");
+      ok = internal("C_SEL outside C_AGG_BEGIN");
     else
       ok = commit_pending(const_aggs_.back());
     if (ok) {
@@ -843,7 +889,7 @@ Handle a C_* record.
     uint_operand(r.ops[0], tgid);
     t = type_at(tgid);
     if (t == nullptr)
-      ok = format_error("constant names an unknown type");
+      ok = false;
     else
       ok = scalar_constant_record(r, t, tgid);
   }
@@ -918,7 +964,6 @@ C_AGG_BEGIN records, once their type is known.
   }
   case eop_c_addr: {
     uint64_t g = 0;
-    uint64_t bytes = 0;
     int64_t offset = 0;
     a_entity *e;
     mlir::StringAttr name;
@@ -926,13 +971,11 @@ C_AGG_BEGIN records, once their type is known.
 
     uint_operand(r.ops[1], g);
     ecil::operand_i64(r.ops[2], offset);
-    (void)bytes;
-    auto found = entities_.find(g);
-    if (found == entities_.end()) {
-      ok = format_error("C_ADDR names an unknown entity");
+    e = entity_at(g);
+    if (e == nullptr) {
+      ok = false;
       break;
     }
-    e = &found->second;
     e->referenced = true;
     name = e->is_function
         ? mlir::cast<cir::FuncOp>(e->op).getSymNameAttr()
@@ -967,6 +1010,126 @@ C_AGG_BEGIN records, once their type is known.
 
 /* Finish. */
 
+/*
+Names.  During emission every entity has a unique MLIR symbol of its own
+(a_entity::symbol: its name if it was free, else a placeholder) and all uses
+refer to it.  The final names are chosen here, once, from the effective names
+(spec 7): an external entity always keeps its name, an internal one gives way
+(name.N) when an external or an earlier internal entity has the name.  The
+symbols that differ from their final names are then substituted in one pass
+over the module.  Everything derived from a final name (the library-generated
+__const.<function>.<n> globals; C++ comdat and guard names later) is computed
+here, after the final names, never at the point of creation.
+*/
+
+void a_emitter::assign_final_names()
+/*
+Choose the final name of every entity and generated symbol and queue the
+changes (symbol to final name) for apply_substitution.
+*/
+{
+  std::unordered_set<std::string_view> used;
+  std::unordered_map<std::string_view, unsigned> counters;
+  std::vector<std::string_view> finals(entity_order_.size());
+
+  auto unique_name = [&](std::string_view base) {
+    std::string_view result = base;
+    if (!used.insert(result).second) {
+      unsigned &k = counters[base];
+      do {
+        ++k;
+        result = keep_string(std::string(base) + "." + std::to_string(k));
+      } while (!used.insert(result).second);
+    }
+    return result;
+  };
+  auto is_local = [](const a_entity &e) {
+    return e.linkage == elk_internal || e.linkage == elk_private;
+  };
+
+  /* External entities first: their names are never changed. */
+  for (size_t i = 0; i < entity_order_.size(); ++i) {
+    const a_entity &e = *entity_order_[i];
+    if (!is_local(e)) {
+      finals[i] = e.named ? e.want : e.symbol;
+      if (!used.insert(finals[i]).second)
+        internal("two external entities have the final name '" +
+                 std::string(finals[i]) + "'");
+    }
+  }
+  /* Then the internal ones, in creation order. */
+  for (size_t i = 0; i < entity_order_.size(); ++i) {
+    const a_entity &e = *entity_order_[i];
+    if (is_local(e))
+      finals[i] = unique_name(e.want.empty() ? e.symbol : e.want);
+  }
+  for (size_t i = 0; i < entity_order_.size(); ++i) {
+    a_entity &e = *entity_order_[i];
+    if (finals[i] != e.symbol) {
+      symbol_changes_.push_back({e.op,
+                                 mlir::StringAttr::get(ctx_, e.symbol),
+                                 mlir::StringAttr::get(ctx_, finals[i])});
+      e.symbol = finals[i];
+    }
+  }
+  /* Library-generated names derive from the final names. */
+  std::unordered_map<uint64_t, std::string_view> final_of;
+  if (!generated_.empty()) {
+    for (size_t i = 0; i < entity_order_.size(); ++i)
+      final_of[entity_order_[i]->gid] = finals[i];
+  }
+  for (const a_generated_symbol &g : generated_) {
+    std::string_view function = "fn";
+    std::string_view name;
+    auto found = final_of.find(g.function_gid);
+    if (found != final_of.end() && g.function_gid != 0)
+      function = found->second;
+    name = unique_name(keep_string("__const." + std::string(function) + "." +
+                                   std::to_string(g.index)));
+    cir::GlobalOp op = g.op;
+    symbol_changes_.push_back({op.getOperation(), op.getSymNameAttr(),
+                               mlir::StringAttr::get(ctx_, name)});
+  }
+}  /* a_emitter::assign_final_names */
+
+void a_emitter::apply_substitution()
+/*
+Apply the queued symbol changes: one walk over the module replaces every
+symbol reference at once (simultaneously, so a name that is both a source and
+a target is safe), then the symbol names are set.  The walk is skipped only
+when there is nothing to substitute.
+*/
+{
+  if (!symbol_changes_.empty()) {
+    llvm::DenseMap<mlir::StringAttr, mlir::StringAttr> map;
+    mlir::AttrTypeReplacer replacer;
+
+    for (const a_symbol_change &change : symbol_changes_)
+      map[change.from] = change.to;
+    replacer.addReplacement(
+        [&](mlir::SymbolRefAttr attr) -> std::pair<mlir::Attribute,
+                                                    mlir::WalkResult> {
+          if (attr.getNestedReferences().empty()) {
+            auto found = map.find(attr.getRootReference());
+            if (found != map.end())
+              return {mlir::FlatSymbolRefAttr::get(found->second),
+                      mlir::WalkResult::skip()};
+          }
+          return {attr, mlir::WalkResult::skip()};
+        });
+    replacer.recursivelyReplaceElementsIn(module_.getOperation(),
+                                          /*replaceAttrs=*/true,
+                                          /*replaceLocs=*/false,
+                                          /*replaceTypes=*/false);
+    ++walks_done_;
+    for (const a_symbol_change &change : symbol_changes_)
+      mlir::SymbolTable::setSymbolName(change.op, change.to);
+    renames_applied_ += symbol_changes_.size();
+    symbol_changes_.clear();
+  }
+}  /* a_emitter::apply_substitution */
+
+
 bool a_emitter::finish()
 /*
 Late names, record layout metadata, inline-only bodies and the unsupported
@@ -978,43 +1141,30 @@ entity policy (spec 8.11).  Runs on the worker thread.
   std::vector<std::string> errors;
   std::vector<mlir::NamedAttribute> layouts;
 
-  /* Late names. */
-  for (const auto &rename : renames_) {
-    auto found = entities_.find(rename.first);
-    if (found == entities_.end())
-      continue;
-    a_entity &e = found->second;
-    std::string new_name = unique_symbol(rename.second);
-    mlir::StringAttr old_attr = mlir::StringAttr::get(ctx_, e.name);
-    mlir::StringAttr new_attr = mlir::StringAttr::get(ctx_, new_name);
-
-    if (e.referenced)
-      (void)mlir::SymbolTable::replaceAllSymbolUses(old_attr, new_attr,
-                                                    module_);
-    mlir::SymbolTable::setSymbolName(e.op, new_attr);
-    e.name = new_name;
-  }
+  /* Final names, and their one-pass substitution. */
+  assign_final_names();
+  apply_substitution();
   /* Definitions must be named. */
-  for (uint64_t gid : entity_order_) {
-    a_entity &e = entities_[gid];
+  for (a_entity *entity : entity_order_) {
+    a_entity &e = *entity;
     bool defined = e.is_function ? e.has_body : (e.flags &
                                        ECIL_DECL_VAR_DEFINITION) != 0;
     if (defined && !e.named && !(e.flags & ECIL_DECL_VAR_STRING_LITERAL))
-      errors.push_back("definition of entity " + std::to_string(gid) +
+      errors.push_back("definition of entity " + std::to_string(e.gid) +
                        " has no name at the end of the stream");
   }
   /* C99 inline-only functions keep no body: they are external declarations
      (their definition lives in another translation unit). */
-  for (uint64_t gid : entity_order_) {
-    a_entity &e = entities_[gid];
+  for (a_entity *entity : entity_order_) {
+    a_entity &e = *entity;
     if (e.is_function && e.has_body &&
         (e.flags & ECIL_DECL_FUNC_INLINE_ONLY)) {
       cir::FuncOp fn = mlir::cast<cir::FuncOp>(e.op);
       /* Uses may outlive their definitions across blocks: drop them first. */
       fn.getBody().dropAllReferences();
       fn.getBody().getBlocks().clear();
-      fn.setLinkageAttr(cir::GlobalLinkageKindAttr::get(
-          ctx_, cir::GlobalLinkageKind::ExternalLinkage));
+      fn.setLinkageAttr(
+          linkage_attr(cir::GlobalLinkageKind::ExternalLinkage));
       mlir::SymbolTable::setSymbolVisibility(
           fn, mlir::SymbolTable::Visibility::Private);
       e.has_body = false;
@@ -1023,8 +1173,8 @@ entity policy (spec 8.11).  Runs on the worker thread.
   /* Declarations without a definition: weak ones are extern_weak, every
      other kind of declaration is external (llvm.func and llvm.mlir.global
      accept nothing else). */
-  for (uint64_t gid : entity_order_) {
-    a_entity &e = entities_[gid];
+  for (a_entity *entity : entity_order_) {
+    a_entity &e = *entity;
     bool declared_only = e.is_function ? !e.has_body : !e.has_init &&
         !(e.flags & ECIL_DECL_VAR_DEFINITION);
     if (declared_only && e.op != nullptr) {
@@ -1032,7 +1182,7 @@ entity policy (spec 8.11).  Runs on the worker thread.
                   e.linkage == elk_extern_weak;
       auto kind = weak ? cir::GlobalLinkageKind::ExternalWeakLinkage
                        : cir::GlobalLinkageKind::ExternalLinkage;
-      auto attr = cir::GlobalLinkageKindAttr::get(ctx_, kind);
+      auto attr = linkage_attr(kind);
       if (e.is_function)
         mlir::cast<cir::FuncOp>(e.op).setLinkageAttr(attr);
       else
@@ -1040,8 +1190,8 @@ entity policy (spec 8.11).  Runs on the worker thread.
     }
   }
   /* Unsupported entities. */
-  for (uint64_t gid : entity_order_) {
-    a_entity &e = entities_[gid];
+  for (a_entity *entity : entity_order_) {
+    a_entity &e = *entity;
     bool dropped = e.is_function ? (e.flags & ECIL_DECL_FUNC_UNSUPPORTED) != 0
                                  : (e.flags & ECIL_DECL_VAR_UNSUPPORTED) != 0;
     bool local = e.linkage == elk_internal || e.linkage == elk_private;
@@ -1053,20 +1203,23 @@ entity policy (spec 8.11).  Runs on the worker thread.
       continue;
     }
     if (!keep_going) {
-      errors.push_back("the definition of '" + e.name + "' was dropped: it "
-                       "uses a construct the CIR back end cannot express");
+      errors.push_back("the definition of '" + std::string(e.symbol) +
+                       "' was dropped: it uses a construct the CIR back "
+                       "end cannot express");
     } else if (!local) {
       session_.report(EDG_CIR_SEVERITY_WARNING, edc_unsupported,
-                      "'" + e.name + "' is only declared: its definition "
-                      "uses a construct the CIR back end cannot express");
+                      "'" + std::string(e.symbol) + "' is only declared: "
+                      "its definition uses a construct the CIR back end "
+                      "cannot express");
       if (!e.is_function) {
-        mlir::cast<cir::GlobalOp>(e.op)->removeAttr("initial_value");
+        compat::clear_initial_value(mlir::cast<cir::GlobalOp>(e.op));
         mlir::SymbolTable::setSymbolVisibility(
             e.op, mlir::SymbolTable::Visibility::Private);
       }
     } else if (e.referenced) {
-      errors.push_back("the internal definition of '" + e.name + "' was "
-                       "dropped but is still referenced");
+      errors.push_back("the internal definition of '" +
+                       std::string(e.symbol) + "' was dropped but is still "
+                       "referenced");
     } else {
       e.op->erase();
       e.op = nullptr;

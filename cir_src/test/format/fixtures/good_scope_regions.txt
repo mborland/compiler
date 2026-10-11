@@ -1,0 +1,49 @@
+; Locals of every scope region are used only inside it.
+ecil 0.7 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame REGION
+  TY_INT 1 32 true 4 4
+  TY_FUNC 2 1 0 [1]
+  STR 2 "f"
+  DECL_FUNC 3 2 0 1 2
+  FUNC_BEGIN 3 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 1 nil 4 0
+  FOR_BEGIN
+  LOCAL 3 1 nil 4 0
+  LREF 3
+  DROP
+  FOR_COND true
+  LREF 3
+  DROP
+  FOR_STEP true
+  LREF 3
+  DROP
+  FOR_BODY
+  LOCAL 4 1 nil 4 0
+  LREF 3
+  DROP
+  LREF 4
+  DROP
+  FOR_END
+  LREF 1
+  DROP
+  LREF 2
+  DROP
+  LREF 1
+  LOAD 0
+  IF_BEGIN true
+  LOCAL 5 1 nil 4 0
+  LREF 5
+  DROP
+  IF_ELSE
+  LOCAL 6 1 nil 4 0
+  LREF 6
+  DROP
+  IF_END
+  FUNC_END 0
+frame END
+  END 2 0

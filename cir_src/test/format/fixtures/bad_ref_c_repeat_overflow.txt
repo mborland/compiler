@@ -1,0 +1,18 @@
+; expect: format element index 18446744073709551615 (+2) is out of range
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  TY_ARRAY 4 1 2 0
+  STR 2 "v"
+  DECL_VAR 5 4 0 1 4 2
+  C_AGG_BEGIN 4
+  C_REPEAT 18446744073709551615 2
+  C_INT 1 0
+  C_AGG_END
+  VAR_INIT 5
+frame END
+  END 2 0

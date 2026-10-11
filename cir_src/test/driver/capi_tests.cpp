@@ -448,8 +448,12 @@ Output path, process_file, version and status strings, the edg-cir tool.
   }
   CHECK(edg_cir_process_file(&options, "no/such/file.ecil") ==
         EDG_CIR_ERROR_IO, "missing input");
-  CHECK(std::strstr(edg_cir_version_string(), "ECIL 0.6") != nullptr,
-        "version string: %s", edg_cir_version_string());
+  {
+    std::string want = "ECIL " + std::to_string(ECIL_VERSION_MAJOR) + "." +
+                       std::to_string(ECIL_VERSION_MINOR);
+    CHECK(std::strstr(edg_cir_version_string(), want.c_str()) != nullptr,
+          "version string: %s", edg_cir_version_string());
+  }
   for (int s = 0; s <= 9; ++s)
     CHECK(std::strcmp(edg_cir_status_string(
                           static_cast<an_edg_cir_status>(s)),

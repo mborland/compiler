@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c23 --gcc Test_name.c
-ecil 0.6 features=0x00000000
+ecil 0.7 features=0x00000000
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -82,8 +82,6 @@ frame REGION
   TY_ARRAY 23 20 3 0
   STR 15 "fn.var"
   DECL_VAR 24 23 1 17 0 15
-  C_STRING 23 "fn\x00"
-  VAR_INIT 24
   C_ADDR 21 24 0
   VAR_INIT 22
   TY_ARRAY 25 21 2 0
@@ -102,6 +100,8 @@ frame REGION
   C_AGG_END
   VAR_INIT 26
   TY_PTR 29 21
+  C_STRING 23 "fn\x00"
+  VAR_INIT 24
   FUNC_BEGIN 19 0
   BLOCK_BEGIN
   GREF 22

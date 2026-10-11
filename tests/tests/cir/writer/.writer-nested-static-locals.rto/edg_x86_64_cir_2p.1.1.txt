@@ -1,0 +1,119 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 Test_name.c
+"Test_name.c", line 13: warning: variable "s" was declared but never referenced
+    static struct S s = { &(int){5}, __func__ };
+                    ^
+
+"Test_name.c", line 14: warning: variable "t" was declared but never referenced
+    static struct T t = { &(struct S){ &(int){7}, "x" } };
+                    ^
+
+ecil 0.7 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 201112 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_INT 4 8 true 1 1
+  TY_PTR 5 4
+  TY_FUNC 6 5 0 []
+  STR 5 "chain"
+  DECL_FUNC 7 6 0 0 5
+  DECL_FUNC 7 6 0 1 5
+  STR 6 "chain.a"
+  DECL_VAR 8 5 1 17 0 6
+  TY_ARRAY 9 4 6 0
+  STR 7 "chain.var"
+  DECL_VAR 10 9 1 17 0 7
+  C_ADDR 5 10 0
+  VAR_INIT 8
+  STR 8 "S"
+  TY_RECORD_DECL 11 0 8
+  TY_PTR 12 1
+  STR 9 "p"
+  STR 10 "n"
+  TY_RECORD_BODY 11 16 16 8 0 2
+  REC_FIELD 12 0 nil nil 9 0
+  REC_FIELD 5 8 nil nil 10 0
+  STR 11 "chain.s"
+  DECL_VAR 13 11 1 17 0 11
+  STR 12 "chain.var.1"
+  DECL_VAR 14 1 1 17 0 12
+  C_AGG_BEGIN 11
+  C_SEL 0
+  C_ADDR 12 14 0
+  C_SEL 1
+  C_ADDR 5 10 0
+  C_AGG_END
+  VAR_INIT 13
+  STR 13 "T"
+  TY_RECORD_DECL 15 0 13
+  TY_PTR 16 11
+  STR 14 "s"
+  TY_RECORD_BODY 15 8 8 8 0 1
+  REC_FIELD 16 0 nil nil 14 0
+  STR 15 "chain.t"
+  DECL_VAR 17 15 1 17 0 15
+  STR 16 "chain.var.2"
+  DECL_VAR 18 11 1 17 0 16
+  C_AGG_BEGIN 15
+  C_SEL 0
+  C_ADDR 16 18 0
+  C_AGG_END
+  VAR_INIT 17
+  C_STRING 9 "chain\x00"
+  VAR_INIT 10
+  C_INT 1 5
+  VAR_INIT 14
+  STR 17 "chain.var.3"
+  DECL_VAR 19 1 1 17 0 17
+  TY_ARRAY 20 4 2 0
+  STR 18 ".str"
+  DECL_VAR 21 20 2 11 0 18
+  C_STRING 20 "x\x00"
+  VAR_INIT 21
+  C_AGG_BEGIN 11
+  C_SEL 0
+  C_ADDR 12 19 0
+  C_SEL 1
+  C_ADDR 5 21 0
+  C_AGG_END
+  VAR_INIT 18
+  C_INT 1 7
+  VAR_INIT 19
+  FUNC_BEGIN 7 0
+  BLOCK_BEGIN
+  GREF 8
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 19 "use_func"
+  DECL_FUNC 22 6 0 0 19
+  DECL_FUNC 22 6 0 1 19
+  TY_ARRAY 23 4 9 0
+  STR 20 "use_func.var"
+  DECL_VAR 24 23 1 17 0 20
+  C_STRING 23 "use_func\x00"
+  VAR_INIT 24
+  FUNC_BEGIN 22 0
+  BLOCK_BEGIN
+  GREF 24
+  ADDR
+  CAST 12 5
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame END
+  END 4 0

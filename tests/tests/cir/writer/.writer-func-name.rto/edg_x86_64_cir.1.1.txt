@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c99 Test_name.c
-ecil 0.6 features=0x00000000
+ecil 0.7 features=0x00000000
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -27,12 +27,12 @@ frame REGION
   TY_ARRAY 10 6 5 0
   STR 7 "main.var"
   DECL_VAR 11 10 1 17 0 7
-  C_STRING 10 "main\x00"
-  VAR_INIT 11
   STR 8 ".str"
   DECL_VAR 12 10 2 11 0 8
   C_STRING 10 "main\x00"
   VAR_INIT 12
+  C_STRING 10 "main\x00"
+  VAR_INIT 11
   FUNC_BEGIN 5 0
   BLOCK_BEGIN
   GREF 11

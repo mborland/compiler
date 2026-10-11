@@ -1,0 +1,17 @@
+; Ids with small gaps (a few holes) stay within the reader limit.
+ecil 0.7 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  TY_VOID 3
+  TY_PTR 5 1
+  STR 2 "a"
+  STR 4 "b"
+  TY_FUNC 7 1 0 [5]
+  DECL_FUNC 9 7 0 1 2
+  DECL_FUNC 11 7 0 1 4
+frame END
+  END 2 0

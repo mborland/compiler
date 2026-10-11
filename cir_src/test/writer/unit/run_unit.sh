@@ -35,5 +35,6 @@ run() {  # name, harness-mode
 [ "$1" = "-r" ] && RERECORD=1
 run empty 0
 run abort 1
+"$tmp/h" "$tmp/reasons.ecil" 2 || status=1
 rm -rf "$tmp"
 exit $status

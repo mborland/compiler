@@ -1,6 +1,6 @@
 # ECIL — EDG CIR IL stream format
 
-Status: **v0.6** (header minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
+Status: **v0.7** (header minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
 orchestrator.
 
 - **Normative source.** The definitions live in
@@ -175,17 +175,45 @@ and v0 readers skip them all (they are consumed from M5 onward).
     and reset at every `FUNC_BEGIN`.
   - **sids** (strings) are global and introduced by `STR(sid, bin)`. The
     library copies any string it keeps.
-  - In every space, 0 or nil means "none".
+  - In every space, 0 or nil means "none". Every id is below 2^32.
+- **Density (minor 7; a writer MUST).**
+  - A writer introduces G-ids and sids densely and in increasing order.
+    Each new id is the highest id introduced so far plus 1.
+  - The introduction record (`TY_*`, `DECL_*`, `STR`) is emitted in the
+    declaration section of the frame that assigns the id, at the moment the
+    id is assigned.
+  - L-ids are dense in the same way within a function. The one exception: a
+    forward `GOTO_STMT` may name a label L-id before its `LABEL` record.
+  - **Reader limit (all minors).** A reader may reject any id above
+    `2 * introduced + 1024`, where `introduced` is the number of ids of that
+    space introduced (or, for L-ids, referenced) so far. This is a resource
+    limit, not a format rule: it bounds the reader's tables by the stream
+    size, so it applies to streams of every minor. Every writer since minor
+    0 has been dense.
+  - **Writer check.** In CHECKING builds the writer asserts at `F_END` that
+    every id it allocated was introduced.
 - **Names.**
   - A declaration carries its final mangled (or C) name sid when it is
     known. Otherwise it carries nil, and `NAME_BIND(g, sid, linkage)`
     supplies the name later. Until then the consumer uses the placeholder
     `__ecil.<gid>`.
   - A definition still unnamed at `F_END` is a format error.
-  - **One G-id per symbol.** Two distinct G-ids must never bind the same
-    symbol name. The writer deduplicates by name; for example,
-    `__builtin_memcpy` sent as a library call reuses the G-id of `memcpy`.
-    A consumer that sees a duplicate reports a format error.
+  - **Effective name.** An entity's *effective* name is the name of its
+    latest `DECL_*` or `NAME_BIND` that carried a non-nil name.
+    - A re-issue with a nil name keeps the effective name.
+    - A re-issue with a different non-nil name renames the entity.
+    - The consumer applies every rename at finish, so all earlier uses
+      follow the entity.
+  - **One G-id per symbol.** Two distinct G-ids must never have the same
+    effective external (non-internal) name.
+    - The writer deduplicates by name; for example, `__builtin_memcpy` sent
+      as a library call reuses the G-id of `memcpy`.
+    - A reader checks ownership after every `DECL_*` and `NAME_BIND`, on the
+      effective name and linkage, and releases the old name when an entity
+      is renamed or becomes internal. A duplicate is a format error.
+    - Internal entities may share a name with each other or with an
+      external entity. The consumer makes internal symbols unique at finish
+      and never renames an external one.
   - Label names (`LABEL`) are hints only. The consumer makes them unique
     within the function.
 - **Stretch goal (ODR).** Every non-internal entity ends up with its
@@ -313,13 +341,33 @@ When `end_reachable` is set and control falls off the end:
 - `MATERIALIZE_TEMP(l, t)` creates temporary `l` in the current block,
   stores the popped prvalue and pushes its glvalue.
 - **Placement.** The consumer may place each alloca at function entry, and
-  the v0 library does so. `BLOCK_BEGIN`/`BLOCK_END` brackets are scoping
-  hints, not exact variable lifetimes.
-- **For-init variables.** The writer currently emits a for-init variable
-  inside a `BLOCK` that closes before `FOR_COND`, even though the condition,
-  step and body use it.
-- **C++ (M3).** This must be fixed before M3, where lifetimes drive
-  destructors: the init scope must stay open over the whole loop.
+  the v0 library does so. Alloca placement is the consumer's choice, but the
+  scope rule below is normative.
+- **Scope regions (minor 7).** A `LOCAL` or `MATERIALIZE_TEMP` belongs to
+  the innermost open *scope region*:
+  - the function body;
+  - a `BLOCK_BEGIN … BLOCK_END`;
+  - the `FOR_BEGIN … FOR_END` init scope;
+  - an `IF_BEGIN` or `IF_ELSE` arm;
+  - a loop body (`WHILE_BODY … WHILE_END`, `DO_BEGIN … DO_COND`,
+    `FOR_BODY … FOR_END`);
+  - the `SWITCH_BEGIN … SWITCH_END` body.
+
+  Referencing it after its scope region has closed is a format error. In
+  C++ (v1) the scope region is also where its destruction happens; v1 adds
+  more scope regions (11.5).
+- **Function bodies are never nested (minor 7).** A `FUNC_BEGIN` before the
+  previous `FUNC_END` is a format error. An `F_REGION` with several
+  functions (a function and its lambdas) has their bodies one after
+  another.
+- **For-init variables (minor 7).** `FOR_BEGIN` opens a scope that lasts
+  until the matching `FOR_END`. The init statements, including `LOCAL`s,
+  follow `FOR_BEGIN` directly, with no `BLOCK` wrapper. Their variables are
+  in scope in the condition, the step and the body. Before minor 7 the writer
+  wrapped them in a `BLOCK` that closed before `FOR_COND`. A minor-7 reader
+  treats a `LOCAL` declared in a closed `BLOCK` and used after it as a format
+  error. C++ (M3) relies on this rule, because the end of the init scope is
+  where for-init objects are destroyed.
 
 ### 8.4 Statements
 
@@ -338,14 +386,18 @@ The value stack is empty between statements. An expression statement is
 
 Notes on the rows:
 - **for:** `FOR_BEGIN` opens an implicit scope that holds the init
-  statements.
+  statements. The scope stays open over `FOR_COND`, `FOR_STEP` and
+  `FOR_BODY` and closes at `FOR_END` (minor 7).
 - **switch:** the condition is already promoted.
 - **jumps:** `RETURN_STMT` pops a value that is already converted. Label
   lids share the frame's L-id space. `GOTO` may jump into or out of
   blocks; C has no cleanups, so `n_cleanups` is 0.
 
 **Switch strategy.** A case label may sit directly in the switch body or
-inside a plain block in it; the writer diagnoses Duff's device. The
+inside nested `BLOCK`s in it, but never inside another statement bracket
+(`IF`, a loop). A case label inside a nested `SWITCH` belongs to that inner
+switch. The writer diagnoses Duff's device. Readers enforce this from
+minor 7. The
 consumer emits each label as a *marker* case: a `cir.case` with an empty
 region ending in `cir.yield`, at the current insertion point inside the
 `cir.switch` body. The labelled statements follow in the enclosing region.

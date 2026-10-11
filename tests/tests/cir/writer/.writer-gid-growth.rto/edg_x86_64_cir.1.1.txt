@@ -1,0 +1,147 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 Test_name.c
+ecil 0.7 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 201112 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FUNC 4 1 0 []
+  STR 5 "later_func"
+  DECL_FUNC 5 4 0 0 5
+  DECL_FUNC 5 4 0 1 5
+  FUNC_BEGIN 5 0
+  BLOCK_BEGIN
+  CONST_INT 1 4
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 6 "B"
+  TY_RECORD_DECL 6 0 6
+  TY_PTR 7 6
+  STR 7 "C"
+  TY_RECORD_DECL 8 0 7
+  TY_PTR 9 8
+  TY_FUNC 10 1 0 [7, 9]
+  STR 8 "uses_incomplete"
+  DECL_FUNC 11 10 0 0 8
+  DECL_FUNC 11 10 0 1 8
+  STR 9 "b"
+  STR 10 "c"
+  FUNC_BEGIN 11 0
+  PARAM 1 7 7 9 0
+  PARAM 2 9 9 10 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CONST_NULL 7
+  CMP 5
+  LAND_BEGIN
+  LREF 2
+  LOAD 0
+  CONST_NULL 9
+  CMP 5
+  LAND_END
+  CAST 4 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_INT 12 16 true 2 2
+  TY_PTR 13 12
+  TY_FLOAT 14 4 16 16
+  TY_FLOAT 15 2 4 4
+  TY_FUNC 16 14 0 [15]
+  TY_PTR 17 16
+  STR 11 "x"
+  STR 12 "cb"
+  TY_RECORD_BODY 6 24 24 8 0 3
+  REC_FIELD 13 0 nil nil 11 0
+  REC_FIELD 17 8 nil nil 12 0
+  REC_FIELD 9 16 nil nil 10 0
+  TY_PTR 18 1
+  STR 13 "q"
+  TY_RECORD_BODY 8 8 8 8 0 1
+  REC_FIELD 18 0 nil nil 13 0
+  STR 14 "after_completion"
+  DECL_FUNC 19 4 0 0 14
+  DECL_FUNC 19 4 0 1 14
+  FUNC_BEGIN 19 0
+  BLOCK_BEGIN
+  CONST_INT 1 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  STR 15 "gx"
+  DECL_VAR 20 1 0 33 0 15
+  STR 16 "gp"
+  DECL_VAR 21 18 0 1 0 16
+  C_ADDR 18 20 0
+  VAR_INIT 21
+  STR 17 "gp_later"
+  DECL_VAR 22 18 0 1 0 17
+  STR 18 "later_var"
+  DECL_VAR 23 1 0 0 0 18
+  C_ADDR 18 23 0
+  VAR_INIT 22
+  TY_PTR 24 4
+  STR 19 "gfp_later"
+  DECL_VAR 25 24 0 1 0 19
+  C_ADDR 24 5 0
+  VAR_INIT 25
+  DECL_VAR 23 1 0 1 0 18
+  C_INT 1 3
+  VAR_INIT 23
+  TY_INT 26 8 true 1 1
+  TY_PTR 27 26
+  STR 20 "gs"
+  DECL_VAR 28 27 0 1 0 20
+  TY_ARRAY 29 26 6 0
+  STR 21 ".str"
+  DECL_VAR 30 29 2 11 0 21
+  C_STRING 29 "hello\x00"
+  VAR_INIT 30
+  C_ADDR 27 30 0
+  VAR_INIT 28
+  STR 22 "A"
+  TY_RECORD_DECL 31 0 22
+  TY_FLOAT 32 3 8 8
+  TY_FUNC 33 32 0 [26]
+  TY_PTR 34 33
+  STR 23 "s"
+  STR 24 "p"
+  TY_RECORD_BODY 31 24 24 8 0 3
+  REC_FIELD 27 0 nil nil 23 0
+  REC_FIELD 18 8 nil nil 24 0
+  REC_FIELD 34 16 nil nil 12 0
+  STR 25 "ga"
+  DECL_VAR 35 31 0 1 0 25
+  TY_ARRAY 36 26 2 0
+  STR 26 ".str.1"
+  DECL_VAR 37 36 2 11 0 26
+  C_STRING 36 "x\x00"
+  VAR_INIT 37
+  C_AGG_BEGIN 31
+  C_SEL 0
+  C_ADDR 27 37 0
+  C_SEL 1
+  C_ADDR 18 20 0
+  C_AGG_END
+  VAR_INIT 35
+  STR 27 "pb"
+  DECL_VAR 38 7 0 33 0 27
+  STR 28 "pc"
+  DECL_VAR 39 9 0 33 0 28
+frame END
+  END 5 0

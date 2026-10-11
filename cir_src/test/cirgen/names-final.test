@@ -1,0 +1,91 @@
+; Final names (spec 7, L4): an external entity keeps its name when an internal
+; one has it (the internal one becomes foo.1), a re-issued declaration with
+; another name renames the entity, a late NAME_BIND names a placeholder; all
+; uses follow in one substitution pass.
+; RUN: cat %S/Inputs/header07_late.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --stats --emit=cir -o /dev/null %t.ecil 2>&1 | %FileCheck %s --check-prefix=STATS
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK-DAG: cir.func {{.*}}@foo.1(
+; CHECK-DAG: cir.func {{.*}}@foo(
+; CHECK-DAG: cir.func {{.*}}@renamed(
+; CHECK-DAG: cir.func {{.*}}@late(
+; CHECK-DAG: cir.call @foo.1()
+; CHECK-DAG: cir.call @foo()
+; CHECK-DAG: cir.call @renamed()
+; CHECK-DAG: cir.call @late()
+; CHECK-NOT: @old
+; CHECK-NOT: __ecil
+; STATS: stats: {{.*}} 4 symbol renames, 1 substitution walks
+
+frame DECLS
+  STR 10 "foo"
+  STR 11 "old"
+  STR 12 "renamed"
+  STR 13 "main"
+  STR 14 "late"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 21 1 1 10
+  DECL_FUNC 41 21 0 1 10
+  DECL_FUNC 42 21 0 1 11
+  DECL_FUNC 43 21 0 1 nil
+  DECL_FUNC 44 21 0 9 13
+  DECL_FUNC 42 21 0 1 12
+  NAME_BIND 43 14 0
+frame REGION
+; static int foo(void) { return 1; }  int foo(void) { return 2; }
+; int renamed(void) { return 4; }  int late(void) { return 8; }
+  FUNC_BEGIN 40 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  CONST_INT 1 8
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 44 0
+  CALL 40 21 0 0
+  CONST_INT 1 1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  CALL 41 21 0 0
+  CONST_INT 1 2
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  CALL 42 21 0 0
+  CONST_INT 1 4
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  CALL 43 21 0 0
+  CONST_INT 1 8
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 1
+frame END
+  END auto 0

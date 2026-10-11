@@ -80,9 +80,10 @@ STATIC_THREAD size_t
 STATIC_THREAD uint32_t
                 next_lid;         /* The last frame-local id assigned. */
 STATIC_THREAD uint8_t
-                *streamed_bitmap; /* Indexed by function_def_number. */
+                *function_states; /* An an_ecil_function_state, indexed by
+                                     function_def_number. */
 STATIC_THREAD size_t
-                streamed_capacity;
+                function_states_capacity;
 STATIC_THREAD an_init_level
                 *agg_levels;      /* Dynamic aggregate cursors. */
 STATIC_THREAD size_t
@@ -99,48 +100,75 @@ Release the writer's function-body storage at the end of a compilation.
     ecil_init_level_end(&agg_levels[--num_agg_levels]);
   }  /* while */
   free(code_stack);
-  free(streamed_bitmap);
+  free(function_states);
   free(agg_levels);
   code_stack = NULL;
-  streamed_bitmap = NULL;
+  function_states = NULL;
   agg_levels = NULL;
   code_stack_size = code_stack_capacity = 0;
-  streamed_capacity = 0;
+  function_states_capacity = 0;
   num_agg_levels = agg_levels_capacity = 0;
   next_lid = 0;
 }  /* ecil_code_reset */
 
 
-a_boolean ecil_function_is_streamed(a_routine_ptr rout)
+an_ecil_function_state ecil_function_state(a_routine_ptr rout)
 /*
-Return TRUE if the body of the routine has been streamed (or dropped).
+Return what the writer has done with the routine's body (efs_none if nothing
+yet).  A routine that has a body has a function definition number, which
+indexes the map (number 0 is the "no definition" number and is never
+tracked: it reads as efs_none).
+*/
+{
+  size_t                  n = (size_t)rout->function_def_number;
+  an_ecil_function_state  state = efs_none;
+
+  if (n != (size_t)NULL_function_def_number && n < function_states_capacity) {
+    state = (an_ecil_function_state)function_states[n];
+  }  /* if */
+  return state;
+}  /* ecil_function_state */
+
+
+void ecil_set_function_state(a_routine_ptr rout, an_ecil_function_state state)
+/*
+Record what the writer has done with the routine's body.
 */
 {
   size_t  n = (size_t)rout->function_def_number;
 
-  return n < streamed_capacity && streamed_bitmap[n] != 0;
-}  /* ecil_function_is_streamed */
-
-
-static void mark_streamed(a_routine_ptr rout)
-/*
-Record that the routine's body has been handled.
-*/
-{
-  size_t  n = (size_t)rout->function_def_number;
-
-  if (n >= streamed_capacity) {
+  check_assertion(n != (size_t)NULL_function_def_number);
+  if (n == (size_t)NULL_function_def_number) {
+    /* Not tracked (see ecil_function_state). */
+  } else if (n >= function_states_capacity) {
     size_t  new_capacity = (n + 1024) * 2;
-    uint8_t *new_map = (uint8_t *)realloc(streamed_bitmap, new_capacity);
+    uint8_t *new_map = (uint8_t *)realloc(function_states, new_capacity);
 
     if (new_map != NULL) {
-      memset(new_map + streamed_capacity, 0, new_capacity - streamed_capacity);
-      streamed_bitmap = new_map;
-      streamed_capacity = new_capacity;
+      memset(new_map + function_states_capacity, 0,
+             new_capacity - function_states_capacity);
+      function_states = new_map;
+      function_states_capacity = new_capacity;
     }  /* if */
   }  /* if */
-  if (n < streamed_capacity) streamed_bitmap[n] = 1;
-}  /* mark_streamed */
+  if (n != (size_t)NULL_function_def_number &&
+      n < function_states_capacity) {
+    function_states[n] = (uint8_t)state;
+  }  /* if */
+}  /* ecil_set_function_state */
+
+
+a_boolean ecil_function_is_handled(a_routine_ptr rout)
+/*
+Return TRUE if the writer is done with the routine's body: streamed, dropped
+as unsupported or retracted.  (A delayed one is not done.)
+*/
+{
+  an_ecil_function_state  state = ecil_function_state(rout);
+
+  return state == efs_streamed || state == efs_dropped ||
+         state == efs_retracted;
+}  /* ecil_function_is_handled */
 
 
 /* The work stack. */
@@ -286,22 +314,31 @@ Assign the next frame-local id.
 }  /* new_lid */
 
 
-/* Conversions. */
-
-static uint32_t promoted_gid(an_ecil_frame *frame, uint32_t gid)
+static void emit_local(an_ecil_frame *frame,
+                       uint32_t      lid,
+                       uint32_t      t,
+                       uint32_t      name_sid,
+                       uint32_t      alignment)
 /*
-The integer promotion of an ECIL type: bool and integers narrower than int
-become int; everything else is unchanged.
+LOCAL: declare local (or temporary) lid of ECIL type t, named by name_sid
+(0: unnamed), with an explicit alignment (0: the natural one).
 */
 {
-  an_ecil_gid_info  *info = info_of(gid);
-
-  if (info->kind == egk_bool || (info->kind == egk_int && info->bits < 32)) {
-    gid = ecil_intern_int_type(frame, 32, TRUE, 4, 4);
+  ecil_rec_begin(frame, eop_local);
+  ecil_arg_uint(frame, lid);
+  ecil_arg_uint(frame, t);
+  if (name_sid != 0) {
+    ecil_arg_uint(frame, name_sid);
+  } else {
+    ecil_arg_nil(frame);
   }  /* if */
-  return gid;
-}  /* promoted_gid */
+  ecil_arg_uint(frame, alignment);
+  ecil_arg_uint(frame, 0);
+  ecil_rec_end(frame);
+}  /* emit_local */
 
+
+/* Conversions. */
 
 static unsigned int float_rank(const an_ecil_gid_info *info)
 /*
@@ -338,8 +375,8 @@ The usual arithmetic conversions on two ECIL arithmetic types.
       result = b;
     }  /* if */
   } else {
-    uint32_t  pa = promoted_gid(frame, a);
-    uint32_t  pb = promoted_gid(frame, b);
+    uint32_t  pa = ecil_promote_gid(frame, a, NULL);
+    uint32_t  pb = ecil_promote_gid(frame, b, NULL);
 
     ia = info_of(pa);
     ib = info_of(pb);
@@ -403,7 +440,7 @@ are the same.
       } else if (d->kind == egk_float) {
         emit_cast(frame, (unsigned int)eck_bool_to_float, dst);
       } else if (d->kind == egk_ptr) {
-        uint32_t  wide = ecil_intern_int_type(frame, 64, FALSE, 8, 8);
+        uint32_t  wide = ecil_target_uintptr_type(frame);
 
         emit_cast(frame, (unsigned int)eck_bool_to_int, wide);
         emit_cast(frame, (unsigned int)eck_int_to_ptr, dst);
@@ -437,7 +474,7 @@ Note an unsupported operator or node kind, giving its enumerator value (see
 an_expr_operator_kind, an_expr_node_kind, a_constant_repr_kind in il_def.h).
 */
 {
-  static char reason[80];
+  char  reason[80];
 
   (void)snprintf(reason, sizeof(reason), "the %s %d", what, kind);
   ecil_note_unsupported(reason);
@@ -477,69 +514,13 @@ reported as such, the others by enumerator number.
 
 
 
-
-
 /* Leaf expressions. */
-
-static void emit_integer_constant(an_ecil_frame *frame,
-                                  a_constant_ptr c,
-                                  uint32_t       t)
-/*
-CONST_INT, CONST_NULL or CONST_PTR for an integer constant of type t.
-*/
-{
-  an_ecil_gid_info  *info = info_of(t);
-  a_boolean         ovflo = FALSE;
-
-  if (info->kind == egk_ptr) {
-    uint64_t  value = (uint64_t)unsigned_value_of_integer_constant(c, &ovflo);
-
-    if (value == 0) {
-      ecil_rec1(frame, eop_const_null, t);
-    } else {
-      ecil_rec2(frame, eop_const_ptr, t, value);
-    }  /* if */
-  } else if (info->kind == egk_int && info->bits > 64) {
-    a_host_large_integer  value = value_of_integer_constant(c, &ovflo);
-    uint64_t              high = 0;
-
-    if (sizeof(value) > 8) {
-      high = (uint64_t)((a_host_large_unsigned)value >>
-                        (sizeof(value) > 8 ? 64 : 0));
-    }  /* if */
-    ecil_rec_begin(frame, eop_const_int);
-    ecil_arg_uint(frame, t);
-    ecil_arg_int128(frame, (uint64_t)value, high, info->is_signed);
-    ecil_rec_end(frame);
-  } else {
-    ecil_rec_begin(frame, eop_const_int);
-    ecil_arg_uint(frame, t);
-    if (info->kind == egk_int && info->is_signed) {
-      ecil_arg_int(frame, (int64_t)value_of_integer_constant(c, &ovflo));
-    } else {
-      ecil_arg_uint(frame, (uint64_t)unsigned_value_of_integer_constant(
-                                                            c, &ovflo));
-    }  /* if */
-    ecil_rec_end(frame);
-  }  /* if */
-}  /* emit_integer_constant */
-
-
-static void emit_float_constant(an_ecil_frame *frame,
-                                a_constant_ptr c,
-                                uint32_t       t)
-/*
-CONST_FLOAT for a floating constant node.
-*/
-{
-  (void)t;
-  (void)ecil_emit_float_constant(frame, c);
-}  /* emit_float_constant */
-
 
 static void emit_constant_node(an_ecil_frame *frame, an_expr_node_ptr node)
 /*
-An enk_constant node: a value, or (string literals) a glvalue.
+An enk_constant node: a value, or (string literals) a glvalue.  The scalar
+and address-resolution parts are shared with the initializer emitter
+(ecil_const.c).
 */
 {
   a_constant_ptr  c = node_constant(node);
@@ -548,10 +529,8 @@ An enk_constant node: a value, or (string literals) a glvalue.
   if (t != 0) {
     switch (c->kind) {
       case ck_integer:
-        emit_integer_constant(frame, c, t);
-        break;
       case ck_float:
-        emit_float_constant(frame, c, t);
+        (void)ecil_emit_scalar_constant(frame, c, t, FALSE);
         break;
       case ck_string:
         { uint32_t  g = ecil_string_literal_id(frame, c);
@@ -560,30 +539,9 @@ An enk_constant node: a value, or (string literals) a glvalue.
         }
         break;
       case ck_address:
-        { uint32_t  g = 0;
-          a_boolean is_function = FALSE;
+        { a_boolean is_function;
+          uint32_t  g = ecil_address_constant_gid(frame, c, &is_function);
 
-          switch (c->variant.address.kind) {
-            case abk_variable:
-              g = ecil_variable_id(frame, c->variant.address.variant.variable);
-              break;
-            case abk_routine:
-              g = ecil_function_id(frame, c->variant.address.variant.routine);
-              is_function = TRUE;
-              break;
-            case abk_constant:
-              if (c->variant.address.variant.constant->kind ==
-                      (a_constant_repr_kind)ck_string) {
-                g = ecil_string_literal_id(frame,
-                                    c->variant.address.variant.constant);
-              } else {
-                ecil_note_unsupported("the address of a non-string constant");
-              }  /* if */
-              break;
-            default:
-              ecil_note_unsupported("this kind of address constant");
-              break;
-          }  /* switch */
           if (g != 0) {
             ecil_rec1(frame, eop_gref, g);
             if (!is_function) ecil_rec0(frame, eop_addr);
@@ -626,7 +584,10 @@ Return TRUE for locals with automatic storage (including parameters).
 
 static void emit_variable_node(an_ecil_frame *frame, an_expr_node_ptr node)
 /*
-An enk_variable node: LREF or GREF (a glvalue).
+An enk_variable node: LREF or GREF (a glvalue).  A static local with no
+declaration statement (__func__) is defined at its first use: its G-id is
+introduced here and its initializer queued (ecil_variable_id), which counts
+as defined from then on.
 */
 {
   a_variable_ptr  var = node_variable(node);
@@ -642,16 +603,7 @@ An enk_variable node: LREF or GREF (a glvalue).
   } else {
     uint32_t  gid = ecil_gid_of(var);
 
-    if (var->source_corresp.is_local_to_function &&
-        var->storage_class != (a_storage_class)sc_extern &&
-        (gid == 0 || (ecil_gid_info(gid)->flags & ECIL_GF_DEFINED) == 0)) {
-      /* A static local with no stmk_decl (__func__): define it at its
-         first use. */
-      ecil_define_variable(frame, var, NULL);
-      gid = ecil_gid_of(var);
-    } else if (gid == 0) {
-      gid = ecil_variable_id(frame, var);
-    }  /* if */
+    if (gid == 0) gid = ecil_variable_id(frame, var);
     if (gid != 0 && ecil_unsupported_reason == NULL) {
       ecil_rec1(frame, eop_gref, gid);
     }  /* if */
@@ -674,31 +626,21 @@ are not scalars.
 }  /* value_is_opaque_scalar */
 
 
-static a_boolean value_is_failed_record(an_ecil_frame *frame,
-                                        an_expr_node_ptr node)
-/*
-Return TRUE if the node's type is a record whose body could not be written.
-*/
-{
-  uint32_t  t = ecil_type_id(frame, node->type);
-
-  return t != 0 && (info_of(t)->flags & ECIL_GF_FAILED) != 0;
-}  /* value_is_failed_record */
-
-
 static void emit_load_if_value(an_ecil_frame *frame, an_expr_node_ptr node)
 /*
 After the address of a storage-designating node: add the implicit
-lvalue-to-rvalue conversion if the node is used as a value.
+lvalue-to-rvalue conversion if the node is used as a value.  A value of an
+opaque scalar type or of a record whose body could not be written is
+unsupported.
 */
 {
   if (!is_glvalue_node(node)) {
+    uint32_t    gid = ecil_type_id(frame, node->type);
     a_type_ptr  t = skip_typerefs(node->type);
 
-    if (value_is_opaque_scalar(frame, node) ||
-        value_is_failed_record(frame, node)) {
-      ecil_note_unsupported_type(ecil_type_id(frame, node->type),
-                                 "a value of an unsupported type");
+    if (gid != 0 && (info_of(gid)->kind == egk_opaque ||
+                     (info_of(gid)->flags & ECIL_GF_FAILED) != 0)) {
+      ecil_note_unsupported_type(gid, "a value of an unsupported type");
     } else if (t->kind != tk_array && t->kind != tk_routine) {
       ecil_rec_begin(frame, eop_load);
       ecil_arg_uint(frame, access_is_volatile(node) ?
@@ -711,18 +653,12 @@ lvalue-to-rvalue conversion if the node is used as a value.
 
 /* Unsupported builtins and the library builtin rule. */
 
-
-
-
-
-
-
 static void note_unsupported_builtin(const char *name)
 /*
 Note an unsupported builtin function, naming it in the reason.
 */
 {
-  static char reason[160];
+  char  reason[160];
 
   (void)snprintf(reason, sizeof(reason), "the builtin function %.100s",
                  name != NULL ? name : "?");
@@ -730,164 +666,22 @@ Note an unsupported builtin function, naming it in the reason.
 }  /* note_unsupported_builtin */
 
 
-/* An internal "builtin id" for __builtin_c23_va_start, sent as VA_START. */
-#define SPECIAL_C23_VA_START 100U
-/* __builtin_alloca_with_align: BUILTIN alloca on the size operand only. */
-#define SPECIAL_ALLOCA_ALIGN 101U
-/* __builtin_{add,sub,mul}_overflow_p: BUILTIN *_overflow on the two operands
-   and the address of a temporary of the type of the third operand. */
-#define SPECIAL_ADD_OVERFLOW_P 102U
-#define SPECIAL_SUB_OVERFLOW_P 103U
-#define SPECIAL_MUL_OVERFLOW_P 104U
-/* Floating-point classification and comparison builtins (ECIL minor 6). */
-#define SPECIAL_FP_ISNAN 110U
-#define SPECIAL_FP_ISINF 111U
-#define SPECIAL_FP_ISFINITE 112U
-#define SPECIAL_FP_ISNORMAL 113U
-#define SPECIAL_FP_ISSIGNALING 114U
-#define SPECIAL_FP_SIGNBIT 115U
-#define SPECIAL_FP_ISINF_SIGN 116U
-#define SPECIAL_FP_FPCLASSIFY 117U
-#define SPECIAL_FP_ISLESS 120U
-#define SPECIAL_FP_ISGREATER 121U
-#define SPECIAL_FP_ISLESSEQUAL 122U
-#define SPECIAL_FP_ISGREATEREQUAL 123U
-#define SPECIAL_FP_ISLESSGREATER 124U
-#define SPECIAL_FP_ISUNORDERED 125U
-#define SPECIAL_CLZG 130U
-#define SPECIAL_CTZG 131U
-#define SPECIAL_FP_FIRST 110U
-#define SPECIAL_FP_LAST 125U
-
-
-static a_boolean has_int_suffix(const char *s, const char *base)
+static a_boolean classify_routine(a_routine_ptr       rout,
+                                  an_ecil_name_class  *cls)
 /*
-Return TRUE if s is base followed by nothing, "l", "ll" or "imax" (the
-type-suffix variants of the bit-counting builtins).
-*/
-{
-  size_t  n = strlen(base);
-
-  return strncmp(s, base, n) == 0 &&
-         (s[n] == '\0' || strcmp(s + n, "l") == 0 ||
-          strcmp(s + n, "ll") == 0 || strcmp(s + n, "imax") == 0 ||
-          strcmp(s + n, "g") == 0);
-}  /* has_int_suffix */
-
-
-static a_boolean has_fl_suffix(const char *s, const char *base)
-/*
-Return TRUE if s is base, or base followed by "f" or "l".
-*/
-{
-  size_t  n = strlen(base);
-
-  return strncmp(s, base, n) == 0 &&
-         (s[n] == '\0' ||
-          ((s[n] == 'f' || s[n] == 'l') && s[n + 1] == '\0'));
-}  /* has_fl_suffix */
-
-
-static unsigned int special_builtin_id(const char *name)
-/*
-Return the an_ecil_builtin of the builtins ECIL has records for (spec 8.8),
-SPECIAL_C23_VA_START for __builtin_c23_va_start, or 0.
-*/
-{
-  unsigned int  id = 0;
-  const char    *b = name;
-
-  if (strncmp(name, "__builtin_", 10) == 0) {
-    b = name + 10;
-    if (strcmp(b, "expect") == 0) {
-      id = (unsigned int)ebi_expect;
-    } else if (strcmp(b, "unreachable") == 0) {
-      id = (unsigned int)ebi_unreachable;
-    } else if (strcmp(b, "trap") == 0) {
-      id = (unsigned int)ebi_trap;
-    } else if (strcmp(b, "alloca") == 0) {
-      id = (unsigned int)ebi_alloca;
-    } else if (strcmp(b, "bswap16") == 0 || strcmp(b, "bswap32") == 0 ||
-               strcmp(b, "bswap64") == 0) {
-      id = (unsigned int)ebi_bswap;
-    } else if (strcmp(b, "clzg") == 0) {
-      id = SPECIAL_CLZG;
-    } else if (strcmp(b, "ctzg") == 0) {
-      id = SPECIAL_CTZG;
-    } else if (has_int_suffix(b, "clz")) {
-      id = (unsigned int)ebi_clz;
-    } else if (has_int_suffix(b, "ctz")) {
-      id = (unsigned int)ebi_ctz;
-    } else if (has_int_suffix(b, "popcount")) {
-      id = (unsigned int)ebi_popcount;
-    } else if (has_int_suffix(b, "parity")) {
-      id = (unsigned int)ebi_parity;
-    } else if (has_int_suffix(b, "ffs")) {
-      id = (unsigned int)ebi_ffs;
-    } else if (has_int_suffix(b, "clrsb")) {
-      id = (unsigned int)ebi_clrsb;
-    } else if (strcmp(b, "add_overflow") == 0) {
-      id = (unsigned int)ebi_add_overflow;
-    } else if (strcmp(b, "sub_overflow") == 0) {
-      id = (unsigned int)ebi_sub_overflow;
-    } else if (strcmp(b, "mul_overflow") == 0) {
-      id = (unsigned int)ebi_mul_overflow;
-    } else if (has_fl_suffix(b, "isnan")) {
-      id = SPECIAL_FP_ISNAN;
-    } else if (strcmp(b, "isinf_sign") == 0) {
-      id = SPECIAL_FP_ISINF_SIGN;
-    } else if (has_fl_suffix(b, "isinf")) {
-      id = SPECIAL_FP_ISINF;
-    } else if (has_fl_suffix(b, "isfinite")) {
-      id = SPECIAL_FP_ISFINITE;
-    } else if (has_fl_suffix(b, "isnormal")) {
-      id = SPECIAL_FP_ISNORMAL;
-    } else if (has_fl_suffix(b, "issignaling")) {
-      id = SPECIAL_FP_ISSIGNALING;
-    } else if (has_fl_suffix(b, "signbit")) {
-      id = SPECIAL_FP_SIGNBIT;
-    } else if (strcmp(b, "fpclassify") == 0) {
-      id = SPECIAL_FP_FPCLASSIFY;
-    } else if (strcmp(b, "isless") == 0) {
-      id = SPECIAL_FP_ISLESS;
-    } else if (strcmp(b, "isgreater") == 0) {
-      id = SPECIAL_FP_ISGREATER;
-    } else if (strcmp(b, "islessequal") == 0) {
-      id = SPECIAL_FP_ISLESSEQUAL;
-    } else if (strcmp(b, "isgreaterequal") == 0) {
-      id = SPECIAL_FP_ISGREATEREQUAL;
-    } else if (strcmp(b, "islessgreater") == 0) {
-      id = SPECIAL_FP_ISLESSGREATER;
-    } else if (strcmp(b, "isunordered") == 0) {
-      id = SPECIAL_FP_ISUNORDERED;
-    } else if (strcmp(b, "c23_va_start") == 0) {
-      id = SPECIAL_C23_VA_START;
-    } else if (strcmp(b, "alloca_with_align") == 0) {
-      id = SPECIAL_ALLOCA_ALIGN;
-    } else if (strcmp(b, "add_overflow_p") == 0) {
-      id = SPECIAL_ADD_OVERFLOW_P;
-    } else if (strcmp(b, "sub_overflow_p") == 0) {
-      id = SPECIAL_SUB_OVERFLOW_P;
-    } else if (strcmp(b, "mul_overflow_p") == 0) {
-      id = SPECIAL_MUL_OVERFLOW_P;
-    }  /* if */
-  }  /* if */
-  return id;
-}  /* special_builtin_id */
-
-
-static a_boolean builtin_is_unsupported(a_routine_ptr rout)
-/*
-Return TRUE if rout is a front-end builtin routine (a __builtin_X name or a
-routine the front end declares itself, such as __sync_* and __atomic_*) that
-ECIL has no mapping for.  Library functions, under either spelling, are
-ordinary calls.
+Classify a routine by name (one hashed lookup) and return TRUE if it is a
+front-end builtin routine (a __builtin_X name or a routine the front end
+declares itself, such as __sync_* and __atomic_*) that ECIL has no mapping
+for.  Library functions, under either spelling, are ordinary calls.
 */
 {
   const char  *name = rout->source_corresp.name;
   a_boolean   is_builtin = FALSE;
   a_boolean   unsupported = FALSE;
 
+  cls->special_id = 0;
+  cls->library_name = NULL;
+  cls->is_library_function = FALSE;
   if (name != NULL) {
     is_builtin = strncmp(name, "__builtin_", 10) == 0;
 #if BUILTIN_FUNCTIONS_ENABLED
@@ -898,14 +692,18 @@ ordinary calls.
       is_builtin = TRUE;
     }  /* if */
 #endif /* BUILTIN_FUNCTIONS_ENABLED */
-    if (is_builtin && special_builtin_id(name) == 0 &&
-        ecil_library_builtin_name(name) == NULL &&
-        !ecil_is_library_function(name)) {
-      unsupported = TRUE;
+    if (is_builtin) {
+      /* Only builtins need the lookup: the classification of an ordinary
+         routine is never used. */
+      ecil_classify_function_name(name, cls);
+      if (cls->special_id == 0 && cls->library_name == NULL &&
+          !cls->is_library_function) {
+        unsupported = TRUE;
+      }  /* if */
     }  /* if */
   }  /* if */
   return unsupported;
-}  /* builtin_is_unsupported */
+}  /* classify_routine */
 
 
 /* Operators. */
@@ -919,7 +717,7 @@ overflow is undefined), unless -fwrapv semantics are in effect.
   an_ecil_gid_info  *info = info_of(gid);
 
   return (!ecil_wrapv && info->kind == egk_int && info->is_signed &&
-          info->bits >= 32) ? ECIL_ARITH_NSW : 0u;
+          info->bits >= ecil_int_bits()) ? ECIL_ARITH_NSW : 0u;
 }  /* arith_flags */
 
 
@@ -1088,7 +886,7 @@ static a_boolean fp_is_comparison(unsigned int id)
 Return TRUE for the two-operand comparison builtins.
 */
 {
-  return id >= SPECIAL_FP_ISLESS && id <= SPECIAL_FP_LAST;
+  return id >= ECIL_SPECIAL_FP_ISLESS && id <= ECIL_SPECIAL_FP_LAST;
 }  /* fp_is_comparison */
 
 
@@ -1100,21 +898,21 @@ The ECIL_FP_CLASS_* mask of a single-argument classification builtin.
   unsigned int  mask = 0;
 
   switch (id) {
-    case SPECIAL_FP_ISNAN:
+    case ECIL_SPECIAL_FP_ISNAN:
       mask = ECIL_FP_CLASS_SNAN | ECIL_FP_CLASS_QNAN;
       break;
-    case SPECIAL_FP_ISINF:
+    case ECIL_SPECIAL_FP_ISINF:
       mask = ECIL_FP_CLASS_NEG_INF | ECIL_FP_CLASS_POS_INF;
       break;
-    case SPECIAL_FP_ISFINITE:
+    case ECIL_SPECIAL_FP_ISFINITE:
       mask = ECIL_FP_CLASS_NEG_NORMAL | ECIL_FP_CLASS_NEG_SUBNORMAL |
              ECIL_FP_CLASS_NEG_ZERO | ECIL_FP_CLASS_POS_ZERO |
              ECIL_FP_CLASS_POS_SUBNORMAL | ECIL_FP_CLASS_POS_NORMAL;
       break;
-    case SPECIAL_FP_ISNORMAL:
+    case ECIL_SPECIAL_FP_ISNORMAL:
       mask = ECIL_FP_CLASS_NEG_NORMAL | ECIL_FP_CLASS_POS_NORMAL;
       break;
-    case SPECIAL_FP_ISSIGNALING:
+    case ECIL_SPECIAL_FP_ISSIGNALING:
       mask = ECIL_FP_CLASS_SNAN;
       break;
     default:
@@ -1131,7 +929,7 @@ The operand that is classified: the last of fpclassify's six, else the first.
 {
   an_expr_node_ptr  x = callee->next;
 
-  if (it->b == SPECIAL_FP_FPCLASSIFY) {
+  if (it->b == ECIL_SPECIAL_FP_FPCLASSIFY) {
     while (x != NULL && x->next != NULL) x = x->next;
   }  /* if */
   return x;
@@ -1150,8 +948,7 @@ an integer operand (GCC converts it); 0 if neither.
   if (xt != 0 && info_of(xt)->kind == egk_float) {
     result = xt;
   } else if (xt != 0 && info_of(xt)->kind == egk_int) {
-    result = ecil_intern_float_type(frame, (unsigned int)eff_ieee_double,
-                                    8, 8);
+    result = ecil_target_double_type(frame);
   }  /* if */
   return result;
 }  /* fp_operand_type */
@@ -1185,7 +982,7 @@ stored into it when it has been computed).
   size_t            n = 0;
 
   for (arg = callee->next; arg != NULL; arg = arg->next) n++;
-  if (it->b == SPECIAL_FP_FPCLASSIFY) {
+  if (it->b == ECIL_SPECIAL_FP_FPCLASSIFY) {
     if (n != 6) {
       ecil_note_unsupported("a malformed fpclassify call");
     } else {
@@ -1209,18 +1006,12 @@ stored into it when it has been computed).
 
     if (xt == 0) {
       ecil_note_unsupported("a classification of a non-arithmetic value");
-    } else if (it->b == SPECIAL_FP_ISINF_SIGN ||
-               it->b == SPECIAL_FP_FPCLASSIFY) {
+    } else if (it->b == ECIL_SPECIAL_FP_ISINF_SIGN ||
+               it->b == ECIL_SPECIAL_FP_FPCLASSIFY) {
       uint32_t  lid = new_lid();
 
       it->a = lid;
-      ecil_rec_begin(frame, eop_local);
-      ecil_arg_uint(frame, lid);
-      ecil_arg_uint(frame, xt);
-      ecil_arg_nil(frame);
-      ecil_arg_uint(frame, 0);
-      ecil_arg_uint(frame, 0);
-      ecil_rec_end(frame);
+      emit_local(frame, lid, xt, 0, 0);
       ecil_rec1(frame, eop_lref, lid);
     }  /* if */
   }  /* if */
@@ -1245,7 +1036,7 @@ Push the bool "the saved value is in the classes of mask" (or its sign bit).
     ecil_rec_end(frame);
   } else {
     ecil_rec2(frame, eop_const_int,
-              ecil_intern_int_type(frame, 32, TRUE, 4, 4), mask);
+              ecil_target_int_type(frame), mask);
     ecil_rec_begin(frame, eop_builtin);
     ecil_arg_uint(frame, (unsigned int)ebi_is_fp_class);
     ecil_arg_uint(frame, 2);
@@ -1285,16 +1076,16 @@ return an int built from a TERN chain over the saved operand.
 
     if (tb != 0 && tc != 0) emit_convert(frame, tb, tc);
     switch (it->b) {
-      case SPECIAL_FP_ISGREATER: kind = (unsigned int)ecmp_gt; break;
-      case SPECIAL_FP_ISLESSEQUAL: kind = (unsigned int)ecmp_le; break;
-      case SPECIAL_FP_ISGREATEREQUAL: kind = (unsigned int)ecmp_ge; break;
-      case SPECIAL_FP_ISLESSGREATER: kind = (unsigned int)ecmp_one; break;
-      case SPECIAL_FP_ISUNORDERED: kind = (unsigned int)ecmp_uno; break;
+      case ECIL_SPECIAL_FP_ISGREATER: kind = (unsigned int)ecmp_gt; break;
+      case ECIL_SPECIAL_FP_ISLESSEQUAL: kind = (unsigned int)ecmp_le; break;
+      case ECIL_SPECIAL_FP_ISGREATEREQUAL: kind = (unsigned int)ecmp_ge; break;
+      case ECIL_SPECIAL_FP_ISLESSGREATER: kind = (unsigned int)ecmp_one; break;
+      case ECIL_SPECIAL_FP_ISUNORDERED: kind = (unsigned int)ecmp_uno; break;
       default: break;
     }  /* switch */
     ecil_rec1(frame, eop_cmp, kind);
     finish_bool_result(frame, node, it->flags);
-  } else if (it->b == SPECIAL_FP_SIGNBIT) {
+  } else if (it->b == ECIL_SPECIAL_FP_SIGNBIT) {
     emit_fp_operand_conversion(frame, it, callee);
     ecil_rec_begin(frame, eop_builtin);
     ecil_arg_uint(frame, (unsigned int)ebi_signbit);
@@ -1302,16 +1093,16 @@ return an int built from a TERN chain over the saved operand.
     ecil_arg_uint(frame, bool_t);
     ecil_rec_end(frame);
     finish_bool_result(frame, node, it->flags);
-  } else if (it->b == SPECIAL_FP_ISINF_SIGN ||
-             it->b == SPECIAL_FP_FPCLASSIFY) {
+  } else if (it->b == ECIL_SPECIAL_FP_ISINF_SIGN ||
+             it->b == ECIL_SPECIAL_FP_FPCLASSIFY) {
     uint32_t          lid = (uint32_t)it->a;
     an_expr_node_ptr  arg = callee->next;
     unsigned int      i;
 
     emit_fp_operand_conversion(frame, it, callee);
     ecil_rec2(frame, eop_store, 0, 0);       /* The LOCAL <- operand. */
-    if (it->b == SPECIAL_FP_ISINF_SIGN) {
-      emit_fp_test(frame, lid, fp_mask(SPECIAL_FP_ISINF), FALSE);
+    if (it->b == ECIL_SPECIAL_FP_ISINF_SIGN) {
+      emit_fp_test(frame, lid, fp_mask(ECIL_SPECIAL_FP_ISINF), FALSE);
       emit_tern_begin(frame, rt);
       emit_fp_test(frame, lid, 0, TRUE);
       emit_tern_begin(frame, rt);
@@ -1345,7 +1136,7 @@ return an int built from a TERN chain over the saved operand.
   } else {
     emit_fp_operand_conversion(frame, it, callee);
     ecil_rec2(frame, eop_const_int,
-              ecil_intern_int_type(frame, 32, TRUE, 4, 4), fp_mask(it->b));
+              ecil_target_int_type(frame), fp_mask(it->b));
     ecil_rec_begin(frame, eop_builtin);
     ecil_arg_uint(frame, (unsigned int)ebi_is_fp_class);
     ecil_arg_uint(frame, 2);
@@ -1382,13 +1173,7 @@ value is stored when it has been computed) because it is used twice.
       uint32_t  lid = new_lid();
 
       it->a = lid;
-      ecil_rec_begin(frame, eop_local);
-      ecil_arg_uint(frame, lid);
-      ecil_arg_uint(frame, xt);
-      ecil_arg_nil(frame);
-      ecil_arg_uint(frame, 0);
-      ecil_arg_uint(frame, 0);
-      ecil_rec_end(frame);
+      emit_local(frame, lid, xt, 0, 0);
       ecil_rec1(frame, eop_lref, lid);
     }  /* if */
   }  /* if */
@@ -1417,7 +1202,7 @@ count builtin; with one it is x == 0 ? result : count(x) over the temporary.
 */
 {
   uint32_t      rt = ecil_type_id(frame, node->type);
-  unsigned int  id = (it->b == SPECIAL_CLZG) ? (unsigned int)ebi_clz :
+  unsigned int  id = (it->b == ECIL_SPECIAL_CLZG) ? (unsigned int)ebi_clz :
                                                (unsigned int)ebi_ctz;
 
   if (it->a == 0) {
@@ -1488,22 +1273,23 @@ eok_call: callee (unless direct), arguments in order, then CALL.
       code_stack_size--;
       done = TRUE;
     } else if (direct != NULL) {
-      const char  *name = direct->source_corresp.name;
+      const char          *name = direct->source_corresp.name;
+      an_ecil_name_class  cls;
 
-      if (builtin_is_unsupported(direct)) {
+      if (classify_routine(direct, &cls)) {
         note_unsupported_builtin(name);
-      } else if (special_builtin_id(name != NULL ? name : "") != 0) {
-        it->b = special_builtin_id(name);
+      } else if (cls.special_id != 0) {
+        it->b = cls.special_id;
       }  /* if */
       if (ecil_unsupported_reason == NULL && it->b == 0) {
         it->a = ecil_function_id(frame, direct);
       }  /* if */
       it->cursor = callee->next;
-      if (ecil_unsupported_reason == NULL && it->b >= SPECIAL_FP_FIRST &&
-          it->b <= SPECIAL_FP_LAST) {
+      if (ecil_unsupported_reason == NULL && it->b >= ECIL_SPECIAL_FP_FIRST &&
+          it->b <= ECIL_SPECIAL_FP_LAST) {
         setup_fp_call(frame, it, callee);
       } else if (ecil_unsupported_reason == NULL &&
-                 (it->b == SPECIAL_CLZG || it->b == SPECIAL_CTZG)) {
+                 (it->b == ECIL_SPECIAL_CLZG || it->b == ECIL_SPECIAL_CTZG)) {
         setup_clzg_call(frame, it, callee);
       }  /* if */
     } else {
@@ -1522,11 +1308,12 @@ eok_call: callee (unless direct), arguments in order, then CALL.
 
     /* __builtin_c23_va_start(ap, ...): only ap is used. */
     it->cursor = arg->next;
-    if (it->b == SPECIAL_C23_VA_START || it->b == SPECIAL_ALLOCA_ALIGN ||
-        it->b == SPECIAL_CLZG || it->b == SPECIAL_CTZG) {
+    if (it->b == ECIL_SPECIAL_C23_VA_START ||
+        it->b == ECIL_SPECIAL_ALLOCA_ALIGN ||
+        it->b == ECIL_SPECIAL_CLZG || it->b == ECIL_SPECIAL_CTZG) {
       it->cursor = NULL;               /* Only the first operand is used. */
-    } else if (it->b >= SPECIAL_ADD_OVERFLOW_P &&
-               it->b <= SPECIAL_MUL_OVERFLOW_P && arg->next != NULL &&
+    } else if (it->b >= ECIL_SPECIAL_ADD_OVERFLOW_P &&
+               it->b <= ECIL_SPECIAL_MUL_OVERFLOW_P && arg->next != NULL &&
                arg->next->next == NULL) {
       it->cursor = NULL;               /* The last (type-only) operand. */
     }  /* if */
@@ -1582,11 +1369,11 @@ eok_call: callee (unless direct), arguments in order, then CALL.
       if (node->result_is_not_used) flags |= ECIL_CALL_RESULT_UNUSED;
       if (ecil_unsupported_reason == NULL && t_call != 0) {
         it = &code_stack[idx];
-        if (it->b >= SPECIAL_FP_FIRST && it->b <= SPECIAL_FP_LAST) {
+        if (it->b >= ECIL_SPECIAL_FP_FIRST && it->b <= ECIL_SPECIAL_FP_LAST) {
           emit_fp_call(frame, it, node, callee);
-        } else if (it->b == SPECIAL_CLZG || it->b == SPECIAL_CTZG) {
+        } else if (it->b == ECIL_SPECIAL_CLZG || it->b == ECIL_SPECIAL_CTZG) {
           emit_clzg_call(frame, it, node, callee);
-        } else if (it->b == SPECIAL_C23_VA_START) {
+        } else if (it->b == ECIL_SPECIAL_C23_VA_START) {
           uint32_t  ap_t = ecil_type_id(frame, callee->next->type);
 
           if (ap_t != 0 && info_of(ap_t)->kind == egk_array) {
@@ -1600,34 +1387,29 @@ eok_call: callee (unless direct), arguments in order, then CALL.
                int function): VA_START produced none, so supply one. */
             ecil_rec2(frame, eop_const_int, result_gid, 0);
           }  /* if */
-        } else if (it->b >= SPECIAL_ADD_OVERFLOW_P &&
-                   it->b <= SPECIAL_MUL_OVERFLOW_P) {
+        } else if (it->b >= ECIL_SPECIAL_ADD_OVERFLOW_P &&
+                   it->b <= ECIL_SPECIAL_MUL_OVERFLOW_P) {
           uint32_t  tt = ecil_type_id(frame,
                                   callee->next->next->next->type);
           uint32_t  lid = new_lid();
 
           if (tt != 0) {
-            ecil_rec_begin(frame, eop_local);
-            ecil_arg_uint(frame, lid);
-            ecil_arg_uint(frame, tt);
-            ecil_arg_nil(frame);
-            ecil_arg_uint(frame, 0);
-            ecil_arg_uint(frame, 0);
-            ecil_rec_end(frame);
+            emit_local(frame, lid, tt, 0, 0);
             ecil_rec1(frame, eop_lref, lid);
             ecil_rec0(frame, eop_addr);
             ecil_rec_begin(frame, eop_builtin);
             ecil_arg_uint(frame, (uint64_t)ebi_add_overflow +
-                                 (it->b - SPECIAL_ADD_OVERFLOW_P));
+                                 (it->b - ECIL_SPECIAL_ADD_OVERFLOW_P));
             ecil_arg_uint(frame, 3);
             ecil_arg_uint(frame, result_gid);
             ecil_rec_end(frame);
           }  /* if */
         } else if (it->b != 0) {
           ecil_rec_begin(frame, eop_builtin);
-          ecil_arg_uint(frame, it->b == SPECIAL_ALLOCA_ALIGN ?
+          ecil_arg_uint(frame, it->b == ECIL_SPECIAL_ALLOCA_ALIGN ?
                                (unsigned int)ebi_alloca : it->b);
-          ecil_arg_uint(frame, it->b == SPECIAL_ALLOCA_ALIGN ? 1u : nargs);
+          ecil_arg_uint(frame, it->b == ECIL_SPECIAL_ALLOCA_ALIGN ? 1u :
+                               nargs);
           if (is_void_node_type(node)) {
             ecil_arg_nil(frame);
           } else {
@@ -1649,9 +1431,9 @@ eok_call: callee (unless direct), arguments in order, then CALL.
           ecil_rec_end(frame);
         }  /* if */
         /* The bool-valued floating-point builtins finished their result. */
-        if (it->b < SPECIAL_FP_FIRST || it->b > SPECIAL_FP_LAST ||
-            it->b == SPECIAL_FP_ISINF_SIGN ||
-            it->b == SPECIAL_FP_FPCLASSIFY) {
+        if (it->b < ECIL_SPECIAL_FP_FIRST || it->b > ECIL_SPECIAL_FP_LAST ||
+            it->b == ECIL_SPECIAL_FP_ISINF_SIGN ||
+            it->b == ECIL_SPECIAL_FP_FPCLASSIFY) {
           finish_value(frame, it->flags);
         }  /* if */
       }  /* if */
@@ -1682,8 +1464,8 @@ declared type (C11 6.3.1.1p2), so "unsigned b:3; b /= -2" divides signed.
     a_field_ptr  field =
         node_field(lhs->variant.operation.operands->next);
 
-    if (field->is_bit_field && field->bit_size < 32) {
-      result = ecil_intern_int_type(frame, 32, TRUE, 4, 4);
+    if (field->is_bit_field && field->bit_size < ecil_int_bits()) {
+      result = ecil_target_int_type(frame);
     }  /* if */
   }  /* if */
   return result;
@@ -1720,7 +1502,8 @@ one place:  <lhs glv> DUP LOAD cast <rhs> cast <op> cast STORE.
     if (op == eok_padd_assign || op == eok_psubtract_assign) {
       comp = tl;
     } else if (op == eok_shiftl_assign || op == eok_shiftr_assign) {
-      comp = promoted_gid(frame, bit_field_promoted_gid(frame, lhs, tl));
+      comp = ecil_promote_gid(frame, bit_field_promoted_gid(frame, lhs, tl),
+                              NULL);
     } else {
       comp = common_gid(frame, bit_field_promoted_gid(frame, lhs, tl), tr);
     }  /* if */
@@ -1773,7 +1556,6 @@ revisit.
                     op = node->variant.operation.kind;
   an_expr_node_ptr  op1 = node->variant.operation.operands;
   an_expr_node_ptr  op2 = op1 != NULL ? op1->next : NULL;
-  an_expr_node_ptr  op3 = op2 != NULL ? op2->next : NULL;
   unsigned int      flags = it->flags;
   unsigned int      opcode = 0;
   unsigned int      cmp = 0;
@@ -1856,7 +1638,6 @@ revisit.
         }  /* if */
         break;
     }  /* switch */
-    (void)op3;
   } else {
     /* Phase 1 or more: the operands are on the stack. */
     a_boolean done = TRUE;
@@ -1893,7 +1674,7 @@ revisit.
         } else if (it->phase == 2) {
           ecil_rec0(frame, eop_tern_else);
           it->phase = 3;
-          push_expr(op3, 0);
+          push_expr(op2->next, 0);
           done = FALSE;
         } else {
           ecil_rec0(frame, eop_tern_end);
@@ -2112,8 +1893,6 @@ revisit.
           ecil_rec1(frame, eop_cmp, cmp);
           finish_bool_result(frame, node, flags);
         } else if (operator_opcode(op, &opcode)) {
-          an_expr_node_ptr  a = op1;
-
           t = ecil_type_id(frame, node->type);
           if (opcode == eop_shl || opcode == eop_shr) {
             uint32_t  tr = ecil_type_id(frame, op2->type);
@@ -2126,7 +1905,6 @@ revisit.
           } else {
             ecil_rec1(frame, opcode, t != 0 ? arith_flags(t) : 0u);
           }  /* if */
-          (void)a;
           finish_value(frame, flags);
         } else {
           note_unsupported_operator(frame, op, node);
@@ -2158,10 +1936,11 @@ Visit an expression item.
       if (node_routine(node) == NULL) {
         ecil_note_unsupported("a routine reference without a routine");
       } else {
-        const char  *name = node_routine(node)->source_corresp.name;
-        uint32_t    gid;
+        const char          *name = node_routine(node)->source_corresp.name;
+        uint32_t            gid;
+        an_ecil_name_class  cls;
 
-        if (builtin_is_unsupported(node_routine(node))) {
+        if (classify_routine(node_routine(node), &cls)) {
           note_unsupported_builtin(name);
         } else {
           gid = ecil_function_id(frame, node_routine(node));
@@ -2198,13 +1977,7 @@ Visit an expression item.
 
         if (t != 0) {
           lid = new_lid();
-          ecil_rec_begin(frame, eop_local);
-          ecil_arg_uint(frame, lid);
-          ecil_arg_uint(frame, t);
-          ecil_arg_nil(frame);
-          ecil_arg_uint(frame, 0);
-          ecil_arg_uint(frame, 0);
-          ecil_rec_end(frame);
+          emit_local(frame, lid, t, 0, 0);
           it = &code_stack[idx];
           it->a = lid;
           it->b = t;
@@ -2531,17 +2304,8 @@ stmk_decl: declare the locals (LOCAL) and define the static variables.
 
           ecil_set_lid(var, lid);
           ecil_check_variable_attributes(var);
-          ecil_rec_begin(frame, eop_local);
-          ecil_arg_uint(frame, lid);
-          ecil_arg_uint(frame, t);
-          if (name_sid != 0) {
-            ecil_arg_uint(frame, name_sid);
-          } else {
-            ecil_arg_nil(frame);
-          }  /* if */
-          ecil_arg_uint(frame, (uint64_t)ecil_variable_alignment(var));
-          ecil_arg_uint(frame, 0);
-          ecil_rec_end(frame);
+          emit_local(frame, lid, t, name_sid,
+                     (uint32_t)ecil_variable_alignment(var));
         }  /* if */
       }  /* if */
     }  /* if */
@@ -2728,9 +2492,21 @@ Visit a statement item.
       { a_for_loop_ptr loop = s->variant.for_loop.extra_info;
 
         if (it->phase == 0) {
+          /* FOR_BEGIN opens the scope of the init declarations (ECIL 0.7):
+             they follow it directly and stay in scope to FOR_END.  The
+             front end wraps them in a block (in C there is no
+             for_init_scope); the block's statements are sent without a
+             BLOCK around them. */
           ecil_rec0(frame, eop_for_begin);
           it->phase = 1;
-          if (loop->initialization != NULL) push_stmt(loop->initialization);
+          if (loop->initialization != NULL &&
+              loop->initialization->kind == (a_statement_kind)stmk_block) {
+            (void)push_item(cik_stmt_list,
+                            loop->initialization->variant.block.statements,
+                            0);
+          } else if (loop->initialization != NULL) {
+            push_stmt(loop->initialization);
+          }  /* if */
           done = FALSE;
         } else if (it->phase == 1) {
           rec_bool(frame, eop_for_cond, s->expr != NULL);
@@ -2931,6 +2707,7 @@ and warn.
   a_routine_ptr rout = scope->variant.routine.ptr;
   uint32_t      gid;
   an_ecil_mark  mark;
+  a_boolean     dropped = FALSE;
 
   /* A reason noted while introducing the declaration (an unsupported
      parameter type) is reported with the dropped body below. */
@@ -2968,15 +2745,7 @@ and warn.
       }  /* if */
 
       if (decl != 0 && !prototyped) {
-        an_ecil_gid_info  *pi = info_of(decl);
-
-        if ((pi->kind == egk_int && pi->bits < 32) || pi->kind == egk_bool) {
-          abi = ecil_intern_int_type(frame, 32, TRUE, 4, 4);
-        } else if (pi->kind == egk_float &&
-                   ecil_is_plain_float_type(param->type)) {
-          abi = ecil_intern_float_type(frame,
-                                       (unsigned int)eff_ieee_double, 8, 8);
-        }  /* if */
+        abi = ecil_promote_gid(frame, decl, param->type);
       }  /* if */
       if (param->source_corresp.name != NULL) {
         name_sid = ecil_intern_cstring(frame, param->source_corresp.name);
@@ -3008,12 +2777,20 @@ and warn.
       run_code_stack(frame);
     }  /* if */
     if (ecil_unsupported_reason == NULL) {
+#if CHECKING
+      ecil_check_function_lids(next_lid);
+#endif /* CHECKING */
       ecil_rec1(frame, eop_func_end, reachable ? ECIL_FUNC_END_REACHABLE : 0u);
     }  /* if */
   }  /* if */
+  /* The static locals met on the way were introduced (DECL_VAR) where they
+     were first used; their initializers are built now, whether or not the
+     body survives.  A failure among them makes the function unsupported. */
+  ecil_drain_variable_definitions(frame);
   if (ecil_unsupported_reason != NULL) {
     char  message[500];
 
+    dropped = TRUE;
     ecil_frame_truncate(frame, mark);
     (void)snprintf(message, sizeof(message),
                    "the body of \"%.200s\" uses %.100s, which the CIR back "
@@ -3028,8 +2805,8 @@ and warn.
   }  /* if */
   code_stack_size = 0;
   reset_agg_levels();
-  ecil_forget_lids();
-  mark_streamed(rout);
+  ecil_end_lid_epoch(next_lid);
+  ecil_set_function_state(rout, dropped ? efs_dropped : efs_streamed);
 }  /* emit_function */
 
 
@@ -3047,7 +2824,7 @@ and its lambdas share the region).
   curr_il_region_number = region_number;
   for (; scope != NULL; scope = scope->next) {
     if (scope->kind == (a_scope_kind)sck_function &&
-        !ecil_function_is_streamed(scope->variant.routine.ptr) &&
+        !ecil_function_is_handled(scope->variant.routine.ptr) &&
         scope->variant.routine.ptr->defined &&
         !ecil_routine_is_filtered(scope->variant.routine.ptr)) {
       innermost_function_scope = scope;

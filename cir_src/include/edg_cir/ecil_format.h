@@ -23,7 +23,7 @@ ECIL_VERSION_MAJOR or ECIL_VERSION_MINOR (section 9 of the spec).
 #include <stdint.h>
 
 #define ECIL_VERSION_MAJOR 0
-#define ECIL_VERSION_MINOR 6
+#define ECIL_VERSION_MINOR 7
 
 /*
 The stream preamble: 8 magic bytes, then u16 major, u16 minor and
@@ -163,7 +163,7 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(do_begin,         0x4D, 0)                                               \
   X(do_cond,          0x4E, 0)                                               \
   X(do_end,           0x4F, 0)  /* pops bool */                              \
-  X(for_begin,        0x50, 0)                                               \
+  X(for_begin,        0x50, 0)  /* opens the init scope, to FOR_END */       \
   X(for_cond,         0x51, 1)  /* has_cond */                               \
   X(for_step,         0x52, 1)  /* has_step; pops bool if has_cond */        \
   X(for_body,         0x53, 0)                                               \

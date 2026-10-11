@@ -30,17 +30,6 @@ Records and arrays are aggregates (loaded and stored as whole values).
   return mlir::isa<cir::RecordType>(t) || mlir::isa<cir::ArrayType>(t);
 }  /* is_aggregate_type */
 
-mlir::NamedAttribute nothrow_attribute(mlir::Builder &b)
-/*
-The call-site attribute meaning "cannot unwind".
-*/
-{
-  return mlir::NamedAttribute(
-      mlir::StringAttr::get(b.getContext(),
-                            cir::CIRDialect::getNoThrowAttrName()),
-      b.getUnitAttr());
-}  /* nothrow_attribute */
-
 }  /* anonymous namespace */
 
 /* The value stack. */
@@ -196,13 +185,13 @@ object now holds.
       uint32_t align = static_cast<uint32_t>(type_align(value.getType()));
       mlir::Value temp = alloca_here(value.getType(), "agg.tmp", align);
       builder_.createStore(loc(), value, temp, false, false,
-                           builder_.getAlignmentAttr(align));
+                           alignment_attr(align));
       cir::CopyOp copy = builder_.createCopy(target.value, temp, is_volatile);
       copy.setDstAlignment(target.align);
       copy.setSrcAlignment(align);
     } else {
       builder_.createStore(loc(), value, target.value, is_volatile, false,
-                           builder_.getAlignmentAttr(target.align));
+                           alignment_attr(target.align));
     }
     if (result != nullptr)
       *result = value;
@@ -225,9 +214,9 @@ bit-field glvalue addressing its access unit).
     ok = format_error("FIELD of something that is not a glvalue");
   else if (t == nullptr || t->kind != a_type_kind::record_type ||
            !t->record->complete)
-    ok = format_error("FIELD names a type that is not a complete record");
+    ok = internal("FIELD names a type that is not a complete record");
   else if (index >= t->record->fields.size())
-    ok = format_error("FIELD index past the record's fields");
+    ok = internal("FIELD index past the record's fields");
   if (ok) {
     a_record_info &rec = *t->record;
     if (mlir::cast<cir::PointerType>(address.getType()).getPointee() !=
@@ -273,7 +262,7 @@ Address of element index of the array glvalue base.
   mlir::Value stride;
 
   if (t == nullptr || t->kind != a_type_kind::array_type) {
-    ok = format_error("AGG_SEL on a type that is neither record nor array");
+    ok = internal("AGG_SEL on a type that is neither record nor array");
   } else {
     element = type_at(t->target);
     decayed = builder_.createCast(loc(), cir::CastKind::array_to_ptrdecay,
@@ -426,7 +415,7 @@ for the rest.
 
   if (size <= 16) {
     builder_.createStore(loc(), builder_.getNullValue(type, loc()), address,
-                         false, false, builder_.getAlignmentAttr(align));
+                         false, false, alignment_attr(align));
   } else {
     compat::memset_zero(builder_, loc(), address, builder_.getUIntNTy(64),
                         size, align);
@@ -448,15 +437,18 @@ from a private constant global instead of being built in registers.
   } else if (c.is_zero && is_aggregate_type(type)) {
     zero_fill(target.value, type, target.align);
   } else if (is_aggregate_type(type) && type_size(type) > 256) {
-    std::string name = unique_symbol(
-        "__const." + (fn_entity_ ? fn_entity_->name : std::string("fn")) +
-        "." + std::to_string(temp_counter_++));
+    /* The name derives from the function's final name, so it is chosen at
+       finish (a_generated_symbol); a unique placeholder serves until then. */
+    unsigned index = temp_counter_++;
+    std::string_view name = claim_symbol(
+        keep_string("__ecil.const." + std::to_string(generated_.size())), 0);
     cir::GlobalOp g = compat::create_global(
         builder_, module_, loc(), name, type, true,
         cir::GlobalLinkageKind::PrivateLinkage);
+    generated_.push_back({g, fn_entity_ != nullptr ? fn_entity_->gid : 0,
+                          index});
     g.setInitialValueAttr(c.attr);
-    g.setAlignmentAttr(builder_.getI64IntegerAttr(
-        static_cast<int64_t>(type_align(type))));
+    g.setAlignmentAttr(alignment_attr(type_align(type)));
     mlir::SymbolTable::setSymbolVisibility(
         g, mlir::SymbolTable::Visibility::Private);
     compat::set_dso_local(g.getOperation(), true);
@@ -484,7 +476,7 @@ CONST_INT / CONST_FLOAT / CONST_NULL / CONST_PTR.
   uint_operand(r.ops[0], tgid);
   t = type_at(tgid);
   if (t == nullptr) {
-    ok = format_error("constant names an unknown type");
+    ok = false;
   } else if (r.opcode == eop_const_ptr) {
     /* As CIRGen: an integer constant converted by int_to_ptr (the LLVM
        lowering has no pointer-valued cir.const). */
@@ -545,7 +537,7 @@ and an indirect call with all arguments as variadic extras.
   mlir::Value callee;
   cir::CallOp op;
   bool noreturn;
-  mlir::NamedAttribute nothrow = nothrow_attribute(builder_);
+  mlir::NamedAttribute nothrow = nothrow_attr();
   bool use_nothrow = c_language_ &&
                      !(session_.header.lang_flags & ECIL_LANG_EXCEPTIONS);
   llvm::SmallVector<mlir::NamedAttribute> attrs;
@@ -567,13 +559,17 @@ and an indirect call with all arguments as variadic extras.
   if (ok) {
     /* Result and parameters of a call must be complete. */
     for (uint64_t p : call_type->params)
-      ok = ok && type_at(p) != nullptr && type_is_complete(type_at(p)->cir);
-    ok = ok && type_at(call_type->target) != nullptr &&
-         type_is_complete(type_at(call_type->target)->cir);
+      ok = ok && type_is_complete(type_at(p)->cir);
+    ok = ok && type_is_complete(type_at(call_type->target)->cir);
     if (!ok)
       ok = format_error("CALL with an incomplete record type as argument "
                         "or result");
   }
+  if (ok && nargs + (indirect ? 1u : 0u) > values_.size())
+    /* Bound the allocation by what the value stack can supply. */
+    ok = format_error("CALL needs " + std::to_string(nargs) +
+                      " argument values but the value stack holds " +
+                      std::to_string(values_.size()));
   if (ok) {
     args.resize(static_cast<size_t>(nargs));
     for (size_t k = static_cast<size_t>(nargs); ok && k > 0; --k)
@@ -610,7 +606,7 @@ and an indirect call with all arguments as variadic extras.
     if (!indirect) {
       e = entity_for(gid, true);
       if (e == nullptr) {
-        ok = format_error("CALL of an entity that is not a function");
+        ok = false;  /* entity_for reported the internal error. */
       } else {
         cir::FuncOp fn = mlir::cast<cir::FuncOp>(e->op);
         e->referenced = true;
@@ -738,15 +734,15 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
       uint_operand(r.ops[0], tgid);
       a_type *t = type_at(tgid);
       if (t == nullptr) {
-        ok = format_error("TERN_BEGIN names an unknown type");
+        ok = false;
         break;
       }
       result_type = t->cir;
     }
     mlir::Operation *op = compat::open_ternary(builder_, loc(), cond,
                                                result_type);
-    mlir::Block *block = builder_.createBlock(&op->getRegion(0));
-    open_frame(a_frame_kind::ternary, op, block);
+    builder_.createBlock(&op->getRegion(0));
+    open_frame(a_frame_kind::ternary, op);
     frames_.back().result_type = result_type;
     break;
   }
@@ -770,7 +766,7 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
       ok = format_error("values left on the stack in a ?: arm");
       break;
     }
-    f->alloca_block = builder_.createBlock(&f->op->getRegion(1));
+    builder_.createBlock(&f->op->getRegion(1));
     f->phase = 1;
     break;
   }
@@ -811,13 +807,13 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
     mlir::Operation *op = compat::open_ternary(builder_, loc(), lhs,
                                                builder_.getBoolTy());
     bool is_and = r.opcode == eop_land_begin;
-    mlir::Block *first = builder_.createBlock(&op->getRegion(0));
-    open_frame(is_and ? a_frame_kind::land : a_frame_kind::lor, op, first);
+    builder_.createBlock(&op->getRegion(0));
+    open_frame(is_and ? a_frame_kind::land : a_frame_kind::lor, op);
     if (!is_and) {
       /* LOR: the true arm is the constant true; the rhs goes in the false
          arm. */
       builder_.createYield(loc(), mlir::ValueRange{builder_.getTrue(loc())});
-      frames_.back().alloca_block = builder_.createBlock(&op->getRegion(1));
+      builder_.createBlock(&op->getRegion(1));
       frames_.back().phase = 1;
     }
     break;
@@ -876,7 +872,7 @@ AGG_INIT_BEGIN / AGG_SEL / AGG_INIT_END / INIT_CONST / INIT_ZERO.
     uint_operand(r.ops[1], flags);
     t = type_at(tgid);
     if (t == nullptr) {
-      ok = format_error("AGG_INIT_BEGIN names an unknown type");
+      ok = false;
       break;
     }
     if (!pop_glvalue(address) || address.kind != a_value_kind::glvalue) {
@@ -885,7 +881,7 @@ AGG_INIT_BEGIN / AGG_SEL / AGG_INIT_END / INIT_CONST / INIT_ZERO.
     }
     if (flags & ECIL_AGG_INIT_ZERO_FILL)
       zero_fill(address.value, t->cir, address.align);
-    open_frame(a_frame_kind::agg_init, nullptr, current_alloca_block());
+    open_frame(a_frame_kind::agg_init, nullptr);
     a_init_target target = {address, tgid};
     targets_.push_back(target);
     break;
@@ -895,7 +891,7 @@ AGG_INIT_BEGIN / AGG_SEL / AGG_INIT_END / INIT_CONST / INIT_ZERO.
     a_value out;
     uint_operand(r.ops[0], index);
     if (targets_.empty()) {
-      ok = format_error("AGG_SEL outside AGG_INIT_BEGIN");
+      ok = internal("AGG_SEL outside AGG_INIT_BEGIN");
       break;
     }
     const a_init_target &target = targets_.back();
@@ -1010,7 +1006,7 @@ CIRGen does.
                                    compat::int_type(ctx_, 64, false));
       memory = builder_.createAlloca(loc(), cir::PointerType::get(byte),
                                      "bi_alloca",
-                                     builder_.getAlignmentAttr(16), size);
+                                     alignment_attr(16), size);
       push_prvalue(builder_.createBitcast(loc(), memory, result_type->cir));
     }
   } else if (id == ebi_is_fp_class || id == ebi_signbit) {
@@ -1018,8 +1014,7 @@ CIRGen does.
       ok = format_error("floating-point class builtins need a floating "
                         "operand");
     } else if (id == ebi_signbit) {
-      push_prvalue(cir::SignBitOp::create(builder_, loc(),
-                                          builder_.getBoolTy(), args[0]));
+      push_prvalue(compat::sign_bit(builder_, loc(), args[0]));
     } else {
       auto constant = args.size() == 2
                           ? args[1].getDefiningOp<cir::ConstantOp>()
@@ -1029,9 +1024,8 @@ CIRGen does.
       if (!mask) {
         ok = format_error("is_fp_class needs a constant mask");
       } else {
-        push_prvalue(cir::IsFPClassOp::create(
-            builder_, loc(), builder_.getBoolTy(), args[0],
-            static_cast<cir::FPClassTest>(mask.getUInt())));
+        push_prvalue(compat::is_fp_class(builder_, loc(), args[0],
+                                         mask.getUInt()));
       }
     }
   } else if (id >= ebi_add_overflow && id <= ebi_mul_overflow) {
@@ -1067,22 +1061,15 @@ CIRGen does.
         y = builder_.createCast(loc(), cir::CastKind::integral, y, wide);
       mlir::Value value;
       mlir::Value overflow;
-      if (id == ebi_add_overflow) {
-        auto op = cir::AddOverflowOp::create(builder_, loc(), types[2], x, y);
-        value = op.getResult();
-        overflow = op.getOverflow();
-      } else if (id == ebi_sub_overflow) {
-        auto op = cir::SubOverflowOp::create(builder_, loc(), types[2], x, y);
-        value = op.getResult();
-        overflow = op.getOverflow();
-      } else {
-        auto op = cir::MulOverflowOp::create(builder_, loc(), types[2], x, y);
-        value = op.getResult();
-        overflow = op.getOverflow();
-      }
+      compat::overflow_op(builder_, loc(),
+                          id == ebi_add_overflow ? compat::a_overflow_kind::add
+                          : id == ebi_sub_overflow
+                              ? compat::a_overflow_kind::sub
+                              : compat::a_overflow_kind::mul,
+                          types[2], x, y, value, overflow);
       builder_.createStore(
           loc(), value, pointer, false, false,
-          builder_.getAlignmentAttr(
+          alignment_attr(
               static_cast<uint32_t>(type_align(types[2]))));
       push_prvalue(overflow);
     }
@@ -1093,32 +1080,37 @@ CIRGen does.
     mlir::Value out;
     switch (id) {
     case ebi_bswap:
-      out = cir::ByteSwapOp::create(builder_, loc(), with_sign(x, false));
+      out = compat::bit_op(builder_, loc(), compat::a_bit_op::byte_swap,
+                           with_sign(x, false));
       out = with_sign(out, int_of(x).isSigned());
       break;
     case ebi_clz:
-      out = cir::BitClzOp::create(builder_, loc(), with_sign(x, false), true)
-                .getResult();
+      out = compat::bit_op(builder_, loc(),
+                           compat::a_bit_op::count_leading_zeros,
+                           with_sign(x, false));
       break;
     case ebi_ctz:
-      out = cir::BitCtzOp::create(builder_, loc(), with_sign(x, false), true)
-                .getResult();
+      out = compat::bit_op(builder_, loc(),
+                           compat::a_bit_op::count_trailing_zeros,
+                           with_sign(x, false));
       break;
     case ebi_popcount:
-      out = cir::BitPopcountOp::create(builder_, loc(), with_sign(x, false))
-                .getResult();
+      out = compat::bit_op(builder_, loc(),
+                           compat::a_bit_op::population_count,
+                           with_sign(x, false));
       break;
     case ebi_parity:
-      out = cir::BitParityOp::create(builder_, loc(), with_sign(x, false))
-                .getResult();
+      out = compat::bit_op(builder_, loc(), compat::a_bit_op::parity,
+                           with_sign(x, false));
       break;
     case ebi_ffs:
-      out = cir::BitFfsOp::create(builder_, loc(), with_sign(x, true))
-                .getResult();
+      out = compat::bit_op(builder_, loc(), compat::a_bit_op::find_first_set,
+                           with_sign(x, true));
       break;
     default:
-      out = cir::BitClrsbOp::create(builder_, loc(), with_sign(x, true))
-                .getResult();
+      out = compat::bit_op(builder_, loc(),
+                           compat::a_bit_op::redundant_sign_bits,
+                           with_sign(x, true));
       break;
     }
     push_prvalue(id == ebi_bswap ? out : to_result(out));
@@ -1167,24 +1159,26 @@ Handle one expression record.
     break;
   case eop_lref: {
     uint64_t l = 0;
+    a_local *local;
     uint_operand(r.ops[0], l);
-    auto found = locals_.find(l);
-    if (found == locals_.end()) {
-      ok = format_error("LREF of an undeclared local " + std::to_string(l));
+    local = local_at(l);
+    if (local == nullptr) {
+      ok = false;  /* local_at reported the internal error. */
       break;
     }
-    push_glvalue(found->second.address, found->second.align);
+    push_glvalue(local->address, local->align);
     break;
   }
   case eop_gref: {
     uint64_t g = 0;
+    a_entity *entity;
     uint_operand(r.ops[0], g);
-    auto found = entities_.find(g);
-    if (found == entities_.end()) {
-      ok = format_error("GREF of an unknown entity");
+    entity = entity_at(g);
+    if (entity == nullptr) {
+      ok = false;
       break;
     }
-    a_entity &e = found->second;
+    a_entity &e = *entity;
     if (e.is_function) {
       push_glvalue(function_address(e), 1);
     } else {
@@ -1276,7 +1270,7 @@ Handle one expression record.
     base.align = static_cast<uint32_t>(type_align(t->cir));
     base.value = alloca_here(t->cir, "extract.tmp", base.align);
     builder_.createStore(loc(), record_value, base.value, false, false,
-                         builder_.getAlignmentAttr(base.align));
+                         alignment_attr(base.align));
     if (!field_address(base, rec, index, out)) {
       ok = false;
       break;
@@ -1322,7 +1316,7 @@ Handle one expression record.
     ecil::operand_i64(r.ops[1], bytes);
     t = type_at(tgid);
     if (t == nullptr || !pop_prvalue(pointer)) {
-      ok = format_error("ADDR_OFFSET names an unknown type");
+      ok = false;
       break;
     }
     mlir::Value result = pointer;
@@ -1335,7 +1329,7 @@ Handle one expression record.
       result = builder_.createPtrStride(loc(), base, offset);
     }
     if (!mlir::isa<cir::PointerType>(t->cir))
-      ok = format_error("ADDR_OFFSET result type is not a pointer type");
+      ok = internal("ADDR_OFFSET result type is not a pointer type");
     else
       push_prvalue(builder_.createBitcast(loc(), result, t->cir));
     break;
@@ -1359,32 +1353,31 @@ Handle one expression record.
     uint64_t tgid = 0;
     mlir::Value v;
     a_type *t;
-    a_local local;
+    a_local *local;
     uint_operand(r.ops[0], l);
     uint_operand(r.ops[1], tgid);
     t = type_at(tgid);
-    if (t == nullptr || !pop_prvalue(v)) {
-      ok = format_error("MATERIALIZE_TEMP names an unknown type");
+    if (t == nullptr || (local = new_local(l)) == nullptr || !pop_prvalue(v)) {
+      ok = false;
       break;
     }
     if (!type_is_complete(t->cir)) {
-      ok = format_error("MATERIALIZE_TEMP of an incomplete record type");
+      ok = internal("MATERIALIZE_TEMP of an incomplete record type");
       break;
     }
-    local.align = static_cast<uint32_t>(type_align(t->cir));
-    local.type = tgid;
-    local.address = alloca_here(t->cir, "ref.tmp" + std::to_string(l),
-                                local.align);
+    local->align = static_cast<uint32_t>(type_align(t->cir));
+    local->type = tgid;
+    local->address = alloca_here(t->cir, "ref.tmp" + std::to_string(l),
+                                 local->align);
     a_value target;
     target.kind = a_value_kind::glvalue;
-    target.value = local.address;
-    target.align = local.align;
+    target.value = local->address;
+    target.align = local->align;
     if (!store_value(target, v, false, nullptr)) {
       ok = false;
       break;
     }
-    locals_[l] = local;
-    push_glvalue(local.address, local.align);
+    push_glvalue(local->address, local->align);
     break;
   }
   case eop_add: case eop_sub: case eop_mul: case eop_div: case eop_rem:
@@ -1504,7 +1497,7 @@ Handle one expression record.
     uint_operand(r.ops[0], tgid);
     t = type_at(tgid);
     if (t == nullptr || !pop_prvalue(rhs) || !pop_prvalue(lhs)) {
-      ok = format_error("PTR_DIFF names an unknown type");
+      ok = false;
       break;
     }
     if (lhs.getType() != rhs.getType())
@@ -1520,7 +1513,7 @@ Handle one expression record.
     uint_operand(r.ops[1], tgid);
     t = type_at(tgid);
     if (t == nullptr || !pop_prvalue(v)) {
-      ok = format_error("CAST names an unknown type");
+      ok = false;
       break;
     }
     if (!cast_value(static_cast<uint32_t>(r.ops[0].u), v, t->cir, out)) {
@@ -1550,7 +1543,7 @@ Handle one expression record.
     uint_operand(r.ops[0], tgid);
     t = type_at(tgid);
     if (t == nullptr || !pop_prvalue(ap)) {
-      ok = format_error("VA_ARG names an unknown type");
+      ok = false;
       break;
     }
     push_prvalue(cir::VAArgOp::create(builder_, loc(), t->cir, ap));
@@ -1572,7 +1565,13 @@ Handle one expression record.
     llvm::SmallVector<mlir::Value> args;
     uint_operand(r.ops[0], id);
     uint_operand(r.ops[1], nargs);
-    args.resize(static_cast<size_t>(nargs));
+    if (nargs > values_.size())
+      /* Bound the allocation by what the value stack can supply. */
+      ok = format_error("BUILTIN needs " + std::to_string(nargs) +
+                        " argument values but the value stack holds " +
+                        std::to_string(values_.size()));
+    if (ok)
+      args.resize(static_cast<size_t>(nargs));
     for (size_t k = static_cast<size_t>(nargs); ok && k > 0; --k)
       ok = pop_prvalue(args[k - 1]);
     if (!ok) {

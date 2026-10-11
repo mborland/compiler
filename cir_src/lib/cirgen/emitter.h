@@ -27,7 +27,9 @@ LLVM-exception); see CIRCompat.h for the upstream API surface used.
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "CIRCompat.h"
@@ -119,19 +121,36 @@ struct a_entity {
   unsigned                   linkage = 0;
   uint32_t                   flags = 0;
   uint32_t                   align = 0;
-  std::string                name;
+  std::string_view           symbol;     /* The current MLIR symbol: unique
+                                            among the ops, never changed
+                                            before finish. */
+  std::string_view           want;       /* The effective name (spec 7),
+                                            valid when named. */
   bool                       named = false;
-  std::string                placeholder;
   mlir::Operation           *op = nullptr;
   bool                       has_body = false;
   bool                       has_init = false;
   bool                       referenced = false;
-  bool                       renamed = false;
-  uint32_t                   reissue_count = 0;
   std::vector<cir::CallOp>   calls;      /* Direct calls created. */
   std::vector<cir::GetGlobalOp>
                              addresses;  /* get_global ops created. */
 };  /* a_entity */
+
+/* A symbol to rename at finish. */
+struct a_symbol_change {
+  mlir::Operation  *op;
+  mlir::StringAttr  from;
+  mlir::StringAttr  to;
+};  /* a_symbol_change */
+
+/* A library-generated symbol whose name derives from another symbol's final
+   name (spec: every name-derived name is computed at finish, after the
+   substitution of the final names). */
+struct a_generated_symbol {
+  cir::GlobalOp  op;
+  uint64_t       function_gid;   /* The function the name derives from. */
+  unsigned       index;
+};  /* a_generated_symbol */
 
 /* Values on the value stack. */
 
@@ -157,7 +176,6 @@ struct a_frame {
   mlir::Operation *op = nullptr;       /* The structured op, if any. */
   mlir::Operation *scope_op = nullptr; /* for: the implicit enclosing scope. */
   uint8_t          phase = 0;
-  mlir::Block     *alloca_block = nullptr;
   size_t           value_base = 0;
   mlir::Type       result_type;        /* ternary. */
   bool             has_cond = false;   /* for. */
@@ -210,21 +228,31 @@ public:
 
   bool finish();
   /*
-  Run at finish on the worker thread: late renames, record layout metadata,
-  inline-only and unsupported-entity policy.  False: the session has an error.
+  Run at finish on the worker thread: final names and their one-pass
+  substitution, record layout metadata, inline-only and unsupported-entity
+  policy.  False: the session has an error.
   */
+
+  uint64_t rename_count() const
+    { return renames_applied_; }
+  uint64_t walk_count() const
+    { return walks_done_; }
 
 private:
   /* Diagnostics. */
   bool fail(an_edg_cir_status status, uint32_t code, const std::string &text);
   bool format_error(const std::string &text);
   bool unsupported(const std::string &text);
+  bool internal(const std::string &text);
+  /* A failed internal check: the validator guarantees what was checked, so
+     this is a library bug.  Always on (never an assert); sets
+     EDG_CIR_ERROR_INTERNAL. */
   mlir::Location loc() const
     { return loc_; }
   bool uint_operand(const ecil::an_operand &op, uint64_t &out);
   bool int_operand_apint(const ecil::an_operand &op, unsigned bits,
                          llvm::APInt &out);
-  std::string string_for(const ecil::an_operand &op, bool &ok);
+  std::string_view string_for(const ecil::an_operand &op, bool &ok);
 
   /* types.cpp */
   a_type *type_at(uint64_t gid);
@@ -243,6 +271,8 @@ private:
   uint32_t derived_align(uint32_t base, uint64_t offset) const;
   mlir::Type convert_for_function(const a_type &t);
   std::string unique_record_name(const std::string &hint);
+  a_local *local_at(uint64_t l);
+  a_local *new_local(uint64_t l);
 
   /* globals.cpp */
   bool decl_function(const ecil::a_record &r);
@@ -264,11 +294,15 @@ private:
                                        bool &ok);
   mlir::Attribute float_attribute(mlir::Type type, const ecil::an_operand &op,
                                   bool &ok);
+  a_entity *entity_at(uint64_t gid);
   a_entity *entity_for(uint64_t gid, bool is_function);
   void retype_function(a_entity &e, mlir::Type new_type);
   void retype_variable(a_entity &e, mlir::Type new_type);
   void convert_call_to_variadic(a_entity &e, cir::CallOp call);
-  std::string unique_symbol(const std::string &base);
+  std::string_view claim_symbol(std::string_view want, uint64_t gid);
+  std::string_view keep_string(std::string_view text);
+  void assign_final_names();
+  void apply_substitution();
   void apply_function_attributes(a_entity &e, cir::FuncOp fn);
 
   /* function.cpp */
@@ -277,8 +311,7 @@ private:
   bool param(const ecil::a_record &r);
   bool local_decl(const ecil::a_record &r);
   bool statement(const ecil::a_record &r);
-  bool open_frame(a_frame_kind kind, mlir::Operation *op,
-                  mlir::Block *alloca_block);
+  bool open_frame(a_frame_kind kind, mlir::Operation *op);
   a_frame *top_frame(a_frame_kind kind, const char *what);
   bool pop_frame();
   bool terminate_region(mlir::Region &region, bool value_block_ok = false);
@@ -292,7 +325,9 @@ private:
                         const std::string &name, uint32_t align);
   mlir::Value alloca_here(mlir::Type type, const std::string &name,
                           uint32_t align);
-  mlir::Block *current_alloca_block();
+  mlir::IntegerAttr alignment_attr(uint64_t align);
+  cir::GlobalLinkageKindAttr linkage_attr(cir::GlobalLinkageKind kind);
+  mlir::NamedAttribute nothrow_attr();
   std::string label_name(uint64_t l);
 
   /* expr.cpp */
@@ -341,19 +376,26 @@ private:
   bool                                    cheap_unaligned_;
   bool                                    c_language_;
 
-  /* Types and entities. */
-  std::vector<a_type>                     types_;
+  /* Types and entities.  The id tables belong to the stream reader and hold
+     the G-id and L-id facts; the emitter keeps its objects in deques (stable
+     addresses) and hangs them on the tables' payload slots. */
+  ecil::a_id_tables                      &ids_;
+  std::deque<a_type>                      type_store_;
+  std::deque<a_entity>                    entity_store_;
+  std::deque<a_local>                     local_store_;
   std::deque<a_record_info>               records_;
   /* The record info of a CIR record type, keyed by the type's identity. */
   std::unordered_map<const void *, const a_record_info *>
                                           record_of_type_;
-  std::vector<uint64_t>                   record_gids_;
   std::unordered_map<std::string, unsigned>
                                           record_names_;
-  std::unordered_map<std::string, unsigned>
-                                          symbol_names_;
-  std::unordered_map<uint64_t, a_entity>  entities_;
-  std::vector<uint64_t>                   entity_order_;
+  /* The MLIR symbol names in use (views into the arena). */
+  std::unordered_set<std::string_view>    symbols_;
+  std::vector<a_entity *>                 entity_order_;
+  std::vector<a_generated_symbol>         generated_;
+  std::vector<a_symbol_change>            symbol_changes_;
+  uint64_t                                renames_applied_ = 0;
+  uint64_t                                walks_done_ = 0;
   uint64_t                                pending_body_gid_ = 0;
 
   /* Per frame / function state. */
@@ -362,7 +404,15 @@ private:
   std::vector<a_const_aggregate>          const_aggs_;
   std::vector<a_frame>                    frames_;
   std::vector<a_init_target>              targets_;
-  std::unordered_map<uint64_t, a_local>   locals_;
+  /* Attributes built once (their uniquing lookups are not free). */
+  mlir::UnitAttr                          unit_attr_;
+  mlir::StringAttr                        nothrow_name_;
+  mlir::StringAttr                        noreturn_name_;
+  mlir::IntegerAttr                       align_attrs_[16];   /* 1 << index */
+  cir::GlobalLinkageKindAttr              linkage_attrs_[16]; /* by kind */
+  /* The last alloca made in the current function's entry block: the next
+     one goes right after it (no backward scan). */
+  mlir::Operation                        *last_alloca_ = nullptr;
   cir::FuncOp                             fn_;
   a_entity                               *fn_entity_ = nullptr;
   mlir::Block                            *fn_entry_ = nullptr;
@@ -371,9 +421,6 @@ private:
   unsigned                                temp_counter_ = 0;
   uint64_t                                fn_return_type_ = 0;
   mlir::Value                             fn_retval_;  /* __retval slot */
-  std::vector<std::pair<uint64_t, std::string>>
-                                          renames_;
-  std::vector<cir::GlobalOp>              temporaries_;
 };  /* a_emitter */
 
 }  /* namespace edg_cir */

@@ -11,7 +11,8 @@ DEF(null_source_position); DEF(highest_used_region_number); DEF(mem_region_table
 DEF(primary_source_file_name); DEF(rtti_enabled); DEF(std_version);
 DEF(targ_alignof_int); DEF(targ_char_bit); DEF(targ_has_signed_chars);
 DEF(targ_little_endian); DEF(targ_sizeof_int); DEF(targ_sizeof_long);
-DEF(targ_sizeof_pointer);
+DEF(targ_sizeof_pointer); DEF(targ_sizeof_double); DEF(targ_alignof_double);
+DEF(curr_translation_unit); DEF(cleared_locator);
 void assertion_failed(const char *a, int b, const char *c, const char *d, const char *e) { fprintf(stderr, "ASSERT %s:%d %s %s %s\n", a, b, c?c:"", d?d:"", e?e:""); abort(); }
 
 /* Symbols the type/constant/code modules reference; the harness never
@@ -39,3 +40,18 @@ static void init_empty_scope(void) {
   il_header.primary_scope = &empty_primary_scope;
   targ_supports_x86_64 = TRUE;
 }
+
+/* The predefined macros: the test target defines __linux__ (a fake
+   translation unit with a file scope stands for "start-up is over"). */
+static a_translation_unit fake_translation_unit;
+static void init_fake_translation_unit(void) __attribute__((constructor));
+static void init_fake_translation_unit(void) {
+  fake_translation_unit.primary_scope = &empty_primary_scope;
+  curr_translation_unit = &fake_translation_unit;
+}
+a_symbol_ptr find_macro_symbol_by_name(a_const_char *identifier,
+                                       sizeof_t length,
+                                       a_symbol_locator *locator) {
+  (void)locator;
+  return (length == 9 && memcmp(identifier, "__linux__", 9) == 0) ?
+         (a_symbol_ptr)&fake_translation_unit : NULL; }

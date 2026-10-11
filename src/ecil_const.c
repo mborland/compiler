@@ -43,10 +43,32 @@ sequence.
 /* Conditionally open the "edg" namespace. */
 BEGIN_EDG_NAMESPACE
 
+/* A static local whose DECL_VAR was sent and whose initializer is still to
+   be built (see ecil_queue_variable_definition). */
+typedef struct an_ecil_pending_definition {
+  a_variable_ptr
+                var;
+  uint32_t      gid;
+  uint32_t      type;
+  an_initializer_ptr
+                init;
+  a_boolean     has_init;
+} an_ecil_pending_definition;
+
 STATIC_THREAD an_ecil_buffer
-                const_scratch;
-STATIC_THREAD int
-                const_scratch_in_use;   /* Nesting depth of the emitter. */
+                const_scratch;          /* The constant being built. */
+STATIC_THREAD uint32_t
+                *string_key;            /* The key of a string literal. */
+STATIC_THREAD size_t
+                string_key_capacity;
+STATIC_THREAD an_ecil_pending_definition
+                *pending_defs;          /* Queued static local definitions. */
+STATIC_THREAD size_t
+                num_pending_defs;
+STATIC_THREAD size_t
+                next_pending_def;       /* The first one not yet defined. */
+STATIC_THREAD size_t
+                pending_defs_capacity;
 STATIC_THREAD an_init_level
                 *level_stack;
 STATIC_THREAD size_t
@@ -64,9 +86,14 @@ Release the writer's constant-building storage at the end of a compilation.
   for (i = 0; i < level_stack_size; i++) ecil_init_level_end(&level_stack[i]);
   ecil_buf_free(&const_scratch);
   free(level_stack);
+  free(string_key);
+  free(pending_defs);
   level_stack = NULL;
   level_stack_size = level_stack_capacity = 0;
-  const_scratch_in_use = 0;
+  string_key = NULL;
+  string_key_capacity = 0;
+  pending_defs = NULL;
+  num_pending_defs = next_pending_def = pending_defs_capacity = 0;
 }  /* ecil_const_reset */
 
 
@@ -279,12 +306,25 @@ static a_boolean insert_entries(an_init_level *level, size_t pos, size_t n)
 Open n slots at pos in the entry array (the array grows on demand).
 */
 {
-  an_init_entry *grown = (an_init_entry *)realloc(level->entries,
-                  (level->num_entries + n) * sizeof(an_init_entry));
-  a_boolean     ok = (grown != NULL);
+  an_init_entry *grown = level->entries;
+  a_boolean     ok = TRUE;
 
+  if (level->num_entries + n > level->entries_capacity) {
+    size_t  new_capacity = level->entries_capacity == 0 ?
+                           16 : level->entries_capacity * 2;
+
+    if (new_capacity < level->num_entries + n) {
+      new_capacity = level->num_entries + n;
+    }  /* if */
+    grown = (an_init_entry *)realloc(level->entries,
+                                     new_capacity * sizeof(an_init_entry));
+    ok = (grown != NULL);
+    if (ok) {
+      level->entries = grown;
+      level->entries_capacity = new_capacity;
+    }  /* if */
+  }  /* if */
   if (ok) {
-    level->entries = grown;
     memmove(&level->entries[pos + n], &level->entries[pos],
             (level->num_entries - pos) * sizeof(an_init_entry));
     level->num_entries += n;
@@ -354,7 +394,9 @@ adds its entries to it; a union replaces an earlier union.  Order is kept.
             same_aggregate_type(r->value->variant.init_repeat.constant,
                                 e->value)) {
           split_repeat(level, k, e->index);
-          j = (size_t)0 - 1;         /* The array changed: rescan. */
+          /* The array changed from k on (the entries before k and what they
+             were compared with are as they were): rescan from k. */
+          j = k - 1;
           break;
         }  /* if */
       }  /* for */
@@ -436,6 +478,9 @@ Start walking the entries of an aggregate (see ecil_write.h).
 
   level->entries = NULL;
   level->num_entries = 0;
+  level->entries_capacity = 0;
+  level->members = NULL;
+  level->num_members = 0;
   level->entry_pos = 0;
   level->entry_sources = NULL;
   level->entry_num_sources = 0;
@@ -557,8 +602,12 @@ Release the storage of a level.
 
   for (i = 0; i < level->num_entries; i++) free(level->entries[i].sources);
   free(level->entries);
+  free(level->members);
   level->entries = NULL;
   level->num_entries = 0;
+  level->entries_capacity = 0;
+  level->members = NULL;
+  level->num_members = 0;
 }  /* ecil_init_level_end */
 
 
@@ -725,6 +774,89 @@ array's size (the consumer zero-pads any tail).
 }  /* emit_string_bytes */
 
 
+a_boolean ecil_emit_scalar_constant(an_ecil_frame *frame,
+                                    a_constant_ptr c,
+                                    uint32_t       t,
+                                    a_boolean      is_initializer)
+/*
+Emit the record of an integer or floating constant c of ECIL type t: the
+constant-stack record C_NULL, C_PTR, C_INT or C_FLOAT of an initializer, or
+the expression record CONST_NULL, CONST_PTR, CONST_INT or CONST_FLOAT.
+Return FALSE (after noting why) if it is not expressible.  A floating
+constant is encoded in the format of its own type, so that type (c->type)
+is the one the record names, whatever t is.
+*/
+{
+  an_ecil_gid_kind  kind = ecil_gid_info(t)->kind;
+  a_boolean         ok = TRUE;
+
+  if (c->kind == (a_constant_repr_kind)ck_float) {
+    t = ecil_type_id(frame, c->type);
+    if (t == 0) {
+      ok = FALSE;
+    } else {
+      ecil_rec_begin(frame, is_initializer ? eop_c_float : eop_const_float);
+      ecil_arg_uint(frame, t);
+      ok = arg_float_value(frame, c);
+      ecil_rec_end(frame);
+    }  /* if */
+  } else if (kind == egk_ptr) {
+    a_boolean ovflo = FALSE;
+    uint64_t  value = (uint64_t)unsigned_value_of_integer_constant(c, &ovflo);
+
+    if (value == 0) {
+      ecil_rec1(frame, is_initializer ? eop_c_null : eop_const_null, t);
+    } else {
+      ecil_rec2(frame, is_initializer ? eop_c_ptr : eop_const_ptr, t, value);
+    }  /* if */
+  } else {
+    ecil_rec_begin(frame, is_initializer ? eop_c_int : eop_const_int);
+    ecil_arg_uint(frame, t);
+    arg_integer_value(frame, c, ecil_gid_info(t));
+    ecil_rec_end(frame);
+  }  /* if */
+  return ok;
+}  /* ecil_emit_scalar_constant */
+
+
+uint32_t ecil_address_constant_gid(an_ecil_frame *frame,
+                                   a_constant_ptr c,
+                                   a_boolean      *is_function)
+/*
+The G-id of the entity an address constant (ck_address) points into, which
+is introduced if need be (a variable may be queued for definition, see
+ecil_variable_id); *is_function says whether it is a function.  Return 0,
+having noted why, if the address is not expressible.
+*/
+{
+  uint32_t  g = 0;
+
+  *is_function = FALSE;
+  switch (c->variant.address.kind) {
+    case abk_variable:
+      g = ecil_variable_id(frame, c->variant.address.variant.variable);
+      break;
+    case abk_routine:
+      g = ecil_function_id(frame, c->variant.address.variant.routine);
+      *is_function = TRUE;
+      break;
+    case abk_constant:
+      if (c->variant.address.variant.constant->kind ==
+              (a_constant_repr_kind)ck_string) {
+        g = ecil_string_literal_id(frame,
+                                   c->variant.address.variant.constant);
+      } else {
+        ecil_note_unsupported("the address of a non-string constant");
+      }  /* if */
+      break;
+    default:
+      ecil_note_unsupported("this kind of address constant");
+      break;
+  }  /* switch */
+  return g;
+}  /* ecil_address_constant_gid */
+
+
 static a_boolean emit_leaf(an_ecil_frame *frame, a_constant_ptr c,
                            uint32_t target)
 /*
@@ -741,35 +873,10 @@ char[5]).
   if (t == 0) {
     ok = FALSE;
   } else {
-    an_ecil_gid_info  *info = ecil_gid_info(t);
-
     switch (c->kind) {
       case ck_integer:
-        if (info->kind == egk_ptr) {
-          a_boolean ovflo = FALSE;
-          uint64_t  value = (uint64_t)unsigned_value_of_integer_constant(
-                                                              c, &ovflo);
-
-          if (value == 0) {
-            ecil_rec1(frame, eop_c_null, t);
-          } else {
-            ecil_rec_begin(frame, eop_c_ptr);
-            ecil_arg_uint(frame, t);
-            ecil_arg_uint(frame, value);
-            ecil_rec_end(frame);
-          }  /* if */
-        } else {
-          ecil_rec_begin(frame, eop_c_int);
-          ecil_arg_uint(frame, t);
-          arg_integer_value(frame, c, info);
-          ecil_rec_end(frame);
-        }  /* if */
-        break;
       case ck_float:
-        ecil_rec_begin(frame, eop_c_float);
-        ecil_arg_uint(frame, t);
-        ok = arg_float_value(frame, c);
-        ecil_rec_end(frame);
+        ok = ecil_emit_scalar_constant(frame, c, t, TRUE);
         break;
       case ck_string:
         emit_string_bytes(frame, c, (target != 0 &&
@@ -777,31 +884,12 @@ char[5]).
                                                       egk_array) ? target : t);
         break;
       case ck_address:
-        { uint32_t  g = 0;
+        { a_boolean is_function;
+          uint32_t  g = ecil_address_constant_gid(frame, c, &is_function);
 
-          switch (c->variant.address.kind) {
-            case abk_variable:
-              g = ecil_variable_id(frame, c->variant.address.variant.variable);
-              break;
-            case abk_routine:
-              g = ecil_function_id(frame, c->variant.address.variant.routine);
-              break;
-            case abk_constant:
-              if (c->variant.address.variant.constant->kind ==
-                      (a_constant_repr_kind)ck_string) {
-                g = ecil_string_literal_id(frame,
-                                    c->variant.address.variant.constant);
-              } else {
-                ecil_note_unsupported("the address of a non-string constant");
-              }  /* if */
-              break;
-            default:
-              ecil_note_unsupported("this kind of address constant");
-              break;
-          }  /* switch */
           if (g == 0) {
             ok = FALSE;
-          } else if (info->kind != egk_ptr) {
+          } else if (ecil_gid_info(t)->kind != egk_ptr) {
             ok = FALSE;
             ecil_note_unsupported("an address constant of integer type");
           } else {
@@ -818,9 +906,9 @@ char[5]).
         ecil_note_unsupported("a non-constant initializer element");
         break;
       default:
-        ok = FALSE;
-        { static char reason[80];
+        { char  reason[80];
 
+          ok = FALSE;
           (void)snprintf(reason, sizeof(reason), "the constant kind %d",
                          (int)c->kind);
           ecil_note_unsupported(reason);
@@ -888,6 +976,8 @@ uint32_t ecil_member_type_gid(an_ecil_frame *frame, an_init_level *level,
                               uint64_t index)
 /*
 The G-id of the type of member or element index of the aggregate of level.
+The members of a record are put in an array on first use, so that entries in
+any order (designators) cost one step each.
 */
 {
   uint32_t  gid = 0;
@@ -895,12 +985,36 @@ The G-id of the type of member or element index of the aggregate of level.
   if (level->is_array) {
     gid = ecil_type_id(frame, level->type->variant.array.element_type);
   } else {
-    a_field_ptr  field = level->type->variant.class_struct_union.field_list;
+    a_field_ptr  field = NULL;
 
-    while (field != NULL && index > 0) {
-      field = field->next;
-      index--;
-    }  /* while */
+    if (level->members == NULL) {
+      uint64_t     count = 0;
+      a_field_ptr  f;
+
+      for (f = level->type->variant.class_struct_union.field_list; f != NULL;
+           f = f->next) {
+        count++;
+      }  /* for */
+      level->members = (a_field_ptr *)malloc((count + 1) *
+                                             sizeof(a_field_ptr));
+      if (level->members != NULL) {
+        level->num_members = 0;
+        for (f = level->type->variant.class_struct_union.field_list;
+             f != NULL; f = f->next) {
+          level->members[level->num_members++] = f;
+        }  /* for */
+      }  /* if */
+    }  /* if */
+    if (level->members != NULL) {
+      if (index < level->num_members) field = level->members[index];
+    } else {
+      /* Out of memory: walk the list. */
+      field = level->type->variant.class_struct_union.field_list;
+      while (field != NULL && index > 0) {
+        field = field->next;
+        index--;
+      }  /* while */
+    }  /* if */
     if (field != NULL) gid = ecil_type_id(frame, field->type);
   }  /* if */
   return gid;
@@ -937,25 +1051,6 @@ aggregate is initialized by agg, or by the n merged constants in sources.
 }  /* begin_aggregate */
 
 
-a_boolean ecil_emit_float_constant(an_ecil_frame *frame, a_constant_ptr c)
-/*
-Emit the CONST_FLOAT expression record for a floating constant into the
-current section.  Return FALSE, having noted why, if it cannot be expressed.
-*/
-{
-  uint32_t  t = ecil_type_id(frame, c->type);
-  a_boolean ok = FALSE;
-
-  if (t != 0) {
-    ecil_rec_begin(frame, eop_const_float);
-    ecil_arg_uint(frame, t);
-    ok = arg_float_value(frame, c);
-    ecil_rec_end(frame);
-  }  /* if */
-  return ok;
-}  /* ecil_emit_float_constant */
-
-
 a_boolean ecil_emit_constant_sources(an_ecil_frame *frame,
                                      a_constant_ptr constant,
                                      a_constant_ptr *sources,
@@ -973,18 +1068,12 @@ emitted nothing and noted why, if it cannot be expressed.
   a_boolean       ok;
   an_ecil_buffer  *target = frame->current;
   size_t          base = level_stack_size;
-  an_ecil_buffer  nested;
   an_ecil_buffer  *scratch = &const_scratch;
 
   /* Build in a scratch buffer so introductions made on the way do not
-     fall inside the C_* sequence.  Introducing an object can define a
-     variable (a static local such as __func__) and so re-enter here: the
-     nested call needs a buffer of its own. */
-  if (const_scratch_in_use) {
-    ecil_buf_init(&nested);
-    scratch = &nested;
-  }  /* if */
-  const_scratch_in_use++;
+     fall inside the C_* sequence.  Building a constant never builds another
+     (a static local it refers to is only queued, see
+     ecil_queue_variable_definition), so one buffer serves. */
   scratch->size = 0;
   scratch->failed = FALSE;
   frame->current = scratch;
@@ -1040,8 +1129,6 @@ emitted nothing and noted why, if it cannot be expressed.
     ok = FALSE;
     ecil_note_unsupported("out of memory in the ECIL writer");
   }  /* if */
-  if (scratch == &nested) ecil_buf_free(&nested);
-  const_scratch_in_use--;
   return ok;
 }  /* ecil_emit_constant_sources */
 
@@ -1057,15 +1144,6 @@ ecil_emit_constant_sources for a single constant.
 }  /* ecil_emit_constant_typed */
 
 
-a_boolean ecil_emit_constant(an_ecil_frame *frame, a_constant_ptr constant)
-/*
-ecil_emit_constant_typed when the target type is not known.
-*/
-{
-  return ecil_emit_constant_typed(frame, constant, 0);
-}  /* ecil_emit_constant */
-
-
 /* String literals. */
 
 uint32_t ecil_string_literal_id(an_ecil_frame *frame, a_constant_ptr constant)
@@ -1073,7 +1151,8 @@ uint32_t ecil_string_literal_id(an_ecil_frame *frame, a_constant_ptr constant)
 Return the G-id of the private constant global that holds a string literal,
 defining it (DECL_VAR + C_STRING + VAR_INIT in the declaration section) the
 first time.  Equal literals (same array type, same bytes) share one global,
-in order of first use.
+in order of first use.  The lookup key is built in a buffer that is kept from
+one literal to the next.
 */
 {
   uint32_t  t = ecil_type_id(frame, constant->type);
@@ -1082,13 +1161,24 @@ in order of first use.
   if (t != 0) {
     size_t    length = (size_t)constant->variant.string.length;
     size_t    n_words = 3 + (length + 3) / 4;
-    uint32_t  *key = (uint32_t *)calloc(n_words, sizeof(uint32_t));
 
-    if (key == NULL) {
+    if (n_words > string_key_capacity) {
+      size_t    new_capacity = n_words * 2;
+      uint32_t  *new_key = (uint32_t *)realloc(string_key,
+                                        new_capacity * sizeof(uint32_t));
+
+      if (new_key != NULL) {
+        string_key = new_key;
+        string_key_capacity = new_capacity;
+      }  /* if */
+    }  /* if */
+    if (n_words > string_key_capacity) {
       ecil_note_unsupported("out of memory in the ECIL writer");
     } else {
-      size_t  i;
+      uint32_t  *key = string_key;
+      size_t    i;
 
+      memset(key, 0, n_words * sizeof(uint32_t));
       key[0] = 0x53545231u;
       key[1] = t;
       key[2] = (uint32_t)length;
@@ -1103,29 +1193,17 @@ in order of first use.
         gid = ecil_new_gid(egk_var);
         if (gid != 0) {
           an_ecil_buffer  *saved;
-          an_ecil_gid_info
-                          *info = ecil_gid_info(gid);
 
           ecil_word_register(key, n_words, gid);
-          info->decl_type = t;
-          info->decl_emitted = TRUE;
+          ecil_emit_decl_var(frame, gid, t, (unsigned int)elk_private,
+                             ECIL_DECL_VAR_DEFINITION | ECIL_DECL_VAR_CONST |
+                             ECIL_DECL_VAR_STRING_LITERAL, 0, name_sid);
           saved = ecil_frame_enter_decl(frame);
-          ecil_rec_begin(frame, eop_decl_var);
-          ecil_arg_uint(frame, gid);
-          ecil_arg_uint(frame, t);
-          ecil_arg_uint(frame, (uint64_t)elk_private);
-          ecil_arg_uint(frame, ECIL_DECL_VAR_DEFINITION |
-                               ECIL_DECL_VAR_CONST |
-                               ECIL_DECL_VAR_STRING_LITERAL);
-          ecil_arg_uint(frame, 0);
-          ecil_arg_uint(frame, name_sid);
-          ecil_rec_end(frame);
           emit_string_bytes(frame, constant, t);
           ecil_rec1(frame, eop_var_init, gid);
           ecil_frame_leave_decl(frame, saved);
         }  /* if */
       }  /* if */
-      free(key);
     }  /* if */
   }  /* if */
   return gid;
@@ -1177,35 +1255,25 @@ member of its struct (a GNU extension: the object is larger than its type).
 }  /* initializes_flexible_array */
 
 
-static void emit_variable_definition(an_ecil_frame     *frame,
-                                     a_variable_ptr    var,
-                                     uint32_t          gid,
-                                     uint32_t          type,
-                                     unsigned int      flags,
-                                     an_initializer_ptr init,
-                                     a_boolean         has_init)
+static void begin_variable_definition(an_ecil_frame *frame,
+                                      a_variable_ptr var,
+                                      uint32_t       gid,
+                                      uint32_t       type,
+                                      unsigned int   flags)
 /*
-Emit DECL_VAR(definition) for a variable that has its G-id and type, then
-its initializer and VAR_INIT.  If the initializer cannot be expressed
-(ecil_unsupported_reason becomes set) a global is re-issued as an
-unsupported declaration (spec 8.11, F1); a static local is left for the
-caller to handle by dropping the function.
+Send DECL_VAR(definition) for a variable that has its G-id and type: the
+introduction of the G-id (a static local is named <function>.<variable>,
+made unique).  The initializer follows in finish_variable_definition.
 */
 {
   a_boolean         is_static_local = var->source_corresp.is_local_to_function;
-  unsigned int      linkage = (unsigned int)elk_external;
+  unsigned int      linkage = ecil_linkage_for(var->storage_class,
+                                    var->source_corresp.name_linkage,
+                                    var->is_weak);
   uint32_t          name_sid = 0;
   const char        *name = ecil_entity_name(&var->source_corresp);
-  an_ecil_gid_info  *info = ecil_gid_info(gid);
-  an_ecil_buffer    *saved;
 
-  if (var->storage_class == (a_storage_class)sc_static ||
-      var->source_corresp.name_linkage == (a_name_linkage_kind)nlk_internal ||
-      is_static_local) {
-    linkage = (unsigned int)elk_internal;
-  } else if (var->is_weak) {
-    linkage = (unsigned int)elk_weak;
-  }  /* if */
+  if (is_static_local) linkage = (unsigned int)elk_internal;
   if (is_const_qualified_type(var->type)) flags |= ECIL_DECL_VAR_CONST;
   if (is_effective_thread_local(var)) flags |= ECIL_DECL_VAR_TLS;
   if (is_static_local) {
@@ -1238,26 +1306,28 @@ caller to handle by dropping the function.
       name_sid = ecil_unique_symbol_name(frame, ".compoundliteral");
     }  /* if */
   }  /* if */
-  saved = ecil_frame_enter_decl(frame);
-  ecil_rec_begin(frame, eop_decl_var);
-  ecil_arg_uint(frame, gid);
-  ecil_arg_uint(frame, type);
-  ecil_arg_uint(frame, linkage);
-  ecil_arg_uint(frame, flags);
-  ecil_arg_uint(frame, (uint64_t)ecil_variable_alignment(var));
-  if (name_sid != 0) {
-    ecil_arg_uint(frame, name_sid);
-  } else {
-    ecil_arg_nil(frame);
-  }  /* if */
-  ecil_rec_end(frame);
-  info->decl_type = type;
-  info->decl_linkage = linkage;
-  info->decl_flags = flags;
-  info->decl_name = name_sid;
-  info->decl_align = (uint32_t)ecil_variable_alignment(var);
-  info->decl_emitted = TRUE;
-  info->flags |= ECIL_GF_DEFINED;
+  ecil_emit_decl_var(frame, gid, type, linkage, flags,
+                     (uint32_t)ecil_variable_alignment(var), name_sid);
+  ecil_gid_info(gid)->flags |= ECIL_GF_DEFINED;
+}  /* begin_variable_definition */
+
+
+static void finish_variable_definition(an_ecil_frame      *frame,
+                                       a_variable_ptr     var,
+                                       uint32_t           gid,
+                                       uint32_t           type,
+                                       an_initializer_ptr init,
+                                       a_boolean          has_init)
+/*
+Send the initializer and VAR_INIT of a variable whose DECL_VAR(definition)
+has been sent.  If the initializer cannot be expressed
+(ecil_unsupported_reason becomes set) a global is re-issued as an
+unsupported declaration (spec 8.11, F1); a static local is left for the
+caller to handle by dropping the function.
+*/
+{
+  an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
+
   if (has_init && initializes_flexible_array(init->constant)) {
     ecil_note_unsupported("an initializer of a flexible array member");
   } else if (has_init && ecil_emit_constant_typed(frame, init->constant,
@@ -1265,45 +1335,40 @@ caller to handle by dropping the function.
     ecil_rec1(frame, eop_var_init, gid);
   }  /* if */
   ecil_frame_leave_decl(frame, saved);
-  if (ecil_unsupported_reason != NULL && !is_static_local) {
-    unsigned int  new_flags = (flags & ~(unsigned int)
-                               ECIL_DECL_VAR_DEFINITION) |
-                              ECIL_DECL_VAR_UNSUPPORTED;
+  if (ecil_unsupported_reason != NULL &&
+      !var->source_corresp.is_local_to_function) {
+    /* The G-id table may have moved while the initializer was built. */
+    const an_ecil_gid_info  *info = ecil_gid_info(gid);
 
-    saved = ecil_frame_enter_decl(frame);
-    ecil_rec_begin(frame, eop_decl_var);
-    ecil_arg_uint(frame, gid);
-    ecil_arg_uint(frame, type);
-    ecil_arg_uint(frame, linkage);
-    ecil_arg_uint(frame, new_flags);
-    ecil_arg_uint(frame, (uint64_t)ecil_variable_alignment(var));
-    if (name_sid != 0) {
-      ecil_arg_uint(frame, name_sid);
-    } else {
-      ecil_arg_nil(frame);
-    }  /* if */
-    ecil_rec_end(frame);
-    ecil_frame_leave_decl(frame, saved);
-    info->decl_flags = new_flags;
-    info->flags &= ~ECIL_GF_DEFINED;
+    ecil_emit_decl_var(frame, gid, type, info->decl_linkage,
+                       (info->decl_flags & ~(unsigned int)
+                                   ECIL_DECL_VAR_DEFINITION) |
+                       ECIL_DECL_VAR_UNSUPPORTED,
+                       (uint32_t)ecil_variable_alignment(var),
+                       info->decl_name);
+    ecil_gid_info(gid)->flags &= ~ECIL_GF_DEFINED;
   }  /* if */
-}  /* emit_variable_definition */
+}  /* finish_variable_definition */
 
 
-void ecil_define_variable(an_ecil_frame *frame,
-                          a_variable_ptr var,
-                          a_scope_ptr    scope)
+static uint32_t prepare_variable_definition(an_ecil_frame      *frame,
+                                            a_variable_ptr     var,
+                                            a_scope_ptr        scope,
+                                            uint32_t           *type_out,
+                                            an_initializer_ptr *init_out,
+                                            a_boolean          *has_init_out)
 /*
-Define a global or static variable: DECL_VAR with the definition flag,
-then its initializer (C_* records and VAR_INIT) if it has one; a definition
-without VAR_INIT is zero-initialized.  A static local is named
-<function>.<variable>, made unique.  A failure sets
-ecil_unsupported_reason (see emit_variable_definition).
+Decide what a definition of the variable is (its type, its initializer if
+any), assign its G-id and send DECL_VAR(definition).  Return the G-id, or 0
+(with ecil_unsupported_reason set if the variable cannot be defined).  A
+failure of the initializer itself comes later, in
+finish_variable_definition.
 */
 {
   an_init_kind        init_kind;
   an_initializer_ptr  init = NULL;
   uint32_t            type;
+  uint32_t            gid = 0;
   unsigned int        flags = ECIL_DECL_VAR_DEFINITION;
   a_boolean           has_init = FALSE;
 
@@ -1338,8 +1403,7 @@ ecil_unsupported_reason (see emit_variable_definition).
     ecil_note_unsupported_type(type, "a record type that is not supported");
   }  /* if */
   if (type != 0 && ecil_unsupported_reason == NULL) {
-    uint32_t  gid = ecil_gid_of(var);
-
+    gid = ecil_gid_of(var);
     if (gid == 0) {
       /* Another IL entry may already be bound to this symbol. */
       gid = ecil_variable_symbol_gid(frame, var);
@@ -1349,11 +1413,120 @@ ecil_unsupported_reason (see emit_variable_definition).
       }  /* if */
       if (gid != 0) ecil_set_gid(var, gid);
     }  /* if */
-    if (gid != 0) {
-      emit_variable_definition(frame, var, gid, type, flags, init, has_init);
-    }  /* if */
+    if (gid != 0) begin_variable_definition(frame, var, gid, type, flags);
+  }  /* if */
+  *type_out = type;
+  *init_out = init;
+  *has_init_out = has_init;
+  return gid;
+}  /* prepare_variable_definition */
+
+
+void ecil_define_variable(an_ecil_frame *frame,
+                          a_variable_ptr var,
+                          a_scope_ptr    scope)
+/*
+Define a global or static variable: DECL_VAR with the definition flag,
+then its initializer (C_* records and VAR_INIT) if it has one; a definition
+without VAR_INIT is zero-initialized.  A static local is named
+<function>.<variable>, made unique.  A failure sets
+ecil_unsupported_reason (see finish_variable_definition).  Static locals the
+initializer refers to are queued, not defined here.
+*/
+{
+  uint32_t            type;
+  an_initializer_ptr  init;
+  a_boolean           has_init;
+  uint32_t            gid = prepare_variable_definition(frame, var, scope,
+                                                        &type, &init,
+                                                        &has_init);
+
+  if (gid != 0) {
+    finish_variable_definition(frame, var, gid, type, init, has_init);
   }  /* if */
 }  /* ecil_define_variable */
+
+
+uint32_t ecil_queue_variable_definition(an_ecil_frame *frame,
+                                        a_variable_ptr var)
+/*
+Introduce a static local that has no declaration statement (__func__, a
+compound literal) and was reached while a constant or an expression was
+being built: assign its G-id and send DECL_VAR(definition) now, so that the
+id is introduced before it is used, and queue the initializer (and VAR_INIT)
+for ecil_drain_variable_definitions.  Return the G-id, or 0 (with the reason
+noted).  The variable counts as defined from here on.
+*/
+{
+  uint32_t            type;
+  an_initializer_ptr  init;
+  a_boolean           has_init;
+  uint32_t            gid = prepare_variable_definition(frame, var, NULL,
+                                                        &type, &init,
+                                                        &has_init);
+
+  if (gid != 0) {
+    if (num_pending_defs == pending_defs_capacity) {
+      size_t                      new_capacity = pending_defs_capacity == 0 ?
+                                        16 : pending_defs_capacity * 2;
+      an_ecil_pending_definition  *grown =
+                (an_ecil_pending_definition *)realloc(pending_defs,
+                    new_capacity * sizeof(an_ecil_pending_definition));
+
+      if (grown != NULL) {
+        pending_defs = grown;
+        pending_defs_capacity = new_capacity;
+      }  /* if */
+    }  /* if */
+    if (num_pending_defs == pending_defs_capacity) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+    } else {
+      an_ecil_pending_definition  *d = &pending_defs[num_pending_defs++];
+
+      d->var = var;
+      d->gid = gid;
+      d->type = type;
+      d->init = init;
+      d->has_init = has_init;
+    }  /* if */
+  }  /* if */
+  return gid;
+}  /* ecil_queue_variable_definition */
+
+
+void ecil_drain_variable_definitions(an_ecil_frame *frame)
+/*
+Build the initializers of the queued static locals, in the order queued
+(building one can queue more; they follow).  Every queued definition is
+completed whatever the state of the caller, because its DECL_VAR has been
+sent; the caller's own reason, if any, is kept and otherwise the first
+failure among the definitions becomes the reason.
+*/
+{
+  if (next_pending_def < num_pending_defs) {
+    an_ecil_saved_reason  caller_reason;
+    an_ecil_saved_reason  failure;
+
+    ecil_save_reason(&caller_reason);
+    failure.is_set = FALSE;
+    while (next_pending_def < num_pending_defs) {
+      an_ecil_pending_definition  d = pending_defs[next_pending_def++];
+
+      finish_variable_definition(frame, d.var, d.gid, d.type, d.init,
+                                 d.has_init);
+      if (ecil_unsupported_reason != NULL) {
+        if (failure.is_set) {
+          ecil_unsupported_reason = NULL;
+        } else {
+          ecil_save_reason(&failure);
+        }  /* if */
+      }  /* if */
+    }  /* while */
+    num_pending_defs = next_pending_def = 0;
+    if (failure.is_set) ecil_restore_reason(&failure);
+    ecil_restore_reason(&caller_reason);
+  }  /* if */
+}  /* ecil_drain_variable_definitions */
 
 
 void ecil_emit_globals(an_ecil_frame *frame)
@@ -1387,6 +1560,7 @@ are not here: they were defined in the frame of their function.
     if (!skip) {
       ecil_unsupported_reason = NULL;
       ecil_define_variable(frame, var, il_header.primary_scope);
+      ecil_drain_variable_definitions(frame);
       if (ecil_unsupported_reason != NULL) {
         char  message[400];
 

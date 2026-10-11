@@ -520,14 +520,25 @@ or variable is dropped, and dropped definitions are errors unless
 1. **GNU builtins in v0.** Accept the roughly 16 GNU builtins as part of
    v0? They are needed by glibc's `<math.h>`/byteswap macros and by the
    corpus.
+
+I ACCEPT
+
 2. **Orphan killing.** Make test-harness orphan killing (and a default
    per-program timeout) unconditional for all configs?
+
+YES
+
 3. **libc flag in the builtin tables.** Add a "libc function" flag to the
    FE builtin tables, so the writer's library-builtin rule is derived
    rather than hand-listed? This is an FE change.
+
+YES
+
 4. **Next milestone.** Priority after M2: M3 (C++) as planned, or M5
    memory/concurrency first? The in-process memory result argues for
    per-function lowering early.
+
+M3
 
 ## 9. M2 gate evidence (current tree, box, clean rebuild; `~/edg-cir-config/gate-m2b`)
 

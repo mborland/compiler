@@ -23,6 +23,7 @@ it only creates attributes and an empty module (no recursion, no verifier).
 #include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
+#include "CIRCompat.h"
 #include "cir_module.h"
 
 extern "C" {
@@ -152,13 +153,10 @@ report the problem through session.fail and return nullptr.
                                  : cir::SourceLanguage::C));
     module->setAttr(
         cir::CIRDialect::getLoweringLangOptionsAttrName(),
-        cir::LoweringLangOptionsAttr::get(
-            ctx, /*exceptions=*/(facts.lang_flags & ECIL_LANG_EXCEPTIONS) != 0,
-            /*threadsafe_statics=*/
+        edg_cir::compat::lowering_lang_options(
+            ctx, (facts.lang_flags & ECIL_LANG_EXCEPTIONS) != 0,
             (facts.lang_flags & ECIL_LANG_THREADSAFE_STATICS) != 0,
-            /*cuda=*/false, /*cuda_is_device=*/false, /*hip=*/false,
-            /*gpu_rdc=*/false, /*openmp=*/false,
-            /*openmp_is_target_device=*/false, abi_compat));
+            abi_compat));
     module->setAttr(cir::CIRDialect::getDefaultTlsModelAttrName(),
                     cir::TLSModelAttr::get(ctx,
                                            cir::TLSModel::GeneralDynamic));
@@ -183,21 +181,23 @@ cir.int_type_width (when the role and its integer type are known).
     mlir::Builder b(&session.module->context);
 
     for (const auto &entry : session.type_roles) {
-      auto width = session.int_widths.find(entry.second);
+      const ecil::a_gid_entry *type =
+          session.reader->ids().find_gid(entry.second);
+      bool is_int = type != nullptr && type->kind == ecil::gk_int;
       if (entry.first == etr_va_list) {
         /* The va_list role names an array type, not an integer type. */
-      } else if (width == session.int_widths.end()) {
+      } else if (!is_int) {
         session.fail(EDG_CIR_ERROR_FORMAT, edc_format,
                      "HDR_TYPE_ROLE names a type that is not an integer "
                      "type introduced earlier");
       } else if (entry.first == etr_size_t) {
         module->setAttr(cir::CIRDialect::getSizeTypeWidthAttrName(),
                         b.getI32IntegerAttr(static_cast<int32_t>(
-                                                         width->second)));
+                                                         type->extent)));
       } else if (entry.first == etr_int) {
         module->setAttr(cir::CIRDialect::getIntTypeWidthAttrName(),
                         b.getI32IntegerAttr(static_cast<int32_t>(
-                                                         width->second)));
+                                                         type->extent)));
       }
     }
   }

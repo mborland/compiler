@@ -30,9 +30,25 @@ the output of its commands (the .rt.tar.gz files of the run):
 The M2 gate needs the smoke list to be 100% PASS and FE_CRASH and LIB_CRASH to
 be 0 over the corpus.
 
+C++ tests (the M3 corpus, .cpp/.cc/... sources) are bucketed the same way, and
+a run that has any also prints:
+
+  - the pass rate per C++ language mode (the --c++NN option of the case);
+  - the failing tests by C++ feature (exceptions, virtual functions and
+    vtables, RTTI, member pointers, coroutines, static initialization,
+    operator new/delete, libstdc++ symbols, ...), from the diagnostic or the
+    undefined symbol (linker messages carry the kind of the mangled name:
+    `_ZTV...` is a vtable, `_ZTI...` typeinfo, ...).
+
+The reference configuration (--reference, default tests/expectations/
+edg_x86_64, whose imported.log also lists the gnu/cpp tests) is matched per
+test case (path and options), as a C++ test has one case per language mode.
+A run with only C tests prints what it always did.
+
 Usage:
   edg-cir-summary [RUN_DIR [CONFIG]] [--top N] [--list BUCKET]
                   [--compare OTHER_RUN_DIR] [--json FILE]
+                  [--language {all,c,cxx}]
 
 RUN_DIR is tests/runs/<timestamp> (default: the newest one); CONFIG is a
 directory in it (default: every config whose name contains "cir").
@@ -86,15 +102,77 @@ _ASM_REGEX = re.compile(
 _CIR_LINE_REGEX = re.compile(r'(CIR back end|edg-cir|ecil-dump)\b')
 _ERROR_LINE_REGEX = re.compile(r'(?i)\b(error|catastrophic error)\b')
 
+# Source extensions of the C++ tests (the C ones are .c).
+_CXX_EXTENSIONS = ('.cpp', '.cc', '.cxx', '.c++', '.cp', '.C')
+_LANGUAGE_OPTION_REGEX = re.compile(r'--c\+\+(\d\d|\w+)\b')
+
+# An Itanium mangled name in a message, and the names of the entities that
+# the C++ run time and the code generator need (not mangled in the usual
+# way): they decide which kind of symbol a link error is about.
+_MANGLED_REGEX = re.compile(r'\b_Z[A-Za-z0-9_$.]*')
+_MANGLED_KINDS = (
+  (re.compile(r'^_ZTV'), 'vtable'),
+  (re.compile(r'^_ZTT'), 'vtt'),
+  (re.compile(r'^_ZTI'), 'typeinfo'),
+  (re.compile(r'^_ZTS'), 'typeinfo-name'),
+  (re.compile(r'^_ZGV'), 'guard'),
+  (re.compile(r'^_Z(nw|na|dl|da)[A-Za-z]'), 'new-delete'),
+  (re.compile(r'^_Z(N|S)t'), 'libstdc++'),
+  (re.compile(r'^_ZN.*[CD][0-5]E'), 'structor'),
+  (re.compile(r'^_ZTh|^_ZTv|^_ZTc'), 'thunk')
+)
+
+# C++ features, for the "by feature" table: the first regex that matches the
+# normalized message decides.
+_FEATURE_REGEXES = (
+  ('exceptions', re.compile(
+    r'\bthrow\b|\btry\b|\bcatch\b|exception|landing ?pad|unwind|'
+    r'__cxa_(throw|begin_catch|end_catch|rethrow)|__gxx_personality',
+    re.IGNORECASE)),
+  ('vtables/virtual', re.compile(
+    r'virtual|vtable|vptr|<mangled:(vtable|vtt|thunk)>', re.IGNORECASE)),
+  ('rtti', re.compile(
+    r'typeid|dynamic_cast|typeinfo|\bRTTI\b|__dynamic_cast|'
+    r'<mangled:typeinfo(-name)?>', re.IGNORECASE)),
+  ('member pointers', re.compile(
+    r'member pointer|pointer[- ]to[- ]member|ptrmem', re.IGNORECASE)),
+  ('coroutines', re.compile(r'coroutine|co_await|co_yield|co_return',
+                            re.IGNORECASE)),
+  ('static initialization', re.compile(
+    r'static (init|local)|guard|dynamic init|__cxa_(atexit|guard)|'
+    r'global (constructor|destructor)|<mangled:guard>', re.IGNORECASE)),
+  ('constructors/destructors', re.compile(
+    r'constructor|destructor|<mangled:structor>', re.IGNORECASE)),
+  ('operator new/delete', re.compile(
+    r'operator (new|delete)|new-expression|delete-expression|'
+    r'<mangled:new-delete>', re.IGNORECASE)),
+  ('libstdc++ symbols', re.compile(r'<mangled:libstdc\+\+>')),
+  ('modules', re.compile(r'\bmodule|header unit', re.IGNORECASE)),
+  ('lambdas', re.compile(r'lambda|closure', re.IGNORECASE)),
+  ('templates', re.compile(r'template|instantiat', re.IGNORECASE)),
+  ('atomics', re.compile(r'atomic', re.IGNORECASE))
+)
+
 
 class TestResult:
   def __init__(self, path: str, status: str, bucket: str,
-               message: str) -> None:
+               message: str, variant: str = '') -> None:
     self.ref_fail = False
     self.path = path
     self.status = status
     self.bucket = bucket
     self.message = message
+    self.variant = variant
+    self.language = 'cxx' if path.endswith(_CXX_EXTENSIONS) else 'c'
+
+
+def _mangled_token(match: 're.Match[str]') -> str:
+  '''Replace a mangled name by a token that keeps what kind of symbol it is.'''
+  name = match.group(0)
+  for regex, kind in _MANGLED_KINDS:
+    if regex.search(name):
+      return f"<mangled:{kind}>"
+  return '<mangled>'
 
 
 def _normalize_message(line: str) -> str:
@@ -105,6 +183,7 @@ def _normalize_message(line: str) -> str:
   line = re.sub(r'"[A-Za-z_][A-Za-z_0-9:]*"', '"<id>"', line)
   line = re.sub(r"'[A-Za-z_][A-Za-z_0-9:]*'", "'<id>'", line)
   line = re.sub(r'0x[0-9a-fA-F]+', '0xN', line)
+  line = _MANGLED_REGEX.sub(_mangled_token, line)
   line = re.sub(r'\b\d+\b', 'N', line)
   line = re.sub(r'\s+', ' ', line)
   return line[:160]
@@ -118,17 +197,18 @@ def _first_matching_line(text: str,
   return None
 
 
-def _read_case_outputs(tar_file: tarfile.TarFile) -> List[Tuple[int, str]]:
-  '''Return [(command index, output text)] for case 1 (the usual case).'''
-  outputs = []
+def _read_case_outputs(tar_file: tarfile.TarFile
+                       ) -> Dict[int, Dict[int, str]]:
+  '''Return {case number: {command index: output text}} of every case.'''
+  outputs: Dict[int, Dict[int, str]] = defaultdict(dict)
   for member in tar_file.getmembers():
     match = re.match(r'cases/(\d+)/(\d+)/output\.txt$', member.name)
-    if match and match.group(1) == '1':
+    if match:
       extracted = tar_file.extractfile(member)
       assert extracted is not None
-      outputs.append((int(match.group(2)),
-                      extracted.read().decode('utf-8', errors = 'replace')))
-  return sorted(outputs)
+      outputs[int(match.group(1))][int(match.group(2))] = \
+        extracted.read().decode('utf-8', errors = 'replace')
+  return outputs
 
 
 def classify(status: str, compile_output: str,
@@ -188,15 +268,59 @@ def load_config_results(config_dir: Path) -> List[TestResult]:
       extracted = tar_file.extractfile('metadata.json')
       assert extracted is not None
       metadata = json.load(extracted)
-      outputs = dict(_read_case_outputs(tar_file))
+      case_outputs = _read_case_outputs(tar_file)
     test_path = metadata.get('path', str(tar_path))
-    for case in metadata.get('cases', []):
+    # A test has one case per option set (for C++ tests, one per language
+    # mode); case N of the metadata is cases/N/ in the archive.
+    for number, case in enumerate(metadata.get('cases', []), start = 1):
       status = case['status']['result']
+      outputs = case_outputs.get(number, {})
       compile_output = outputs.get(1, '')
       run_output = outputs.get(2, '')
       bucket, message = classify(status, compile_output, run_output)
-      results.append(TestResult(test_path, status, bucket, message))
+      results.append(TestResult(test_path, status, bucket, message,
+                                case['status'].get('variant', '')))
   return results
+
+
+def cxx_feature(result: TestResult) -> str:
+  '''The C++ feature a failing test's message is about ("other" if none).'''
+  for feature, regex in _FEATURE_REGEXES:
+    if regex.search(result.message):
+      return feature
+  return 'other'
+
+
+def language_mode(result: TestResult) -> str:
+  '''The --c++NN option of the case ("default" if it has none).'''
+  match = _LANGUAGE_OPTION_REGEX.search(result.variant)
+  return f"c++{match.group(1)}" if match else 'default'
+
+
+def print_cxx_tables(results: List[TestResult], top: int) -> None:
+  '''Print the C++ tables: pass rate per language mode, failures by feature.
+
+  Only the C++ tests are counted; C tests of a mixed run are left out.
+  '''
+  cxx = [r for r in results if r.language == 'cxx']
+  by_mode: Dict[str, Counter] = defaultdict(Counter)
+  for result in cxx:
+    by_mode[language_mode(result)][result.bucket] += 1
+  print(f"  C++ tests: {len(cxx)} cases; pass rate per language mode:")
+  for mode in sorted(by_mode):
+    sub = by_mode[mode]
+    print(f"    {mode:<10} {sub['PASS']:>5}/{sum(sub.values()):<5}")
+
+  features: Dict[str, Counter] = defaultdict(Counter)
+  for result in cxx:
+    if result.bucket != 'PASS':
+      features[cxx_feature(result)][result.bucket] += 1
+  if features:
+    print('  C++ failures by feature (cases; buckets in brackets):')
+    for feature in sorted(features, key = lambda f: -sum(features[f].values())):
+      sub = features[feature]
+      detail = ', '.join(f"{b} {sub[b]}" for b in BUCKETS if sub[b])
+      print(f"    {feature:<26} {sum(sub.values()):>5}  [{detail}]")
 
 
 def print_summary(config: str, results: List[TestResult], top: int) -> None:
@@ -227,6 +351,9 @@ def print_summary(config: str, results: List[TestResult], top: int) -> None:
     for message, count in messages.most_common(top):
       print(f"    {count:>5}  {message}")
 
+  if any(r.language == 'cxx' for r in results):
+    print_cxx_tables(results, top)
+
   gate = counts['FE_CRASH'] + counts['LIB_CRASH']
   print(f"  gate: crashes/assertions = {gate} (must be 0); "
         f"pass rate = {counts['PASS']}/{total}")
@@ -243,21 +370,34 @@ def print_summary(config: str, results: List[TestResult], top: int) -> None:
                     if ref_counts[b]))
 
 
-def load_reference_failures(reference_dir: Path) -> set:
-  '''Return the test paths that do not PASS in a reference configuration.
+def load_reference_failures(reference_dir: Path) -> Dict[str, set]:
+  '''Return the failing cases of a reference configuration.
 
   reference_dir is a tests/expectations/<config> directory, whose <suite>.log
-  files list the tests whose status is not a plain pass.  Paths are returned
-  as "<suite>/<path>", like the run's metadata.
+  files list the cases whose status is not a plain pass.  The result maps
+  "<suite>/<path>", like the run's metadata, to the set of the options of its
+  failing cases (the third field of a line, like the case's "variant").
   '''
-  failing = set()
+  failing: Dict[str, set] = defaultdict(set)
   for log_file in reference_dir.glob('*.log'):
     suite = log_file.stem
     for line in log_file.read_text(errors = 'replace').splitlines():
       parts = line.split(':')
       if len(parts) >= 4 and not parts[3].startswith('PASS'):
-        failing.add(f"{suite}/{parts[0]}")
+        failing[f"{suite}/{parts[0]}"].add(parts[2])
   return failing
+
+
+def fails_in_reference(result: TestResult, reference: Dict[str, set]) -> bool:
+  '''Whether the case of a result also fails in the reference.
+
+  A C test (one case) fails if its path is listed.  A C++ test has a case per
+  language mode, so its case must be listed with the same options.
+  '''
+  variants = reference.get(result.path)
+  if variants is None:
+    return False
+  return result.language == 'c' or result.variant in variants
 
 
 def newest_run(runs_dir: Path) -> Path:
@@ -282,6 +422,9 @@ def main() -> None:
                       help = 'expectations directory of the reference config '
                              '(failures there are expected: they are '
                              'counted separately); "" to disable')
+  parser.add_argument('--language', choices = ('all', 'c', 'cxx'),
+                      default = 'all',
+                      help = 'summarize only the C or only the C++ tests')
   parser.add_argument('--json', dest = 'json_file', default = None,
                       help = 'also write the results to this file')
   args = parser.parse_args()
@@ -294,14 +437,16 @@ def main() -> None:
     sorted(p.name for p in run_dir.iterdir()
            if p.is_dir() and 'cir' in p.name)
   )
-  reference = set()
+  reference: Dict[str, set] = {}
   if args.reference and Path(args.reference).is_dir():
     reference = load_reference_failures(Path(args.reference))
   all_results: Dict[str, List[TestResult]] = {}
   for config in configs:
     results = load_config_results(run_dir / config)
+    if args.language != 'all':
+      results = [r for r in results if r.language == args.language]
     for result in results:
-      result.ref_fail = result.path in reference
+      result.ref_fail = fails_in_reference(result, reference)
     all_results[config] = results
     print_summary(config, results, args.top)
     if args.list_bucket:
@@ -310,15 +455,19 @@ def main() -> None:
         if result.bucket == args.list_bucket:
           print(f"    {result.path}  [{result.status}] {result.message}")
     if args.compare:
+      def case_key(result: TestResult) -> str:
+        # A C++ test has a case per language mode.
+        return result.path if result.language == 'c' else \
+          f"{result.path} [{result.variant}]"
       before = {
-        r.path: r.bucket
+        case_key(r): r.bucket
         for r in load_config_results(Path(args.compare) / config)
       }
       print(f"  changes since {args.compare}:")
       for result in results:
-        old = before.get(result.path)
+        old = before.get(case_key(result))
         if old is not None and old != result.bucket:
-          print(f"    {result.path}: {old} -> {result.bucket}")
+          print(f"    {case_key(result)}: {old} -> {result.bucket}")
 
   if args.json_file:
     with open(args.json_file, 'w') as file_handle:

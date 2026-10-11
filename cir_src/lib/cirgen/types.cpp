@@ -23,8 +23,6 @@ namespace edg_cir {
 
 namespace {
 
-const uint64_t max_type_gid = uint64_t(1) << 26;
-
 uint64_t align_to(uint64_t value, uint64_t align)
 /*
 Round value up to a multiple of align (align >= 1).
@@ -54,6 +52,15 @@ A malformed stream (semantic error the format layer cannot see).
 {
   return fail(EDG_CIR_ERROR_FORMAT, edc_format, text);
 }  /* a_emitter::format_error */
+
+bool a_emitter::internal(const std::string &text)
+/*
+A failed internal check: something the validator guarantees did not hold.
+*/
+{
+  return fail(EDG_CIR_ERROR_INTERNAL, edc_internal,
+              "internal error in the emitter: " + text);
+}  /* a_emitter::internal */
 
 bool a_emitter::unsupported(const std::string &text)
 /*
@@ -104,22 +111,24 @@ width, sign-extending signed forms and truncating wider ones.
   return result;
 }  /* a_emitter::int_operand_apint */
 
-std::string a_emitter::string_for(const ecil::an_operand &op, bool &ok)
+std::string_view a_emitter::string_for(const ecil::an_operand &op, bool &ok)
 /*
-Resolve a sid operand to its string; nil gives "" (ok stays true).
+Resolve a sid operand to its string (a view into the reader's arena); nil
+gives "" (ok stays true).  The validator checked that every sid was
+introduced, so an unknown one is an internal error.
 */
 {
-  std::string result;
+  std::string_view result;
   uint64_t sid = 0;
 
   ok = true;
   if (op.kind != ecil::an_operand_kind::nil) {
-    auto found = uint_operand(op, sid) ? session_.strings.find(sid)
-                                       : session_.strings.end();
-    if (found == session_.strings.end())
+    if (uint_operand(op, sid) && ids_.has_string(sid)) {
+      result = ids_.string(sid);
+    } else {
       ok = false;
-    else
-      result = found->second;
+      internal("string id used before its STR record");
+    }
   }
   return result;
 }  /* a_emitter::string_for */
@@ -134,12 +143,17 @@ attributes).
   : session_(session), cm_(*session.module), ctx_(&session.module->context),
     module_(session.module->module.get()), builder_(*ctx_),
     layout_(module_), loc_(mlir::UnknownLoc::get(ctx_)), reg_bits_(64),
-    cheap_unaligned_(false), c_language_(true)
+    cheap_unaligned_(false), c_language_(true), ids_(session.reader->ids())
 {
   reg_bits_ = session.header.reg_bits != 0 ? session.header.reg_bits : 64;
   cheap_unaligned_ = (session.header.target_flags &
                       ECIL_TARGET_CHEAP_UNALIGNED_BF) != 0;
   c_language_ = session.header.language == elang_c;
+  unit_attr_ = builder_.getUnitAttr();
+  nothrow_name_ = mlir::StringAttr::get(ctx_,
+                                        cir::CIRDialect::getNoThrowAttrName());
+  noreturn_name_ = mlir::StringAttr::get(
+                      ctx_, cir::CIRDialect::getNoReturnAttrName());
   builder_.setInsertionPointToEnd(module_.getBody());
 }  /* a_emitter::a_emitter */
 
@@ -147,32 +161,76 @@ attributes).
 
 a_type *a_emitter::type_at(uint64_t gid)
 /*
-Return the type with this gid, or nullptr if it was not introduced.
+The type object of a type G-id.  The validator guarantees that every type
+operand names an introduced type, so a miss is an internal error.
 */
 {
   a_type *result = nullptr;
+  const ecil::a_gid_entry *entry = ids_.find_gid(gid);
 
-  if (gid < types_.size() && types_[gid].kind != a_type_kind::none)
-    result = &types_[gid];
+  if (entry == nullptr || entry->payload == nullptr ||
+      entry->kind == ecil::gk_func || entry->kind == ecil::gk_var)
+    internal("type G-id " + std::to_string(gid) + " has no type object");
+  else
+    result = static_cast<a_type *>(entry->payload);
   return result;
 }  /* a_emitter::type_at */
 
 a_type *a_emitter::new_type(uint64_t gid)
 /*
-Reserve the slot of a newly introduced type (nullptr if gid is invalid or
-already introduced).
+Create the type object of a newly introduced type and hang it on the G-id's
+payload slot (the validator already introduced the G-id once).
 */
 {
   a_type *result = nullptr;
+  ecil::a_gid_entry *entry = ids_.find_gid(gid);
 
-  if (gid != 0 && gid < max_type_gid) {
-    if (gid >= types_.size())
-      types_.resize(gid + 1);
-    if (types_[gid].kind == a_type_kind::none)
-      result = &types_[gid];
+  if (entry == nullptr || entry->payload != nullptr) {
+    internal("type G-id " + std::to_string(gid) +
+             " was not introduced or has an object already");
+  } else {
+    type_store_.emplace_back();
+    result = &type_store_.back();
+    entry->payload = result;
   }
   return result;
 }  /* a_emitter::new_type */
+
+a_local *a_emitter::local_at(uint64_t l)
+/*
+The local object of a value L-id of the current function (validated: LREF
+names a live value).
+*/
+{
+  a_local *result = nullptr;
+  ecil::a_lid_entry *entry = ids_.find_lid(l);
+
+  if (entry == nullptr || entry->payload == nullptr ||
+      entry->state != ecil::ls_value)
+    internal("L-id " + std::to_string(l) + " has no local object");
+  else
+    result = static_cast<a_local *>(entry->payload);
+  return result;
+}  /* a_emitter::local_at */
+
+a_local *a_emitter::new_local(uint64_t l)
+/*
+Create the local object of a value L-id the validator just introduced.
+*/
+{
+  a_local *result = nullptr;
+  ecil::a_lid_entry *entry = ids_.find_lid(l);
+
+  if (entry == nullptr || entry->state != ecil::ls_value ||
+      entry->payload != nullptr) {
+    internal("L-id " + std::to_string(l) + " was not introduced as a value");
+  } else {
+    local_store_.emplace_back();
+    result = &local_store_.back();
+    entry->payload = result;
+  }
+  return result;
+}  /* a_emitter::new_local */
 
 uint64_t a_emitter::type_size(mlir::Type t)
 /*
@@ -217,15 +275,13 @@ bool a_emitter::type_is_complete(mlir::Type t) const
 /*
 True unless t is a record without a body or an array of one: computing the
 size, alignment or storage of such a type is a front-end contract violation.
+Arrays are peeled with a loop.
 */
 {
-  bool complete = true;
-
-  if (auto record = mlir::dyn_cast<cir::RecordType>(t))
-    complete = record.isComplete();
-  else if (auto array = mlir::dyn_cast<cir::ArrayType>(t))
-    complete = type_is_complete(array.getElementType());
-  return complete;
+  while (auto array = mlir::dyn_cast<cir::ArrayType>(t))
+    t = array.getElementType();
+  auto record = mlir::dyn_cast<cir::RecordType>(t);
+  return record == nullptr || record.isComplete();
 }  /* a_emitter::type_is_complete */
 
 uint32_t a_emitter::derived_align(uint32_t base, uint64_t offset) const
@@ -270,12 +326,10 @@ Handle one type introduction record (TY_*, except the body records).
   a_type *t;
 
   if (!uint_operand(r.ops[0], gid)) {
-    ok = format_error("type id must be an unsigned integer");
+    ok = internal("type id must be an unsigned integer");
   } else {
     t = new_type(gid);
-    if (t == nullptr)
-      ok = format_error("type id " + std::to_string(gid) +
-                        " is invalid or introduced twice");
+    ok = t != nullptr;
   }
   if (ok) switch (r.opcode) {
   case eop_ty_void:
@@ -332,7 +386,7 @@ Handle one type introduction record (TY_*, except the body records).
     uint_operand(r.ops[1], a);
     pointee = type_at(a);
     if (pointee == nullptr) {
-      ok = format_error("TY_PTR names an unknown pointee type");
+      ok = false;
     } else {
       t->kind = a_type_kind::pointer_type;
       t->target = a;
@@ -349,7 +403,7 @@ Handle one type introduction record (TY_*, except the body records).
     element = type_at(a);
     uint_operand(r.ops[3], flags);
     if (element == nullptr) {
-      ok = format_error("TY_ARRAY names an unknown element type");
+      ok = false;
     } else {
       uint64_t count = 0;
       if (r.ops[2].kind != ecil::an_operand_kind::nil)
@@ -374,15 +428,14 @@ Handle one type introduction record (TY_*, except the body records).
     uint_operand(r.ops[1], a);
     uint_operand(r.ops[2], flags);
     ret = type_at(a);
-    if (ret == nullptr)
-      ok = format_error("TY_FUNC names an unknown return type");
+    ok = ret != nullptr;
     while (ok && ecil::next_array_element(reader, element)) {
       uint64_t p = 0;
       a_type *param;
       uint_operand(element, p);
       param = type_at(p);
       if (param == nullptr) {
-        ok = format_error("TY_FUNC names an unknown parameter type");
+        ok = false;
       } else {
         t->params.push_back(p);
         inputs.push_back(param->cir);
@@ -401,9 +454,9 @@ Handle one type introduction record (TY_*, except the body records).
     std::string name;
     bool good;
     uint_operand(r.ops[1], a);
-    name = string_for(r.ops[2], good);
+    name = std::string(string_for(r.ops[2], good));
     if (!good) {
-      ok = format_error("TY_RECORD_DECL uses an unknown string id");
+      ok = false;
     } else {
       records_.emplace_back();
       a_record_info &info = records_.back();
@@ -459,13 +512,11 @@ TY_RECORD_BODY: remember the layout facts and await the REC_FIELD records.
 
   uint_operand(r.ops[0], gid);
   t = type_at(gid);
-  if (pending_body_gid_ != 0)
-    ok = format_error("TY_RECORD_BODY before the previous body's fields were "
-                      "complete");
-  else if (t == nullptr || t->kind != a_type_kind::record_type)
-    ok = format_error("TY_RECORD_BODY for a type that is not a record");
-  else if (t->record->complete)
-    ok = format_error("record completed twice");
+  if (t == nullptr)
+    ok = false;
+  else if (pending_body_gid_ != 0 || t->kind != a_type_kind::record_type ||
+           t->record->complete)
+    ok = internal("TY_RECORD_BODY out of step with the validator");
   if (ok) {
     uint_operand(r.ops[1], size);
     uint_operand(r.ops[2], data_size);
@@ -500,7 +551,7 @@ REC_FIELD: append to the record being defined; complete it with the last one.
   bool good = true;
 
   if (t == nullptr || t->record->pending_fields == 0) {
-    ok = format_error("REC_FIELD outside a TY_RECORD_BODY");
+    ok = internal("REC_FIELD outside a TY_RECORD_BODY");
   } else {
     f.type = 0;
     uint_operand(r.ops[0], f.type);
@@ -513,20 +564,18 @@ REC_FIELD: append to the record being defined; complete it with the last one.
       f.bit_offset = static_cast<uint32_t>(v);
     if (f.is_bitfield && uint_operand(r.ops[3], v))
       f.bit_width = static_cast<uint32_t>(v);
-    f.name = string_for(r.ops[4], good);
+    f.name = std::string(string_for(r.ops[4], good));
     uint_operand(r.ops[5], flags);
     f.is_unnamed = (flags & ECIL_FIELD_UNNAMED) != 0 ||
                    r.ops[4].kind == ecil::an_operand_kind::nil;
     f.empty_for_abi = (flags & ECIL_FIELD_EMPTY_FOR_ABI) != 0;
     f.bitfield_signed = (flags & ECIL_FIELD_BITFIELD_SIGNED) != 0;
     f.flexible_array = (flags & ECIL_FIELD_FLEXIBLE_ARRAY) != 0;
-    if (!good)
-      ok = format_error("REC_FIELD uses an unknown string id");
-    else if (type_at(f.type) == nullptr)
-      ok = format_error("REC_FIELD names an unknown type");
+    if (!good || type_at(f.type) == nullptr)
+      ok = false;
     else if (f.is_bitfield &&
              !mlir::isa<cir::IntType, cir::BoolType>(type_at(f.type)->cir))
-      ok = format_error("bit-field member of a non-integer type");
+      ok = internal("bit-field member of a non-integer type");
     else {
       t->record->fields.push_back(f);
       if (--t->record->pending_fields == 0)
@@ -597,7 +646,7 @@ the rest of the size is the union's tail-padding type.
       mlir::Type storage = cir::isValidFundamentalIntWidth(bits)
           ? compat::int_type(ctx_, bits, false)
           : static_cast<mlir::Type>(compat::array_of(byte, bits / 8));
-      mlir::Type declared = types_[f.type].cir;
+      mlir::Type declared = type_at(f.type)->cir;
       cir::BitFieldDeclAttr decl = compat::bitfield_decl(declared, f.bit_width,
                                                          f.is_unnamed);
       type = compat::bitfield_unit(ctx_, storage, {decl});
@@ -613,7 +662,7 @@ the rest of the size is the union's tail-padding type.
       info.size = std::min<unsigned>(f.bit_width, bits);
       info.is_signed = f.bitfield_signed;
     } else {
-      type = types_[f.type].cir;
+      type = type_at(f.type)->cir;
       kind = f.empty_for_abi ? cir::RecordMemberKind::Empty
                              : cir::RecordMemberKind::Data;
     }
@@ -677,7 +726,7 @@ the members.
     return m.data && compat::member_owns_bytes(m.data);
   };
   auto decl_of = [&](const a_field &f) {
-    return compat::bitfield_decl(types_[f.type].cir, f.bit_width,
+    return compat::bitfield_decl(type_at(f.type)->cir, f.bit_width,
                                  f.is_unnamed);
   };
   auto unit_member = [&](uint64_t offset, mlir::Type storage,
@@ -690,7 +739,7 @@ the members.
   };
   auto is_empty_for_layout = [&](const a_field &f) {
     bool result;
-    mlir::Type ft = types_[f.type].cir;
+    mlir::Type ft = type_at(f.type)->cir;
     if (f.is_bitfield)
       result = f.bit_width == 0;
     else
@@ -702,7 +751,7 @@ the members.
   for (size_t i = 0; i < count;) {
     const a_field &f = rec.fields[i];
     if (!f.is_bitfield) {
-      a_member m = {f.byte_offset, types_[f.type].cir,
+      a_member m = {f.byte_offset, type_at(f.type)->cir,
                     f.empty_for_abi ? cir::RecordMemberKind::Empty
                                     : cir::RecordMemberKind::Data,
                     static_cast<int>(i)};
@@ -900,7 +949,7 @@ the members.
         uint64_t storage_bits = type_size(storage) * 8;
         info.name = f.name;
         info.storage = storage;
-        info.declared = types_[f.type].cir;
+        info.declared = type_at(f.type)->cir;
         info.unit_index = static_cast<uint32_t>(rec.members.size() - 1);
         info.unit_offset = m.offset;
         info.offset = static_cast<unsigned>(field_bit_offset(f) -

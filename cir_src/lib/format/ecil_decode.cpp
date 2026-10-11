@@ -77,6 +77,7 @@ Reset operand to nil.
   operand.data = nullptr;
   operand.length = 0;
   operand.count = 0;
+  operand.all_uint = false;
 }  /* clear_operand */
 
 bool take(a_cursor &cursor, size_t n, an_error &error)
@@ -373,9 +374,16 @@ set error.message and return false.
       const uint8_t *body = cursor.p;
       an_operand element;
 
-      for (uint32_t k = 0; k < count && result; ++k)
+      bool all_uint = true;
+      uint64_t ignored = 0;
+
+      for (uint32_t k = 0; k < count && result; ++k) {
         result = decode_scalar(cursor, element, false, error);
+        if (result && !operand_u64(element, ignored))
+          all_uint = false;
+      }
       if (result) {
+        operand.all_uint = all_uint;
         operand.kind = an_operand_kind::array;
         operand.data = body;
         operand.length = static_cast<uint32_t>(cursor.p - body);
@@ -415,6 +423,27 @@ Decode the next element; return false at the end.
   }
   return result;
 }  /* next_array_element */
+
+bool next_uint_element(an_array_reader &reader, uint64_t &value)
+/*
+The next element of an all-unsigned array.
+*/
+{
+  bool result = false;
+
+  if (reader.remaining > 0) {
+    if (*reader.p <= ECIL_TAG_FIXUINT_MAX) {
+      value = *reader.p++;
+      --reader.remaining;
+      result = true;
+    } else {
+      an_operand element;
+      result = next_array_element(reader, element) &&
+               operand_u64(element, value);
+    }
+  }
+  return result;
+}  /* next_uint_element */
 
 bool operand_u64(const an_operand &operand, uint64_t &value)
 /*
@@ -622,13 +651,8 @@ Check operand kinds, flag masks and enumerator ranges against the schema.
       if (op.kind != an_operand_kind::array) {
         problem = "must be an array";
       } else {
-        an_array_reader reader = array_elements(op);
-        an_operand element;
-        uint64_t ev;
-        while (problem == nullptr && next_array_element(reader, element)) {
-          if (!operand_u64(element, ev))
-            problem = "array elements must be unsigned integers";
-        }
+        if (!op.all_uint)
+          problem = "array elements must be unsigned integers";
       }
       break;
     case an_operand_class::floating:

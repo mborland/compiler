@@ -495,6 +495,9 @@ Initialize the option information table.
   add_option_description(optk_ecil_keep_regions, "ecil_keep_regions",
                          '\0', /*value=*/TRUE, /*arg_required=*/FALSE,
                          pchek_none);
+  add_option_description(optk_ecil_allow_cxx, "ecil_allow_cxx",
+                         '\0', /*value=*/TRUE, /*arg_required=*/FALSE,
+                         pchek_none);
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if BACK_END_GENERATES_SOURCE
   /* --msvc_target_version is supported for compatibility but deprecated
@@ -11132,6 +11135,11 @@ Process the arguments on the command line that invoked the compiler.
         check_assertion(opt_value == TRUE);
         ecil_keep_regions = TRUE;
         break;
+      case optk_ecil_allow_cxx:
+        /* Permit C++ (the default is to reject it). */
+        check_assertion(opt_value == TRUE);
+        ecil_allow_cxx = TRUE;
+        break;
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if BACK_END_GENERATES_SOURCE
       case optk_msvc_target_version:
@@ -12942,13 +12950,14 @@ enable_microsoft_mode:
   if (strcmp(opt_arg, "-") == 0) opt_arg = FILE_NAME_FOR_STDIN;
   primary_source_file_name = file_name_from_opt_arg(opt_arg);
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
-  /* The CIR back end handles only C for now.  The language mode is final
-     here, whether C++ was asked for (--c++, --c++NN) or is the default.  This
-     is checked whenever a source file is going to be turned into IL (even
-     with -n/--no_code_gen: the ECIL writer and the region lifecycle still
-     run), and not for invocations without IL (--version,
+  /* The CIR back end handles only C until the C++ support is complete, unless
+     the undocumented option --ecil_allow_cxx is given.  The language mode is
+     final here, whether C++ was asked for (--c++, --c++NN) or is the default.
+     This is checked whenever a source file is going to be turned into IL
+     (even with -n/--no_code_gen: the ECIL writer and the region lifecycle
+     still run), and not for invocations without IL (--version,
      --dump_configuration, preprocessing only). */
-  if (!C_mode() && !do_preprocessing_only) {
+  if (!C_mode() && !do_preprocessing_only && !ecil_allow_cxx) {
     str_command_line_error(ec_cir_error, "C++ is not supported yet");
   }  /* if */
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
@@ -13504,6 +13513,7 @@ variables declared in cmd_line.h.
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
   ecil_output_file_name = NULL;
   ecil_keep_regions = FALSE;
+  ecil_allow_cxx = FALSE;
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   precompiled_header_processing_required = FALSE;
   create_precompiled_header = FALSE;

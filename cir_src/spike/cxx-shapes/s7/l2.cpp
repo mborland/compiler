@@ -1,0 +1,12 @@
+struct B { int a; char c; B(); };
+struct D : B { char d; };
+struct E1 { E1(); };
+struct E2 : E1 { int x; };
+struct F : E1 { E1 e; int x; };
+struct B2 { B b; char z; };
+struct D2 : B { B inner; };
+struct D3 : D { char e; };
+struct E5 : E1 { };
+struct G : B, E1 { short s; };
+D gd; E2 ge2; F gf; B2 gb2; D2 gd2; D3 gd3; E5 ge5; G gg;
+unsigned long sizes[] = { sizeof(D), sizeof(B2), sizeof(D2), sizeof(D3), sizeof(G) };

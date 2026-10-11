@@ -209,6 +209,34 @@ for the reader limit.
   return result;
 }  /* a_id_tables::touch_lid */
 
+void a_id_tables::add_base(uint32_t record, uint32_t base, uint64_t offset)
+/*
+Remember a direct base subobject of a record.
+*/
+{
+  a_base_rec entry = {base, offset};
+
+  bases_[record].push_back(entry);
+}  /* a_id_tables::add_base */
+
+bool a_id_tables::has_base(uint32_t record, uint32_t base,
+                           uint64_t offset) const
+/*
+True if the record has a direct base of that type at that offset.
+*/
+{
+  bool found = false;
+  auto it = bases_.find(record);
+
+  if (it != bases_.end()) {
+    for (const a_base_rec &b : it->second) {
+      if (b.base == base && b.offset == offset)
+        found = true;
+    }
+  }
+  return found;
+}  /* a_id_tables::has_base */
+
 bool a_id_tables::bind_symbol(std::string_view text, uint32_t g,
                               uint32_t &other)
 /*

@@ -1216,6 +1216,10 @@ Handle one expression record.
     mlir::Value stored;
     uint64_t result_kind = 0;
     uint_operand(r.ops[1], result_kind);
+    if (!v1_flags(r.ops[0], ECIL_STORE_INIT | ECIL_STORE_DSIZE, "STORE")) {
+      ok = false;
+      break;
+    }
     if (!pop_prvalue(value) || !pop_glvalue(target)) {
       ok = false;
       break;

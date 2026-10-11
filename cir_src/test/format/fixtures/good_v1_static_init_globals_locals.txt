@@ -1,0 +1,39 @@
+; Each STATIC_INIT in F_GLOBALS has its own L-id space; a conditional cleanup is enclosed by a FULLEXPR inside it.
+ecil 0.8 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  STR 2 "v"
+  STR 3 "w"
+  DECL_VAR 25 1 0 1 4 2
+  DECL_VAR 26 1 0 1 4 3
+frame GLOBALS
+  STATIC_INIT_BEGIN 25 0
+  LOCAL 1 1 nil 4 0
+  LREF 1
+  CONST_INT 1 5
+  STORE 0 0
+  FULLEXPR_BEGIN
+  MATERIALIZE_TEMP 2 1
+  CONST_INT 1 1
+  TO_BOOL
+  TERN_BEGIN 1
+  CLEANUP_BEGIN 1 nil 0
+  CLEANUP_BODY
+  CONST_INT 1 1
+  TERN_ELSE
+  CONST_INT 1 2
+  TERN_END
+  FULLEXPR_END
+  DROP
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 26 0
+  LOCAL 1 1 nil 4 0
+  LREF 1
+  DROP
+  STATIC_INIT_END
+frame END
+  END 3 0

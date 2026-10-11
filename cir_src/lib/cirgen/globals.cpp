@@ -273,7 +273,9 @@ renames the entity (spec 7); the new name is applied at finish.
   name = string_for(r.ops[4], good);
   t = type_at(tgid);
   entry = ids_.find_gid(gid);
-  if (!good || t == nullptr || entry == nullptr ||
+  if (!v1_flags(r.ops[3], ECIL_DECL_FUNC_COMDAT, "DECL_FUNC")) {
+    ok = false;
+  } else if (!good || t == nullptr || entry == nullptr ||
       entry->kind != ecil::gk_func) {
     ok = good && t != nullptr ? internal("DECL_FUNC out of step with the "
                                          "validator") : false;
@@ -355,7 +357,10 @@ Create or update a variable entity (a cir.global).
   t = type_at(tgid);
   is_definition = (flags & ECIL_DECL_VAR_DEFINITION) != 0;
   entry = ids_.find_gid(gid);
-  if (!good || t == nullptr) {
+  if (!v1_flags(r.ops[3], ECIL_DECL_VAR_COMDAT | ECIL_DECL_VAR_GUARDED,
+                "DECL_VAR")) {
+    ok = false;
+  } else if (!good || t == nullptr) {
     ok = false;
   } else if (entry == nullptr || entry->kind != ecil::gk_var) {
     ok = internal("DECL_VAR out of step with the validator");

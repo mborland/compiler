@@ -119,6 +119,7 @@ enum an_option_kind {
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
   optk_ecil_output,
   optk_ecil_keep_regions,
+  optk_ecil_allow_cxx,
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   optk_create_pch,
   optk_use_pch,
@@ -1392,6 +1393,12 @@ EXTERN_THREAD a_boolean
 			/* TRUE if IL memory regions should not be freed after
 			   they are streamed (--ecil_keep_regions; also set by
 			   --il_display, which needs the IL after streaming). */
+EXTERN_THREAD a_boolean
+		ecil_allow_cxx;
+			/* TRUE if C++ may be compiled (--ecil_allow_cxx, an
+			   undocumented option for developing the C++ support
+			   of the CIR back end).  The default is FALSE, which
+			   makes C++ an error. */
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 EXTERN_THREAD a_boolean

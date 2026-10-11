@@ -55,6 +55,13 @@ STANDARD_OPTIONS = [
   '-DTEST_NUMBER=1', '--gnu_version=999999', '-e', '200', '--no_wrap',
   '--no_wrap_diagnostics', '--gcc'
 ]
+# The options edgy gives the C++ tests of the GNU testsuite: --gcc would
+# select C in eccp, so C++ runs use -tused and a GNU version instead.
+STANDARD_CXX_OPTIONS = [
+  '-DTEST_NUMBER=1', '--gnu_version=999999', '-tused', '-e', '200',
+  '--no_wrap', '--no_wrap_diagnostics'
+]
+DEFAULT_FILTERS = '@tests/.edgy/filters/cir-c-smoke.txt,cir/writer'
 _BAD_OUTPUT_REGEX = re.compile(
   r'AddressSanitizer|LeakSanitizer|Assertion failed|assertion failed at|'
   r'internal error|Segmentation fault|SIGSEGV|SIGABRT'
@@ -131,8 +138,8 @@ def compile_to_stream(source: Path, options: List[str], env: Dict[str, str],
   return rc, output, stream.read_bytes() if stream.exists() else None
 
 
-def check_case(test: Path, tests_dir: Path, env: Dict[str, str]
-               ) -> List[str]:
+def check_case(test: Path, tests_dir: Path, env: Dict[str, str],
+               standard: List[str] = STANDARD_OPTIONS) -> List[str]:
   '''Return the problems of every case of a test (empty if none).'''
   problems: List[str] = []
   top = tests_dir / test.relative_to(tests_dir).parts[0]
@@ -140,7 +147,7 @@ def check_case(test: Path, tests_dir: Path, env: Dict[str, str]
   name = test.relative_to(tests_dir).as_posix()
   for number, (mode, base_options, case_options) in enumerate(
       description.traverse_cases()):
-    options = [*STANDARD_OPTIONS, *base_options, *case_options]
+    options = [*standard, *base_options, *case_options]
     work = Path(tempfile.mkdtemp(prefix = 'writer-stress.'))
     try:
       rc_ref, out_ref, stream_ref = compile_to_stream(
@@ -172,11 +179,12 @@ def check_case(test: Path, tests_dir: Path, env: Dict[str, str]
 def main() -> None:
   parser = argparse.ArgumentParser(description = __doc__.split('\n')[0])
   parser.add_argument('--root', default = '.')
-  parser.add_argument('--filters',
-                      default = '@tests/.edgy/filters/cir-c-smoke.txt,'
-                                'cir/writer',
+  parser.add_argument('--filters', default = DEFAULT_FILTERS,
                       help = '"@file" lists and path prefixes, comma '
                              'separated')
+  parser.add_argument('--cxx', action = 'store_true',
+                      help = 'the C++ variant: compile the C++ tests (the C++ '
+                             'smoke list and cir/writer) as C++')
   parser.add_argument('--fe-build', default = 'build/gcc-cir',
                       help = 'the (ASan) front end build to stress')
   parser.add_argument('-j', dest = 'jobs', type = int,
@@ -192,12 +200,22 @@ def main() -> None:
   env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
   env['ECCP'] = str(root / 'util/eccp.sh')
   env['CPFE'] = exports['CPFE_CIR']
-  tests = find_tests(tests_dir, read_filter_list(args.filters, root))
+  standard = STANDARD_OPTIONS
+  filters = args.filters
+  if args.cxx:
+    # The C++ variant: the C++ smoke list and the C++ writer tests.
+    standard = STANDARD_CXX_OPTIONS
+    if filters == DEFAULT_FILTERS:
+      filters = '@tests/.edgy/filters/cir-cpp-smoke.txt,cir/writer'
+  tests = find_tests(tests_dir, read_filter_list(filters, root))
+  if args.cxx:
+    tests = [t for t in tests if t.suffix in ('.cpp', '.cc', '.C', '.cxx')]
   print(f"stressing {len(tests)} tests with {args.jobs} jobs", flush = True)
 
   problems: List[str] = []
   with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
-    for result in pool.map(lambda t: check_case(t, tests_dir, env), tests):
+    for result in pool.map(
+        lambda t: check_case(t, tests_dir, env, standard), tests):
       problems.extend(result)
   for problem in sorted(problems):
     print(f"FAIL {problem}")

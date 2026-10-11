@@ -69,7 +69,8 @@ enum a_gid_flag : uint8_t {
   gf_has_count = 4,   /* Array with a count. */
   gf_named     = 8,   /* Declaration: the effective name is set. */
   gf_defined   = 16,  /* Function: FUNC_BEGIN seen.  Variable: defining. */
-  gf_owns_name = 32   /* Declaration: owns its external symbol name. */
+  gf_owns_name = 32,  /* Declaration: owns its external symbol name. */
+  gf_in_group  = 128  /* Function: member of a STRUCTOR pair. */
 };  /* a_gid_flag */
 
 /* One G-id (index = the id).  Types use element and extent; function and
@@ -79,14 +80,34 @@ struct a_gid_entry {
   uint8_t   kind;      /* a_gid_kind. */
   uint8_t   flags;     /* a_gid_flag bits. */
   uint8_t   linkage;   /* Declaration: the latest linkage. */
-  uint8_t   spare;
-  uint32_t  element;   /* Array: element G-id.  Declaration: its type. */
+  uint8_t   role;      /* STRUCTOR: 1 complete (C1/D1), 2 base (C2/D2). */
+  uint32_t  element;   /* Array: element G-id.  Declaration: its type.
+                          Function type: the return type. */
   uint64_t  extent;    /* Record: field count.  Array: count.  Int: bits. */
   uint32_t  name_sid;  /* Declaration: the effective name's sid (0: none). */
-  uint32_t  spare2;
+  uint32_t  decl_flags;  /* Declaration: the latest DECL_* flags. */
   void     *payload;   /* Owner data (the emitter's objects); null in
                           ecil-dump. */
 };  /* a_gid_entry */
+
+/* a_gid_entry::role of a function: the STRUCTOR role bits. */
+enum a_structor_role : uint8_t {
+  sr_complete = 1,    /* C1/D1. */
+  sr_base     = 2,    /* C2/D2. */
+  sr_vbases   = 4     /* The pair has virtual bases (M4). */
+};  /* a_structor_role */
+
+/* a_gid_entry::role of a variable. */
+enum a_var_role : uint8_t {
+  vr_var_init    = 1,   /* VAR_INIT seen. */
+  vr_static_init = 2    /* STATIC_INIT_BEGIN seen (at most one per variable;
+                           with a VAR_INIT it may hold only the exit
+                           cleanup). */
+};  /* a_var_role */
+
+/* a_gid_entry::decl_flags bit above the DECL_* flags: the declaration was
+   introduced with a nil name (NAME_BIND may name it later). */
+const uint32_t decl_flag_nil_introduced = 0x80000000u;
 
 /* L-ids. */
 
@@ -168,6 +189,10 @@ public:
   size_t lid_index(const a_lid_entry *entry) const
     { return static_cast<size_t>(entry - lids_.data()); }
 
+  /* Base subobjects (REC_FIELD with BASE) of the records, for the casts. */
+  void add_base(uint32_t record, uint32_t base, uint64_t offset);
+  bool has_base(uint32_t record, uint32_t base, uint64_t offset) const;
+
   /* External symbol names. */
   bool bind_symbol(std::string_view text, uint32_t g, uint32_t &other);
   /* Claim text for g.  False (and the other owner) when another G-id owns
@@ -198,6 +223,12 @@ private:
   std::vector<uint64_t>                  function_seen_;  /* per function */
   std::unordered_map<std::string_view, uint32_t>
                                          owners_;
+  struct a_base_rec {
+    uint32_t base;
+    uint64_t offset;
+  };  /* a_base_rec */
+  std::unordered_map<uint32_t, std::vector<a_base_rec>>
+                                         bases_;
   uint64_t                               gids_introduced_;
   uint64_t                               sids_introduced_;
 };  /* a_id_tables */

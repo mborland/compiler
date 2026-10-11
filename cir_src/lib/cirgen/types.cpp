@@ -53,6 +53,21 @@ A malformed stream (semantic error the format layer cannot see).
   return fail(EDG_CIR_ERROR_FORMAT, edc_format, text);
 }  /* a_emitter::format_error */
 
+bool a_emitter::v1_flags(const ecil::an_operand &op, uint32_t mask,
+                         const char *what)
+/*
+Reject C++ flag bits the library does not implement yet.
+*/
+{
+  uint64_t flags = 0;
+  bool ok = true;
+
+  if (uint_operand(op, flags) && (flags & mask) != 0)
+    ok = unsupported(std::string(what) + ": C++ constructs (ECIL v1 flag "
+                     "bits) are not supported yet");
+  return ok;
+}  /* a_emitter::v1_flags */
+
 bool a_emitter::internal(const std::string &text)
 /*
 A failed internal check: something the validator guarantees did not hold.
@@ -512,7 +527,10 @@ TY_RECORD_BODY: remember the layout facts and await the REC_FIELD records.
 
   uint_operand(r.ops[0], gid);
   t = type_at(gid);
-  if (t == nullptr)
+  if (!v1_flags(r.ops[4], ECIL_RECORD_NONTRIVIAL_ABI |
+                          ECIL_RECORD_NONTRIVIAL_DTOR, "TY_RECORD_BODY"))
+    ok = false;
+  else if (t == nullptr)
     ok = false;
   else if (pending_body_gid_ != 0 || t->kind != a_type_kind::record_type ||
            t->record->complete)
@@ -572,6 +590,10 @@ REC_FIELD: append to the record being defined; complete it with the last one.
     f.bitfield_signed = (flags & ECIL_FIELD_BITFIELD_SIGNED) != 0;
     f.flexible_array = (flags & ECIL_FIELD_FLEXIBLE_ARRAY) != 0;
     if (!good || type_at(f.type) == nullptr)
+      ok = false;
+    else if (!v1_flags(r.ops[5], ECIL_FIELD_BASE |
+                                 ECIL_FIELD_POTENTIALLY_OVERLAPPING,
+                       "REC_FIELD"))
       ok = false;
     else if (f.is_bitfield &&
              !mlir::isa<cir::IntType, cir::BoolType>(type_at(f.type)->cir))

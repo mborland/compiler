@@ -1,0 +1,6 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+/usr/sbin/ld: Test_name.o: in function `_Z3fooP5firstP6second':
+Test_name.c:(.text+0xXX): undefined reference to `_Z10link_errorv'
+/usr/sbin/ld: Test_name.o: in function `_Z3barP5firstP5multi':
+Test_name.c:(.text+0xXX): undefined reference to `_Z10link_errorv'
+collect2: error: ld returned 1 exit status

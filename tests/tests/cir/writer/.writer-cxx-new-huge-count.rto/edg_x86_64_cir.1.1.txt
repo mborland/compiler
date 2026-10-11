@@ -1,0 +1,33 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 11: warning: CIR back end: the body of "main" uses a new[] with 2^32 or more elements, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+ecil 1.0 features=0x00000008
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FUNC 4 1 0 []
+  STR 5 "main"
+  DECL_FUNC 5 4 0 8 5
+  DECL_FUNC 5 4 0 9 5
+  TY_INT 6 8 true 1 1
+  TY_PTR 7 6
+  STR 6 "p"
+  DECL_FUNC 5 4 0 40 5
+frame GLOBALS
+frame NAMES
+frame END
+  END 4 0

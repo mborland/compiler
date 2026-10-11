@@ -1,0 +1,93 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 9: warning: CIR back end: the body of "Class1" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Class1() {};
+              ^
+
+"Test_name.c", line 10: warning: CIR back end: the body of "~Class1" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual ~Class1() {};
+                       ^
+
+"Test_name.c", line 28: warning: CIR back end: the body of "Method2" uses a virtual call, which the CIR back end does not support; the function is dropped
+    }
+    ^
+
+"Test_name.c", line 34: warning: CIR back end: the body of "~Class3" uses a virtual function, which the CIR back end does not support; the function is dropped
+    Class4() {};
+             ^
+          detected during:
+            implicit generation of "Class3::~Class3() noexcept" at line 34
+            implicit generation of "Class3::Class3()" at line 34
+
+"Test_name.c", line 34: warning: CIR back end: the body of "Class3" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Class4() {};
+             ^
+          detected during implicit generation of "Class3::Class3()" at line 34
+
+"Test_name.c", line 34: warning: CIR back end: the body of "~Class2" uses a virtual function, which the CIR back end does not support; the function is dropped
+    Class4() {};
+             ^
+          detected during:
+            implicit generation of "Class2::~Class2() noexcept" at line 34
+            implicit generation of "Class2::Class2()" at line 34
+
+"Test_name.c", line 34: warning: CIR back end: the body of "Class2" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Class4() {};
+             ^
+          detected during implicit generation of "Class2::Class2()" at line 34
+
+"Test_name.c", line 34: warning: CIR back end: the body of "Class4" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Class4() {};
+              ^
+
+"Test_name.c", line 34: warning: CIR back end: the body of "~Class4" uses a virtual function, which the CIR back end does not support; the function is dropped
+    Class4() {};
+              ^
+          detected during implicit generation of "Class4::~Class4() noexcept" at line 34
+
+"Test_name.c", line 35: warning: CIR back end: the body of "Method1" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void Method1() {};
+                            ^
+
+"Test_name.c", line 44: warning: CIR back end: the body of "main" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN6Class1C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class1C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class1D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class1D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class37Method2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class3D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class3D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class3C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class3C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class2D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class2D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class2C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class2C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class4C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class4C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class4D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class4D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN6Class47Method1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,10 @@
+; expect: version major version 0
+; A 0.x (pre-release) stream, here the last 0.6 shape, is rejected: ECIL 1.0 is
+; the first stable version and the reader accepts major 1 only.
+ecil 0.6 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 0 201112 0
+frame END
+  END 1 0

@@ -1,0 +1,29 @@
+; Emitter-side check (ECIL v1, slice S3): the exit cleanup code of a
+; static-duration object must start with GREF of that object.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: the exit cleanup code of a static-duration object must start with GREF of that object
+
+frame DECLS
+  STR 10 "v"
+  STR 11 "d"
+  TY_FUNC 21 11 0 []
+  DECL_VAR 30 1 0 1 4 10
+  DECL_FUNC 31 21 0 1 11
+frame REGION
+  FUNC_BEGIN 31 0
+  FUNC_END 1
+frame GLOBALS
+  STATIC_INIT_BEGIN 30 0
+  GREF 30
+  CONST_INT 1 1
+  STORE 2 0
+  CLEANUP_BEGIN 4 30 0
+  CALL 31 21 0 0
+  CLEANUP_BODY
+  STATIC_INIT_END
+frame END
+  END auto 0

@@ -1,0 +1,30 @@
+; Switch on a 128-bit integer: a case label that is negative or wider than 64
+; bits is diagnosed (the MLIR LLVM switch translation at the pin reads case
+; values as unsigned 64-bit numbers); small non-negative labels work (see
+; int128.test).
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: a case label of a switch on a 128-bit integer that is negative or wider than 64 bits
+
+frame DECLS
+  TY_INT 40 128 true 16 16
+  TY_FUNC 21 1 0 [40]
+  STR 10 "f"
+  DECL_FUNC 100 21 0 1 10
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 40 40 nil 0
+  LREF 1
+  LOAD 0
+  SWITCH_BEGIN
+  CASE_VALUE i128:-1
+  CONST_INT 1 1
+  RETURN_STMT true
+  SWITCH_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

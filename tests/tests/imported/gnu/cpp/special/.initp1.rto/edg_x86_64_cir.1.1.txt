@@ -1,0 +1,18 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"./special/initp1.C", line 90: warning: CIR back end: the body of "main" uses an init_priority attribute, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the initializer of "foo" uses an init_priority attribute, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the initializer of "goo" uses an init_priority attribute, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the initializer of "coo" uses an init_priority attribute, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the initializer of "koo" uses an init_priority attribute, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the initializer of "xoo" uses an init_priority attribute, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the initializer of "zoo" uses an init_priority attribute, which the CIR back end does not support; the definition is dropped
+
+6 errors detected in the compilation of "Test_name.c".

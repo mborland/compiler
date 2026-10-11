@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Record test expectations of the CIR configurations on the box.
+
+Run it on the Mac, from the repository root, with the SSH master socket to the
+box open.  The tree on the box (default ~/edg-cir-config/m3b-int) must be
+built and synced (edg-cir-checkpoint --steps build does that).  For the
+selected tests and configurations it
+
+  1. runs `edg-docker-test --posture cir --only-configs <config> -W --types ...`
+     in the tree (-W records: the tests/expectations/<config>/<suite>.log
+     lines and the per-config output recordings
+     tests/tests/**/.<test>.rto/<config>.<case>.<command>.txt),
+  2. deletes the recordings that are larger than --limit-kb (default 100): a
+     test without its own recording compares with the `default` one (the
+     output of the C generating configuration), so it reports OUTPUT MISMATCH
+     instead of keeping a huge file in the repository,
+  3. runs the same selection once more without -W and patches the log lines
+     of the tests whose status changed because of step 2 (--OUTPUT MISMATCH),
+  4. copies the changed logs and the changed .rto directories (with their
+     deletions) to the Mac tree (or --dest),
+  5. prints what changed: files, sizes, the deleted ones.
+
+edgy deletes a per-config recording that equals the `default` one; the copy in
+step 4 deletes it here too.  Review `git status` and `git diff --stat` of
+tests/ afterwards; nothing is committed.
+
+Examples:
+
+  edg-cir-record --filter @tests/.edgy/filters/cir-cpp-smoke.txt --types rp \\
+      --configs edg_x86_64_cir,edg_x86_64_cir_2p
+  edg-cir-record --filter @tests/.edgy/filters/cir-cpp-corpus.txt \\
+      --types rp,lp --configs edg_x86_64_cir
+
+The two-process configuration is recorded only for the smoke lists (its
+recordings differ from edg_x86_64_cir's only by the 24 documented diagnostic
+exceptions); a test without a recording of its own compares with the
+`default` recording, so record a config for every test you want it to cover.
+'''
+
+import argparse
+import json
+import shlex
+import subprocess
+import sys
+import time
+
+from pathlib import Path
+from typing import List
+
+BOX = 'mborland@192.168.1.167'
+SOCKET = Path.home() / '.ssh' / 'cm-edgbox'
+
+# Runs on the box in the tree: delete the large recordings and print the
+# changed rto directories and the deleted files as JSON.
+REMOTE_POST = r"""
+import json, os, sys
+marker, limit_kb = sys.argv[1], int(sys.argv[2])
+configs = sys.argv[3].split(',')
+mtime = os.stat(marker).st_mtime
+deleted, kept = [], []
+for dirpath, dirs, files in os.walk('tests/tests'):
+  base = os.path.basename(dirpath)
+  if not (base.startswith('.') and base.endswith('.rto')):
+    continue
+  for name in files:
+    if not any(name.startswith(c + '.') for c in configs):
+      continue
+    path = os.path.join(dirpath, name)
+    if os.stat(path).st_mtime < mtime:
+      continue
+    size = os.path.getsize(path)
+    if size > limit_kb * 1024:
+      os.remove(path)
+      deleted.append([path, size])
+    else:
+      kept.append([path, size])
+# A recording that was rewritten in place does not change its directory's
+# time, so the files count too (every file of any config, newer than marker).
+changed = set()
+for dirpath, dirs, files in os.walk('tests/tests'):
+  if not os.path.basename(dirpath).endswith('.rto'):
+    continue
+  if os.stat(dirpath).st_mtime >= mtime or any(
+      os.stat(os.path.join(dirpath, f)).st_mtime >= mtime for f in files):
+    changed.add(dirpath)
+changed_dirs = sorted(changed)
+print(json.dumps({'deleted': deleted, 'kept': kept, 'dirs': changed_dirs}))
+"""
+
+# Patches the expectation logs with the status changes of a run without -W.
+REMOTE_PATCH = r"""
+import re, sys
+changes = [l.rstrip('\n') for l in open(sys.argv[2])
+           if re.match(r'^[+-] \S', l)]
+log_dir = 'tests/expectations/' + sys.argv[1]
+removed, added = {}, {}
+for line in changes:
+  sign, rest = line[0], line[2:]
+  path, _, fields = rest.partition(' ')
+  suite, _, test = path.partition('/')
+  entry = f"{test}:{fields}"
+  key = entry.split(':')[:3]
+  (removed if sign == '-' else added).setdefault(suite, {})[
+    ':'.join(key)] = entry
+for suite in set(removed) | set(added):
+  log = f"{log_dir}/{suite}.log"
+  lines = []
+  try:
+    lines = open(log).read().splitlines()
+  except FileNotFoundError:
+    pass
+  keys = set(removed.get(suite, {})) | set(added.get(suite, {}))
+  lines = [l for l in lines if ':'.join(l.split(':')[:3]) not in keys]
+  lines += list(added.get(suite, {}).values())
+  open(log, 'w').write('\n'.join(sorted(lines)) + '\n')
+  print(f"{log}: {len(added.get(suite, {}))} lines set, "
+        f"{len(removed.get(suite, {}))} replaced or removed")
+"""
+
+
+def ssh_options() -> List[str]:
+  return ['-o', f"ControlPath={SOCKET}", '-o', 'ControlMaster=no',
+          '-o', 'BatchMode=yes']
+
+
+def ssh(command: str, stdin: str = '', capture: bool = True
+        ) -> subprocess.CompletedProcess:
+  return subprocess.run(
+    ['ssh', *ssh_options(), BOX, command], input = stdin, text = True,
+    stdout = subprocess.PIPE if capture else None,
+    stderr = subprocess.STDOUT if capture else None
+  )
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2]
+  )
+  parser.add_argument('--tree', default = 'm3b-int')
+  parser.add_argument('--filter', required = True,
+                      help = 'the edgy filter ("@file" or prefixes)')
+  parser.add_argument('--types', default = 'rp,lp')
+  parser.add_argument('--configs', default = 'edg_x86_64_cir')
+  parser.add_argument('--limit-kb', type = int, default = 100,
+                      help = 'recordings larger than this are not kept')
+  parser.add_argument('--dest', default = '.',
+                      help = 'the tree to copy the results to (default: '
+                             'this one)')
+  parser.add_argument('--timeout', type = int, default = 180,
+                      help = 'per-program limit (-T) of the runs')
+  parser.add_argument('--copy-only', default = '',
+                      help = 'only copy the results of earlier recordings '
+                             'back: the name of the marker file (.tmp/'
+                             'record-<time>) before the first of them; no '
+                             'recording, no deletion of large files')
+  args = parser.parse_args()
+
+  tree = f"~/edg-cir-config/{args.tree}"
+  marker = f".tmp/record-{int(time.time())}"
+  if args.copy_only:
+    marker = args.copy_only
+  else:
+    ssh(f"cd {tree} && mkdir -p .tmp && touch {marker}")
+    time.sleep(1)
+  env = ("export PATH=$PWD/dev_tools/bin:$PATH "
+         "PYTHONPATH=$PWD/dev_tools/pylibs; ")
+  filter_arg = shlex.quote(args.filter)
+  for config in ([] if args.copy_only else args.configs.split(',')):
+    print(f"recording {config} ...", flush = True)
+    command = (f"cd {tree} && {env}sg docker -c "
+               + shlex.quote(
+                 f"edg-docker-test --non-interactive --posture cir "
+                 f"--only-configs {config} -W -T {args.timeout} "
+                 f"--types {args.types} {filter_arg}") +
+               " < /dev/null > .tmp/record-run.log 2>&1; echo rc=$?")
+    print(ssh(command).stdout.strip())
+
+  print('deleting the recordings over the limit ...', flush = True)
+  post = ssh(f"cd {tree} && python3 - {marker} "
+             f"{10**9 if args.copy_only else args.limit_kb} "
+             f"{args.configs}", stdin = REMOTE_POST).stdout
+  info = json.loads(post.strip().splitlines()[-1])
+  print(f"{len(info['kept'])} recordings kept, {len(info['deleted'])} over "
+        f"{args.limit_kb} KB deleted, {len(info['dirs'])} rto directories "
+        f"changed")
+
+  if info['deleted']:
+    for config in args.configs.split(','):
+      print(f"status lines of the tests without recording ({config}) ...",
+            flush = True)
+      command = (f"cd {tree} && {env}sg docker -c "
+                 + shlex.quote(
+                   f"edg-docker-test --non-interactive --posture cir "
+                   f"--only-configs {config} -T {args.timeout} "
+                   f"--types {args.types} {filter_arg}") +
+                 " < /dev/null > .tmp/record-check.log 2>&1; "
+                 f"python3 - {config} .tmp/record-check.log")
+      print(ssh(command, stdin = REMOTE_PATCH).stdout.strip())
+
+  # Copy the logs and the changed rto directories, with deletions.
+  dest = Path(args.dest).resolve()
+  rsync = ['rsync', '-a', '-R', '--delete', '-e',
+           'ssh ' + ' '.join(ssh_options())]
+  paths = [f"{BOX}:edg-cir-config/{args.tree}/./{d}" for d in info['dirs']]
+  for config in args.configs.split(','):
+    paths.append(f"{BOX}:edg-cir-config/{args.tree}/./tests/expectations/"
+                 f"{config}")
+  for index in range(0, len(paths), 40):
+    result = subprocess.run([*rsync, *paths[index:index + 40], f"{dest}/"])
+    if result.returncode != 0:
+      print('rsync failed', file = sys.stderr)
+      sys.exit(2)
+  print(f"copied to {dest}; deleted recordings:")
+  for path, size in info['deleted'][:30]:
+    print(f"  {path} ({size // 1024} KB)")
+  print('review: git status --short tests/ | head; git diff --stat tests/')
+
+
+main()

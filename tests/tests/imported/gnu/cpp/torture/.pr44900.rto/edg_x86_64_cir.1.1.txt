@@ -1,0 +1,49 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 15: warning: CIR back end: the body of "_mm_set_ps" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 28: warning: CIR back end: the body of "zero" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+          }
+          ^
+
+"Test_name.c", line 31: warning: CIR back end: the body of "vec" uses the initializer of a member of an anonymous union or struct, which the CIR back end does not support; the function is dropped
+          vec(const __m128 & a) : v(a) {}
+                                        ^
+
+"Test_name.c", line 49: warning: CIR back end: the body of "load" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+          }
+          ^
+
+"Test_name.c", line 59: warning: CIR back end: the body of "operator==" uses the builtin function __builtin_ia32_movmskps, which the CIR back end does not support; the function is dropped
+  { return 0xf == __builtin_ia32_movmskps(__builtin_ia32_cmpeqps(a, b)); }
+                                                                         ^
+
+"Test_name.c", line 71: warning: CIR back end: the body of "vec" uses the initializer of a member of an anonymous union or struct, which the CIR back end does not support; the function is dropped
+          vec v1 = a.v1();
+                   ^
+          detected during implicit generation of "vec::vec(const vec &) noexcept" at line 71
+
+"Test_name.c", line 78: warning: CIR back end: the body of "main" uses a call returning an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_Z10_mm_set_psffff' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3vec4zeroEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3vecC1ERKDv4_f' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3vecC2ERKDv4_f' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN4vec24loadEPKf' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZeqRK3vecS1_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3vecC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN3vecC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,15 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c ptrmem6a.C
+Test_name.c:
+"Test_name.c", line 15: warning: CIR back end: the body of "main" uses the operator "call through a pointer to member (->*)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".
+ptrmem6a.C:
+Warning: CIR back end: the initializer of "m" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'm' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "ptrmem6a.C".

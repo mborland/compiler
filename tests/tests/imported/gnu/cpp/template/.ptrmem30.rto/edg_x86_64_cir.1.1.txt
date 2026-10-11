@@ -1,0 +1,16 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 28: warning: CIR back end: the body of "test1" uses the constant "pointer-to-member constant", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void test1<F>() [with F=void ()]" at line 44
+
+"Test_name.c", line 38: warning: CIR back end: the body of "test2" uses the constant "pointer-to-member constant", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void test2<F>() [with F=void ()]" at line 46
+
+Error: CIR back end: the definition of '_Z5test1IFvvEEvv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z5test2IFvvEEvv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+2 errors detected in the compilation of "Test_name.c".

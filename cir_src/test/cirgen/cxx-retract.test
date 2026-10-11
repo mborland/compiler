@@ -1,0 +1,55 @@
+; C++ (ECIL v1, slice S4): RETRACT.  A definition dropped as unsupported does
+; not make the stream an error once it is retracted (whatever its linkage, and
+; even though it is referenced: it stays an external declaration), and a
+; retracted linkonce_odr definition that nothing uses is removed by the
+; GlobalDCE of the pipeline; one that is used stays.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
+
+; CHECK-DAG: cir.func private @_Z9unsup_extv
+; CHECK-DAG: cir.func private @_ZL9unsup_intv
+; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_Z6unusedv
+; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_Z4usedv
+
+; SYMS-NOT: _Z6unusedv
+; SYMS-DAG: {{[Ww]}} _Z4usedv
+; SYMS-DAG: U _Z9unsup_extv
+
+frame DECLS
+  STR 10 "_Z9unsup_extv"
+  STR 11 "_ZL9unsup_intv"
+  STR 12 "_Z6unusedv"
+  STR 13 "_Z4usedv"
+  STR 14 "main"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 21 0 32 10
+  DECL_FUNC 41 21 1 32 11
+  DECL_FUNC 42 21 3 65 12
+  DECL_FUNC 43 21 3 65 13
+  DECL_FUNC 44 21 0 9 14
+frame REGION
+  FUNC_BEGIN 42 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 44 0
+  CALL 40 21 0 0
+  DROP
+  CALL 41 21 0 0
+  DROP
+  CALL 43 21 0 0
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  RETRACT 40
+  RETRACT 41
+  RETRACT 42
+frame END
+  END auto 0

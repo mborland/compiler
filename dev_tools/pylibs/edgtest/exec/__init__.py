@@ -1039,6 +1039,24 @@ def _case_requests_unsupported_target(
       return True
   return False
 
+# Options that select Microsoft mode or C++/CLI or C++/CX (also abbreviated:
+# --microsoft_v=1930).
+_MICROSOFT_OPTION_REGEX = re.compile(
+  r'(?:^|\s)--(?:microsoft|ms_|c\+\+cli|c\+\+cx|cppcli|cppcx)'
+)
+
+def _case_requests_unsupported_mode(
+    cmd_opts: List[str],
+    cmd_case_opts: List[str],
+    config_dump: str
+) -> bool:
+  '''True for a case that selects Microsoft mode (or C++/CLI, C++/CX) when the
+  front end is built without Microsoft extensions (cpfe-cir is, by design).'''
+  if 'MICROSOFT_EXTENSIONS_ALLOWED 0' not in config_dump:
+    return False
+  options_str = ' '.join([*cmd_opts, *cmd_case_opts])
+  return _MICROSOFT_OPTION_REGEX.search(options_str) is not None
+
 async def run_test(test_path: Path, *, top_dir: Path, output_dir: Path,
                    env: Dict[str, str], build_constants: BuildConstants,
                    faster_mode: bool, update_recording: bool, debug_mode: bool,
@@ -1158,6 +1176,20 @@ async def run_test(test_path: Path, *, top_dir: Path, output_dir: Path,
           build_constants.target_configurations
         ):
           # Case requests a --target that this front end was not built with.
+          test_results.append(make_requirements_not_met_status(
+            test_path,
+            mode,
+            test_descript.remark,
+            _case_options_tag(case_number, cmd_case_opts)
+          ))
+          continue
+
+        if _case_requests_unsupported_mode(
+          cmd_opts,
+          cmd_case_opts,
+          build_constants.config_dump
+        ):
+          # Microsoft mode is not supported by this front end's configuration.
           test_results.append(make_requirements_not_met_status(
             test_path,
             mode,

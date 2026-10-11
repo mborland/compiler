@@ -1,0 +1,33 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 23: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 27: warning: unknown attribute "noclone"
+  void __attribute__ ((noinline, noclone))
+                                 ^
+
+"Test_name.c", line 30: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    a = new A();
+             ^
+          detected during implicit generation of "A::A() noexcept" at line 30
+
+"Test_name.c", line 31: warning: CIR back end: the body of "allocate_a" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 38: warning: CIR back end: the body of "main" uses a virtual call, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1AC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1AC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1A3fooEPFvvE' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z10allocate_av' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

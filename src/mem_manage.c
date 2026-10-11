@@ -38,6 +38,19 @@ mem_manage.c -- Memory management routines.
 #endif /* ifndef IL_REGIONS_DISPOSED_INCREMENTALLY */
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
 #include "ecil_write.h"
+/* With AddressSanitizer, the storage of a freed memory block is poisoned
+   until the block is handed out again, so that a use of a freed region (the
+   blocks are pooled, not returned to malloc) is reported. */
+#if defined(__SANITIZE_ADDRESS__)
+#define CIR_ASAN_REGIONS 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define CIR_ASAN_REGIONS 1
+#endif /* __has_feature(address_sanitizer) */
+#endif /* defined(__SANITIZE_ADDRESS__) */
+#ifdef CIR_ASAN_REGIONS
+#include <sanitizer/asan_interface.h>
+#endif /* CIR_ASAN_REGIONS */
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 /*
@@ -783,6 +796,10 @@ a smaller-sized block.  Return a pointer to the block header.
   hdr->start_of_block = (char *)alloc_addr + adjusted_header_size;
   hdr->after_end_of_block = (char *)alloc_addr + alloc_size;
 have_hdr:
+#ifdef CIR_ASAN_REGIONS
+  ASAN_UNPOISON_MEMORY_REGION(hdr->start_of_block,
+                              hdr->after_end_of_block - hdr->start_of_block);
+#endif /* CIR_ASAN_REGIONS */
   /* Everything in the block is available. */
   hdr->next_avail_in_block = hdr->start_of_block;
   hdr->trimmed = FALSE;
@@ -832,6 +849,10 @@ Free the storage associated with the indicated memory block.
   memset(hdr->start_of_block, 0xdb,
          size_t_arg(hdr->after_end_of_block - hdr->start_of_block));
 #endif /* OVERWRITE_FREED_MEM_BLOCKS */
+#ifdef CIR_ASAN_REGIONS
+  ASAN_POISON_MEMORY_REGION(hdr->start_of_block,
+                            hdr->after_end_of_block - hdr->start_of_block);
+#endif /* CIR_ASAN_REGIONS */
   if (!okay_to_free_mem_blocks) {
     /* If memory blocks cannot be freed, don't attempt to merge the blocks.
        This is an optimization because the list of blocks can get quite large
@@ -1414,6 +1435,27 @@ memory because of the properties of rout.  scope is the scope of rout
        defined because of later instantiations.  Those definitions may need
        access to the enclosing function scope. */
     keep_memory = TRUE;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  } else if (rout->source_corresp.is_class_member &&
+             type_is_lambda_closure(parent_class_of(rout))) {
+    /* A lambda call operator is implicitly constexpr when it can be: the
+       constant evaluator may call it later (interpret.c needs its scope), so
+       the region stays until the end of the compilation (it is streamed
+       now). */
+    keep_memory = TRUE;
+  } else if (rout->is_prototype_instantiation) {
+    /* Without MAINTAIN_NEEDED_FLAGS nothing keeps the region of a prototype
+       instantiation, but later instantiations of the template read what the
+       file scope holds about it (the variable of a structured binding pack,
+       see find_binding_for_pack).  It is not streamed (ecil_routine_is_
+       filtered); the region stays until the end of the compilation. */
+    keep_memory = TRUE;
+  } else if (scope->expr_node_refs != NULL) {
+    /* A template argument in the file scope region refers to an expression
+       in this region (find_local_expr_node): later lookups of template
+       instances compare it, so the region stays (it is streamed now). */
+    keep_memory = TRUE;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if DO_IL_LOWERING
   } else if (parent_is_lambda_closure(rout, &closure_class) &&
              class_type_supp(closure_class)->has_lambda_conversion_function) {

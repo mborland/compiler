@@ -1,0 +1,10 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics conpr-3a.cc conpr-3b.cc Test_name.c
+conpr-3a.cc:
+Error: CIR back end: the initializer of "foo1" uses an init_priority attribute, which the CIR back end does not support; the definition is dropped
+
+1 error detected in the compilation of "conpr-3a.cc".
+conpr-3b.cc:
+Error: CIR back end: the initializer of "foo2" uses an init_priority attribute, which the CIR back end does not support; the definition is dropped
+
+1 error detected in the compilation of "conpr-3b.cc".
+Test_name.c:

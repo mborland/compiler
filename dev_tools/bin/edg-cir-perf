@@ -20,6 +20,14 @@ Two measurements, both with the non-ASan release front end
           front end writing an ECIL file), `2p-edg-cir` (edg-cir on that
           file), `inproc` (front end with the library in-process) and `keep`
           (`inproc` with --ecil_keep_regions)
+  cxx     a generated C++ file (--cxx-functions, about 6000 functions of M3
+          features: classes with constructors and bases, templates, statics,
+          dynamic initialization, lambdas, new/delete) in the same four
+          configurations, plus the C generating path (`cgen-fe`: the default
+          cpfe, `cgen-total`: cpfe and gcc on the generated C; --cgen-build)
+  streams (--stream) edg-cir alone on stream files or generated streams (the
+          C++ shapes the front end cannot write yet): instructions, CPU time,
+          peak RSS
   corpus  the sum over every test case of a filter list (the C corpus):
           `fe` (the front end writing the ECIL stream, the work of the writer)
           and `cir` (edg-cir on the saved stream, the work of the library)
@@ -220,8 +228,10 @@ def time_edg_cir(tools: Tools, stream: Path, work: Path) -> None:
   )
 
 
-def measure_big(tools: Tools, source: Path, repeat: int) -> Dict[str, dict]:
-  '''Measure the four configurations of the big file.'''
+def measure_big(tools: Tools, source: Path, repeat: int,
+                flags: Optional[List[str]] = None) -> Dict[str, dict]:
+  '''Measure the four configurations of the big file (flags: C or C++).'''
+  flags = flags or ['--c11']
   results: Dict[str, dict] = {}
   work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf-big.'))
   try:
@@ -248,7 +258,7 @@ def measure_big(tools: Tools, source: Path, repeat: int) -> Dict[str, dict]:
           run_dir.mkdir()
           shutil.copy2(source, run_dir / source.name)
           wrapper = tools.fe_counted if index == 0 else tools.fe_timed
-          rc = run_eccp(tools, wrapper, run_dir / source.name, ['--c11'],
+          rc = run_eccp(tools, wrapper, run_dir / source.name, flags,
                         run_dir, extra)
           if index == 0:
             ir = sum(cachegrind_total(p) for p in run_dir.glob('fe.*.cg'))
@@ -261,6 +271,129 @@ def measure_big(tools: Tools, source: Path, repeat: int) -> Dict[str, dict]:
         'ir': ir, 'rc': rc, 'wall_s': round(min(t[0] for t in times), 3),
         'cpu_s': round(min(t[1] for t in times), 3),
         'rss_mb': round(max(t[2] for t in times), 1)
+      }
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+  return results
+
+
+def measure_cgen(tools: Tools, cgen_build: str, source: Path, repeat: int,
+                 flags: List[str]) -> Dict[str, dict]:
+  '''The C-generating path: the default cpfe (C code generation) on the
+  source, then gcc on the generated C (eccp -c with the dev-env base).
+
+  `cgen-fe` is the front end alone (instructions, CPU time and peak RSS of
+  cpfe), `cgen-total` the whole eccp run including the gcc compilation of
+  the generated C (CPU time of all processes; peak RSS of the largest).
+  '''
+  root = tools.root
+  exports = load_exports(root / cgen_build / 'environment.sh')
+  if not exports.get('CPFE') or not Path(exports['CPFE']).exists():
+    return {}
+  env = dict(os.environ)
+  env.update(exports)
+  env['EDG_BASE'] = str(root / 'bases/docker/dev-env/gcc')
+  env['ECCP_LIBDIR'] = exports.get('ECCP_LIBDIR', '')
+  results: Dict[str, dict] = {}
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf-cgen.'))
+  try:
+    valgrind = ' '.join(VALGRIND)
+    counted = make_wrapper(
+      work / 'cgen-counted',
+      f"exec {valgrind} --cachegrind-out-file=\"$EDG_PERF_DIR/fe.$$.cg\" "
+      f"{exports['CPFE']} \"$@\"")
+    timed = make_wrapper(
+      work / 'cgen-timed',
+      f"exec {sys.executable} {tools.timer} \"$EDG_PERF_DIR/fe.time\" "
+      f"{exports['CPFE']} \"$@\"")
+    plain = make_wrapper(work / 'cgen-plain',
+                         f"exec {exports['CPFE']} \"$@\"")
+
+    def run(wrapper: Path, run_dir: Path, outer_timer: bool) -> int:
+      run_env = dict(env)
+      run_env['CPFE'] = str(wrapper)
+      run_env['EDG_PERF_DIR'] = str(run_dir)
+      command = [tools.eccp, '-c', *flags, source.name]
+      if outer_timer:
+        command = [sys.executable, str(tools.timer),
+                   str(run_dir / 'total.time'), *command]
+      return subprocess.run(command, cwd = run_dir, env = run_env,
+                            stdout = subprocess.DEVNULL,
+                            stderr = subprocess.DEVNULL).returncode
+
+    def fresh(name: str) -> Path:
+      run_dir = work / name
+      run_dir.mkdir()
+      shutil.copy2(source, run_dir / source.name)
+      return run_dir
+
+    run_dir = fresh('count')
+    rc = run(counted, run_dir, False)
+    ir = sum(cachegrind_total(p) for p in run_dir.glob('fe.*.cg'))
+    fe_times, total_times = [], []
+    for index in range(repeat):
+      run_dir = fresh(f"fe{index}")
+      run(timed, run_dir, False)
+      fe_times.append(read_times(run_dir / 'fe.time'))
+      run_dir = fresh(f"total{index}")
+      run(plain, run_dir, True)
+      total_times.append(read_times(run_dir / 'total.time'))
+    for name, times in (('cgen-fe', fe_times), ('cgen-total', total_times)):
+      results[name] = {
+        'ir': ir if name == 'cgen-fe' else 0, 'rc': rc,
+        'wall_s': round(min(t[0] for t in times), 3),
+        'cpu_s': round(min(t[1] for t in times), 3),
+        'rss_mb': round(max(t[2] for t in times), 1)
+      }
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+  return results
+
+
+def generate_stream(tools: Tools, root: Path, spec: str, work: Path) -> Path:
+  '''Write the synthetic stream KIND:N (ecil-stress-gen.py piped to ecil-asm).'''
+  kind, _, count = spec.partition(':')
+  asm = Path(tools.edg_cir).parent.parent / 'tools' / 'ecil-asm' / 'ecil-asm'
+  text = subprocess.run(
+    [sys.executable, str(root / 'cir_src/scripts/ecil-stress-gen.py'), kind,
+     count], check = True, stdout = subprocess.PIPE, text = True
+  ).stdout
+  source = work / f"{kind}{count}.txt"
+  source.write_text(text)
+  stream = work / f"{kind}{count}.ecil"
+  subprocess.run([str(asm), str(source), '-o', str(stream)], check = True)
+  return stream
+
+
+def measure_streams(tools: Tools, root: Path, specs: List[str], repeat: int
+                    ) -> Dict[str, dict]:
+  '''Measure edg-cir --emit=asm on stream files or generated streams.
+
+  A spec is a file name, or KIND:N for ecil-stress-gen.py (a kind such as
+  cxx_funcs).  The streams do not come from the front end, so this measures
+  the library alone on shapes the front end cannot write yet.
+  '''
+  results: Dict[str, dict] = {}
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf-streams.'))
+  try:
+    for spec in specs:
+      if ':' in spec and not Path(spec).exists():
+        stream = generate_stream(tools, root, spec, work)
+        name = spec.replace(':', '')
+      else:
+        stream = Path(spec).resolve()
+        name = stream.stem
+      ir, rc = count_edg_cir(tools, stream, work)
+      times = []
+      for _ in range(repeat):
+        (work / 'cir.time').unlink(missing_ok = True)
+        time_edg_cir(tools, stream, work)
+        times.append(read_times(work / 'cir.time'))
+      results[name] = {
+        'ir': ir, 'rc': rc, 'wall_s': round(min(t[0] for t in times), 3),
+        'cpu_s': round(min(t[1] for t in times), 3),
+        'rss_mb': round(max(t[2] for t in times), 1),
+        'bytes': stream.stat().st_size
       }
   finally:
     shutil.rmtree(work, ignore_errors = True)
@@ -436,6 +569,31 @@ def format_table(new: dict, base: Optional[dict]) -> str:
         lambda v: f"{v:.2f}")
     row(f"{prefix}: peak RSS MB", old.get('rss_mb'), big[name]['rss_mb'],
         lambda v: f"{v:.0f}")
+  base_cxx = (base or {}).get('big_cxx', {})
+  cxx_functions = new.get('meta', {}).get('cxx_functions', '?')
+  for name in BIG_ROWS + ('cgen-fe', 'cgen-total'):
+    entry = new.get('big_cxx', {}).get(name)
+    if not entry:
+      continue
+    prefix = f"C++ TU ({cxx_functions} functions) {name}"
+    old = base_cxx.get(name, {})
+    if entry['ir']:
+      row(f"{prefix}: instructions (M)", old.get('ir'), entry['ir'])
+    row(f"{prefix}: CPU s", old.get('cpu_s'), entry['cpu_s'],
+        lambda v: f"{v:.2f}")
+    row(f"{prefix}: wall s", old.get('wall_s'), entry['wall_s'],
+        lambda v: f"{v:.2f}")
+    row(f"{prefix}: peak RSS MB", old.get('rss_mb'), entry['rss_mb'],
+        lambda v: f"{v:.0f}")
+  base_streams = (base or {}).get('streams', {})
+  for name, entry in new.get('streams', {}).items():
+    prefix = f"stream {name} ({entry['bytes'] // 1024} KB) edg-cir"
+    old = base_streams.get(name, {})
+    row(f"{prefix}: instructions (M)", old.get('ir'), entry['ir'])
+    row(f"{prefix}: CPU s", old.get('cpu_s'), entry['cpu_s'],
+        lambda v: f"{v:.2f}")
+    row(f"{prefix}: peak RSS MB", old.get('rss_mb'), entry['rss_mb'],
+        lambda v: f"{v:.0f}")
   corpus = new.get('corpus')
   if corpus:
     old_corpus = (base or {}).get('corpus', {})
@@ -489,8 +647,19 @@ def main() -> None:
   parser.add_argument('--fe-build', default = 'build/gcc-release-cir',
                       help = 'build directory of the (non-ASan) cpfe-cir')
   parser.add_argument('--only', default = 'big,corpus',
-                      help = 'comma separated: big, corpus')
+                      help = 'comma separated: big, cxx, corpus, streams')
+  parser.add_argument('--stream', action = 'append', default = [],
+                      help = 'also measure edg-cir on this ECIL stream file, '
+                             'or on the generated stream KIND:N (ecil-stress-'
+                             'gen.py, e.g. cxx_funcs:6000); repeatable.  '
+                             '--only streams alone measures cxx_funcs:6000')
   parser.add_argument('--big-functions', type = int, default = 6000)
+  parser.add_argument('--cxx-functions', type = int, default = 6000,
+                      help = 'size of the generated C++ file of --only cxx '
+                             '(edg-cir-rss --generate-cxx-functions)')
+  parser.add_argument('--cgen-build', default = 'build/gcc-release',
+                      help = 'build directory of the default (C generating) '
+                             'cpfe for the C++ baseline of --only cxx')
   parser.add_argument('--big', default = '',
                       help = 'measure this C file instead of a generated '
                              'one')
@@ -546,6 +715,22 @@ def main() -> None:
         )
       print(f"big: {big}", flush = True)
       result['big'] = measure_big(tools, big.resolve(), args.repeat)
+    if 'cxx' in only:
+      source = work / 'big.cpp'
+      subprocess.run(
+        [sys.executable, str(root / 'dev_tools/bin/edg-cir-rss'),
+         '--generate-cxx-functions', str(args.cxx_functions), '-o',
+         str(source)], check = True, stdout = subprocess.DEVNULL
+      )
+      print(f"cxx: {source}", flush = True)
+      cxx = measure_big(tools, source, args.repeat, ['--c++17'])
+      cxx.update(measure_cgen(tools, args.cgen_build, source, args.repeat,
+                              ['--c++17']))
+      result['big_cxx'] = cxx
+      result['meta']['cxx_functions'] = args.cxx_functions
+    if 'streams' in only or args.stream:
+      specs = args.stream or ['cxx_funcs:6000']
+      result['streams'] = measure_streams(tools, root, specs, args.repeat)
     if 'corpus' in only:
       per_case = measure_corpus(tools, root, args)
       result['corpus'] = summarize_corpus(per_case)

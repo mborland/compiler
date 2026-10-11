@@ -3,7 +3,9 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: integer type of 128 bits is not supported
+"Test_name.c", line 67: warning: CIR back end: the body of "test_fetch_sub" uses the builtin function __atomic_fetch_sub_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
 
 "Test_name.c", line 77: warning: integer conversion resulted in a change of sign
     if (__atomic_fetch_and (&v, init, __ATOMIC_CONSUME) !=  0) 
@@ -12,6 +14,10 @@ Error: CIR back end: integer type of 128 bits is not supported
 "Test_name.c", line 84: warning: integer conversion resulted in a change of sign
     if (__atomic_fetch_and (&v, init, __ATOMIC_RELEASE) !=  init)
                                 ^
+
+"Test_name.c", line 92: warning: CIR back end: the body of "test_fetch_and" uses the builtin function __atomic_fetch_and_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
 
 "Test_name.c", line 102: warning: integer conversion resulted in a change of sign
     if (__atomic_fetch_nand (&v, init, __ATOMIC_CONSUME) !=  init) 
@@ -25,6 +31,26 @@ Error: CIR back end: integer type of 128 bits is not supported
     if (__atomic_fetch_nand (&v, init, __ATOMIC_ACQ_REL) !=  0) 
                                  ^
 
+"Test_name.c", line 116: warning: CIR back end: the body of "test_fetch_nand" uses the builtin function __atomic_fetch_nand_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 141: warning: CIR back end: the body of "test_fetch_xor" uses the builtin function __atomic_fetch_xor_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 171: warning: CIR back end: the body of "test_fetch_or" uses the builtin function __atomic_fetch_or_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 198: warning: CIR back end: the body of "test_add_fetch" uses the builtin function __atomic_add_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 224: warning: CIR back end: the body of "test_sub_fetch" uses the builtin function __atomic_sub_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
 "Test_name.c", line 235: warning: integer conversion resulted in a change of sign
     if (__atomic_and_fetch (&v, init, __ATOMIC_CONSUME) !=  init) 
                                 ^
@@ -32,6 +58,10 @@ Error: CIR back end: integer type of 128 bits is not supported
 "Test_name.c", line 242: warning: integer conversion resulted in a change of sign
     if (__atomic_and_fetch (&v, init, __ATOMIC_RELEASE) !=  init)
                                 ^
+
+"Test_name.c", line 251: warning: CIR back end: the body of "test_and_fetch" uses the builtin function __atomic_and_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
 
 "Test_name.c", line 261: warning: integer conversion resulted in a change of sign
     if (__atomic_nand_fetch (&v, init, __ATOMIC_CONSUME) !=  0) 
@@ -45,6 +75,26 @@ Error: CIR back end: integer type of 128 bits is not supported
     if (__atomic_nand_fetch (&v, init, __ATOMIC_ACQ_REL) !=  init) 
                                  ^
 
+"Test_name.c", line 275: warning: CIR back end: the body of "test_nand_fetch" uses the builtin function __atomic_nand_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 302: warning: CIR back end: the body of "test_xor_fetch" uses the builtin function __atomic_xor_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 332: warning: CIR back end: the body of "test_or_fetch" uses the builtin function __atomic_or_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 367: warning: CIR back end: the body of "test_add" uses the builtin function __atomic_add_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 399: warning: CIR back end: the body of "test_sub" uses the builtin function __atomic_sub_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
 "Test_name.c", line 411: warning: integer conversion resulted in a change of sign
     __atomic_fetch_and (&v, init, __ATOMIC_CONSUME);
                             ^
@@ -52,6 +102,10 @@ Error: CIR back end: integer type of 128 bits is not supported
 "Test_name.c", line 420: warning: integer conversion resulted in a change of sign
     __atomic_fetch_and (&v, init, __ATOMIC_RELEASE);
                             ^
+
+"Test_name.c", line 432: warning: CIR back end: the body of "test_and" uses the builtin function __atomic_and_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
 
 "Test_name.c", line 443: warning: integer conversion resulted in a change of sign
     __atomic_fetch_nand (&v, init, __ATOMIC_CONSUME);
@@ -65,4 +119,52 @@ Error: CIR back end: integer type of 128 bits is not supported
     __atomic_fetch_nand (&v, init, __ATOMIC_ACQ_REL);
                              ^
 
-1 error detected in the compilation of "Test_name.c".
+"Test_name.c", line 462: warning: CIR back end: the body of "test_nand" uses the builtin function __atomic_fetch_nand_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 495: warning: CIR back end: the body of "test_xor" uses the builtin function __atomic_xor_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 531: warning: CIR back end: the body of "test_or" uses the builtin function __atomic_or_fetch_16, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'test_fetch_add' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_fetch_sub' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_fetch_and' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_fetch_nand' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_fetch_xor' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_fetch_or' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_add_fetch' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_sub_fetch' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_and_fetch' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_nand_fetch' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_xor_fetch' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_or_fetch' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_add' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_sub' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_and' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_nand' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_xor' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of 'test_or' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+18 errors detected in the compilation of "Test_name.c".

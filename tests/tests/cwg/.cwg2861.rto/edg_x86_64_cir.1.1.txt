@@ -1,0 +1,26 @@
+eccp -DTEST_NUMBER=1 --c++23 Test_name.c
+"Test_name.c", line 7: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
+      virtual void foo(){}
+                         ^
+
+"Test_name.c", line 10: warning: CIR back end: the body of "foo2" uses a virtual function, which the CIR back end does not support; the function is dropped
+      virtual void foo2(){}
+                          ^
+
+"Test_name.c", line 15: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
+     }
+     ^
+
+"Test_name.c", line 27: warning: CIR back end: the body of "main" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1A3fooEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1B4foo2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1D3fooEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

@@ -210,6 +210,16 @@
       }
     },
     {
+      "name": "linux-gcc-debug-cir-nopoison",
+      "inherits": "linux-gcc-debug-cir",
+      "displayName": "Linux (GCC) with the CIR back end - DEBUG without overwriting freed memory",
+      "description": "As linux-gcc-debug-cir but with OVERWRITE_FREED_MEM_BLOCKS=0: edg-cir-poison-check compares its streams with those of the poisoning build",
+      "binaryDir": "${sourceDir}/build/gcc-cir-nopoison",
+      "cacheVariables": {
+        "EDG_MACRO_CONF": "linux-gcc-nopoison"
+      }
+    },
+    {
       "name": "linux-i686-gcc-debug",
       "inherits": "linux-common",
       "displayName": "Linux i686 (GCC) Build Config - DEBUG",

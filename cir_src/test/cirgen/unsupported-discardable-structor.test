@@ -1,0 +1,39 @@
+; Unsupported policy, STRUCTOR pairs: both variants are dropped (linkonce_odr).
+; Unreferenced, the pair is erased; a call of C1 alone makes the pair referenced
+; (an error naming the entities).
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: cat %S/Inputs/header08_cxx.txt %S/Inputs/unsupported_structor_used.txt > %t2.txt
+; RUN: %ecil-asm %t2.txt -o %t2.ecil
+; RUN: %not %edg-cir --emit=cir %t2.ecil 2>&1 | %FileCheck %s --check-prefix=USED
+; CHECK-DAG: warning [1003]: the unused definition of '_ZN1EC1Ei' was dropped and erased
+; CHECK-DAG: warning [1003]: the unused definition of '_ZN1EC2Ei' was dropped and erased
+; CHECK-NOT: cir.func {{.*}}@_ZN1EC
+; USED-DAG: error [1003]: the definition of '_ZN1EC1Ei' was dropped
+; USED-DAG: error [1003]: the definition of '_ZN1EC2Ei' was dropped
+
+frame DECLS
+  STR 11 "E"
+  STR 12 "_ZN1EC2Ei"
+  STR 13 "_ZN1EC1Ei"
+  STR 14 "main"
+  TY_RECORD_DECL 21 0 11
+  TY_RECORD_BODY 21 4 4 4 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 22 21
+  TY_FUNC 23 11 0 [22, 1]
+  TY_FUNC 24 1 0 []
+  DECL_FUNC 100 23 3 67 12
+  DECL_FUNC 101 23 3 67 13
+  STRUCTOR 101 100 0
+  DECL_FUNC 100 23 0 34 12
+  DECL_FUNC 101 23 0 34 13
+  DECL_FUNC 102 24 0 9 14
+frame REGION
+  FUNC_BEGIN 102 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

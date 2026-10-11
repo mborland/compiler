@@ -1,0 +1,14 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"Test_name.c", line 42: warning: CIR back end: the body of "S" uses the address of a non-string constant, which the CIR back end does not support; the function is dropped
+    constexpr S () { c = source_location::current (); }
+                                                      ^
+
+"Test_name.c", line 90: warning: CIR back end: the body of "foo" uses the address of a non-string constant, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 92: error: static assertion failed
+  static_assert (foo ());
+  ^
+
+1 error detected in the compilation of "Test_name.c".

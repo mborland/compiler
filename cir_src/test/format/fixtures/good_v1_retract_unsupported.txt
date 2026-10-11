@@ -1,0 +1,19 @@
+; RETRACT of an entity whose definition was dropped as unsupported, at any
+; linkage (here external functions and variables).
+ecil 1.0 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  TY_FUNC 2 1 0 []
+  STR 2 "f"
+  STR 3 "v"
+  DECL_FUNC 20 2 0 32 2
+  DECL_VAR 21 1 0 65 4 3
+frame GLOBALS
+  RETRACT 20
+  RETRACT 21
+frame END
+  END 3 0

@@ -746,6 +746,15 @@ new G-id or sid must be the highest introduced so far plus 1 (spec 7).
 }  /* ecil_check_introduction */
 
 
+void ecil_check_begin_lids(void)
+/*
+A STATIC_INIT of the file scope starts a fresh L-id space (spec 11.7).
+*/
+{
+  ecil_stream.lids_introduced = 0;
+}  /* ecil_check_begin_lids */
+
+
 void ecil_check_function_lids(uint32_t num_lids)
 /*
 At FUNC_END: the function allocated num_lids L-ids and every one of them was
@@ -1046,7 +1055,7 @@ first use.
     }  /* while */
   }  /* if */
   if (sid == 0) {
-    char  *copy = (char *)malloc(length == 0 ? 1 : length);
+    char  *copy = (char *)malloc(length + 1);  /* NUL-terminated. */
 
     if (copy != NULL &&
         stream->num_strings == stream->strings_capacity) {
@@ -1074,6 +1083,7 @@ first use.
       frame->decl.failed = TRUE;
     } else {
       if (length != 0) memcpy(copy, text, length);
+      copy[length] = '\0';
       stream->strings[stream->num_strings].text = copy;
       stream->strings[stream->num_strings].length = length;
       stream->strings[stream->num_strings].hash = hash;
@@ -1109,6 +1119,19 @@ Intern a NUL-terminated string.
 {
   return ecil_intern_string(frame, text, strlen(text));
 }  /* ecil_intern_cstring */
+
+
+const char *ecil_string_text(uint32_t sid)
+/*
+Return the text of an interned string (NULL for sid 0 or an unknown sid).
+The pointer is valid until the next string is interned.
+*/
+{
+  an_ecil_stream  *stream = &ecil_stream;
+
+  return (sid != 0 && sid <= stream->num_strings) ?
+                               stream->strings[sid - 1].text : NULL;
+}  /* ecil_string_text */
 
 
 /* Unsupported-construct reporting. */
@@ -1873,8 +1896,12 @@ need, then HDR_TARGET, HDR_LANG, HDR_PRODUCER and HDR_TYPE_ROLE.
 #endif /* CHECKING */
   if (ecil_wrapv) lang_flags |= ECIL_LANG_WRAPV;
   if (!C_mode()) {
-    if (exceptions_enabled) lang_flags |= ECIL_LANG_EXCEPTIONS;
+    /* The stream is a no-exceptions stream whatever the front end does
+       with exceptions (spec 11.1): ECIL_LANG_EXCEPTIONS is never set. */
     if (rtti_enabled) lang_flags |= ECIL_LANG_RTTI;
+    /* The front end always has thread-safe initialization of function-local
+       statics (__cpp_threadsafe_static_init). */
+    lang_flags |= ECIL_LANG_THREADSAFE_STATICS;
   }  /* if */
   ecil_rec_begin(frame, eop_hdr_lang);
   ecil_arg_uint(frame, C_mode() ? (unsigned int)elang_c :
@@ -1974,8 +2001,9 @@ nothing.
           preamble[9] = (char)((ECIL_VERSION_MAJOR >> 8) & 0xFF);
           preamble[10] = (char)(ECIL_VERSION_MINOR & 0xFF);
           preamble[11] = (char)((ECIL_VERSION_MINOR >> 8) & 0xFF);
-          /* Features: none yet (LOCATIONS is off in M1). */
-          preamble[12] = 0;
+          /* Features: LATE_NAMES for C++ (NAME_BIND in F_NAMES); LOCATIONS
+             is off. */
+          preamble[12] = C_mode() ? 0 : (char)ECIL_FEATURE_LATE_NAMES;
           preamble[13] = 0;
           preamble[14] = 0;
           preamble[15] = 0;
@@ -2035,6 +2063,24 @@ hand-off to the next (its storage is released only when it grew large).
     }  /* if */
     if (frame->decl.size != 0 || frame->body.size != 0 ||
         frame->kind == efk_globals) {
+      ecil_submit_frame(frame);
+    }  /* if */
+    if (region_number == FILE_SCOPE_REGION_NUMBER && !C_mode() &&
+        stream->state == ess_open && ecil_invokers_pending()) {
+      /* Static invokers of lambdas that only the file scope refers to (a
+         constant function pointer): their bodies follow in a region frame
+         (spec 11.9). */
+      ecil_frame_reset(frame, efk_region);
+      ecil_drain_invokers(frame);
+      ecil_submit_frame(frame);
+    }  /* if */
+    if (region_number == FILE_SCOPE_REGION_NUMBER && !C_mode() &&
+        stream->state == ess_open) {
+      /* The names that were not final when their entities were sent, bound
+         now that the file scope is complete (spec 7); F_NAMES is always
+         present for C++, possibly empty. */
+      ecil_frame_reset(frame, efk_names);
+      ecil_emit_late_names(frame);
       ecil_submit_frame(frame);
     }  /* if */
   }  /* if */

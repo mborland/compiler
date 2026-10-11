@@ -1,0 +1,97 @@
+; C++ (ECIL v1): an F_REGION frame after F_GLOBALS (the writer emits one for
+; synthesized static invokers that are only known at the end).  Function
+; bodies in it work like any other: a STRUCTOR pair (alias of C2, whose body
+; comes late), linkonce_odr comdat definitions, a retracted one (RETRACT in a
+; later F_GLOBALS), and the finish-time names all apply.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil > %t.cir
+; RUN: %FileCheck %s < %t.cir
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK-DAG: cir.func private @_ZN1SC1Ei(!cir.ptr<!rec_S>, !s32i) alias(@_ZN1SC2Ei)
+; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_Z3inlv
+; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_Z6unusedv
+; CHECK-DAG: cir.func {{.*}}@_ZN1SC2Ei
+; CHECK-DAG: cir.global external dso_local @gv = #cir.int<0> : !s32i ctor
+
+; SYMS-NOT: _Z6unusedv
+; SYMS-DAG: {{[Ww]}} _Z3inlv
+; SYMS-DAG: T _ZN1SC1Ei
+; SYMS-DAG: T _ZN1SC2Ei
+
+frame DECLS
+  STR 11 "S"
+  STR 12 "_ZN1SC2Ei"
+  STR 13 "_ZN1SC1Ei"
+  STR 14 "_Z3inlv"
+  STR 15 "_Z6unusedv"
+  STR 16 "gv"
+  STR 17 "main"
+  STR 18 "g_n"
+  TY_RECORD_DECL 21 0 11
+  TY_RECORD_BODY 21 4 4 4 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 22 21
+  TY_FUNC 23 11 0 [22, 1]
+  TY_FUNC 24 1 0 []
+  DECL_FUNC 100 23 0 1 12
+  DECL_FUNC 101 23 0 0 13
+  STRUCTOR 101 100 0
+  DECL_FUNC 102 24 3 65 14
+  DECL_FUNC 103 24 3 65 15
+  DECL_FUNC 104 24 0 9 17
+  DECL_VAR 105 1 0 1 4 16
+  DECL_VAR 106 1 0 1 4 18
+frame REGION
+  FUNC_BEGIN 104 0
+  LOCAL 1 21 nil 4 0
+  LREF 1
+  ADDR
+  CONST_INT 1 4
+  CALL 101 23 2 0
+  LREF 1
+  FIELD 21 0
+  LOAD 0
+  CALL 102 24 0 0
+  ADD 1
+  GREF 105
+  LOAD 0
+  ADD 1
+  CONST_INT 1 16
+  SUB 1
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  STATIC_INIT_BEGIN 105 0
+  GREF 105
+  CONST_INT 1 9
+  STORE 2 0
+  STATIC_INIT_END
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 22 22 nil 1
+  PARAM 2 1 1 nil 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 21 0
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  FUNC_END 1
+  FUNC_BEGIN 102 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 103 0
+  CONST_INT 1 5
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  RETRACT 103
+frame END
+  END auto 0

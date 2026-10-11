@@ -1,0 +1,31 @@
+; Emitter-side check: DEREF of a pointer to a function gives a function
+; designator (no data layout); LOAD of it is a stream error (a function
+; lvalue is used through its address), not an internal crash.  The writer
+; emitted this for "void f(const T &fcn) { fcn(); }" with T = void().
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: error [1001]: LOAD of a function designator
+
+frame DECLS
+  STR 10 "f"
+  STR 11 "p"
+  TY_FUNC 21 1 0 []
+  TY_PTR 22 21
+  TY_FUNC 23 1 0 [22]
+  DECL_FUNC 30 23 0 1 10
+frame REGION
+  FUNC_BEGIN 30 0
+  PARAM 1 22 22 11 0
+  LREF 1
+  LOAD 0
+  DEREF
+  LOAD 0
+  DROP
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

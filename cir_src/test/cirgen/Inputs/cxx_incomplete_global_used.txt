@@ -1,0 +1,17 @@
+frame DECLS
+  STR 10 "f"
+  STR 11 "e"
+  TY_RECORD_DECL 20 0 nil
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 30 21 0 1 10
+  DECL_VAR 33 20 0 0 0 11
+frame REGION
+  FUNC_BEGIN 30 0
+  GREF 33
+  ADDR
+  DROP
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

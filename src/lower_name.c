@@ -847,6 +847,25 @@ static void mangled_operator_or_special_function(
 #endif /* ABI_COMPATIBILITY_VERSION >= 402 */
 static a_boolean entity_needs_to_be_individuated(a_source_correspondence *scp,
                                                  an_il_entry_kind        kind);
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+STATIC_THREAD int
+                cir_ctor_dtor_kind_override;
+                        /* An a_ctor_or_dtor_kind that mangled_function_name
+                           uses instead of cdk_none, or 0. */
+
+static a_boolean cir_internal_name_marker_needed(
+                                            a_source_correspondence *scp)
+/*
+Return TRUE if the entity has internal linkage because it is static (or a
+const variable) at namespace scope: the Itanium ABI puts an L before its
+source name (_ZL1fv).  A member of an unnamed namespace has no L.
+*/
+{
+  return scp->name_linkage == (a_name_linkage_kind)nlk_internal &&
+         !scp->is_class_member && !scp->is_local_to_function &&
+         !is_member_of_unnamed_namespace(scp);
+}  /* cir_internal_name_marker_needed */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 static void mangled_encoding_for_param_reference(
                                                an_expr_node_ptr         expr,
                                                a_mangling_control_block *mctl);
@@ -8036,6 +8055,11 @@ has been chosen) will give the namespace an appropriate name.
     /* The name is either __N or _GLOBAL__N_ followed by the module id. */
     check_assertion(!nsp->source_corresp.is_class_member);
     parent_nsp = parent_namespace_or_null(nsp);
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+    /* Itanium: every unnamed namespace is _GLOBAL__N_1. */
+    (void)parent_nsp;
+    module_id = "1";
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
     if (parent_nsp != NULL &&
         unmangled_name_of(&parent_nsp->source_corresp) == NULL) {
       /* A nested unnamed namespace within an unnamed namespace.
@@ -8047,6 +8071,7 @@ has been chosen) will give the namespace an appropriate name.
       module_id = module_id_for_source_corresp(&nsp->source_corresp, mctl);
       lacking_module_id = mctl->lacking_module_id;
     }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
     if (lacking_module_id) {
       /* No module id is available yet; return a temporary name for now
          so mangling can continue. */
@@ -9106,6 +9131,14 @@ be individuated in late-specified return types as well.
 {
   a_boolean result = FALSE;
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* The CIR back end gives internal entities Itanium names (an L before the
+     source name of a static entity, _GLOBAL__N_1 for an unnamed namespace)
+     and never a module id, so that names are deterministic.  Nothing is
+     individuated. */
+  (void)scp;
+  (void)kind;
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
   if (local_types_as_template_args_enabled) {
     if (kind == iek_type) {
       if (((is_immediate_class_type((a_type_ptr)scp) &&
@@ -9174,6 +9207,7 @@ be individuated in late-specified return types as well.
                                         iek_type);
     }  /* if */
   }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   return result;
 }  /* entity_needs_to_be_individuated */
 
@@ -9776,9 +9810,16 @@ determination is made by the callee.
   a_boolean         needs_to_be_individuated;
 
   check_assertion(discriminator_scp != NULL);
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  if (force_individuation) {
+    /* Not individuated (see entity_needs_to_be_individuated). */
+    needs_to_be_individuated = FALSE;
+  } else {
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
   if (force_individuation) {
     needs_to_be_individuated = TRUE;
   } else {
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
     needs_to_be_individuated = entity_needs_to_be_individuated(scp, kind);
   }  /* if */
   *discriminator_scp = NULL;
@@ -12754,6 +12795,12 @@ literal operator.
     name = unmangled_or_fabricated_name_of(scp);
     check_assertion_str(name != NULL,
                         "mangled_function_base_name: unnamed routine");
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+    if (special_kind == (a_special_function_kind)sfk_none &&
+        cir_internal_name_marker_needed(scp)) {
+      add_to_mangled_name('L', mctl);
+    }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if IA64_ABI
     add_number_to_mangled_name((unsigned long)strlen(name), mctl);
 #endif /* IA64_ABI */
@@ -13044,6 +13091,16 @@ determination is made by the callee.
   an_opname_kind   opname_kind = (an_opname_kind)onk_none;
   a_ctor_or_dtor_kind
                    ctor_dtor_kind = (a_ctor_or_dtor_kind)cdk_none;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* The variant applies to this routine only: the entities local to it, and
+     the routines that enclose a local one, use the complete-object
+     encoding, so it is taken before any nested mangling. */
+  a_ctor_or_dtor_kind
+                   cir_variant = (a_ctor_or_dtor_kind)
+                                         cir_ctor_dtor_kind_override;
+
+  cir_ctor_dtor_kind_override = 0;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
   routine_type = skip_typerefs(routine->type);
   /* See if the function should be mangled as a template.  In the modern C++
@@ -13139,6 +13196,9 @@ determination is made by the callee.
     *base_name_offset = mctl->length;
   }  /* if */
 #endif /* IA64_ABI && DO_IL_LOWERING */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  if (cir_variant != 0) ctor_dtor_kind = cir_variant;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if GNU_FUNCTION_MULTIVERSIONING && !IA64_ABI
   if (has_gnu_routine_supp(routine)) add_mv_distinction(routine, mctl);
 #endif /* GNU_FUNCTION_MULTIVERSIONING && !IA64_ABI */
@@ -13897,6 +13957,11 @@ to the mangled name.
       }  /* if */
     }  /* if */
 #endif /* IA64_ABI && ABI_COMPATIBILITY_VERSION >= 510 */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+    if (kind == iek_variable && cir_internal_name_marker_needed(scp)) {
+      add_to_mangled_name('L', mctl);
+    }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
     mangled_name_with_length(unmangled_or_fabricated_name_of(scp), mctl);
 #if IA64_ABI && ABI_COMPATIBILITY_VERSION >= 510
     if (tmpl != NULL) {
@@ -14445,6 +14510,11 @@ Also determines any implicit abi_tags for the variable when mangling is needed.
   } else if (is_class_or_namespace_member(variable)) {
     /* Static data members and members of namespaces need mangled names. */
     mangling_needed = TRUE;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  } else if (cir_internal_name_marker_needed(&variable->source_corresp)) {
+    /* A static file-scope variable gets the L of an internal name. */
+    mangling_needed = TRUE;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if ABI_COMPATIBILITY_VERSION >= 411 && GNU_EXTENSIONS_ALLOWED
   } else {
     /* A file-scope variable that usually wouldn't need mangling, but it may
@@ -16034,6 +16104,507 @@ initialized for each compilation.
 }  /* lower_name_init */
 
 /* Conditionally close the "edg" namespace. */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+
+char *cir_structor_name(a_routine_ptr routine, a_ctor_or_dtor_kind kind)
+/*
+Return the mangled name of the constructor or destructor variant "kind" of
+the routine (cdk_complete C1/D1, cdk_subobject C2/D2, cdk_deleting D0).  The
+non-CIR mangling of a constructor or destructor is the complete-object one.
+The text is in the mangling buffer and is valid until the next mangling.
+*/
+{
+  char  *name;
+
+  cir_ctor_dtor_kind_override = (int)kind;
+  name = get_mangled_function_name_full(routine, /*force_primary_name=*/FALSE,
+                                        /*externalize_if_necessary=*/FALSE);
+  cir_ctor_dtor_kind_override = 0;
+  return name;
+}  /* cir_structor_name */
+
+
+char *cir_local_static_name(a_variable_ptr variable)
+/*
+Return the Itanium name of a function-local static variable (the name of
+the entity local to its function: _ZZ1fvE1a, with the discriminator for a
+second variable of the same name in the function).  The variable is not
+changed.  The text is in the mangling buffer and is valid until the next
+mangling.
+*/
+{
+  a_mangling_control_block  mctl;
+  a_source_correspondence   *scp = &variable->source_corresp;
+
+  start_mangling(&mctl, variable->is_prototype_instantiation);
+  add_mangled_name_prefix(&mctl);
+  add_prefix_for_local_entity(scp->enclosing_routine, &mctl);
+  mangled_name_with_length(unmangled_or_fabricated_name_of(scp), &mctl);
+  add_discriminator_if_necessary(scp, &mctl);
+  return end_mangling(/*final=*/TRUE, &mctl);
+}  /* cir_local_static_name */
+
+
+
+/* Entities that are local to the translation unit although they have no
+   internal linkage of their own (spec 11.2).  Their Itanium names do not
+   carry a module id, so the same name in two translation units must not
+   denote one entity: they get internal linkage. */
+
+typedef struct a_tu_item {
+  an_il_entry_kind  kind;
+  void              *entity;
+  unsigned long     generation;   /* The walk that recorded this item. */
+  a_boolean         result;       /* For the memo table. */
+} a_tu_item;
+
+/* A set of entities: open addressing, power-of-two capacity.  An item is
+   live if its entity is set and its generation is the current one, so that
+   clearing the set for the next walk is free. */
+typedef struct a_tu_table {
+  a_tu_item     *items;
+  size_t        capacity;
+  size_t        count;
+  unsigned long generation;
+} a_tu_table;
+
+STATIC_THREAD a_tu_item
+                *tu_stack;
+STATIC_THREAD size_t
+                tu_stack_size;
+STATIC_THREAD size_t
+                tu_stack_capacity;
+STATIC_THREAD a_tu_table
+                tu_seen;        /* Entities examined by this walk. */
+STATIC_THREAD a_tu_table
+                tu_memo;        /* The answers for entities asked about. */
+STATIC_THREAD a_boolean
+                tu_found;       /* A template argument is a local template. */
+
+static size_t tu_hash(an_il_entry_kind kind, void *entity)
+/*
+A hash of an entity: its address and kind.
+*/
+{
+  size_t  h = (size_t)(((unsigned long)(size_t)entity >> 4) *
+                       2654435761UL);
+
+  return h ^ (h >> 15) ^ (size_t)kind;
+}  /* tu_hash */
+
+
+static a_tu_item *tu_table_slot(a_tu_table *table,
+                                an_il_entry_kind kind,
+                                void *entity)
+/*
+The slot holding the entity, or the free slot where it belongs.  The table
+must not be full.
+*/
+{
+  size_t     mask = table->capacity - 1;
+  size_t     i = tu_hash(kind, entity) & mask;
+  a_tu_item  *item = &table->items[i];
+
+  while (item->entity != NULL && item->generation == table->generation &&
+         !(item->entity == entity && item->kind == kind)) {
+    i = (i + 1) & mask;
+    item = &table->items[i];
+  }  /* while */
+  return item;
+}  /* tu_table_slot */
+
+
+static void tu_table_grow(a_tu_table *table)
+/*
+Double the capacity of a table, keeping its live items.  Running out of
+memory is fatal.
+*/
+{
+  a_tu_item  *old_items = table->items;
+  size_t     old_capacity = table->capacity;
+  size_t     i;
+
+  table->capacity = (old_capacity == 0) ? 256 : old_capacity * 2;
+  table->items = (a_tu_item *)calloc(table->capacity, sizeof(a_tu_item));
+  if (table->items == NULL) catastrophe(ec_out_of_memory);
+  for (i = 0; i < old_capacity; i++) {
+    if (old_items[i].entity != NULL &&
+        old_items[i].generation == table->generation) {
+      *tu_table_slot(table, old_items[i].kind, old_items[i].entity) =
+                                                                 old_items[i];
+    }  /* if */
+  }  /* for */
+  free(old_items);
+}  /* tu_table_grow */
+
+
+static a_tu_item *tu_table_add(a_tu_table *table,
+                               an_il_entry_kind kind,
+                               void *entity)
+/*
+Add an entity (known to be absent) to a table and return its item.
+*/
+{
+  a_tu_item  *item;
+
+  if (table->capacity == 0 || (table->count + 1) * 2 > table->capacity) {
+    tu_table_grow(table);
+  }  /* if */
+  item = tu_table_slot(table, kind, entity);
+  item->kind = kind;
+  item->entity = entity;
+  item->generation = table->generation;
+  item->result = FALSE;
+  table->count++;
+  return item;
+}  /* tu_table_add */
+
+
+static void tu_push(an_il_entry_kind kind, void *entity)
+/*
+Queue an entity to be examined.
+*/
+{
+  if (entity != NULL) {
+    if (tu_stack_size == tu_stack_capacity) {
+      size_t     new_capacity = (tu_stack_capacity == 0) ? 64 :
+                                                         tu_stack_capacity * 2;
+      a_tu_item  *new_list = (a_tu_item *)realloc(tu_stack,
+                                        new_capacity * sizeof(a_tu_item));
+
+      if (new_list == NULL) catastrophe(ec_out_of_memory);
+      tu_stack = new_list;
+      tu_stack_capacity = new_capacity;
+    }  /* if */
+    tu_stack[tu_stack_size].kind = kind;
+    tu_stack[tu_stack_size].entity = entity;
+    tu_stack_size++;
+  }  /* if */
+}  /* tu_push */
+
+
+static a_boolean tu_seen_before(an_il_entry_kind kind, void *entity)
+/*
+Return TRUE if the entity was examined already; else remember it.
+*/
+{
+  a_boolean  seen = FALSE;
+  a_tu_item  *slot = NULL;
+
+  if (tu_seen.capacity != 0) slot = tu_table_slot(&tu_seen, kind, entity);
+  if (slot != NULL && slot->entity != NULL &&
+      slot->generation == tu_seen.generation) {
+    seen = TRUE;
+  } else {
+    (void)tu_table_add(&tu_seen, kind, entity);
+  }  /* if */
+  return seen;
+}  /* tu_seen_before */
+
+
+static a_boolean ttt_collect_classes(a_type_ptr tp, a_boolean *end_traversal)
+/*
+traverse_type_tree service function: queue every class and enum type of the
+tree (the traversal itself does not recurse into the entities).
+*/
+{
+  (void)end_traversal;
+  if (is_immediate_class_type(tp) || is_immediate_enum_type(tp)) {
+    tu_push(iek_type, tp);
+  }  /* if */
+  return FALSE;
+}  /* ttt_collect_classes */
+
+
+static void tu_push_type_tree(a_type_ptr type)
+/*
+Queue the class and enum types a type is made of: through pointers, arrays,
+function types, template arguments and enclosing classes.
+*/
+{
+  if (type != NULL) {
+    (void)traverse_type_tree(type, ttt_collect_classes,
+                             TTT_RETURN_TYPE | TTT_PARAM_TYPES |
+                             TTT_THIS_PARAM_TYPE | TTT_TEMPLATE_ARGS |
+                             TTT_SKIP_TYPEREFS | TTT_PARENT_CLASSES |
+                             TTT_EXCEPTION_SPECS);
+  }  /* if */
+}  /* tu_push_type_tree */
+
+
+STATIC_THREAD a_constant_ptr
+                *tu_cstack;     /* Constants of a template argument. */
+STATIC_THREAD size_t
+                tu_cstack_capacity;
+
+static void tu_scan_constant(a_constant_ptr constant)
+/*
+Queue the entities a constant template argument refers to: the entity whose
+address it is, and (a C++20 class-type argument) those of its members and
+the types it is made of.  A heap stack walks the nested aggregates.
+*/
+{
+  size_t  size = 0;
+
+  while (constant != NULL || size > 0) {
+    a_constant_ptr  c = constant;
+
+    if (c == NULL) c = tu_cstack[--size];
+    constant = NULL;
+    if (c->kind == (a_constant_repr_kind)ck_address) {
+      if (c->variant.address.kind == (an_address_base_kind)abk_routine) {
+        tu_push(iek_routine, c->variant.address.variant.routine);
+      } else if (c->variant.address.kind ==
+                                     (an_address_base_kind)abk_variable) {
+        tu_push(iek_variable, c->variant.address.variant.variable);
+      }  /* if */
+    } else if (c->kind == (a_constant_repr_kind)ck_init_repeat) {
+      constant = c->variant.init_repeat.constant;
+    } else if (c->kind == (a_constant_repr_kind)ck_aggregate) {
+      a_constant_ptr  e;
+
+      if (c->type != NULL) tu_push_type_tree(c->type);
+      for (e = c->variant.aggregate.first_constant; e != NULL; e = e->next) {
+        if (size == tu_cstack_capacity) {
+          size_t          new_capacity = (tu_cstack_capacity == 0) ? 32 :
+                                         tu_cstack_capacity * 2;
+          a_constant_ptr  *new_stack = (a_constant_ptr *)realloc(tu_cstack,
+                                  new_capacity * sizeof(a_constant_ptr));
+
+          if (new_stack == NULL) catastrophe(ec_out_of_memory);
+          tu_cstack = new_stack;
+          tu_cstack_capacity = new_capacity;
+        }  /* if */
+        tu_cstack[size++] = e;
+      }  /* for */
+    }  /* if */
+  }  /* while */
+}  /* tu_scan_constant */
+
+
+static void tu_push_template_args(a_template_arg_ptr args)
+/*
+Queue the entities a template argument list names: type arguments, and the
+entities whose address a non-type argument is.
+*/
+{
+  for (; args != NULL; args = args->next) {
+    if (args->kind == (a_templ_arg_kind)tak_type) {
+      tu_push_type_tree(args->variant.type);
+    } else if (args->kind == (a_templ_arg_kind)tak_template) {
+      if (args->variant.templ.ptr != NULL &&
+          is_member_of_unnamed_namespace(
+                                 &args->variant.templ.ptr->source_corresp)) {
+        tu_found = TRUE;
+      }  /* if */
+    } else if (args->kind == (a_templ_arg_kind)tak_nontype &&
+               !args->is_array_bound_of_unknown_type &&
+               args->variant.constant != NULL) {
+      tu_scan_constant(args->variant.constant);
+    }  /* if */
+  }  /* for */
+}  /* tu_push_template_args */
+
+
+static a_routine_ptr tu_default_arg_lambda_parent(a_type_ptr t)
+/*
+For a lambda closure defined directly in a default argument, the routine that
+has that default argument; NULL for any other type (and while the routine is
+not recorded yet: the lambda is then treated as unnamed).
+*/
+{
+  a_routine_ptr  result = NULL;
+
+  if (type_is_lambda_closure(t)) {
+    a_class_symbol_supplement_ptr  cssp = symbol_supplement_for_class(t);
+    a_class_type_supplement_ptr    ctsp = class_type_supp(t);
+
+    if (cssp != NULL &&
+        cssp->lambda_immediately_inside_default_arg_expression &&
+        !ctsp->defined_in_variable_initializer &&
+        !ctsp->defined_in_field_initializer) {
+      result = ctsp->lambda_parent.routine;
+    }  /* if */
+  }  /* if */
+  return result;
+}  /* tu_default_arg_lambda_parent */
+
+
+static a_boolean tu_walk(an_il_entry_kind kind, void *entity)
+/*
+Return TRUE if the routine, variable or type is local to the translation
+unit: it has internal linkage, or it is in an unnamed namespace, is an
+unnamed class without a linkage name, is local to (or a lambda of) such a
+function, or is made of such entities (a template argument, a parameter or
+return type, a member of such a class).  The walk uses a heap work list: no
+recursion on the nesting of the entities.
+*/
+{
+  a_boolean  result = FALSE;
+
+  tu_stack_size = 0;
+  tu_seen.generation++;
+  tu_seen.count = 0;
+  tu_found = FALSE;
+  tu_push(kind, entity);
+  while (!result && tu_stack_size > 0) {
+    a_tu_item  item = tu_stack[--tu_stack_size];
+
+    result = tu_found;
+    if (result) {
+      /* Found by a template argument. */
+    } else if (tu_seen_before(item.kind, item.entity)) {
+      /* Examined already. */
+    } else if (item.kind == (an_il_entry_kind)iek_routine) {
+      a_routine_ptr  r = (a_routine_ptr)item.entity;
+
+      if (r->source_corresp.name_linkage ==
+                                          (a_name_linkage_kind)nlk_internal ||
+          r->storage_class == (a_storage_class)sc_static ||
+          is_member_of_unnamed_namespace(&r->source_corresp)) {
+        result = TRUE;
+      } else {
+        if (r->source_corresp.is_class_member) {
+          tu_push(iek_type, parent_class_of(r));
+        }  /* if */
+        if (r->source_corresp.is_local_to_function &&
+            r->source_corresp.is_class_member) {
+          tu_push(iek_routine,
+                  enclosing_routine_for_local_type_or_null(
+                                                     parent_class_of(r)));
+        }  /* if */
+        tu_push_type_tree(r->type);
+        tu_push_template_args(r->template_arg_list);
+      }  /* if */
+    } else if (item.kind == (an_il_entry_kind)iek_variable) {
+      a_variable_ptr  v = (a_variable_ptr)item.entity;
+
+      if (v->source_corresp.name_linkage ==
+                                          (a_name_linkage_kind)nlk_internal ||
+          (v->storage_class == (a_storage_class)sc_static &&
+           !v->source_corresp.is_local_to_function &&
+           !v->source_corresp.is_class_member) ||
+          is_member_of_unnamed_namespace(&v->source_corresp)) {
+        result = TRUE;
+      } else {
+        if (v->source_corresp.is_local_to_function) {
+          tu_push(iek_routine, v->source_corresp.enclosing_routine);
+        }  /* if */
+        if (v->source_corresp.is_class_member) {
+          tu_push(iek_type, parent_class_of(v));
+        }  /* if */
+        tu_push_type_tree(v->type);
+        if (v->template_info != NULL) {
+          tu_push_template_args(v->template_info->template_arg_list);
+        }  /* if */
+      }  /* if */
+    } else {
+      /* A class or enum type. */
+      a_type_ptr  t = (a_type_ptr)item.entity;
+      a_boolean   closure = type_is_lambda_closure(t);
+      a_boolean   reproducible = FALSE;
+
+      if (closure) {
+        a_class_symbol_supplement_ptr  cssp = symbol_supplement_for_class(t);
+
+        reproducible = cssp != NULL &&
+                       cssp->lambda_subject_to_trans_unit_corresp;
+      }  /* if */
+      if (t->source_corresp.name_linkage ==
+                                          (a_name_linkage_kind)nlk_internal ||
+          is_member_of_unnamed_namespace(&t->source_corresp)) {
+        result = TRUE;
+      } else if (!reproducible && type_is_unnamed(t) &&
+                 !t->source_corresp.is_class_member &&
+                 !t->source_corresp.is_local_to_function &&
+                 !(closure && type_is_lambda_in_initializer(t)) &&
+                 !(tu_default_arg_lambda_parent(t) != NULL &&
+                   (!t->source_corresp.is_local_to_function ||
+                    t->source_corresp.is_class_member))) {
+        /* An unnamed type that is not specific to a class or function. */
+        result = TRUE;
+      } else {
+        if (t->source_corresp.is_local_to_function) {
+          tu_push(iek_routine, enclosing_routine_for_local_type_or_null(t));
+        }  /* if */
+        if (t->source_corresp.is_class_member) {
+          tu_push(iek_type, parent_class_of(t));
+        }  /* if */
+        if (closure && is_immediate_class_type(t)) {
+          a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+
+          if (ctsp->defined_in_variable_initializer) {
+            tu_push(iek_variable, ctsp->lambda_parent.variable);
+          } else {
+            tu_push(iek_routine, tu_default_arg_lambda_parent(t));
+          }  /* if */
+        }  /* if */
+        /* Template arguments and other components of the type. */
+        tu_push_type_tree(t);
+        if (is_immediate_class_type(t)) {
+          a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+
+          if (ctsp->assoc_template != NULL &&
+              is_member_of_unnamed_namespace(
+                                &ctsp->assoc_template->source_corresp)) {
+            result = TRUE;
+          }  /* if */
+          tu_push_template_args(ctsp->template_arg_list);
+        }  /* if */
+      }  /* if */
+    }  /* if */
+  }  /* while */
+  tu_stack_size = 0;
+  return result || tu_found;
+}  /* tu_walk */
+
+
+STATIC_THREAD a_boolean
+                tu_memo_enabled;  /* The names are final. */
+
+void cir_tu_local_names_are_final(void)
+/*
+From now on the answers of cir_entity_is_tu_local are final (the late names
+are being resolved): drop what was remembered and remember the answers.
+Before that an entity's answer can change (a lambda whose parent is not
+recorded yet is treated as unnamed).
+*/
+{
+  tu_memo.generation++;
+  tu_memo.count = 0;
+  tu_memo_enabled = TRUE;
+}  /* cir_tu_local_names_are_final */
+
+
+a_boolean cir_entity_is_tu_local(an_il_entry_kind kind, void *entity)
+/*
+The answer of tu_walk, remembered for each entity asked about once the names
+are final (the walk is linear in the entities reachable from it).
+*/
+{
+  a_tu_item  *memo = NULL;
+  a_boolean  result;
+
+  if (tu_memo_enabled && tu_memo.capacity != 0) {
+    memo = tu_table_slot(&tu_memo, kind, entity);
+    if (memo->entity != entity || memo->kind != kind ||
+        memo->generation != tu_memo.generation) {
+      memo = NULL;
+    }  /* if */
+  }  /* if */
+  if (memo != NULL) {
+    result = memo->result;
+  } else {
+    result = tu_walk(kind, entity);
+    if (tu_memo_enabled) {
+      tu_table_add(&tu_memo, kind, entity)->result = result;
+    }  /* if */
+  }  /* if */
+  return result;
+}  /* cir_entity_is_tu_local */
+
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
 END_EDG_NAMESPACE
 
 #endif /* NEED_NAME_MANGLING */

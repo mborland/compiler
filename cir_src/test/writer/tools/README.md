@@ -26,6 +26,17 @@ builds (`cmake --build build/gcc-cir --target cpfe-cir`) and calls
   output (SAME or DIFF). `CMP_OPTIONS` adds eccp options. See
   `../probes/nested_struct_return.c` (a struct returned from two blocks that
   declare the same name; found a library bug).
+- `cmp_cxx_box.sh` — the C++ counterpart of `cmp_box.sh` (container side):
+  builds each `.cpp` of `.tmp-cmp/files` with g++ and with cpfe-cir +
+  `edg-cir --emit=asm`, runs both and diffs the output.  Programs are in
+  `../probes/cxx_*.cpp` (the argument order of a call is unspecified: print
+  one value per statement).
+- `cmp_cxx_multi_box.sh` — like `cmp_cxx_box.sh` for programs of several
+  translation units (`.tmp-cmp/multi/<name>/*.cpp`, one assembly per file):
+  `../probes/multi/tu_local` checks that equally named entities that are
+  local to a translation unit (lambdas, local classes, anonymous-namespace
+  and unnamed types as template arguments) stay separate.  `CMP_DIR` names
+  the directory `cmp_cxx_box.sh` takes the programs from.
 - `rt_run.sh 'path.sft.c:options'...` (with `rt_box.sh`) — builds and runs
   imported GCC tests through the CIR pipeline on the box; prints the compile
   diagnostics and the exit status.

@@ -6,7 +6,7 @@
 # RUN: cmp %t.a %t.b
 # RUN: %ecil-dump %t.a | %FileCheck %s
 
-# CHECK: ecil 0.6 features=0x00000000
+# CHECK: ecil 1.0 features=0x00000000
 # CHECK: frame HEADER
 # CHECK: HDR_TARGET 1 2 nil 64 64 6
 # CHECK: frame GLOBALS

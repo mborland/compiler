@@ -1,0 +1,38 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++23 Test_name.c
+"./cpp23/ext-floating7.C", line 45: warning: CIR back end: the body of "fn" uses a floating constant of this format, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./cpp23/ext-floating7.C", line 119: warning: CIR back end: the body of "main" uses a floating constant of this format, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "a" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "b" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "c" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "a2" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "z" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "nz" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of '_Z2fnDF16_' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'a' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'a2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'z' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'nz' was dropped: it uses a construct the CIR back end cannot express
+
+8 errors detected in the compilation of "Test_name.c".

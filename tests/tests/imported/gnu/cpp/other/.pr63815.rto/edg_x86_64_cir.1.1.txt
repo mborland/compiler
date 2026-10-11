@@ -1,0 +1,51 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 36: warning: CIR back end: the body of "CreateString" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 42: warning: CIR back end: the body of "Unserialize" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 47: warning: CIR back end: the body of "AGSCCDynamicObject" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    ICCStringClass *x = new ScriptString;
+                            ^
+          detected during:
+            implicit generation of "AGSCCDynamicObject::AGSCCDynamicObject() noexcept" at line 47
+            implicit generation of "ScriptString::ScriptString() noexcept" at line 47
+
+"Test_name.c", line 47: warning: CIR back end: the body of "ICCStringClass" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    ICCStringClass *x = new ScriptString;
+                            ^
+          detected during:
+            implicit generation of "ICCStringClass::ICCStringClass() noexcept" at line 47
+            implicit generation of "ScriptString::ScriptString() noexcept" at line 47
+
+"Test_name.c", line 47: warning: CIR back end: the body of "ScriptString" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    ICCStringClass *x = new ScriptString;
+                            ^
+          detected during implicit generation of "ScriptString::ScriptString() noexcept" at line 47
+
+"Test_name.c", line 52: warning: CIR back end: the body of "main" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN18AGSCCDynamicObjectC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN18AGSCCDynamicObjectC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN14ICCStringClassC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN14ICCStringClassC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12ScriptStringC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12ScriptStringC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN12ScriptString12CreateStringEi' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN12ScriptString11UnserializeEv' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

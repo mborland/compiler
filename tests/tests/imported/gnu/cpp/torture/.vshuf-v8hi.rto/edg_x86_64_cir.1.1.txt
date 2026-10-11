@@ -1,0 +1,36 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"./torture/vshuf-main.inc", line 29: warning: CIR back end: the body of "main" uses the builtin operation "__builtin_shuffle", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "in1" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "mask1" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "out1" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "in2" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "in3" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "mask2" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "out2" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL3in1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL5mask1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL4out1' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL3in2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL3in3' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL5mask2' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL4out2' was dropped: it uses a construct the CIR back end cannot express
+
+8 errors detected in the compilation of "Test_name.c".

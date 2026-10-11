@@ -22,8 +22,8 @@ ECIL_VERSION_MAJOR or ECIL_VERSION_MINOR (section 9 of the spec).
 #include <stddef.h>
 #include <stdint.h>
 
-#define ECIL_VERSION_MAJOR 0
-#define ECIL_VERSION_MINOR 8
+#define ECIL_VERSION_MAJOR 1
+#define ECIL_VERSION_MINOR 0
 
 /*
 The stream preamble: 8 magic bytes, then u16 major, u16 minor and

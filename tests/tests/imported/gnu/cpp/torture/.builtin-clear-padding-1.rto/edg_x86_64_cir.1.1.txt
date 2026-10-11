@@ -1,0 +1,16 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 10: warning: unknown attribute "noipa"
+  __attribute__((noipa)) void
+                 ^
+
+"Test_name.c", line 13: warning: variable "i" was declared but never referenced
+    int i;
+        ^
+
+"Test_name.c", line 34: warning: CIR back end: the body of "main" uses the builtin function __builtin_clear_padding, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

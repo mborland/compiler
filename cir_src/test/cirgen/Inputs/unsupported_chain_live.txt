@@ -1,0 +1,19 @@
+frame DECLS
+  STR 11 "dropped"
+  STR 12 "live_user"
+  STR 13 "main"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 41 21 1 32 11
+  DECL_FUNC 42 21 1 1 12
+  DECL_FUNC 43 21 0 9 13
+frame REGION
+  FUNC_BEGIN 42 0
+  CALL 41 21 0 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  CALL 42 21 0 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

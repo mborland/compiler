@@ -1,0 +1,15 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 9: warning: anonymous non-C-like type given name for linkage purposes by typedef or alias declaration
+    } c;
+      ^
+"Test_name.c", line 7: note: type is not C-like because of this member declaration
+      void b() try { b(); } catch (short) {
+           ^
+
+"Test_name.c", line 10: warning: CIR back end: the body of "b" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void a<<unnamed>>() [with <unnamed>=0]" at line 14
+
+Warning: CIR back end: the unused definition of '_ZZ1aILi0EEvvEN1c1bEv' was dropped and erased: it uses a construct the CIR back end cannot express
+

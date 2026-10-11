@@ -1,0 +1,21 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 22: warning: CIR back end: the body of "ostream" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  ostream cout;
+              ^
+          detected during implicit generation of "ostream::ostream() noexcept" at line 22
+
+"Test_name.c", line 30: warning: CIR back end: the body of "main" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "cout" uses a record type that is not supported, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the unused definition of '_ZN7ostreamC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7ostreamC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'cout' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

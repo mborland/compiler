@@ -1,0 +1,16 @@
+eccp -DTEST_NUMBER=1 --c++23 -A Test_name.c
+"Test_name.c", line 70: warning: CIR back end: the body of "get" uses the constant kind "aggregate", which the CIR back end does not support; the function is dropped
+    }
+    ^
+          detected during instantiation of "B<I> get<I>(const C &) [with I=0]" at line 74
+
+"Test_name.c", line 70: warning: CIR back end: the body of "get" uses the constant kind "aggregate", which the CIR back end does not support; the function is dropped
+    }
+    ^
+          detected during instantiation of "B<I> get<I>(const C &) [with I=1]" at line 74
+
+Error: CIR back end: the definition of '_Z3getILi0EE1BIXT_EERK1C' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z3getILi1EE1BIXT_EERK1C' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+2 errors detected in the compilation of "Test_name.c".

@@ -175,6 +175,15 @@ inline void set_dso_local(mlir::Operation *op, bool value)
 /* Set dso_local through the global-value interface. */
 { mlir::cast<cir::CIRGlobalValueInterface>(op).setDSOLocal(value); }
 
+inline void set_comdat(mlir::Operation *op, llvm::StringRef name)
+/* Put a function or global in the comdat group name ("" is its own name). */
+{
+  if (auto fn = mlir::dyn_cast<cir::FuncOp>(op))
+    fn.setComdat(name);
+  else
+    mlir::cast<cir::GlobalOp>(op).setComdat(name);
+}
+
 inline cir::GlobalOp create_global(a_builder &b, mlir::ModuleOp module,
                                    mlir::Location loc, llvm::StringRef name,
                                    mlir::Type type, bool is_constant,
@@ -186,6 +195,12 @@ inline cir::GlobalOp create_global(a_builder &b, mlir::ModuleOp module,
   b.setInsertionPointToEnd(module.getBody());
   return cir::GlobalOp::create(b, loc, name, type, is_constant,
                                mlir::ptr::MemorySpaceAttrInterface(), linkage);
+}
+
+inline void set_alias(cir::FuncOp fn, llvm::StringRef target)
+/* Make fn an alias of the function named target (fn has no body). */
+{
+  fn.setAliaseeAttr(mlir::FlatSymbolRefAttr::get(fn.getContext(), target));
 }
 
 inline cir::FuncOp create_function(a_builder &b, mlir::ModuleOp module,
@@ -218,6 +233,84 @@ inline cir::IfOp open_if(a_builder &b, mlir::Location loc, mlir::Value cond)
 {
   return cir::IfOp::create(b, loc, cond, /*withElseRegion=*/false,
                            no_op_body(), nullptr);
+}
+
+inline cir::CleanupScopeOp open_cleanup_scope(a_builder &b, mlir::Location loc)
+/*
+Create a cir.cleanup.scope normal with an empty body block and an empty
+cleanup block (each is terminated when its region is finished).
+*/
+{
+  return cir::CleanupScopeOp::create(b, loc, cir::CleanupKind::Normal,
+                                     no_op_body(), no_op_body());
+}
+
+inline cir::LocalInitOp open_local_init(a_builder &b, mlir::Location loc,
+                                        cir::GlobalOp global, bool tls)
+/* Create cir.local_init static_local @global with no regions yet. */
+{ return cir::LocalInitOp::create(b, loc, global.getSymNameAttr(), tls); }
+
+inline cir::RegisterExitDtorOp open_register_exit_dtor(a_builder &b,
+                                                       mlir::Location loc,
+                                                       cir::GlobalOp object)
+/* Create cir.register_exit_dtor @object with no body block yet. */
+{
+  return cir::RegisterExitDtorOp::create(b, loc,
+                                         object.getSymNameAttr().getValue());
+}
+
+inline void mark_static_local(mlir::Value address)
+/* Mark a get_global as the address of a guarded function-local static. */
+{ mlir::cast<cir::GetGlobalOp>(address.getDefiningOp()).setStaticLocal(true); }
+
+inline void set_dynamic_init(cir::GlobalOp global, llvm::StringRef guard,
+                             bool is_local, int tls_kind, bool is_inline,
+                             bool template_instance)
+/*
+Mark a global as guarded dynamically initialized: the guard variable name and
+the facts LoweringPrepare needs (tls_kind: 0 none, 1 static, 2 dynamic).
+*/
+{
+  mlir::MLIRContext *ctx = global.getContext();
+  cir::TLSKind tls = tls_kind == 0 ? cir::TLSKind::None
+                     : tls_kind == 1 ? cir::TLSKind::Static
+                                     : cir::TLSKind::Dynamic;
+
+  global.setDynamicInitGuardAttr(cir::DynamicInitGuardAttr::get(
+      ctx, mlir::StringAttr::get(ctx, guard)));
+  global.setDynamicInitInfoAttr(cir::DynamicInitInfoAttr::get(
+      ctx, is_local, tls, is_inline,
+      template_instance
+          ? cir::TemplateSpecializationKind::ImplicitInstantiation
+          : cir::TemplateSpecializationKind::Undeclared));
+}
+
+inline void delete_array(a_builder &b, mlir::Location loc,
+                         mlir::Value address, cir::FuncOp delete_fn,
+                         bool size_param, uint64_t align_param,
+                         cir::FuncOp element_dtor, uint64_t element_align)
+/*
+Create cir.delete_array: the usual operator delete parameters (size, and the
+alignment when align_param is not zero) only when it takes any, the element
+destructor when the elements have one.  The element alignment is the one the
+new[] used to size the cookie.
+*/
+{
+  mlir::MLIRContext *ctx = b.getContext();
+  cir::UsualDeleteParamsAttr params;
+
+  if (size_param || align_param != 0)
+    params = cir::UsualDeleteParamsAttr::get(
+        ctx, size_param,
+        align_param != 0 ? std::optional<uint64_t>(align_param)
+                         : std::nullopt,
+        false, false);
+  cir::DeleteArrayOp::create(
+      b, loc, address, mlir::FlatSymbolRefAttr::get(delete_fn.getSymNameAttr()),
+      params,
+      element_dtor ? mlir::FlatSymbolRefAttr::get(element_dtor.getSymNameAttr())
+                   : mlir::FlatSymbolRefAttr(),
+      false, b.getI64IntegerAttr(static_cast<int64_t>(element_align)));
 }
 
 inline cir::ForOp open_for(a_builder &b, mlir::Location loc)
@@ -259,6 +352,34 @@ not exist yet, so the op is built through OperationState.
   state.addRegion();
   state.addRegion();
   return b.create(state);
+}
+
+inline mlir::Operation *array_ctor_dtor(a_builder &b, mlir::Location loc,
+                                        bool is_dtor, mlir::Value address,
+                                        mlir::Value count)
+/*
+Create cir.array.ctor (or .dtor) over address: a pointer to a fixed-size array
+(count is null) or to the first element (count is the runtime element count).
+The body region gets its single block; the caller adds the element pointer
+argument and the code.
+*/
+{
+  mlir::Operation *result;
+  auto body = [](mlir::OpBuilder &, mlir::Location) {};
+  llvm::function_ref<void(mlir::OpBuilder &, mlir::Location)> noop(body);
+
+  if (is_dtor) {
+    result = count ? cir::ArrayDtor::create(b, loc, address, count, noop)
+                         .getOperation()
+                   : cir::ArrayDtor::create(b, loc, address, noop)
+                         .getOperation();
+  } else {
+    result = count ? cir::ArrayCtor::create(b, loc, address, count, noop,
+                                            nullptr).getOperation()
+                   : cir::ArrayCtor::create(b, loc, address, noop, nullptr)
+                         .getOperation();
+  }
+  return result;
 }
 
 inline cir::CaseOp create_marker_case(a_builder &b, mlir::Location loc,
@@ -319,6 +440,42 @@ inline mlir::Value memset_zero(a_builder &b, mlir::Location loc,
   return dst;
 }
 
+inline void memcpy_bytes(a_builder &b, mlir::Location loc, mlir::Value dst,
+                         mlir::Value src, uint64_t bytes, unsigned dst_align,
+                         unsigned src_align)
+/* Copy bytes bytes between objects (any pointer types): cir.libc.memcpy. */
+{
+  mlir::Value to = b.createBitcast(dst, b.getVoidPtrTy());
+  mlir::Value from = b.createBitcast(src, b.getVoidPtrTy());
+  mlir::Value len = b.getConstantInt(loc, b.getUIntNTy(64),
+                                     static_cast<int64_t>(bytes));
+
+  cir::MemCpyOp::create(b, loc, to, from, len, b.getAlignmentAttr(dst_align),
+                        b.getAlignmentAttr(src_align));
+}
+
+inline mlir::Value class_address(a_builder &b, mlir::Location loc,
+                                 bool to_derived, mlir::Value pointer,
+                                 mlir::Type result_pointer, uint64_t offset,
+                                 bool assume_not_null)
+/*
+The address of a direct non-virtual base (cir.base_class_addr) or, with
+to_derived, of the derived object (cir.derived_class_addr) for the base at
+offset bytes.
+*/
+{
+  llvm::APInt bytes(64, offset);
+  mlir::Value result;
+
+  if (to_derived)
+    result = cir::DerivedClassAddrOp::create(b, loc, result_pointer, pointer,
+                                             bytes, assume_not_null);
+  else
+    result = cir::BaseClassAddrOp::create(b, loc, result_pointer, pointer,
+                                          bytes, assume_not_null);
+  return result;
+}
+
 inline cir::LoweringLangOptionsAttr
 lowering_lang_options(mlir::MLIRContext *ctx, bool exceptions,
                       bool threadsafe_statics, int32_t abi_compat)
@@ -330,11 +487,18 @@ lowering_lang_options(mlir::MLIRContext *ctx, bool exceptions,
 }
 
 inline cir::RecordLayoutAttr record_layout(mlir::MLIRContext *ctx,
-                                           uint64_t align)
-/* #cir.record_layout for a trivially copyable C record. */
+                                           uint64_t align,
+                                           bool passed_indirectly,
+                                           bool has_trivial_dtor)
+/*
+#cir.record_layout: the ABI facts CallConvLowering needs.  A NONTRIVIAL_ABI
+record cannot be passed in registers.
+*/
 {
-  return cir::RecordLayoutAttr::get(ctx, cir::ArgPassingKind::CanPassInRegs,
-                                    /*has_trivial_dtor=*/true, align);
+  return cir::RecordLayoutAttr::get(
+      ctx, passed_indirectly ? cir::ArgPassingKind::CannotPassInRegs
+                             : cir::ArgPassingKind::CanPassInRegs,
+      has_trivial_dtor, align);
 }
 
 /* Builtin operations whose op classes and builders have churned upstream. */

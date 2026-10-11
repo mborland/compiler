@@ -9553,6 +9553,123 @@ be lowered as soon as a module id becomes available (and TRUE is returned).
 
 #endif /* DO_IL_LOWERING */
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+
+static a_boolean cir_ttt_parentless_lambda(a_type_ptr type,
+                                           a_boolean  *end_traversal)
+/*
+Return TRUE (and stop the type traversal) if the type is a lambda type that
+is defined in a default argument but whose parent pointer has not been set
+(the CIR copy of ttt_has_parentless_lambda_in_default_argument, which is
+compiled only for IL lowering).
+*/
+{
+  a_boolean result = FALSE;
+
+  if (is_immediate_class_type(type) &&
+      class_type_supp(type)
+                    ->does_not_contain_parentless_lambda_in_default_argument) {
+    *end_traversal = TRUE;
+  } else if (type_is_lambda_closure(type) &&
+      symbol_supplement_for_class(type)->
+                            lambda_immediately_inside_default_arg_expression &&
+      class_type_supp(type)->lambda_parent.routine == NULL) {
+    *end_traversal = TRUE;
+    result = TRUE;
+  }  /* if */
+  return result;
+}  /* cir_ttt_parentless_lambda */
+
+
+static void cir_ttt_post_parentless_lambda(a_type_ptr type, a_boolean result)
+/*
+Cache a negative result in the class type supplement.
+*/
+{
+  if (is_immediate_class_type(type) && !result) {
+    a_class_type_supplement_ptr  ctsp = class_type_supp(type);
+
+    ctsp->does_not_contain_parentless_lambda_in_default_argument = TRUE;
+  }  /* if */
+}  /* cir_ttt_post_parentless_lambda */
+
+
+static a_boolean cir_has_parentless_lambda(a_type_ptr type)
+/*
+Traverse the type (and its template arguments) to see if it contains a
+lambda in a default argument that has no parent pointer yet.
+*/
+{
+  return traverse_type_tree_full(type, cir_ttt_parentless_lambda,
+                                 cir_ttt_post_parentless_lambda,
+                                 TTT_TEMPLATE_ARGS | TTT_SKIP_TYPEREFS);
+}  /* cir_has_parentless_lambda */
+
+
+a_boolean cir_name_may_change(a_source_correspondence *scp)
+/*
+CIR back end: return TRUE if the mangled name of the routine or variable may
+still change (its parents are not final yet), so that the ECIL writer must
+send it with a nil name and bind it later.  This is must_wait_for_mangling_
+reasons without the guard on what the routine needs to mangle early: the
+writer names every routine when it hands it off, not only those that
+promote entities out of their scope.  The reasons:
+  - a parent class at namespace or class scope that is unnamed (a typedef
+    name for linkage may still come);
+  - an anonymous union parent (its fabricated name is chosen at the first
+    mangling);
+  - a closure in the initializer of a structured binding;
+  - a parent whose template arguments hold a lambda in a default argument
+    that has no parent routine yet.
+*/
+{
+  a_scope_ptr sp;
+  a_boolean   result = FALSE;
+
+  for (sp = get_parent_scope_of(scp); sp != NULL && !result; ) {
+    if (sp->kind == (a_scope_kind)sck_class_struct_union ||
+        sp->kind == (a_scope_kind)sck_class_reactivation) {
+      a_type_ptr    type = sp->variant.assoc_type;
+
+      check_assertion(is_immediate_class_type(type));
+      if (type->variant.class_struct_union.originally_unnamed &&
+          type_is_unnamed(type) &&
+          !type->source_corresp.is_local_to_function &&
+          !type_is_lambda_closure(type)) {
+        /* (A closure's name is its own: no typedef name for linkage can
+           come.) */
+        result = TRUE;
+      } else if (class_type_supp(type)->anonymous_union_kind !=
+                                           (an_anonymous_union_kind)auk_none) {
+        result = TRUE;
+      } else if (type_is_lambda_closure(type) &&
+                 class_type_supp(type)->defined_in_variable_initializer &&
+                 class_type_supp(type)->lambda_parent.variable->
+                                                 is_struct_binding_container) {
+        result = TRUE;
+      } else if (cir_has_parentless_lambda(type)) {
+        result = TRUE;
+      } else if (type->source_corresp.is_local_to_function) {
+        /* A local class: continue in the scope of its function, if it has
+           a body yet (a lambda in a default argument has not). */
+        a_routine_ptr  enclosing = enclosing_routine_for_local_type_or_null(
+                                                                      type);
+
+        sp = (enclosing != NULL &&
+              enclosing->function_def_number != NULL_function_def_number) ?
+                                  scope_for_routine_or_null(enclosing) : NULL;
+      } else {
+        sp = get_parent_scope_of(type);
+      }  /* if */
+    } else {
+      sp = sp->parent;
+    }  /* if */
+  }  /* for */
+  return result;
+}  /* cir_name_may_change */
+
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
 a_boolean should_delay_finishing_of_function_body(a_routine_ptr  routine)
 /*
 Some routines must be kept in memory for later use.  Return TRUE if

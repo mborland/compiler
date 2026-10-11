@@ -1,0 +1,91 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c pr47218-1.C
+Test_name.c:
+"./other/pr47218.h", line 5: warning: CIR back end: the body of "~FooBaseBase0" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual ~FooBaseBase0 () {}
+                              ^
+
+"./other/pr47218.h", line 11: warning: CIR back end: the body of "Bar" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void Bar() {}
+                        ^
+
+"./other/pr47218.h", line 18: warning: CIR back end: the body of "Bar" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void Bar() {}
+                        ^
+
+"./other/pr47218.C", line 7: warning: CIR back end: the body of "~FooBase" uses a virtual function, which the CIR back end does not support; the function is dropped
+  Foo3::~Foo3 ()
+        ^
+          detected during implicit generation of "FooBase::~FooBase() noexcept" at line 8
+
+"./other/pr47218.C", line 10: warning: CIR back end: the body of "~Foo3" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./other/pr47218.C", line 14: warning: CIR back end: the body of "Bar" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN12FooBaseBase0D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12FooBaseBase0D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12FooBaseBase13BarEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7FooBase3BarEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7FooBaseD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7FooBaseD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN4Foo3D1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN4Foo3D2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN4Foo33BarEv' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".
+pr47218-1.C:
+"pr47218.h", line 5: warning: CIR back end: the body of "~FooBaseBase0" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual ~FooBaseBase0 () {}
+                              ^
+
+"pr47218.h", line 11: warning: CIR back end: the body of "Bar" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void Bar() {}
+                        ^
+
+"pr47218.h", line 18: warning: CIR back end: the body of "Bar" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void Bar() {}
+                        ^
+
+"pr47218-1.C", line 3: warning: CIR back end: the body of "~FooBase" uses a virtual function, which the CIR back end does not support; the function is dropped
+  Foo2::~Foo2 ()
+        ^
+          detected during implicit generation of "FooBase::~FooBase() noexcept" at line 4
+
+"pr47218-1.C", line 6: warning: CIR back end: the body of "~Foo2" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"pr47218-1.C", line 10: warning: CIR back end: the body of "Bar" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN12FooBaseBase0D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12FooBaseBase0D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12FooBaseBase13BarEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7FooBase3BarEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7FooBaseD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7FooBaseD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN4Foo2D1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN4Foo2D2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN4Foo23BarEv' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "pr47218-1.C".

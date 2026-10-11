@@ -1,0 +1,19 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++14 Test_name.c
+"Test_name.c", line 8: warning: declaration of "size_t" does not match the expected type "unsigned long"
+  typedef int size_t;
+              ^
+
+Error: CIR back end: the type of function '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_Alloc_hiderC1EPcOS3_' changed after its body was emitted (!cir.func<(...)> to !cir.func<(!cir.ptr<!cir.struct<"_Alloc_hider" {pad !cir.int<u, 8>}>>, !cir.ptr<!cir.int<s, 8>>, !cir.ptr<!cir.struct<"allocator.1" {pad !cir.int<u, 8>}>>)>)
+          detected during instantiation of "std::__cxx11::basic_string<<unnamed>, <unnamed>, <unnamed>>::basic_string() [with <unnamed>=char, <unnamed>=std::char_traits<char>, <unnamed>=std::allocator<char>]" at line 294 of "Test_name.c"
+
+"Test_name.c", line 48: warning: function "operator new(unsigned long, void *)" has no corresponding operator delete (to be called if an exception is thrown during initialization of an allocated object)
+    template <typename _Up> void construct(_Up *p1) { new (p1) _Up; }
+                                                      ^
+          detected during:
+            instantiation of "void C<_Tp>::construct(_Up *) [with _Tp=Foo, _Up=Foo]" at line 75
+            instantiation of "std::_Require<> std::K<_Alloc>::_S_construct(_Tp) [with _Alloc=std::allocator<Foo>, _Tp=Foo *]" at line 93
+            instantiation of "void std::__uninitialized_fill_a(_ForwardIterator, _ForwardIterator, _Tp, _Allocator) [with _ForwardIterator=Foo *, _Tp=int, _Allocator=std::allocator<Foo>]" at line 210
+            instantiation of "void std::deque<_Tp, _Alloc>::_M_fill_initialize(const std::deque<_Tp, _Alloc>::value_type &) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 194
+            instantiation of "std::deque<_Tp, _Alloc>::deque(std::deque<_Tp, _Alloc>::size_type, std::deque<_Tp, _Alloc>::value_type, std::deque<_Tp, _Alloc>::allocator_type) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 294
+
+1 error detected in the compilation of "Test_name.c".

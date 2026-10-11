@@ -1,5 +1,5 @@
 ; expect: format MEMINIT_BEGIN of a virtual base is not part of ECIL v1
-ecil 0.8 features=0x00000000
+ecil 1.0 features=0x00000000
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   HDR_TARGET 1 nil nil 64 64 6

@@ -1,0 +1,37 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 35: warning: CIR back end: the body of "foo" uses a virtual call, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 40: warning: CIR back end: the body of "baz" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 50: warning: CIR back end: the body of "~B" uses a virtual function, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 56: warning: CIR back end: the body of "B" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    B the_b;
+           ^
+          detected during implicit generation of "B::B() noexcept" at line 56
+
+"Test_name.c", line 61: warning: CIR back end: the body of "main" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1BC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1BC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZNK1C3fooEv' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZNK1B3bazEv' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1BD1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1BD2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+5 errors detected in the compilation of "Test_name.c".

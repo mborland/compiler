@@ -1,0 +1,10 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"Test_name.c", line 15: warning: CIR back end: the body of "C" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  struct C : B { C (B const &) { if (t) throw 1; } };
+                                                 ^
+
+Error: CIR back end: the definition of '_ZN1CC1ERK1B' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1CC2ERK1B' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+2 errors detected in the compilation of "Test_name.c".

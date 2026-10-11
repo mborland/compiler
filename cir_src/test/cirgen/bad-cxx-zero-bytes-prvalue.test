@@ -1,0 +1,24 @@
+; Emitter-side check (ECIL v1): ZERO_BYTES needs a glvalue that is not a bit-field.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: error [1001]: a prvalue was used where a glvalue is required
+
+frame DECLS
+  STR 10 "f"
+  STR 11 "R"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 100 21 0 1 10
+frame REGION
+  FUNC_BEGIN 100 0
+  BLOCK_BEGIN
+  CONST_INT 1 1
+  ZERO_BYTES 4
+  CONST_INT 1 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame END
+  END auto 0

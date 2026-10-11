@@ -1,0 +1,46 @@
+eccp -DTEST_NUMBER=2 --c++14 --gnu_version 70500 Test_name.c
+"Test_name.c", line 22: warning: CIR back end: the body of "main" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 12: warning: CIR back end: the body of "X" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    X(const Ts &... ts) : Ts(ts)... {}
+                                     ^
+          detected during instantiation of "X<Ts...>::X(const Ts &...) [with Ts=<A>]" at line 14
+
+"Test_name.c", line 12: warning: CIR back end: the body of "X" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    X(const Ts &... ts) : Ts(ts)... {}
+                            ^
+          detected during:
+            implicit generation of "X<Ts...>::X(const X<A> &) [with Ts=<A>]" at line 12
+            instantiation of class "X<Ts...> [with Ts=<A>]" at line 12
+            instantiation of "X<Ts...>::X(const Ts &...) [with Ts=<X<A>, A>]" at line 14
+
+"Test_name.c", line 12: warning: CIR back end: the body of "X" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    X(const Ts &... ts) : Ts(ts)... {}
+                                     ^
+          detected during instantiation of "X<Ts...>::X(const Ts &...) [with Ts=<X<A>, A>]" at line 14
+
+Warning: CIR back end: the initializer of "y" uses a record type that is not supported, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "x" uses a record type that is not supported, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC1ERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC2ERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC1ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC2ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1XIJS_IJ1AEES0_EEC1ERKS1_RKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1XIJS_IJ1AEES0_EEC2ERKS1_RKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'x' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'y' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

@@ -1,0 +1,2 @@
+# The linux-gcc debug configuration (see cpfe-cir.cmakedef).
+import <linux-gcc/cpfe-cp>

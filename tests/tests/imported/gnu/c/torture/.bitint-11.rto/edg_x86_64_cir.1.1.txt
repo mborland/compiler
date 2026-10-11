@@ -11,11 +11,13 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: integer type of 128 bits is not supported
-
 "Test_name.c", line 41: warning: unknown attribute "noipa"
   __attribute__((noipa)) _BitInt(575)
                  ^
+
+"Test_name.c", line 47: warning: CIR back end: the body of "test575" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  }
+  ^
 
 "Test_name.c", line 59: error: integer constant is too large
     _BitInt(188) b188 = 51625354135609169507415940782602403562057573230992065937wb;
@@ -33,4 +35,4 @@ Error: CIR back end: integer type of 128 bits is not supported
         != int128_val (-20179593413257295974034559327597105210986698104682733481090257927308152867107766179792744096926808179875378122328280563720406829353405830697365974599460194507118104469864450wb,
            ^
 
-5 errors detected in the compilation of "Test_name.c".
+4 errors detected in the compilation of "Test_name.c".

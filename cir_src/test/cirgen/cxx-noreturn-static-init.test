@@ -1,0 +1,41 @@
+; C++ (ECIL v1): a noreturn call inside a dynamic initializer.  The ctor region
+; of a global is a single block, so the call is not followed by cir.unreachable
+; and a new block (the verifier and LoweringPrepare need one block).
+;   [[noreturn]] void exit(int);   int g = (exit(3), 0);   int main() { return 1; }
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: sh -c '%t.exe; test $? -eq 3'
+
+; CHECK: cir.global {{.*}}@g
+; CHECK: ctor {
+; CHECK: cir.call @exit({{.*}}) nothrow {noreturn}
+; CHECK-NOT: cir.unreachable
+; CHECK: cir.store
+
+frame DECLS
+  STR 11 "g"
+  STR 12 "exit"
+  STR 13 "main"
+  TY_FUNC 21 11 0 [1]
+  TY_FUNC 22 1 0 []
+  DECL_FUNC 100 21 0 4 12
+  DECL_FUNC 101 22 0 9 13
+  DECL_VAR 201 1 0 1 4 11
+frame REGION
+  FUNC_BEGIN 101 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  STATIC_INIT_BEGIN 201 0
+  CONST_INT 1 3
+  CALL 100 21 1 2
+  GREF 201
+  CONST_INT 1 0
+  STORE 0 0
+  STATIC_INIT_END
+frame END
+  END auto 0

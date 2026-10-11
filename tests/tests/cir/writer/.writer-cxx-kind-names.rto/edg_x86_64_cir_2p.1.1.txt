@@ -1,0 +1,319 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++20 --g++ --gnu_version=140000 Test_name.c
+"Test_name.c", line 26: warning: CIR back end: the body of "throws" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  int throws() { throw 1; }
+                          ^
+
+"Test_name.c", line 27: warning: CIR back end: the body of "tries" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  int tries() { try { return 1; } catch (...) { return 0; } }
+                                                            ^
+
+"Test_name.c", line 28: warning: CIR back end: the body of "pm_call" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  int pm_call(P *p, int (P::*f)()) { return (p->*f)(); }
+                                                       ^
+
+"Test_name.c", line 29: warning: CIR back end: the body of "pm_field" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  int pm_field(P *p, int P::*m) { return p->*m; }
+                                                ^
+
+ecil 1.0 features=0x00000008
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 202002 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  STR 5 "E"
+  TY_RECORD_DECL 5 0 5
+  TY_PTR 6 5
+  TY_FUNC 7 4 0 [6]
+  STR 6 "W"
+  TY_RECORD_DECL 8 0 6
+  STR 7 "B"
+  TY_RECORD_DECL 9 0 7
+  TY_PTR 10 9
+  STR 8 "p"
+  TY_RECORD_BODY 8 8 8 8 0 1
+  REC_FIELD 10 0 nil nil 8 0
+  STR 9 "w"
+  TY_RECORD_BODY 5 8 8 8 0 1
+  REC_FIELD 8 0 nil nil 9 0
+  STR 10 "x"
+  TY_RECORD_BODY 9 16 12 8 0 2
+  REC_FIELD 5 0 nil nil nil 17
+  REC_FIELD 1 8 nil nil 10 0
+  STR 11 "_ZN1EI1BEC1Ev"
+  DECL_FUNC 11 7 0 2 11
+  STR 12 "_ZN1EI1BEC2Ev"
+  DECL_FUNC 12 7 0 2 12
+  STRUCTOR 11 12 0
+  DECL_FUNC 11 7 3 67 11
+  DECL_FUNC 12 7 3 67 12
+  STR 13 "this"
+  TY_PTR 13 8
+  TY_FUNC 14 4 0 [13]
+  STR 14 "_ZN1WI1BEC1Ev"
+  DECL_FUNC 15 14 0 0 14
+  STR 15 "_ZN1WI1BEC2Ev"
+  DECL_FUNC 16 14 0 0 15
+  STRUCTOR 15 16 0
+  FUNC_BEGIN 12 0
+  PARAM 1 6 6 13 1
+  MEMINIT_BEGIN 2 0 1
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  ADDR
+  CALL 15 14 1 0
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 17 4 0 [10]
+  STR 16 "_ZN1BC1Ev"
+  DECL_FUNC 18 17 0 2 16
+  STR 17 "_ZN1BC2Ev"
+  DECL_FUNC 19 17 0 2 17
+  STRUCTOR 18 19 0
+  DECL_FUNC 18 17 3 67 16
+  DECL_FUNC 19 17 3 67 17
+  FUNC_BEGIN 19 0
+  PARAM 1 10 10 13 1
+  MEMINIT_BEGIN 1 0 1
+  LREF 1
+  LOAD 0
+  BASE_CAST 9 5 0 1
+  CALL 12 7 1 0
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 18 "O"
+  TY_RECORD_DECL 20 0 18
+  TY_PTR 21 20
+  TY_FUNC 22 21 0 [21]
+  STR 19 "v"
+  TY_RECORD_BODY 20 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 19 0
+  STR 20 "_Z4addrR1O"
+  DECL_FUNC 23 22 0 0 20
+  DECL_FUNC 23 22 0 1 20
+  STR 21 "o"
+  FUNC_BEGIN 23 0
+  PARAM 1 21 21 21 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 24 1 0 []
+  STR 22 "_Z6throwsv"
+  DECL_FUNC 25 24 0 0 22
+  DECL_FUNC 25 24 0 1 22
+  DECL_FUNC 25 24 0 32 22
+frame REGION
+  STR 23 "_Z5triesv"
+  DECL_FUNC 26 24 0 0 23
+  DECL_FUNC 26 24 0 1 23
+  DECL_FUNC 26 24 0 32 23
+frame REGION
+  STR 24 "P"
+  TY_RECORD_DECL 27 0 24
+  TY_PTR 28 27
+  TY_OPAQUE 29 16 8
+  TY_FUNC 30 1 0 [28, 29]
+  STR 25 "m"
+  TY_RECORD_BODY 27 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 25 0
+  STR 26 "_Z7pm_callP1PMS_FivE"
+  DECL_FUNC 31 30 0 0 26
+  DECL_FUNC 31 30 0 1 26
+  STR 27 "f"
+  DECL_FUNC 31 30 0 32 26
+frame REGION
+  TY_OPAQUE 32 8 8
+  TY_FUNC 33 1 0 [28, 32]
+  STR 28 "_Z8pm_fieldP1PMS_i"
+  DECL_FUNC 34 33 0 0 28
+  DECL_FUNC 34 33 0 1 28
+  DECL_FUNC 34 33 0 32 28
+frame REGION
+  STR 29 "S"
+  TY_RECORD_DECL 35 0 29
+  TY_PTR 36 35
+  TY_FUNC 37 4 0 [36]
+  STR 30 "i"
+  TY_RECORD_BODY 35 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 30 0
+  STR 31 "_ZN1SIiEC1Ev"
+  DECL_FUNC 38 37 0 2 31
+  STR 32 "_ZN1SIiEC2Ev"
+  DECL_FUNC 39 37 0 2 32
+  STRUCTOR 38 39 0
+  DECL_FUNC 38 37 3 67 31
+  DECL_FUNC 39 37 3 67 32
+  FUNC_BEGIN 39 0
+  PARAM 1 36 36 13 1
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  DECL_FUNC 15 14 3 67 14
+  DECL_FUNC 16 14 3 67 15
+  FUNC_BEGIN 16 0
+  PARAM 1 13 13 13 1
+  MEMINIT_BEGIN 2 0 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 8 0
+  C_NULL 10
+  INIT_CONST
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  STR 33 "A"
+  TY_RECORD_DECL 40 0 33
+  TY_RECORD_BODY 40 4 4 4 12 1
+  REC_FIELD 1 0 nil nil 19 0
+  TY_ARRAY 41 40 1 0
+  STR 34 "one"
+  DECL_VAR 42 41 0 1 0 34
+  TY_ARRAY 43 40 2 0
+  TY_ARRAY 44 43 2 0
+  STR 35 "grid"
+  DECL_VAR 45 44 0 1 0 35
+  TY_ARRAY 46 35 2 0
+  STR 36 "_ZL2sa"
+  DECL_VAR 47 46 1 1 0 36
+  STR 37 "b"
+  DECL_VAR 48 9 0 1 0 37
+  STR 38 "sel"
+  DECL_VAR 49 1 0 33 0 38
+  STR 39 "C2"
+  TY_RECORD_DECL 50 0 39
+  TY_RECORD_BODY 50 4 4 4 12 1
+  REC_FIELD 1 0 nil nil 19 0
+  STR 40 "_ZL6chosen"
+  DECL_VAR 51 50 1 1 0 40
+  STR 41 "_ZN1N4pairE"
+  DECL_VAR 52 43 0 1 0 41
+  TY_PTR 53 40
+  TY_FUNC 54 4 0 [53]
+  STR 42 "_ZN1AC1Ev"
+  DECL_FUNC 55 54 0 0 42
+  STR 43 "_ZN1AC2Ev"
+  DECL_FUNC 56 54 0 0 43
+  STRUCTOR 55 56 0
+  STR 44 "_ZN1AD1Ev"
+  DECL_FUNC 57 54 0 0 44
+  STR 45 "_ZN1AD2Ev"
+  DECL_FUNC 58 54 0 0 45
+  STRUCTOR 57 58 1
+  TY_BOOL 59 1 1
+  TY_PTR 60 50
+  TY_FUNC 61 4 0 [60, 1]
+  STR 46 "_ZN2C2C1Ei"
+  DECL_FUNC 62 61 0 0 46
+  STR 47 "_ZN2C2C2Ei"
+  DECL_FUNC 63 61 0 0 47
+  STRUCTOR 62 63 0
+  TY_FUNC 64 4 0 [60]
+  STR 48 "_ZN2C2D1Ev"
+  DECL_FUNC 65 64 0 0 48
+  STR 49 "_ZN2C2D2Ev"
+  DECL_FUNC 66 64 0 0 49
+  STRUCTOR 65 66 1
+  STATIC_INIT_BEGIN 42 0
+  GREF 42
+  ARRAY_CTOR_BEGIN 40 1
+  CALL 55 54 1 0
+  ARRAY_CTOR_END
+  CLEANUP_BEGIN 4 42 0
+  GREF 42
+  ARRAY_DTOR_BEGIN 40 1
+  CALL 57 54 1 0
+  ARRAY_DTOR_END
+  CLEANUP_BODY
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 45 0
+  GREF 45
+  ARRAY_CTOR_BEGIN 40 1
+  CALL 55 54 1 0
+  ARRAY_CTOR_END
+  CLEANUP_BEGIN 4 45 0
+  GREF 45
+  ARRAY_DTOR_BEGIN 40 1
+  CALL 57 54 1 0
+  ARRAY_DTOR_END
+  CLEANUP_BODY
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 52 0
+  GREF 52
+  ARRAY_CTOR_BEGIN 40 1
+  CALL 55 54 1 0
+  ARRAY_CTOR_END
+  CLEANUP_BEGIN 4 52 0
+  GREF 52
+  ARRAY_DTOR_BEGIN 40 1
+  CALL 57 54 1 0
+  ARRAY_DTOR_END
+  CLEANUP_BODY
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 47 0
+  GREF 47
+  ARRAY_CTOR_BEGIN 35 1
+  CALL 38 37 1 0
+  ARRAY_CTOR_END
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 48 0
+  GREF 48
+  ADDR
+  CALL 18 17 1 0
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 51 0
+  GREF 49
+  LOAD 0
+  TO_BOOL
+  TERN_BEGIN nil
+  GREF 51
+  ADDR
+  CONST_INT 1 7
+  CALL 62 61 2 0
+  TERN_ELSE
+  GREF 51
+  ADDR
+  CONST_INT 1 8
+  CALL 62 61 2 0
+  TERN_END
+  CLEANUP_BEGIN 4 51 0
+  GREF 51
+  ADDR
+  CALL 65 64 1 0
+  CLEANUP_BODY
+  STATIC_INIT_END
+frame NAMES
+frame END
+  END 12 0

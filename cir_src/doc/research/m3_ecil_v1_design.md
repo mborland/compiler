@@ -538,3 +538,182 @@ supersede the sections above. The M3a contract carries them.
    - `empty_for_abi` is for empty *bases* and C zero-size members only. An
      empty C++ data member (without `[[no_unique_address]]`) is an
      ordinary field of size 1, which clang keeps as `data E1`.
+
+## 9. Slice S1 in the library (cir-lib, 2026-10-10)
+
+What the emitter does for classes, for the next slices.
+
+- **Layout** (`types.cpp`, port of `CIRRecordLowering`):
+  - A `BASE` / `POTENTIALLY_OVERLAPPING` member has the type of its
+    base-subobject record: `<name>.base`, a plain *struct* also for a class
+    (as CIRGen), laid out from the same fields with size = `data_size`.
+    It is created the first time a record needs it
+    (`base_subobject_type`) and only when `data_size < size`.
+    `.base` of a union with reusable tail padding is *unsupported*:
+    CIRGen lowers it as a struct of the storage and padding, not done.
+  - Bases come after the fields in the member list (stable sort by offset,
+    as CIRGen). An `empty_for_abi` base, or an `empty_for_abi`
+    `POTENTIALLY_OVERLAPPING` member, has no member
+    (`member_index == no_member`); its address is the object's plus its
+    offset.
+  - C++ non-virtual size rule of `determinePacked`: a class with
+    `data_size < size` is `packed` when the data size is not a multiple of
+    the alignment of the members below it (`B packed {s32, s8, pad[3]}`).
+    The `.base` inherits the packedness of the complete record.
+  - The union `packed` rule of `lowerUnion` is applied for C unions too (no
+    corpus stream changes).
+  - `cir.record_layouts` has the real `arg_passing_kind`
+    (`NONTRIVIAL_ABI` -> `cannot_pass_in_regs`) and `has_trivial_dtor`.
+  - Checked: `cir-layout-compare-cxx.py` on `spike/cxx-shapes/s7/*.cpp` and
+    `s1lib/cls2.cpp`: 32 record types, 0 differences from clang.
+- **Values**: `FIELD`, `AGG_SEL` and `EXTRACT` of a base or overlapping
+  member give the complete type (get_member + bitcast, clang's shape);
+  constants convert the complete record's `ConstRecordAttr` to the `.base`
+  member list (`constant_for_member`).
+- **Copy-elision rules enforced by the emitter** (format errors, status 2):
+  `DUP`, a `TERN` result, `EXTRACT`, a call argument that is not the load of
+  an alloca, a non-`INIT` `STORE` of a call result, `RETURN_STMT(true)` of a
+  `NONTRIVIAL_ABI` record; `DROP` of one with `NONTRIVIAL_DTOR`.
+  `STORE(INIT)` and `MATERIALIZE_TEMP` store a call result directly (no
+  `agg.tmp`); `STORE(DSIZE)` is `cir.libc.memcpy` of `data_size` bytes from
+  the address of the load (which is erased); `ZERO_BYTES` is `cir.libc.memset`.
+- **Returns**: `RETURN_SLOT` pushes `__retval`; `RETURN_FROM_SLOT` loads it
+  and returns; `LOCAL(RETURN_SLOT)` binds the local to `__retval` (the NRVO
+  flag is the writer's).
+- **STRUCTOR** (`apply_structors`, `finish_structors`, `apply_comdats`):
+  after the final names, before the one substitution walk. External or
+  `weak_odr`: C1 gets `aliasee` = C2's symbol (the walk renames it); a
+  `weak_odr` C2 gets the comdat C5/D5 (its name with the differing digit
+  replaced). `linkonce_odr`, internal, private: a redirect entry
+  (`a_symbol_change` with a null op) and C1 is erased after the walk.
+  Nothing is done unless C2 has a body; otherwise both stay external
+  declarations. **C1 of a vague pair must carry `DEFINED_HERE` and `COMDAT`
+  like C2** although it has no body: the validator rejects `linkonce_odr` /
+  `weak_odr` on a declaration that is not defined here, and it cannot know at
+  `DECL_FUNC` time that a `STRUCTOR` will follow.
+- **COMDAT** is applied at finish from the final flags of defined entities
+  (self comdat, or C5/D5 above).  A declared-only entity of vague linkage is
+  plain external (extern_weak is for C `weak` only).
+- **Calls** are `nothrow` whenever `HDR_LANG.exceptions == 0`, in C++ too.
+- **MEMINIT** is a frame marker (member initializers are ordinary code);
+  `a_frame_kind::meminit`.
+- Still "not supported yet": `CLEANUP_*`, `FULLEXPR_*`, `STATIC_INIT_*`,
+  `ARRAY_*`, `NEW_ARRAY_*`, `DELETE`, `DECL_VAR GUARDED`.
+
+## 10. Slice S2 in the library (cir-lib, 2026-10-10)
+
+Cleanups, full expressions and array loops (`function.cpp`, "Cleanups, full
+expressions and array loops").
+
+- **Two stacks.** The cleanup *code* (CLEANUP_BEGIN .. CLEANUP_BODY) is a
+  bracket, so it is an `a_frame_kind::cleanup` frame that mirrors the
+  reader's bracket depth. The open `cir.cleanup.scope` itself (its *body* is
+  being emitted) is an `a_cleanup_scope` on `cleanups_` with its owner frame
+  and the owner's phase. The two are separate because the scope outlives its
+  code frame.
+- **Closing** is `close_cleanups(owner, phase)`, called by the record that
+  ends the region: BLOCK_END, IF_ELSE (phase 0) and IF_END, WHILE_END (phase
+  1), DO_COND (phase 0), FOR_END (body phase 3, then init scope phase 0),
+  SWITCH_END, MEMINIT_END, ARRAY_*_END, FUNC_END. The owner is the innermost
+  *region* frame at CLEANUP_BODY (`region_owner`: ternary, agg_init and the
+  like are skipped).
+- **Normal and all** become `cir.cleanup.scope normal`; the cleanup code
+  fills the cleanup region, the rest of the region the body. **eh** is
+  dropped: a `dropped` placeholder frame is pushed and every record up to the
+  one that closes the construct is ignored (`drop_depth_`, set from the
+  reader's bracket depth; the reader has validated them). The same mechanism
+  drops the loop of a fixed array with no elements.
+- **FULLEXPR** opens no scope of its own. At FULLEXPR_END the (at most one)
+  carried value is stored to a `tmp.exprcleanup` slot inside the innermost
+  scope, the scopes opened since FULLEXPR_BEGIN close, and the value is
+  reloaded (`cir.cleanup.scope` has no results). A carried bit-field
+  glvalue is unsupported.
+- **Conditional cleanups** (spike 3): the first CLEANUP_BEGIN inside the
+  outermost conditional record creates the flag-guarded scope *then*, by
+  inserting a `cir.cleanup.scope` before the `cir.ternary` and moving the
+  ternary into its body (no empty scopes for conditionals without
+  cleanups). Each cleanup has a `cleanup.cond` alloca, `store false` at the
+  top of the scope body, `store true` at CLEANUP_BODY, and a
+  `cir.if (load flag)` at the *front* of the cleanup region (reverse order).
+  The scope closes with its FULLEXPR; unconditional cleanups begun later nest
+  inside it. The output is identical in shape to clang's.
+- **Returns**: while any cleanup scope is open a value return goes through
+  `__retval` (spike 2), for scalars too.
+- **Arrays**: `cir.array.ctor` / `cir.array.dtor`. Fixed: the glvalue's
+  array type is flattened to `array<elem x total>` (multi-dimensional: the
+  innermost element type, the total count); counted: element pointer plus
+  count. The block argument is the element pointer, pushed for the body.
+- **Still not supported yet**: CLEANUP_BEGIN(exit) and every cleanup, full
+  expression or array loop outside a function (STATIC_INIT), NEW_ARRAY_*,
+  DELETE, DECL_VAR GUARDED.
+
+## 11. Slices S3 and S4 in the library (cir-lib, 2026-10-10)
+
+- **STATIC_INIT** (`static_init_record`). In a function it is a
+  `cir.local_init static_local` (`thread_local` for a TLS variable) whose ctor
+  region holds the initialization and whose dtor region the exit cleanup. In
+  the F_GLOBALS body section the `cir.global` moves to the end of the module
+  (module order is initialization order) and its ctor/dtor regions are filled.
+  The emitter pushes a pseudo function frame so the usual record machinery
+  works: the ctor block is the "entry block" for allocas (`fn_entry_`), the
+  L-id space is fresh (`local_store_` cleared), and cleanup scopes, FULLEXPR
+  and conditional cleanups inside it work unchanged.
+- **Exit cleanups**: for the variable being initialized the code goes to its
+  dtor region (the first op must be the `get_global` of it, which
+  LoweringPrepare asserts; the emitter checks); for another variable (a `_ZGR`
+  temporary) it is a `cir.register_exit_dtor` at that point of the ctor
+  region. A variable with a VAR_INIT and an exit-only STATIC_INIT has no ctor
+  region (global) or an empty one (local).
+- **Guards** are set at finish from the final name (`apply_dynamic_init`):
+  `dynamic_init_guard` (`_ZGV` + name minus `_Z`, else `_ZGV<len><name>`) and
+  `dynamic_init_info` together, for every GUARDED variable that has a
+  STATIC_INIT (local = STATIC_LOCAL, tls from DECL_VAR_TLS, is_inline and tsk
+  from the STATIC_INIT flags). Every `get_global` of a guarded local carries
+  `static_local`.
+- **Init order needs `.init_array`.** The pipeline's TargetOptions now set
+  `UseInitArray`; with the default `.ctors` the guarded vague-linkage
+  constructors ran in reverse. The program output equals the pin's clang for
+  `spike/cxx-shapes/s1lib/static_init.cpp` (init order and destruction order).
+- **RETRACT** marks the entity (and the complete variant of a structor pair)
+  and clears its unsupported obligation; the pipeline's GlobalDCE (also at
+  -O0) removes unreferenced discardable definitions. The validator allows
+  RETRACT of a dropped-as-unsupported entity at any linkage.
+- **NEW_ARRAY_SIZE**: `mul.overflow`, `add.overflow` (cookie), `or`, `select`
+  SIZE_MAX. **NEW_ARRAY_COOKIE**: count (u64) at `p + cookie - 8`, elements at
+  `p + cookie`; cookie 0 is a bitcast. **DELETE**: `cir.if (p != null)` around
+  `cir.delete_array` (delete_params only when sized or aligned, element_dtor,
+  element_align = type alignment) or the destructor call followed by the
+  operator delete call with the size and alignment arguments the flags ask
+  for (checked against the operator's parameter count).
+- Nothing else of ECIL v1 is unsupported except a union with reusable tail
+  padding as a base or [[no_unique_address]] member.
+
+## 12. C++ stress results (cir-lib, 2026-10-10)
+
+Generator: `cir_src/scripts/ecil-stress-gen.py` (`cxx_*` kinds), driver
+`cir_src/scripts/box_stress.sh` (`ulimit -s 256`, builds and runs the
+self-checking C++ programs: constructors count, destructors check reverse
+order, main returns 0 only if all ran). Release (relwithdebinfo) numbers on the
+box; `EDG_CIR_BUILD=build/cir-asan` runs the same under ASan (clean).
+
+| Kind | Size | Time | RSS |
+| --- | --- | --- | --- |
+| cxx_locals (nested cleanup scopes) | 2000 | 2.0 s | 91 MB |
+| cxx_temps (one full expression) | 5000 | 7.4 s | 109 MB |
+| cxx_meminit | 2000 | 0.06 s | 57 MB |
+| cxx_cond_chain (one flag-guarded scope, N flags) | 1000 / 5000 | 0.28 s / 9.8 s | 76 / 181 MB |
+| cxx_cond_seq (N nested flag scopes) | 500 | 0.50 s | 64 MB |
+| cxx_blocks | 500 / 2000 | 0.15 s / 2.8 s | 57 / 82 MB |
+| cxx_array (T[1000], loops) | 1000 | 0.01 s | 49 MB |
+| cxx_array_nest (nested array bodies) | 100 / 200 / 1000 | 0.11 / 0.94 / 96 s | 51 / 53 / 70 MB |
+| cxx_funcs (functions, guarded statics, linkonce) | 6000 | 1.8 s, 19.1 G Ir | 180 MB |
+
+Scaling is quadratic in the nesting depth of cleanup scopes (cubic for nested
+array loops) and sits entirely in upstream stages: for 2000 locals the
+emitter takes 6 ms, the verifier 162 ms, the CIR passes 160 ms, the CIR to LLVM
+lowering 1.7 s. Up to a few hundred nested cleanups everything is below 0.2 s,
+so no change was made: merging sibling cleanups is not valid (a return between
+two constructors must not run the second destructor), and CIR has no
+unstructured form of cleanup. Nested array loops are multi-dimensional arrays,
+which the ECIL flattens (`t_elem` innermost, total count), so depth 100 is
+already far past realistic.

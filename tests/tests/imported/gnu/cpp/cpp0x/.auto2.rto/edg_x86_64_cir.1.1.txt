@@ -1,0 +1,69 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"./cpp0x/auto2.C", line 38: warning: variable "p2" was set but never used
+    auto *p2 = &p;
+          ^
+
+"./cpp0x/auto2.C", line 42: warning: variable "fp" was set but never used
+    auto (*fp)() = f;
+           ^
+
+"./cpp0x/auto2.C", line 46: warning: variable "pm" was set but never used
+    auto A::* pm = &A::i;
+              ^
+
+"./cpp0x/auto2.C", line 50: warning: variable "pmf" was set but never used
+    auto (A::*pmf)() = &A::f;
+              ^
+
+"./cpp0x/auto2.C", line 72: warning: variable "j" was declared but never referenced
+    auto j = 42, k = 24;
+         ^
+
+"./cpp0x/auto2.C", line 72: warning: variable "k" was declared but never referenced
+    auto j = 42, k = 24;
+                 ^
+
+"./cpp0x/auto2.C", line 74: warning: CIR back end: the body of "main" uses this kind of address constant, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./cpp0x/auto2.C", line 26: warning: CIR back end: the body of "g" uses this kind of address constant, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void g(T) [with T=int]" at line 54
+
+"./cpp0x/auto2.C", line 26: warning: CIR back end: the body of "g" uses this kind of address constant, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void g(T) [with T=float]" at line 55
+
+"./cpp0x/auto2.C", line 26: warning: CIR back end: the body of "g" uses this kind of address constant, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "void g(T) [with T=A]" at line 56
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9type_infoC1EPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9type_infoC2EPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt8bad_castC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt8bad_castC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z1gIiEvT_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z1gIfEvT_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z1gI1AEvT_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

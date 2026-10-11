@@ -1,0 +1,187 @@
+; C++ (ECIL v1, slice S1): constant initializers of classes.  A base or
+; [[no_unique_address]] member is stored as its ".base" record, so its
+; constant (the complete class's) is converted to the ".base" member list; an
+; empty base has no member and its C_SEL is simply not there.  The program
+; reads the values back.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK-DAG: cir.global external dso_local @g_d = #cir.const_record<{#cir.const_record<{#cir.int<1> : !s32i, #cir.int<2> : !s8i}> : !rec_B2Ebase, #cir.int<3> : !s8i, #cir.zero : !cir.array<!u8i x 2>}> : !rec_D
+; CHECK-DAG: cir.global external dso_local @g_x = #cir.const_record<{#cir.const_record<{#cir.int<4> : !s32i, #cir.int<5> : !s8i}> : !rec_B2Ebase, #cir.int<6> : !s8i, #cir.zero : !cir.array<!u8i x 2>}> : !rec_X
+; CHECK-DAG: cir.global external dso_local @g_g = #cir.const_record<{#cir.const_record<{#cir.int<7> : !s32i, #cir.int<8> : !s8i}> : !rec_B2Ebase, #cir.int<9> : !s16i}> : !rec_G
+
+frame DECLS
+  STR 11 "B"
+  STR 12 "D"
+  STR 13 "E"
+  STR 14 "G"
+  STR 15 "X"
+  STR 16 "g_d"
+  STR 17 "g_x"
+  STR 18 "g_g"
+  STR 10 "main"
+  TY_RECORD_DECL 21 0 11
+  TY_RECORD_BODY 21 8 5 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 4 4 nil nil nil 0
+  TY_RECORD_DECL 22 0 12
+  TY_RECORD_BODY 22 8 6 4 0 2
+  REC_FIELD 21 0 nil nil nil 48
+  REC_FIELD 4 5 nil nil nil 0
+  TY_RECORD_DECL 23 0 13
+  TY_RECORD_BODY 23 1 0 1 0 0
+  TY_RECORD_DECL 24 0 14
+  TY_RECORD_BODY 24 8 8 4 0 3
+  REC_FIELD 23 0 nil nil nil 18
+  REC_FIELD 21 0 nil nil nil 16
+  REC_FIELD 6 6 nil nil nil 0
+  TY_RECORD_DECL 25 0 15
+  TY_RECORD_BODY 25 8 6 4 0 2
+  REC_FIELD 21 0 nil nil nil 32
+  REC_FIELD 4 5 nil nil nil 0
+  TY_FUNC 27 1 0 []
+  DECL_FUNC 100 27 0 9 10
+  DECL_VAR 201 22 0 1 4 16
+  C_AGG_BEGIN 22
+  C_SEL 0
+  C_AGG_BEGIN 21
+  C_SEL 0
+  C_INT 1 1
+  C_SEL 1
+  C_INT 4 2
+  C_AGG_END
+  C_SEL 1
+  C_INT 4 3
+  C_AGG_END
+  VAR_INIT 201
+  DECL_VAR 202 25 0 1 4 17
+  C_AGG_BEGIN 25
+  C_SEL 0
+  C_AGG_BEGIN 21
+  C_SEL 0
+  C_INT 1 4
+  C_SEL 1
+  C_INT 4 5
+  C_AGG_END
+  C_SEL 1
+  C_INT 4 6
+  C_AGG_END
+  VAR_INIT 202
+  DECL_VAR 203 24 0 1 4 18
+  C_AGG_BEGIN 24
+  C_SEL 1
+  C_AGG_BEGIN 21
+  C_SEL 0
+  C_INT 1 7
+  C_SEL 1
+  C_INT 4 8
+  C_AGG_END
+  C_SEL 2
+  C_INT 6 9
+  C_AGG_END
+  VAR_INIT 203
+frame REGION
+  FUNC_BEGIN 100 0
+
+  GREF 201
+  FIELD 22 0
+  FIELD 21 0
+  LOAD 0
+  CONST_INT 1 1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  GREF 201
+  FIELD 22 0
+  FIELD 21 1
+  LOAD 0
+  CAST 0 1
+  CONST_INT 1 2
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  GREF 201
+  FIELD 22 1
+  LOAD 0
+  CAST 0 1
+  CONST_INT 1 3
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  GREF 202
+  FIELD 25 0
+  FIELD 21 0
+  LOAD 0
+  CONST_INT 1 4
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  GREF 202
+  FIELD 25 0
+  FIELD 21 1
+  LOAD 0
+  CAST 0 1
+  CONST_INT 1 5
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 5
+  RETURN_STMT true
+  IF_END
+  GREF 202
+  FIELD 25 1
+  LOAD 0
+  CAST 0 1
+  CONST_INT 1 6
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 6
+  RETURN_STMT true
+  IF_END
+  GREF 203
+  FIELD 24 1
+  FIELD 21 0
+  LOAD 0
+  CONST_INT 1 7
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 7
+  RETURN_STMT true
+  IF_END
+  GREF 203
+  FIELD 24 1
+  FIELD 21 1
+  LOAD 0
+  CAST 0 1
+  CONST_INT 1 8
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 8
+  RETURN_STMT true
+  IF_END
+  GREF 203
+  FIELD 24 2
+  LOAD 0
+  CAST 0 1
+  CONST_INT 1 9
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 9
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

@@ -39,10 +39,6 @@ else
   # Inject --gnu_version to the scraped GCC version.
   EDG_CPFE_DEFAULT_OPTIONS="--gnu_version=$EDG_GCC_VER_SCRAPE $EDG_CPFE_DEFAULT_OPTIONS"
 fi
-# C++ is rejected by cpfe-cir unless this undocumented option is given; the
-# test configurations pass it while the C++ support is being developed (M3).
-# Remove it when the M3 gate makes C++ the default.
-EDG_CPFE_DEFAULT_OPTIONS="--ecil_allow_cxx $EDG_CPFE_DEFAULT_OPTIONS"
 # The generated assembly needs the small CIR runtime shim (libedg_cir_rt) and
 # the Itanium ABI libraries.  EDG_CIR_RT_LIBDIR is exported by the CMake build
 # (environment.sh).

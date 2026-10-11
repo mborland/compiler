@@ -162,8 +162,8 @@ public:
   /* Introduce g (once); nullptr with problem set when g is 0, introduced
      already or beyond the reader limit. */
 
-  /* L-ids of the current function (a stack of functions: nested bodies are
-     rejected from minor 7 but older streams may nest). */
+  /* L-ids of the current function (a stack of functions; nested bodies are
+     rejected). */
   void begin_function();
   void end_function();
   /* Drop the current function's L-ids. */

@@ -1,0 +1,53 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c pr58201_0.C
+Test_name.c:
+"./torture/pr58201_1.C", line 6: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  A::A() { }
+           ^
+
+"./torture/pr58201_1.C", line 7: warning: CIR back end: the body of "~A" uses a virtual function, which the CIR back end does not support; the function is dropped
+  A::~A() { }
+            ^
+
+"./torture/pr58201_1.C", line 8: warning: CIR back end: the body of "B" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  B::B() { }
+           ^
+
+"./torture/pr58201_1.C", line 9: warning: CIR back end: the body of "~B" uses a virtual function, which the CIR back end does not support; the function is dropped
+  B::~B() { }
+            ^
+
+Error: CIR back end: the definition of '_ZN1AC1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1AC2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1AD1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1AD2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1BC1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1BC2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1BD1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1BD2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+8 errors detected in the compilation of "Test_name.c".
+pr58201_0.C:
+"pr58201_0.C", line 3: warning: CIR back end: the body of "C2" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  C::C2::C2(){ }      
+               ^
+
+"pr58201_0.C", line 4: warning: CIR back end: the body of "~C2" uses a virtual function, which the CIR back end does not support; the function is dropped
+  C::C2::~C2() { }    
+                 ^
+
+Error: CIR back end: the definition of '_ZN1C2C2C1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1C2C2C2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1C2C2D1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1C2C2D2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+4 errors detected in the compilation of "pr58201_0.C".

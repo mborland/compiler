@@ -1,0 +1,30 @@
+eccp -DTEST_NUMBER=3 --c++17 --clang_version 80000 Test_name.c
+"Test_name.c", line 10: warning: CIR back end: the body of "func" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void func() {}
+                         ^
+
+"Test_name.c", line 14: warning: CIR back end: the body of "S" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    }
+    ^
+
+"Test_name.c", line 18: warning: CIR back end: the body of "S" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    }
+    ^
+
+"Test_name.c", line 27: warning: CIR back end: the body of "test" uses a class conditional that does not initialize a variable, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1S4funcEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1SC1Ei' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1SC2Ei' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1SC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1SC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z4testb' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

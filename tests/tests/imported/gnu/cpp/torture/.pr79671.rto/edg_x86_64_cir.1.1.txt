@@ -1,0 +1,12 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 15: warning: function "operator new(unsigned long, void *)" has no corresponding operator delete (to be called if an exception is thrown during initialization of an allocated object)
+    new (&x) B (0);
+    ^
+
+"Test_name.c", line 20: warning: CIR back end: the body of "foo" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of '_Z3foov' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

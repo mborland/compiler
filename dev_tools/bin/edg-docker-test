@@ -30,7 +30,8 @@ BUILTIN_POSTURES = [
   'night',
   'quick-c-fe',
   'extensive',
-  'cir'
+  'cir',
+  'cir-release'
 ]
 
 def parse_args() -> argparse.Namespace:
@@ -232,7 +233,8 @@ def _configure_extensive_posture(args: argparse.Namespace) -> TestRunPosture:
   ]
   return base_posture
 
-def _configure_cir_posture(args: argparse.Namespace) -> TestRunPosture:
+def _configure_cir_posture(args: argparse.Namespace,
+                           release: bool = False) -> TestRunPosture:
   base_posture = _configure_day_posture(args)
   base_posture.image = 'cir-env'
   cir_base = 'bases/docker/cir-env/gcc'
@@ -247,8 +249,11 @@ def _configure_cir_posture(args: argparse.Namespace) -> TestRunPosture:
       source_dir = 'cir_src'
     ),
     TestRunPostureBuild(
-      cmake_preset = 'linux-gcc-debug-cir',
-      build_path = 'build/gcc-cir',
+      # The release front end (the shipping macro configuration, no ASan) for
+      # the cir-release posture; the debug one otherwise.
+      cmake_preset = ('linux-gcc-release-cir' if release
+                      else 'linux-gcc-debug-cir'),
+      build_path = 'build/gcc-release-cir' if release else 'build/gcc-cir',
       # eccp also runs edg_prelink and edg_decode when it links.
       targets = ['cpfe-cir', 'edg_prelink', 'edg_decode'],
       test_configs = ['edg_x86_64_cir', 'edg_x86_64_cir_2p'],
@@ -335,6 +340,8 @@ def _configure_base_posture(args: argparse.Namespace) -> TestRunPosture:
     return _configure_extensive_posture(args)
   elif args.posture == 'cir':
     return _configure_cir_posture(args)
+  elif args.posture == 'cir-release':
+    return _configure_cir_posture(args, release = True)
   elif args.posture.startswith('@'):
     posture_file_path = Path(args.posture[1:])
     if posture_file_path.exists():
@@ -356,7 +363,8 @@ def _configure_posture(args: argparse.Namespace) -> TestRunPosture:
   if args.record_mode:
     posture.record_tests = True
   if args.timeout_seconds != posture.test_timeout_seconds and (
-      args.timeout_seconds != 0 or args.posture != 'cir'):
+      args.timeout_seconds != 0 or
+      args.posture not in ('cir', 'cir-release')):
     # (The cir posture keeps its own default unless -T gives a value.)
     posture.test_timeout_seconds = args.timeout_seconds
   if args.test_types:

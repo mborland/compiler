@@ -1,0 +1,71 @@
+; PTR_STRIDE with a bool index (p + (a < b), promoted to int).
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK: cir.cast bool_to_int
+; CHECK: cir.ptr_stride
+
+frame DECLS
+  TY_ARRAY 41 4 3 0
+  TY_FUNC 21 1 0 [13, 1, 1]
+  TY_FUNC 22 1 0 []
+  STR 10 "pick"
+  STR 11 "main"
+  STR 12 "g_s"
+  DECL_FUNC 100 21 0 1 10
+  DECL_FUNC 101 22 0 9 11
+  DECL_VAR 201 41 0 1 1 12
+  C_STRING 41 bin8:"ab"
+  VAR_INIT 201
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 13 13 nil 0
+  PARAM 2 1 1 nil 0
+  PARAM 3 1 1 nil 0
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  LREF 3
+  LOAD 0
+  CMP 0
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  CAST 0 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 101 0
+  GREF 201
+  ADDR
+  CAST 12 13
+  CONST_INT 1 1
+  CONST_INT 1 2
+  CALL 100 21 3 0
+  CONST_INT 1 98
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  GREF 201
+  ADDR
+  CAST 12 13
+  CONST_INT 1 2
+  CONST_INT 1 1
+  CALL 100 21 3 0
+  CONST_INT 1 97
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Run a slice checkpoint of the CIR back end on the x86-64 box.
+
+Run it on the Mac, from the repository root, with the SSH master socket to the
+box open (see the box-docker-workflow notes):
+
+  edg-cir-checkpoint                # sync, clean build, the default steps
+  edg-cir-checkpoint --quick        # build, smoke, cpp-smoke only
+  edg-cir-checkpoint --steps build,ctest --detach
+
+It does, in this order:
+
+  1. rsync --checksum --no-times of the working tree to ~/edg-cir-config/<tree>
+     on the box (default tree m3b-int; build/, tests/runs/, .tmp/ and .git/ are
+     not touched).  --no-times gives changed files the time of the transfer:
+     with `rsync -a` a changed source can keep a time older than the objects
+     of an earlier build, and ninja then rebuilds nothing.
+  2. wipes the CIR build directories (build/cir, build/cir-*, build/gcc-cir,
+     build/gcc-release-cir), unless --incremental.
+  3. runs edg-cir-gate-evidence there with the chosen steps, in the
+     background (nohup, with an exit file), and polls until it is done.
+  4. prints the PASS/FAIL table and the paths of the evidence.
+
+The default steps are:
+
+  build identity smoke corpus asm-diff writer-stress cpp-smoke
+  cpp-writer-stress ctest
+
+that is the C smoke and corpus (statuses against the recorded expectations),
+the C assembly against the M3a baseline (--asm-baseline, default
+~/edg-cir-config/m3a-base-asm: every difference is listed with its class and
+cause), the ASan debug front end with ECIL_GID_STRESS over the writer tests,
+the C++ smoke list in both configs (a crash fails; with --smoke-all-pass every
+test must pass), and the four cir_src presets from clean build directories.
+About 15 minutes.  Day, stress, rss, perf, modes, cpp-corpus and cpp-modes are
+left for the gates; name them with --steps (they exist in the gate tool).
+
+Exit status: 0 if every step passed, 1 otherwise (2 for a setup problem).
+'''
+
+import argparse
+import shlex
+import subprocess
+import sys
+import time
+
+from datetime import datetime
+from pathlib import Path
+from typing import List
+
+BOX = 'mborland@192.168.1.167'
+SOCKET = Path.home() / '.ssh' / 'cm-edgbox'
+DEFAULT_STEPS = ('build,identity,smoke,corpus,asm-diff,writer-stress,'
+                 'cpp-smoke,cpp-writer-stress,ctest')
+QUICK_STEPS = 'build,smoke,cpp-smoke'
+EXCLUDES = ['/build/', '/tests/runs/', '/.tmp/', '/cmake-build-debug/',
+            '/.idea/', '/.mypy_cache/', '/dev-pref.json', '/.git/',
+            '__pycache__/', '.DS_Store']
+
+
+def ssh_options() -> List[str]:
+  return ['-o', f"ControlPath={SOCKET}", '-o', 'ControlMaster=no',
+          '-o', 'BatchMode=yes']
+
+
+def ssh(command: str, capture: bool = False) -> subprocess.CompletedProcess:
+  return subprocess.run(
+    ['ssh', *ssh_options(), BOX, command], text = True,
+    stdout = subprocess.PIPE if capture else None,
+    stderr = subprocess.STDOUT if capture else None
+  )
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2]
+  )
+  parser.add_argument('--tree', default = 'm3b-int',
+                      help = 'name of the tree under ~/edg-cir-config')
+  parser.add_argument('--steps', default = DEFAULT_STEPS,
+                      help = 'comma separated edg-cir-gate-evidence steps')
+  parser.add_argument('--quick', action = 'store_true',
+                      help = f"only {QUICK_STEPS}")
+  parser.add_argument('--incremental', action = 'store_true',
+                      help = 'keep the CIR build directories')
+  parser.add_argument('--no-sync', action = 'store_true',
+                      help = 'do not rsync (the tree is up to date)')
+  parser.add_argument('--asm-baseline', default = '~/edg-cir-config/'
+                      'm3a-base-asm')
+  parser.add_argument('--identity-baseline',
+                      default = '~/edg-cir-config/identity-m0c')
+  parser.add_argument('--perf-baseline',
+                      default = '~/edg-cir-config/m2-base-perf.json')
+  parser.add_argument('--smoke-all-pass', action = 'store_true',
+                      help = 'cpp-smoke fails unless every test passes')
+  parser.add_argument('--jobs', type = int, default = 12)
+  parser.add_argument('--detach', action = 'store_true',
+                      help = 'start it and return; print how to look at it')
+  parser.add_argument('--extra', default = '',
+                      help = 'more arguments for edg-cir-gate-evidence')
+  args = parser.parse_args()
+
+  root = Path.cwd()
+  if not (root / 'src' / 'cfe.c').exists():
+    print('run it from the repository root', file = sys.stderr)
+    sys.exit(2)
+  if subprocess.run(['ssh', '-O', 'check', '-o', f"ControlPath={SOCKET}",
+                     BOX], stdout = subprocess.DEVNULL,
+                    stderr = subprocess.DEVNULL).returncode != 0:
+    print('the SSH master socket to the box is not open (ask the user to '
+          'reopen it)', file = sys.stderr)
+    sys.exit(2)
+
+  steps = QUICK_STEPS if args.quick else args.steps
+  tree = f"~/edg-cir-config/{args.tree}"
+  stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+  out = f"{tree}/.tmp/checkpoint-{stamp}"
+  log = f"~/edg-cir-config/checkpoint-{args.tree}.log"
+  done = f"~/edg-cir-config/checkpoint-{args.tree}.exit"
+
+  ssh(f"mkdir -p {tree}")
+  if not args.no_sync:
+    print(f"syncing to {args.tree} ...", flush = True)
+    command = ['rsync', '-a', '--checksum', '--no-times', '--delete',
+               '-e', 'ssh ' + ' '.join(ssh_options())]
+    for exclude in EXCLUDES:
+      command += ['--exclude', exclude]
+    command += ['./', f"{BOX}:edg-cir-config/{args.tree}/"]
+    if subprocess.run(command).returncode != 0:
+      print('rsync failed', file = sys.stderr)
+      sys.exit(2)
+
+  gate = [
+    'python3', 'dev_tools/bin/edg-cir-gate-evidence', '--tree', '$T',
+    '--jobs', str(args.jobs), '--only', steps, '--out', out,
+    '--identity-baseline', args.identity_baseline,
+    '--asm-baseline', args.asm_baseline,
+    '--perf-baseline', args.perf_baseline
+  ]
+  if args.smoke_all_pass:
+    gate.append('--cpp-smoke-all-pass')
+  gate_command = ' '.join(
+    a if a == '$T' or a.startswith('~') else shlex.quote(a) for a in gate
+  ) + (f" {args.extra}" if args.extra else '')
+  wipe = '' if args.incremental else (
+    'rm -rf build/cir build/cir-* build/gcc-cir build/gcc-cir-nopoison '
+    'build/gcc-release-cir; ')
+  script = (
+    f"T=$(cd {tree} && pwd); cd $T; mkdir -p .git/hooks .tmp; "
+    f"export PATH=$T/dev_tools/bin:$PATH PYTHONPATH=$T/dev_tools/pylibs; "
+    f"[ -f dev-pref.json ] || sg docker -c 'python3 dev-init.py docker' "
+    f">/dev/null 2>&1; {wipe}rm -f {done}; "
+    f"{gate_command} > {log} 2>&1; echo $? > {done}"
+  )
+  started = time.time()
+  ssh(f"nohup bash -c {shlex.quote(script)} > /dev/null 2>&1 &")
+  print(f"started {steps} in {args.tree}; evidence {out}\n"
+        f"log: {log}   (on the box)", flush = True)
+  if args.detach:
+    print(f"look: ssh ... 'tail {log}; cat {done}'")
+    return
+
+  while True:
+    time.sleep(20)
+    result = ssh(f"cat {done} 2>/dev/null", capture = True)
+    if result.stdout.strip().isdigit():
+      status = int(result.stdout.strip())
+      break
+  table = ssh(f"sed -n '/^| step/,$p' {log}", capture = True).stdout
+  print('\n'.join(line for line in table.splitlines()
+                  if 'SKIPPED' not in line))
+  print(f"{(time.time() - started) / 60:.0f} min; evidence {out}")
+  sys.exit(0 if status == 0 else 1)
+
+
+main()

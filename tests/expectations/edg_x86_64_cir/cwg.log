@@ -1,0 +1,8 @@
+cwg1992.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
+cwg2176.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
+cwg2196.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
+cwg2257.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
+cwg2381.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
+cwg2861.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):Runtime abort since behavior is undefined
+cwg2867.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):Test passes, but output is not correct
+cwg3043.sft.cpp:rp:-DTEST_NUMBER=1 --c++26:FAIL(COMPILE):

@@ -1,0 +1,28 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 42: warning: CIR back end: the body of "docalling_1" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 50: warning: CIR back end: the body of "docalling" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 52: warning: unknown attribute "noclone"
+  int __attribute__ ((noinline,noclone)) get_input (void)
+                               ^
+
+"Test_name.c", line 66: warning: CIR back end: the body of "main" uses the constant kind "pointer-to-member constant", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "gmp" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of '_Z11docalling_1M6StringKFiiE' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z9docallingiM6StringKFiiE' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'gmp' was dropped: it uses a construct the CIR back end cannot express
+
+4 errors detected in the compilation of "Test_name.c".

@@ -1,0 +1,5 @@
+eccp -DTEST_NUMBER=1 --c99 --multi_trans_unit Test_name.c x96_b.c
+Command-line error: too many arguments on command line
+
+1 catastrophic error detected in the compilation of "Test_name.c".
+Compilation terminated.

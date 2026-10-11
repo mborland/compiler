@@ -43,22 +43,22 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'f1c' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f1c' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'f2c' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f2c' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'f3c' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f3c' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'f4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'f4c' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f4c' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'f5c' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f5c' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 9 errors detected in the compilation of "Test_name.c".

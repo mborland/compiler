@@ -1,0 +1,39 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"./torture/pr91606.C", line 70: warning: CIR back end: the body of "get_array_of_variants" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "auto get_array_of_variants(Ts...) [with Ts=<void (MyStruct::*)(int), int (MyStruct::*)(char, short, bool)>]" at line 104
+
+"./torture/pr91606.C", line 15: warning: CIR back end: the body of "variant" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+    {}
+     ^
+          detected during instantiation of "variant<T1, T2>::variant(T1) [with T1=void (MyStruct::*)(int), T2=int (MyStruct::*)(char, short, bool)]" at line 104
+
+"./torture/pr91606.C", line 20: warning: CIR back end: the body of "variant" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+    {}
+     ^
+          detected during instantiation of "variant<T1, T2>::variant(T2) [with T1=void (MyStruct::*)(int), T2=int (MyStruct::*)(char, short, bool)]" at line 104
+
+"./torture/pr91606.C", line 105: warning: CIR back end: the body of "get_member_functions" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./torture/pr91606.C", line 91: warning: CIR back end: the body of "getFuncId" uses a parameter of an unsupported type, which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "int getFuncId(Member Class::*) [with Member=void (int), Class=MyStruct]" at line 109
+
+Warning: CIR back end: the unused definition of '_Z21get_array_of_variantsIJM8MyStructFviEMS0_FicsbEEEDaDpT_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC1ES2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC2ES2_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC1ES4_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC2ES4_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z20get_member_functionsI8MyStructEDav' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z9getFuncIdIFviE8MyStructEiMT0_T_' was dropped and erased: it uses a construct the CIR back end cannot express
+

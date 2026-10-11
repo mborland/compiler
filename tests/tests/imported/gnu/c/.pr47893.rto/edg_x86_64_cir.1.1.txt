@@ -59,18 +59,18 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   __attribute__((noinline, noclone))
                            ^
 
-Error: CIR back end: the definition of 'fn1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'fn2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'fn3' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn3' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'fn4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'fn5' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn5' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'fn6' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn6' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'fn7' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn7' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 7 errors detected in the compilation of "Test_name.c".

@@ -1,0 +1,20 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --exceptions Test_name.c
+"./ext/cleanup-8.C", line 60: warning: CIR back end: the body of "fn5" uses a cleanup attribute, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/cleanup-8.C", line 67: warning: CIR back end: the body of "fn4" uses a cleanup attribute, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./ext/cleanup-8.C", line 95: warning: CIR back end: the body of "fn0" uses a cleanup attribute, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZL3fn5v' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZL3fn4i' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZL3fn0v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

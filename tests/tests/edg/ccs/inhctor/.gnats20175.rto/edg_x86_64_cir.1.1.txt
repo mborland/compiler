@@ -1,0 +1,26 @@
+eccp -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 7: warning: CIR back end: the body of "W" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  struct W : virtual V { using V::V; };
+                         ^
+          detected during:
+            implicit generation of "W::V(int)" at line 9
+            implicit generation of "X::V(int)" at line 9
+
+"Test_name.c", line 8: warning: CIR back end: the body of "X" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  struct X : virtual W, virtual V { using W::W; };
+                                    ^
+          detected during implicit generation of "X::V(int)" at line 9
+
+Warning: CIR back end: the initializer of "x" uses a record type that is not supported, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the unused definition of '_ZN1WCI11VEi' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1WCI21VEi' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1XCI11VEi' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1XCI21VEi' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'x' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

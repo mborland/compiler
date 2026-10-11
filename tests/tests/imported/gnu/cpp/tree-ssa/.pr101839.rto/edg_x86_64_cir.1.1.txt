@@ -1,0 +1,261 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"./tree-ssa/pr101839.C", line 23: warning: CIR back end: the body of "fill" uses a virtual function, which the CIR back end does not support; the function is dropped
+      }
+      ^
+
+"./tree-ssa/pr101839.C", line 24: warning: CIR back end: the body of "~A" uses a virtual function, which the CIR back end does not support; the function is dropped
+      virtual ~A() {}
+                    ^
+
+"./tree-ssa/pr101839.C", line 32: warning: CIR back end: the body of "fill" uses a virtual function, which the CIR back end does not support; the function is dropped
+      }
+      ^
+
+"./tree-ssa/pr101839.C", line 35: warning: CIR back end: the body of "type" uses a virtual function, which the CIR back end does not support; the function is dropped
+      }
+      ^
+
+"./tree-ssa/pr101839.C", line 43: warning: CIR back end: the body of "type" uses a virtual function, which the CIR back end does not support; the function is dropped
+      }
+      ^
+
+"./tree-ssa/pr101839.C", line 48: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    CBA cba;
+           ^
+          detected during:
+            implicit generation of "<unnamed>::A::A()" at line 48
+            implicit generation of "<unnamed>::BA::BA()" at line 48
+            implicit generation of "<unnamed>::CBA::CBA()" at line 48
+
+"./tree-ssa/pr101839.C", line 48: warning: CIR back end: the body of "~BA" uses a virtual function, which the CIR back end does not support; the function is dropped
+    CBA cba;
+           ^
+          detected during:
+            implicit generation of "<unnamed>::BA::~BA()" at line 48
+            implicit generation of "<unnamed>::BA::BA()" at line 48
+            implicit generation of "<unnamed>::CBA::CBA()" at line 48
+
+"./tree-ssa/pr101839.C", line 48: warning: CIR back end: the body of "BA" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    CBA cba;
+           ^
+          detected during:
+            implicit generation of "<unnamed>::BA::BA()" at line 48
+            implicit generation of "<unnamed>::CBA::CBA()" at line 48
+
+"./tree-ssa/pr101839.C", line 48: warning: CIR back end: the body of "~CBA" uses a virtual function, which the CIR back end does not support; the function is dropped
+    CBA cba;
+           ^
+          detected during:
+            implicit generation of "<unnamed>::CBA::~CBA()" at line 48
+            implicit generation of "<unnamed>::CBA::CBA()" at line 48
+
+"./tree-ssa/pr101839.C", line 48: warning: CIR back end: the body of "CBA" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    CBA cba;
+           ^
+          detected during implicit generation of "<unnamed>::CBA::CBA()" at line 48
+
+"./tree-ssa/pr101839.C", line 51: warning: CIR back end: the body of "~CA" uses a virtual function, which the CIR back end does not support; the function is dropped
+    CA ca;
+         ^
+          detected during:
+            implicit generation of "<unnamed>::CA::~CA()" at line 51
+            implicit generation of "<unnamed>::CA::CA()" at line 51
+
+"./tree-ssa/pr101839.C", line 51: warning: CIR back end: the body of "CA" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    CA ca;
+         ^
+          detected during implicit generation of "<unnamed>::CA::CA()" at line 51
+
+"./tree-ssa/pr101839.C", line 53: warning: CIR back end: the body of "main" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9type_infoC1EPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9type_infoC2EPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt8bad_castC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt8bad_castC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z18__gthread_active_pv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z16__gthread_createPmPFPvS0_ES0_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z14__gthread_joinmPPv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z16__gthread_detachm' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z15__gthread_equalmm' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z14__gthread_selfv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z15__gthread_yieldv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z14__gthread_oncePiPFvvE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z20__gthread_key_createPjPFvPvE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z20__gthread_key_deletej' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z21__gthread_getspecificj' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z21__gthread_setspecificjPKv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z29__gthread_mutex_init_functionP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z23__gthread_mutex_destroyP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z20__gthread_mutex_lockP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z23__gthread_mutex_trylockP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z25__gthread_mutex_timedlockP15pthread_mutex_tPK8timespec' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z22__gthread_mutex_unlockP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z24__gthread_cond_broadcastP14pthread_cond_t' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z21__gthread_cond_signalP14pthread_cond_t' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z19__gthread_cond_waitP14pthread_cond_tP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z24__gthread_cond_timedwaitP14pthread_cond_tP15pthread_mutex_tPK8timespec' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z22__gthread_cond_destroyP14pthread_cond_t' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN9__gnu_cxx18__exchange_and_addEPVii' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN9__gnu_cxx12__atomic_addEPVii' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt6locale5facetC1Em' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt6locale5facetC2Em' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt6locale5facet19_M_remove_referenceEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt6locale5_Impl19_M_remove_referenceEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt10error_code7messageB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt15error_condition7messageB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSteqRKSt10error_codeRKSt15error_condition' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZSteqRKSt15error_conditionRKSt10error_code' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1ESt10error_code' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2ESt10error_code' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1ESt10error_codeRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2ESt10error_codeRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1ESt10error_codePKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2ESt10error_codePKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1EiRKNSt3_V214error_categoryEPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2EiRKNSt3_V214error_categoryEPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1EiRKNSt3_V214error_categoryE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2EiRKNSt3_V214error_categoryE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1EiRKNSt3_V214error_categoryERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2EiRKNSt3_V214error_categoryERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7toupperEc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7toupperEPcPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7tolowerEc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7tolowerEPcPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE5widenEc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE5widenEPKcS2_Pc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE6narrowEcc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE6narrowEPKcS2_cPc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE8do_widenEc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE8do_widenEPKcS2_Pc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE9do_narrowEcc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE9do_narrowEPKcS2_cPc' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11A4fillERNS_3BufE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12BA4fillERNS_3BufE' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12BA4typeEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12CA4typeEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12BAD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12BAD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12BAC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12BAC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_13CBAD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_13CBAD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_13CBAC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_13CBAC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12CAD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12CAD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12CAC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_12CAC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

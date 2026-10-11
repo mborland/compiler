@@ -118,6 +118,18 @@ extern void mangle_promoted_entity_name(a_source_correspondence *scp,
                                         a_scope_ptr             scope);
 #endif /* DO_IL_LOWERING */
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+extern char *cir_structor_name(a_routine_ptr        routine,
+                               a_ctor_or_dtor_kind  kind);
+
+extern char *cir_local_static_name(a_variable_ptr variable);
+
+extern a_boolean cir_entity_is_tu_local(an_il_entry_kind kind, void *entity);
+
+/* The late names are being resolved: remember the answers from now on. */
+extern void cir_tu_local_names_are_final(void);
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
 #if ABI_CHANGES_FOR_COVARIANT_VIRTUAL_FUNC_RETURN
 extern void mangle_wrapper_name(a_routine_ptr entry_routine);
 #endif /* ABI_CHANGES_FOR_COVARIANT_VIRTUAL_FUNC_RETURN */

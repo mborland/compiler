@@ -1,0 +1,12 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 16: warning: CIR back end: the body of "write_i32" uses the builtin function __builtin_assume_aligned, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 18: warning: unknown attribute "noipa"
+  __attribute__((noipa))
+                 ^
+
+Error: CIR back end: the definition of '_ZL9write_i32Pvi' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

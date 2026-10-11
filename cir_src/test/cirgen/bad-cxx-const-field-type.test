@@ -1,0 +1,29 @@
+; Emitter-side check: the constant of a record field must have the field's
+; type; a mismatch is a stream error, not an MLIR verifier assertion.  The
+; writer sent a pointer constant for field 0 of a polymorphic class whose
+; field 0 is the vptr.
+;   struct R { int a; long b; };   R r = { <char constant for a>, 2 };
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: error [1001]: the constant of field 0 of record 'R' does not have the type of the field
+
+frame DECLS
+  STR 10 "R"
+  STR 11 "r"
+  TY_RECORD_DECL 21 0 10
+  TY_RECORD_BODY 21 16 16 8 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 3 8 nil nil nil 0
+  DECL_VAR 201 21 0 1 8 11
+  C_AGG_BEGIN 21
+  C_SEL 0
+  C_INT 4 1
+  C_SEL 1
+  C_INT 3 2
+  C_AGG_END
+  VAR_INIT 201
+frame END
+  END auto 0

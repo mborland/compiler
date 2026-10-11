@@ -1,0 +1,48 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"./init/new36.C", line 7: warning: CIR back end: the body of "~E" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual ~E() { }
+                   ^
+
+"./init/new36.C", line 23: warning: CIR back end: the body of "E" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+      throw E();
+            ^
+          detected during implicit generation of "E::E() noexcept" at line 23
+
+"./init/new36.C", line 34: warning: CIR back end: the body of "S" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./init/new36.C", line 68: warning: CIR back end: the body of "E" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    catch (E)
+           ^
+          detected during implicit generation of "E::E(const E &) noexcept" at line 68
+
+"./init/new36.C", line 74: warning: CIR back end: the body of "doit" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./init/new36.C", line 153: warning: CIR back end: the body of "main" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1EC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1EC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1EC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1EC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1SC1Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN1SC2Ev' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z4doiti' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+4 errors detected in the compilation of "Test_name.c".

@@ -1,0 +1,87 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 14: warning: CIR back end: the body of "foo" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 16: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone))
+                           ^
+
+"Test_name.c", line 36: warning: CIR back end: the body of "~C" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual ~C () {}
+                   ^
+
+"Test_name.c", line 41: warning: CIR back end: the body of "B" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    explicit D (const A &x) : d(123) { foo (x.a2, x.a1); }
+                                     ^
+          detected during implicit generation of "B::B() noexcept" at line 41
+
+"Test_name.c", line 41: warning: CIR back end: the body of "C" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    explicit D (const A &x) : d(123) { foo (x.a2, x.a1); }
+                                     ^
+          detected during implicit generation of "C::C() noexcept" at line 41
+
+"Test_name.c", line 41: warning: CIR back end: the body of "D" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    explicit D (const A &x) : d(123) { foo (x.a2, x.a1); }
+                                                         ^
+
+"Test_name.c", line 41: warning: CIR back end: the body of "~D" uses a virtual function, which the CIR back end does not support; the function is dropped
+    explicit D (const A &x) : d(123) { foo (x.a2, x.a1); }
+                                                         ^
+          detected during implicit generation of "D::~D() noexcept" at line 41
+
+"Test_name.c", line 42: warning: CIR back end: the body of "m" uses a virtual function, which the CIR back end does not support; the function is dropped
+    int m () const { return d; }
+                               ^
+
+"Test_name.c", line 48: warning: CIR back end: the body of "E" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    E () : d(0) {}
+                 ^
+
+"Test_name.c", line 49: warning: CIR back end: the body of "n" uses a virtual function, which the CIR back end does not support; the function is dropped
+    virtual void n (const B &x) { d = x.m (); x.m (); x.m (); }
+                                                              ^
+
+"Test_name.c", line 65: warning: CIR back end: the body of "test" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 72: warning: CIR back end: the body of "baz" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1CD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1CD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1BC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1BC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1CC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1CC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DC1ERK1A' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DC2ERK1A' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1DD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZNK1D1mEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1EC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1EC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1E1nERK1B' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z3foodd' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_Z4testv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_Z3bazv' was dropped: it uses a construct the CIR back end cannot express
+
+3 errors detected in the compilation of "Test_name.c".

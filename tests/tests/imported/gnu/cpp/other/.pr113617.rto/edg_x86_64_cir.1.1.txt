@@ -1,0 +1,40 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"./other/pr113617.h", line 22: warning: unknown attribute "noipa"
+    __attribute__((noipa)) static _R bar(const H &) {}
+                   ^
+
+"./other/pr113617.h", line 43: warning: unknown attribute "noipa"
+  __attribute__((noipa)) typename V<W<_F>::value, _F, _B...>::type
+                 ^
+
+"./other/pr113617.h", line 61: warning: unknown attribute "noipa"
+    __attribute__((noipa)) void boo(long long, long long, long long, _F &) {}
+                   ^
+
+"./other/pr113617.h", line 68: warning: unknown attribute "noipa"
+  __attribute__((noipa)) void garply(void *, long long, long long, long long) {}
+                 ^
+
+"./other/pr113617.h", line 95: warning: unknown attribute "noipa"
+    __attribute__((noipa)) C(_F) {}
+                   ^
+
+"./other/pr113617.h", line 121: warning: unknown attribute "noipa"
+  template <typename> struct D { __attribute__((noipa)) D(int *) {} };
+                                                ^
+
+"./other/pr113617.C", line 19: warning: unknown attribute "noipa"
+  __attribute__((noipa)) static void fn1 (void) {}
+                 ^
+
+"./other/pr113617.C", line 20: warning: unknown attribute "noipa"
+  __attribute__((noipa)) static void fn2 (void) {}
+                 ^
+
+"./other/pr113617.C", line 27: warning: CIR back end: the body of "fn3" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of '_Z3fn3v' was dropped: it uses a construct the CIR back end cannot express
+
+1 error detected in the compilation of "Test_name.c".

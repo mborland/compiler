@@ -97,7 +97,7 @@ Assemble text to bytes (abort the test on failure).
 }  /* assemble */
 
 const char *header_text =
-    "ecil 0.6 features=0x00000000\n"
+    "ecil 1.0 features=0x00000000\n"
     "frame HEADER\n"
     "  STR 1 \"x86_64-unknown-linux-gnu\"\n"
     "  STR 2 \"\"\n"
@@ -281,9 +281,11 @@ Error statuses, sticky errors and call-order rules.
   bad[0] = 'X';
   CHECK(run(bad, EDG_CIR_OUTPUT_CIR, c) == EDG_CIR_ERROR_FORMAT, "bad magic");
   CHECK(!c.messages.empty(), "a diagnostic is expected");
-  CHECK(run(assemble("ecil 1.0 features=0x0\n"), EDG_CIR_OUTPUT_CIR, c) ==
+  CHECK(run(assemble("ecil 2.0 features=0x0\n"), EDG_CIR_OUTPUT_CIR, c) ==
         EDG_CIR_ERROR_VERSION, "major version");
-  CHECK(run(assemble("ecil 0.6 features=0x00010000\n"), EDG_CIR_OUTPUT_CIR,
+  CHECK(run(assemble("ecil 0.9 features=0x0\n"), EDG_CIR_OUTPUT_CIR, c) ==
+        EDG_CIR_ERROR_VERSION, "0.x streams are rejected");
+  CHECK(run(assemble("ecil 1.0 features=0x00010000\n"), EDG_CIR_OUTPUT_CIR,
             c) == EDG_CIR_ERROR_VERSION, "required feature");
   CHECK(run(assemble(std::string(header_text) +
                      "frame DECLS\n  ?0x99 1\nframe END\n  END 2 0\n"),

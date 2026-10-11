@@ -5,10 +5,10 @@ Warning: CIR back end: the initializer of "b" uses a vector type (vector types a
 
 Warning: CIR back end: the initializer of "c" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'a' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'a' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 3 errors detected in the compilation of "Test_name.c".

@@ -1,0 +1,29 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
+"./cpp0x/constexpr-decltype1.C", line 5: warning: CIR back end: the body of "value" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  struct W { static constexpr T value() { return V; } };
+                                                    ^
+          detected during instantiation of "T W<T, V>::value() [with T=int (C::*)() const, V=&C::c1]" at line 63
+
+"./cpp0x/constexpr-decltype1.C", line 8: warning: CIR back end: the body of "value" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  struct X { typedef T type; static constexpr type value() { return V; } };
+                                                                       ^
+          detected during instantiation of "X<T, V>::type X<T, V>::value() [with T=int (C::*)() const, V=&C::c1]" at line 64
+
+"./cpp0x/constexpr-decltype1.C", line 11: warning: CIR back end: the body of "value" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  struct Y { using type = T; static constexpr type value() { return V; } };
+                                                                       ^
+          detected during instantiation of "Y<T, V>::type Y<T, V>::value() [with T=int (C::*)() const, V=&C::c1]" at line 65
+
+"./cpp0x/constexpr-decltype1.C", line 14: warning: CIR back end: the body of "value" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+  struct Z { static constexpr decltype(V) value() { return V; } };
+                                                              ^
+          detected during instantiation of "T Z<T, V>::value() [with T=int (C::*)() const, V=&C::c1]" at line 66
+
+Warning: CIR back end: the unused definition of '_ZN1WIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1XIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1YIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN1ZIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express
+

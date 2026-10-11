@@ -1,6 +1,6 @@
 # ECIL — EDG CIR IL stream format
 
-Status: **v0.8** (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
+Status: **v1.0**, frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
 orchestrator.
 
 - **Normative source.** The definitions live in
@@ -334,6 +334,10 @@ When `end_reachable` is set and control falls off the end:
 | C (`HDR_LANG` is C), non-void | Load the uninitialized `__retval` and `cir.return` it. C11 6.9.1p12 only makes this undefined if the caller uses the value. Never `unreachable`. |
 | C++, non-void | `cir.trap` + `unreachable`, as clang does |
 
+A `RETURN_STMT(false)` in a non-void C++ function (`return;`, a GNU
+extension the front end accepts) returns the uninitialized `__retval`, as in
+C.
+
 **Locals and temporaries**
 - `LOCAL(l, t, s|nil, align, flags=0)` declares an automatic variable at
   that point of the body, in the current block. It may appear between
@@ -566,9 +570,24 @@ scalar is diagnosed.
 
 **Consumer, at finish (F5).** These rules apply when any entity carries
 `unsupported`:
-- **Default.** A dropped definition (function or variable, any linkage) is
-  an error, `EDG_CIR_ERROR_UNSUPPORTED`, naming each entity. Tests then
-  report the unsupported construct, not a later link failure.
+- **Default.** A dropped definition is an error,
+  `EDG_CIR_ERROR_UNSUPPORTED`, naming each entity, so tests report the
+  unsupported construct rather than a later link failure. One exception
+  (user decision, 2026-10-11): a dropped *function* definition with
+  discardable linkage (internal or `linkonce_odr`) that nothing references at
+  finish is erased with a warning. Dropped variables stay errors, because
+  their initialization may have side effects even when nothing refers to
+  them. No TU can ever need it, so failing would only
+  reject code that is never used: an unused `static inline` header function,
+  or an uncalled library inline function. A referenced one, or one with
+  external or `weak_odr` linkage, is still an error. "Referenced" counts
+  every use: calls, addresses, `C_ADDR` constants and aliases.
+  - A dropped C++ inline function is re-issued as external (11.2), so
+    "discardable" is decided by the linkage it was first introduced with.
+    The consumer remembers `linkonce_odr`.
+  - A dead, supported, discardable definition that uses an erased one is
+    erased with it, until nothing more changes.
+  - A STRUCTOR pair is live if either variant is referenced.
 - **With `EDG_CIR_FLAG_KEEP_GOING`.**
   - External-linkage entities become declarations, with a warning.
   - An internal-linkage entity that is referenced is still an error.
@@ -595,8 +614,10 @@ scalar is diagnosed.
   - an unknown flag bit;
   - an unknown enumerated-operand value, also reported as "needs ECIL
     minor ≥ N".
-- **v0.x streams are pre-release.** Writer and reader in one tree always
-  match.
+- **v0.x streams were pre-release.** Writer and reader in one tree always
+  matched. **1.0** (M3) is the first stable version: later additions are
+  1.x minors under the rules above, for example exceptions (M4). A change of
+  meaning needs major 2.
 
 ## 10. Worked example
 
@@ -630,8 +651,8 @@ D2                             TERN_END                [-> int]
 
 ## 11. C++ (v1)
 
-Minor 8 declares every v1 record and flag (`ecil_format.h`). A later contract
-change bumps the minor again, and the M3 gate freezes the format as **1.0**.
+ECIL 1.0 contains every record and flag in this section (`ecil_format.h`),
+frozen at the M3 gate. During development these were 0.8–0.x minors.
 Background is in `research/m3_ecil_v1_design.md` (§8 has the spike verdicts),
 `research/cxx_cir_shapes.md` (CIR shapes at the pin) and
 `research/il_to_ecil_map_cxx.md` (IL facts).
@@ -697,8 +718,9 @@ Background is in `research/m3_ecil_v1_design.md` (§8 has the spike verdicts),
   - If the name is mangled (it starts with `_Z`), the guard is `_ZGV`
     followed by the name without its `_Z` (`_ZZ1fvE1a` → `_ZGVZ1fvE1a`).
   - Otherwise the guard is `_ZGV<length><name>` (`iv` → `_ZGV2iv`).
-  - Lifetime-extension temporaries follow the same rule with `_ZGR` and a
-    trailing `_<n>`: `_ZGR2sr_` for `sr`, and `_ZGRZ2h2vE2lr_` for a local.
+  - Lifetime-extension temporaries use the Itanium rule
+    `_ZGR <object name> [<seq-id>] _`: `_ZGR2sr_` for the first temporary of
+    `sr`, then `_ZGR2sr0_`, `_ZGR2sr1_`, …, and `_ZGRZ2h2vE2lr_` for a local.
 - **Late names.**
   - A declaration whose name may still change is sent with a nil name and
     bound by `NAME_BIND` in `F_NAMES`. Examples: a member of an unnamed class
@@ -736,9 +758,11 @@ Background is in `research/m3_ecil_v1_design.md` (§8 has the spike verdicts),
     (Itanium).
   - `NONTRIVIAL_DTOR`.
 - **`REC_FIELD`:**
-  - `BASE` marks a direct non-virtual base. Bases come first, in declaration
-    order, then the data members. Every base is listed, so `FIELD` indexes
-    stay stable.
+  - `BASE` marks a direct non-virtual base. Field order is fixed: the vptr
+    field first (if any), then the bases in declaration order, then the data
+    members. Every base is listed, so `FIELD` indexes stay stable. Only
+    *direct* bases appear; indirect bases are reached through their direct
+    base.
   - `empty_for_abi` is set on these only:
     - empty bases;
     - empty potentially-overlapping members (`[[no_unique_address]]`,
@@ -753,6 +777,10 @@ Background is in `research/m3_ecil_v1_design.md` (§8 has the spike verdicts),
   field type T, not its base-subobject type. The consumer casts from its
   `.base` storage, and computes the address of an omitted empty base from
   its offset.
+- **Base-subobject types.** The consumer's `.base` record (dsize bytes) is a
+  plain struct even for a class, as in clang. A union with reusable tail
+  padding used as a base or as a potentially overlapping member is
+  diagnosed "unsupported" in v1.
 - **vptr.** A class with a vptr has an unnamed
   `TY_OPAQUE(ptr_size, ptr_align)` field at the vptr offset, so it is
   ABI-opaque (8.11) until v2.
@@ -766,9 +794,16 @@ Background is in `research/m3_ecil_v1_design.md` (§8 has the spike verdicts),
     digit.
   - The body is streamed under `g_base` only. `FUNC_BEGIN(g_complete)` is an
     error while `has_vbases` is 0, and `has_vbases` is 0 in v1.
+  - **Declaring C1.** When `g_base` is defined here, `g_complete` is sent
+    with the same linkage and flags as `g_base`, including
+    `DEFINED_HERE` and `COMDAT`, although it has no body of its own: it is
+    defined through `g_base`. If `g_base`'s body is later dropped as
+    unsupported, the writer re-issues both declarations accordingly.
   - Call sites use `g_complete` for complete objects and `g_base` for base
-    subobjects, including the elements of `ARRAY_CTOR`. Clang uses C2
-    there; the difference is visible only in a byte-compare.
+    subobjects. Array elements are complete objects, so `ARRAY_CTOR` and
+    `ARRAY_DTOR` bodies call `g_complete` (C1/D1). Clang uses C2/D2 there,
+    which is equivalent while `has_vbases` is 0; the difference shows only
+    in a byte-compare. M4 relies on the complete variant.
 - **Consumer: C1 strategy.** It applies only when `g_base` ends up defined:
   not unsupported, not retracted, and not merely declared (for example
   `extern template`). Otherwise C1 stays an external declaration.
@@ -869,8 +904,33 @@ diagnosed "unsupported".
   writer does so when the returned expression has temporaries (a
   `FULLEXPR`), so the value is complete before the cleanups run.
 - **NRVO.** `LOCAL` with `RETURN_SLOT` names the NRVO variable.
+  - Like any local with a non-trivial destructor, it gets a `normal`
+    cleanup.
+  - The consumer guards that cleanup with an `nrvo` flag: false at entry,
+    set true by `RETURN_FROM_SLOT`. The object is therefore destroyed when
+    control leaves its scope any other way (a `goto` out, the end of the
+    scope), and not when it is returned.
 - **`STORE` flags:** `INIT` (fresh storage) and `DSIZE` (copy `data_size`
-  bytes). `ZERO_BYTES(bytes)` zero-fills an overlapping base.
+  bytes).
+- **`ZERO_BYTES(bytes)`** pops a glvalue and zero-fills `bytes` bytes starting
+  at its address. The glvalue is not a bit-field. The writer uses it for:
+  - the data size of an overlapping subobject (a base, or a non-empty
+    `[[no_unique_address]]` member);
+  - value-initialization of a whole record or array, padding included;
+  - a constructor delegating to a trivial default constructor;
+  - `new T[n]()` with a constant count: `n × sizeof(T)` bytes from the first
+    element.
+
+  The writer guarantees that the range lies inside one complete object.
+  The consumer does not check the count against the glvalue's type, because
+  for `new[]` the range covers more than the element the glvalue
+  designates.
+- **Omitted empty subobjects.** The writer writes nothing to an empty
+  subobject that the consumer omits (an empty base, or an empty
+  `[[no_unique_address]]` member, at an offset it shares with another
+  member). As a second line of defence, the consumer treats a `STORE`,
+  `INIT_*` or zero-fill through such a glvalue as writing nothing.
+  `ZERO_BYTES` of more than one byte through it is a format error.
 - **Casts.** `BASE_CAST`/`DERIVED_CAST(t_from, t_to, offset,
   flags{nonnull})` map prv pointer to prv pointer. Without `nonnull`, null
   stays null. Each cast is to or from a *direct* base; a conversion through
@@ -945,6 +1005,9 @@ diagnosed "unsupported".
   `alignof(t_elem)`). ARM variant cookies are rejected in v1.
 - **`DELETE(g_delete_fn, g_dtor|nil, t_obj, flags{array, sized,
   aligned})`** includes the null check.
+- **Switch on a 128-bit integer.** A case label that is negative or does
+  not fit in 64 bits is diagnosed "unsupported" by the consumer. The CIR
+  lowering at the pin reads case values as unsigned 64-bit.
 - **Destroying and type-aware `operator delete`** (C++20/26) cannot be
   expressed in v1 and are diagnosed "unsupported".
 - **Implicit operators.** The writer always names the allocation or
@@ -961,6 +1024,12 @@ diagnosed "unsupported".
   `F_REGION`, after the function's body. Lambdas at namespace scope, and
   instances of generic lambdas, get their own `F_REGION` like any other
   routine. Bodies are never nested (8.3).
+- **Trailing region.** A synthesized invoker that is needed only after
+  `F_GLOBALS` (for example a namespace-scope constant initialized with a
+  converted lambda) is defined in one more `F_REGION` after `F_GLOBALS`.
+  Frame order is otherwise free (4): any number of `F_REGION`/`F_GLOBALS`
+  frames may precede `F_NAMES` and `F_END`, and the consumer's finish-time
+  rules apply to all of them.
 - **Static invoker.** For a lambda without captures, the writer synthesizes
   the static invoker (the conversion to a function pointer) when it is
   used, for generic lambdas too. The invoker's body calls the call operator

@@ -134,16 +134,24 @@ Load through a glvalue (cir.load) or a bit-field (cir.get_bitfield).
 }  /* a_emitter::load_value */
 
 bool a_emitter::store_value(const a_value &target, mlir::Value value,
-                            bool is_volatile, mlir::Value *result)
+                            bool is_volatile, mlir::Value *result,
+                            uint32_t store_flags)
 /*
 Store through a glvalue or a bit-field.  A whole-aggregate store whose value
-was just loaded becomes cir.copy.  *result (if given) receives the value the
-object now holds.
+was just loaded becomes cir.copy (cir.libc.memcpy of the data size with
+STORE(DSIZE)).  STORE(INIT) of a call result is a direct store: the callee
+constructs the object in the destination (ECIL spec 11.6).  *result (if
+given) receives the value the object now holds.
 */
 {
   bool ok = true;
 
-  if (target.kind == a_value_kind::bitfield) {
+  if (target.omitted) {
+    /* An omitted empty field has no storage of its own and its address may
+       be that of another member: there is nothing to write. */
+    if (result != nullptr)
+      *result = value;
+  } else if (target.kind == a_value_kind::bitfield) {
     const a_bitfield_info &info = *target.bitfield;
     if (value.getType() != info.declared) {
       mlir::Value converted;
@@ -164,9 +172,22 @@ object now holds.
     mlir::Type pointee =
         mlir::cast<cir::PointerType>(target.value.getType()).getPointee();
     cir::LoadOp load = value.getDefiningOp<cir::LoadOp>();
+    const a_record_info *record = record_info_of(value.getType());
 
-    if (is_aggregate_type(value.getType()) && load && value.use_empty() &&
-        result == nullptr &&
+    if ((store_flags & ECIL_STORE_DSIZE) != 0) {
+      if (!load || !value.use_empty() || result != nullptr ||
+          record == nullptr || pointee != value.getType()) {
+        ok = format_error("STORE(DSIZE) needs the value just loaded from an "
+                          "object of the same record type, and no result");
+      } else {
+        compat::memcpy_bytes(
+            builder_, loc(), target.value, load.getAddr(), record->data_size,
+            target.align,
+            static_cast<unsigned>(load.getAlignment().value_or(1)));
+        load->erase();
+      }
+    } else if (is_aggregate_type(value.getType()) && load &&
+        value.use_empty() && result == nullptr &&
         pointee == value.getType() && !load.getIsVolatile()) {
       cir::CopyOp copy = builder_.createCopy(target.value, load.getAddr(),
                                              is_volatile);
@@ -176,19 +197,26 @@ object now holds.
       load->erase();
     } else if (is_aggregate_type(value.getType()) &&
                value.getDefiningOp<cir::CallOp>() &&
-               pointee == value.getType()) {
-      /* An aggregate call result may be returned through a hidden sret
-         pointer that CallConvLowering aims at the store's destination.  The
-         destination may alias something the callee reads (a1 = f() where f
-         reads a1), so the result lands in a fresh temporary first, as CodeGen
-         does for aliased destinations. */
-      uint32_t align = static_cast<uint32_t>(type_align(value.getType()));
-      mlir::Value temp = alloca_here(value.getType(), "agg.tmp", align);
-      builder_.createStore(loc(), value, temp, false, false,
-                           alignment_attr(align));
-      cir::CopyOp copy = builder_.createCopy(target.value, temp, is_volatile);
-      copy.setDstAlignment(target.align);
-      copy.setSrcAlignment(align);
+               pointee == value.getType() &&
+               (store_flags & ECIL_STORE_INIT) == 0) {
+      if (is_indirect_class(value.getType())) {
+        ok = format_error("a NONTRIVIAL_ABI call result can only be stored "
+                          "with STORE(INIT) (or materialized)");
+      } else {
+        /* An aggregate call result may be returned through a hidden sret
+           pointer that CallConvLowering aims at the store's destination.  The
+           destination may alias something the callee reads (a1 = f() where f
+           reads a1), so the result lands in a fresh temporary first, as
+           CodeGen does for aliased destinations. */
+        uint32_t align = static_cast<uint32_t>(type_align(value.getType()));
+        mlir::Value temp = alloca_here(value.getType(), "agg.tmp", align);
+        builder_.createStore(loc(), value, temp, false, false,
+                             alignment_attr(align));
+        cir::CopyOp copy = builder_.createCopy(target.value, temp,
+                                               is_volatile);
+        copy.setDstAlignment(target.align);
+        copy.setSrcAlignment(align);
+      }
     } else {
       builder_.createStore(loc(), value, target.value, is_volatile, false,
                            alignment_attr(target.align));
@@ -236,14 +264,39 @@ bit-field glvalue addressing its access unit).
       out.align = derived_align(base.align, info.unit_offset);
       out.bitfield = &info;
     } else {
-      mlir::Value member_address = builder_.createGetMember(
-          loc(), cir::PointerType::get(rec.members[member]), address, f.name,
-          member);
+      mlir::Type field_type = type_at(f.type)->cir;
+      mlir::Value member_address;
+
+      if (member == no_member) {
+        /* An empty base or member has no storage: it sits at its offset
+           (zero bytes of it are ever accessed). */
+        member_address = address;
+        if (f.byte_offset != 0) {
+          mlir::Type byte = compat::int_type(ctx_, 8, true);
+          mlir::Value bytes = builder_.createBitcast(
+              loc(), address, compat::pointer_to(byte));
+          mlir::Value stride = builder_.getConstantInt(
+              loc(), builder_.getSIntNTy(64),
+              static_cast<int64_t>(f.byte_offset));
+          member_address = builder_.createPtrStride(loc(), bytes, stride);
+        }
+      } else {
+        member_address = builder_.createGetMember(
+            loc(), cir::PointerType::get(rec.members[member]), address,
+            f.name, member);
+      }
+      /* A base or overlapping member is stored as its ".base" record; the
+         value of the field is the complete type. */
+      if (mlir::cast<cir::PointerType>(member_address.getType())
+              .getPointee() != field_type)
+        member_address = builder_.createBitcast(
+            loc(), member_address, compat::pointer_to(field_type));
       out.kind = a_value_kind::glvalue;
       out.value = member_address;
       out.align = derived_align(base.align,
                                 rec.is_union ? 0 : f.byte_offset);
       out.bitfield = nullptr;
+      out.omitted = member == no_member;
     }
   }
   return ok;
@@ -431,7 +484,9 @@ from a private constant global instead of being built in registers.
 {
   bool ok = true;
 
-  if (target.kind == a_value_kind::bitfield) {
+  if (target.omitted) {
+    /* Nothing to write (see store_value). */
+  } else if (target.kind == a_value_kind::bitfield) {
     mlir::Value v = get_constant_value(c.attr);
     ok = store_value(target, v, false, nullptr);
   } else if (c.is_zero && is_aggregate_type(type)) {
@@ -518,6 +573,32 @@ CONST_INT / CONST_FLOAT / CONST_NULL / CONST_PTR.
 
 /* Calls. */
 
+bool a_emitter::check_class_arguments(
+                              const llvm::SmallVectorImpl<mlir::Value> &args)
+/*
+A by-value argument of a NONTRIVIAL_ABI record is the load of an alloca (a
+local, a parameter or a temporary): CallConvLowering passes that storage
+itself, which is what keeps the copy elided.  Any other argument value
+(a call result, a member, an object reached through a pointer) would be
+rejected by it or, worse, copied silently (ECIL spec 11.6).
+*/
+{
+  bool ok = true;
+
+  for (mlir::Value arg : args) {
+    if (is_indirect_class(arg.getType())) {
+      cir::LoadOp load = arg.getDefiningOp<cir::LoadOp>();
+      if (!load || !load.getAddr().getDefiningOp<cir::AllocaOp>()) {
+        ok = format_error("a NONTRIVIAL_ABI record argument must be the "
+                          "LOAD of a local, parameter or temporary object "
+                          "(copy it into a temporary first)");
+        break;
+      }
+    }
+  }
+  return ok;
+}  /* a_emitter::check_class_arguments */
+
 bool a_emitter::call_record(const ecil::a_record &r, bool indirect)
 /*
 CALL / CALL_INDIRECT with the call-site type rule of spec 8.8: a direct
@@ -538,8 +619,7 @@ and an indirect call with all arguments as variadic extras.
   cir::CallOp op;
   bool noreturn;
   mlir::NamedAttribute nothrow = nothrow_attr();
-  bool use_nothrow = c_language_ &&
-                     !(session_.header.lang_flags & ECIL_LANG_EXCEPTIONS);
+  bool use_nothrow = !(session_.header.lang_flags & ECIL_LANG_EXCEPTIONS);
   llvm::SmallVector<mlir::NamedAttribute> attrs;
 
   if (indirect) {
@@ -575,6 +655,8 @@ and an indirect call with all arguments as variadic extras.
     for (size_t k = static_cast<size_t>(nargs); ok && k > 0; --k)
       ok = pop_prvalue(args[k - 1]);
   }
+  if (ok)
+    ok = check_class_arguments(args);
   if (ok) {
     if (use_nothrow)
       attrs.push_back(nothrow);
@@ -649,9 +731,26 @@ and an indirect call with all arguments as variadic extras.
   if (ok) {
     if (op.getNumResults() == 1)
       push_prvalue(op.getResult());
+    /* After a noreturn call control does not continue: cir.unreachable.
+       Inside a cleanup scope body that would leave the body with no exit,
+       which FlattenCFG does not accept (an assertion): there the call is
+       marked noreturn, as CIRGen does, and the code goes on in the same
+       block (the body ends in its yield). */
     if (noreturn) {
-      cir::UnreachableOp::create(builder_, loc());
-      start_new_block();
+      bool single_block = false;
+
+      /* A STATIC_INIT region (ctor region of a global or local_init) is a
+         single block: no cir.unreachable and no new block there either. */
+      for (const a_frame &f : frames_) {
+        if (f.kind == a_frame_kind::static_init)
+          single_block = true;
+      }
+      if (cleanups_.empty() && !single_block) {
+        cir::UnreachableOp::create(builder_, loc());
+        start_new_block();
+      } else {
+        op->setAttr(noreturn_name_, unit_attr_);
+      }
     }
   }
   return ok;
@@ -735,6 +834,11 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
       a_type *t = type_at(tgid);
       if (t == nullptr) {
         ok = false;
+        break;
+      }
+      if (is_indirect_class(t->cir)) {
+        ok = format_error("a ?: result of a NONTRIVIAL_ABI record type: "
+                          "use a void TERN whose arms STORE(INIT)");
         break;
       }
       result_type = t->cir;
@@ -879,7 +983,7 @@ AGG_INIT_BEGIN / AGG_SEL / AGG_INIT_END / INIT_CONST / INIT_ZERO.
       ok = format_error("AGG_INIT_BEGIN needs an object address");
       break;
     }
-    if (flags & ECIL_AGG_INIT_ZERO_FILL)
+    if ((flags & ECIL_AGG_INIT_ZERO_FILL) != 0 && !address.omitted)
       zero_fill(address.value, t->cir, address.align);
     open_frame(a_frame_kind::agg_init, nullptr);
     a_init_target target = {address, tgid};
@@ -943,7 +1047,9 @@ AGG_INIT_BEGIN / AGG_SEL / AGG_INIT_END / INIT_CONST / INIT_ZERO.
       ok = false;
       break;
     }
-    if (target.kind == a_value_kind::bitfield) {
+    if (target.omitted) {
+      /* Nothing to write (see store_value). */
+    } else if (target.kind == a_value_kind::bitfield) {
       mlir::Value zero = builder_.getNullValue(target.bitfield->declared,
                                                loc());
       ok = store_value(target, zero, false, nullptr);
@@ -960,6 +1066,286 @@ AGG_INIT_BEGIN / AGG_SEL / AGG_INIT_END / INIT_CONST / INIT_ZERO.
   }
   return ok;
 }  /* a_emitter::agg_record */
+
+bool a_emitter::class_cast(const ecil::a_record &r)
+/*
+BASE_CAST / DERIVED_CAST: a pointer to a derived class becomes a pointer to
+its direct base at a byte offset, or back (cir.base_class_addr and
+cir.derived_class_addr).  Without the nonnull flag, null stays null.
+*/
+{
+  bool ok = true;
+  bool to_derived = r.opcode == eop_derived_cast;
+  uint64_t t_der = 0;
+  uint64_t t_base = 0;
+  int64_t offset = 0;
+  a_type *from;
+  a_type *to;
+  mlir::Value pointer;
+
+  uint_operand(r.ops[to_derived ? 1 : 0], t_der);
+  uint_operand(r.ops[to_derived ? 0 : 1], t_base);
+  ecil::operand_i64(r.ops[2], offset);
+  from = type_at(to_derived ? t_base : t_der);
+  to = type_at(to_derived ? t_der : t_base);
+  if (from == nullptr || to == nullptr || !pop_prvalue(pointer)) {
+    ok = false;
+  } else if (!mlir::isa<cir::PointerType>(pointer.getType())) {
+    ok = format_error(std::string(r.info->name) + " of a non-pointer");
+  } else if (offset < 0) {
+    ok = format_error(std::string(r.info->name) + " with a negative "
+                      "offset");
+  } else {
+    mlir::Type source = compat::pointer_to(from->cir);
+    if (pointer.getType() != source)
+      pointer = builder_.createBitcast(loc(), pointer, source);
+    push_prvalue(compat::class_address(
+        builder_, loc(), to_derived, pointer, compat::pointer_to(to->cir),
+        static_cast<uint64_t>(offset),
+        (r.ops[3].u & ECIL_CAST_NONNULL) != 0));
+  }
+  return ok;
+}  /* a_emitter::class_cast */
+
+bool a_emitter::zero_bytes(const ecil::a_record &r)
+/*
+ZERO_BYTES: zero the first bytes bytes of the object a glvalue designates
+(cir.libc.memset), as for the data size of an overlapping subobject.
+*/
+{
+  bool ok = true;
+  uint64_t bytes = 0;
+  a_value target;
+
+  uint_operand(r.ops[0], bytes);
+  if (!pop_glvalue(target)) {
+    ok = false;
+  } else if (target.kind != a_value_kind::glvalue) {
+    ok = format_error("ZERO_BYTES of a bit-field");
+  } else if (target.omitted) {
+    /* An empty class has at most one byte, which the object shares with
+       another member: nothing is written for 0 or 1; more is an error. */
+    if (bytes > 1)
+      ok = format_error("ZERO_BYTES of more than one byte through an "
+                        "omitted empty field");
+  } else if (bytes != 0) {
+    compat::memset_zero(builder_, loc(), target.value, builder_.getUIntNTy(64),
+                        bytes, target.align);
+  }
+  return ok;
+}  /* a_emitter::zero_bytes */
+
+bool a_emitter::new_array_record(const ecil::a_record &r)
+/*
+NEW_ARRAY_SIZE: the byte size of new T[n], elements and cookie, with the
+overflow checks of CIRGen (cir.mul.overflow, cir.add.overflow, or, select): an
+overflow or a negative count gives SIZE_MAX, so operator new[] fails.
+NEW_ARRAY_COOKIE: (void *p, count) -> T *: the count is stored at
+p + cookie - sizeof(size_t), the elements start at p + cookie (Itanium).
+*/
+{
+  bool ok = true;
+  uint64_t tgid = 0;
+  uint64_t cookie = 0;
+  a_type *element;
+  mlir::Value count;
+  mlir::Type word = compat::int_type(ctx_, 64, false);
+
+  uint_operand(r.ops[0], tgid);
+  uint_operand(r.ops[1], cookie);
+  element = type_at(tgid);
+  if (element == nullptr || !pop_prvalue(count)) {
+    ok = false;
+  } else if (!mlir::isa<cir::IntType>(count.getType())) {
+    ok = format_error(std::string(r.info->name) + " needs an integer count");
+  } else if (!type_is_complete(element->cir)) {
+    ok = internal("array new of an incomplete record type");
+  } else if (r.opcode == eop_new_array_size) {
+    auto count_type = mlir::cast<cir::IntType>(count.getType());
+    mlir::Value wide = count.getType() == word ? count
+        : builder_.createCast(loc(), cir::CastKind::integral, count, word);
+    mlir::Value bytes = builder_.getConstantInt(
+        loc(), word, static_cast<int64_t>(type_size(element->cir)));
+    mlir::Value total;
+    mlir::Value overflow;
+    mlir::Value invalid;   /* A negative count. (Counts wider than 64 bits
+                              cannot occur: such integer types are not
+                              supported.) */
+
+    if (count_type.isSigned()) {
+      invalid = builder_.createCompare(
+          loc(), cir::CmpOpKind::lt, count,
+          builder_.getConstantInt(loc(), count.getType(), 0));
+    }
+    compat::overflow_op(builder_, loc(), compat::a_overflow_kind::mul, word,
+                        wide, bytes, total, overflow);
+    if (cookie != 0) {
+      mlir::Value extra = builder_.getConstantInt(
+          loc(), word, static_cast<int64_t>(cookie));
+      mlir::Value sum;
+      mlir::Value second;
+      compat::overflow_op(builder_, loc(), compat::a_overflow_kind::add, word,
+                          total, extra, sum, second);
+      total = sum;
+      overflow = builder_.createOr(loc(), overflow, second);
+    }
+    if (invalid)
+      overflow = builder_.createOr(loc(), overflow, invalid);
+    mlir::Value limit = builder_.getConstantInt(loc(), word, -1);
+    push_prvalue(builder_.createSelect(loc(), overflow, limit, total));
+  } else {
+    mlir::Value pointer;
+    mlir::Type pointer_type = compat::pointer_to(element->cir);
+
+    ok = pop_prvalue(pointer);
+    /* Operands: the pointer first, then the count (just popped). */
+    if (ok && !mlir::isa<cir::PointerType>(pointer.getType())) {
+      ok = format_error("NEW_ARRAY_COOKIE needs the allocation pointer "
+                        "below the count");
+    } else if (ok && cookie != 0 && cookie < 8) {
+      ok = format_error("NEW_ARRAY_COOKIE: a cookie is at least "
+                        "sizeof(size_t) bytes");
+    } else if (ok && cookie == 0) {
+      push_prvalue(builder_.createBitcast(loc(), pointer, pointer_type));
+    } else if (ok) {
+      mlir::Type byte = compat::int_type(ctx_, 8, false);
+      mlir::Value bytes = builder_.createBitcast(loc(), pointer,
+                                                 compat::pointer_to(byte));
+      mlir::Value wide = count.getType() == word ? count
+          : builder_.createCast(loc(), cir::CastKind::integral, count, word);
+      mlir::Value slot = builder_.createPtrStride(
+          loc(), bytes, builder_.getConstantInt(
+              loc(), builder_.getSIntNTy(64),
+              static_cast<int64_t>(cookie - 8)));
+      mlir::Value first = builder_.createPtrStride(
+          loc(), bytes, builder_.getConstantInt(
+              loc(), builder_.getSIntNTy(64), static_cast<int64_t>(cookie)));
+
+      slot = builder_.createBitcast(loc(), slot, compat::pointer_to(word));
+      builder_.createStore(loc(), wide, slot, false, false,
+                           alignment_attr(8));
+      push_prvalue(builder_.createBitcast(loc(), first, pointer_type));
+    }
+  }
+  return ok;
+}  /* a_emitter::new_array_record */
+
+bool a_emitter::delete_record(const ecil::a_record &r)
+/*
+DELETE(g_delete_fn, g_dtor|nil, t_obj, flags): a null-checked delete.  An
+array delete is cir.delete_array (the pin lowers it: it reads the cookie and
+runs the element destructors); a single object is the destructor call
+followed by the operator delete call, which takes the size and the alignment
+when the flags say so.
+*/
+{
+  bool ok = true;
+  uint64_t g_fn = 0;
+  uint64_t g_dtor = 0;
+  uint64_t tgid = 0;
+  uint64_t flags = 0;
+  bool has_dtor = r.ops[1].kind != ecil::an_operand_kind::nil;
+  a_entity *fn;
+  a_entity *dtor = nullptr;
+  a_type *object;
+  mlir::Value pointer;
+
+  uint_operand(r.ops[0], g_fn);
+  if (has_dtor)
+    uint_operand(r.ops[1], g_dtor);
+  uint_operand(r.ops[2], tgid);
+  uint_operand(r.ops[3], flags);
+  fn = entity_for(g_fn, true);
+  if (has_dtor)
+    dtor = entity_for(g_dtor, true);
+  object = type_at(tgid);
+  if (fn == nullptr || (has_dtor && dtor == nullptr) || object == nullptr ||
+      !pop_prvalue(pointer)) {
+    ok = false;
+  } else if (!mlir::isa<cir::PointerType>(pointer.getType())) {
+    ok = format_error("DELETE of a value that is not a pointer");
+  } else if (!type_is_complete(object->cir)) {
+    ok = internal("DELETE of an incomplete record type");
+  } else {
+    bool array = (flags & ECIL_DELETE_ARRAY) != 0;
+    bool sized = (flags & ECIL_DELETE_SIZED) != 0;
+    bool aligned = (flags & ECIL_DELETE_ALIGNED) != 0;
+    cir::FuncOp delete_fn = mlir::cast<cir::FuncOp>(fn->op);
+    uint64_t align = type_align(object->cir);
+    mlir::Value not_null = builder_.createPtrIsNotNull(pointer);
+    cir::IfOp guard = compat::open_if(builder_, loc(), not_null);
+    mlir::Value typed = builder_.createBitcast(
+        loc(), pointer, compat::pointer_to(object->cir));
+
+    fn->referenced = true;
+    builder_.setInsertionPointToStart(&guard.getThenRegion().front());
+    if (array) {
+      compat::delete_array(builder_, loc(), typed, delete_fn, sized,
+                           aligned ? align : 0,
+                           has_dtor ? mlir::cast<cir::FuncOp>(dtor->op)
+                                    : cir::FuncOp(),
+                           align);
+      if (has_dtor)
+        dtor->referenced = true;
+    } else {
+      mlir::NamedAttribute nothrow = nothrow_attr();
+      llvm::SmallVector<mlir::NamedAttribute> attrs;
+      llvm::SmallVector<mlir::Value> args;
+      cir::FuncType type = delete_fn.getFunctionType();
+      unsigned want = 1 + (sized ? 1 : 0) + (aligned ? 1 : 0);
+
+      if (!(session_.header.lang_flags & ECIL_LANG_EXCEPTIONS))
+        attrs.push_back(nothrow);
+      if (has_dtor) {
+        cir::FuncOp dtor_fn = mlir::cast<cir::FuncOp>(dtor->op);
+        mlir::Value self = pointer;
+        if (dtor_fn.getFunctionType().getNumInputs() != 1)
+          ok = format_error("DELETE: the destructor takes one argument");
+        else if (self.getType() != dtor_fn.getFunctionType().getInput(0))
+          self = builder_.createBitcast(
+              loc(), pointer, dtor_fn.getFunctionType().getInput(0));
+        if (ok) {
+          dtor->calls.push_back(builder_.createCallOp(loc(), dtor_fn, self,
+                                                      attrs));
+          dtor->referenced = true;
+        }
+      }
+      if (ok && type.getNumInputs() != want) {
+        ok = format_error("DELETE: the operator delete takes " +
+                          std::to_string(type.getNumInputs()) +
+                          " arguments but the flags give " +
+                          std::to_string(want));
+      } else if (ok) {
+        unsigned k = 0;
+        mlir::Value first = pointer;
+        if (first.getType() != type.getInput(0))
+          first = builder_.createBitcast(loc(), pointer, type.getInput(0));
+        args.push_back(first);
+        for (uint64_t value : {sized ? type_size(object->cir) : 0,
+                               aligned ? align : 0}) {
+          bool present = k == 0 ? sized : aligned;
+          ++k;
+          if (!present)
+            continue;
+          mlir::Type input = type.getInput(args.size());
+          if (!mlir::isa<cir::IntType>(input)) {
+            ok = format_error("DELETE: a size or alignment parameter is not "
+                              "an integer");
+            break;
+          }
+          args.push_back(builder_.getConstantInt(
+              loc(), input, static_cast<int64_t>(value)));
+        }
+        if (ok)
+          fn->calls.push_back(builder_.createCallOp(loc(), delete_fn, args,
+                                                    attrs));
+      }
+    }
+    terminate_region(guard.getThenRegion());
+    builder_.setInsertionPointAfter(guard.getOperation());
+  }
+  return ok;
+}  /* a_emitter::delete_record */
 
 /* The expression dispatcher. */
 
@@ -1166,6 +1552,20 @@ Handle one expression record.
       ok = false;  /* local_at reported the internal error. */
       break;
     }
+    /* The first thing a normal cleanup does to the NRVO variable (the
+       destruction the writer sends for it): skip it once it is returned. */
+    if (local->nrvo && !frames_.empty() &&
+        frames_.back().kind == a_frame_kind::cleanup &&
+        frames_.back().cleanup_mode == 0 &&
+        frames_.back().nrvo_guard == nullptr &&
+        builder_.getBlock()->empty()) {
+      mlir::Value returned = builder_.createLoad(loc(), nrvo_flag(), false, 1);
+      cir::IfOp guard = compat::open_if(
+          builder_, loc(), builder_.createNot(returned));
+
+      frames_.back().nrvo_guard = guard.getOperation();
+      builder_.setInsertionPointToStart(&guard.getThenRegion().front());
+    }
     push_glvalue(local->address, local->align);
     break;
   }
@@ -1182,9 +1582,13 @@ Handle one expression record.
     if (e.is_function) {
       push_glvalue(function_address(e), 1);
     } else {
+      /* A variable of a record type without a body has no alignment: the
+         use is in a body the writer is about to drop. */
       uint32_t align = e.align != 0
           ? e.align
-          : static_cast<uint32_t>(type_align(type_at(e.type)->cir));
+          : !type_is_complete(type_at(e.type)->cir)
+              ? 1
+              : static_cast<uint32_t>(type_align(type_at(e.type)->cir));
       push_glvalue(variable_address(e), align);
     }
     break;
@@ -1215,11 +1619,9 @@ Handle one expression record.
     a_value target;
     mlir::Value stored;
     uint64_t result_kind = 0;
+    uint64_t store_flags = 0;
+    uint_operand(r.ops[0], store_flags);
     uint_operand(r.ops[1], result_kind);
-    if (!v1_flags(r.ops[0], ECIL_STORE_INIT | ECIL_STORE_DSIZE, "STORE")) {
-      ok = false;
-      break;
-    }
     if (!pop_prvalue(value) || !pop_glvalue(target)) {
       ok = false;
       break;
@@ -1228,8 +1630,9 @@ Handle one expression record.
       ok = format_error("STORE of an incomplete record type");
       break;
     }
-    if (!store_value(target, value, (r.ops[0].u & ECIL_ACCESS_VOLATILE) != 0,
-                     result_kind == esr_none ? nullptr : &stored)) {
+    if (!store_value(target, value, (store_flags & ECIL_ACCESS_VOLATILE) != 0,
+                     result_kind == esr_none ? nullptr : &stored,
+                     static_cast<uint32_t>(store_flags))) {
       ok = false;
       break;
     }
@@ -1270,6 +1673,11 @@ Handle one expression record.
       ok = format_error("EXTRACT of a value that is not that record");
       break;
     }
+    if (is_indirect_class(t->cir)) {
+      ok = format_error("EXTRACT from a NONTRIVIAL_ABI record prvalue "
+                        "(materialize it first)");
+      break;
+    }
     base.kind = a_value_kind::glvalue;
     base.align = static_cast<uint32_t>(type_align(t->cir));
     base.value = alloca_here(t->cir, "extract.tmp", base.align);
@@ -1293,8 +1701,12 @@ Handle one expression record.
       ok = format_error("DEREF of a non-pointer");
       break;
     }
+    /* A void, function or incomplete-record lvalue has no data layout:
+       alignment 1 (an incomplete one cannot be used further). */
     push_glvalue(pointer, static_cast<uint32_t>(
-                              mlir::isa<cir::VoidType>(type.getPointee())
+                              mlir::isa<cir::VoidType, cir::FuncType>(
+                                  type.getPointee()) ||
+                                      !type_is_complete(type.getPointee())
                                   ? 1 : type_align(type.getPointee())));
     break;
   }
@@ -1343,12 +1755,26 @@ Handle one expression record.
       ok = format_error("DUP on an empty stack");
       break;
     }
+    if (values_.back().kind == a_value_kind::prvalue &&
+        is_indirect_class(values_.back().value.getType())) {
+      ok = format_error("DUP of a NONTRIVIAL_ABI record prvalue");
+      break;
+    }
     values_.push_back(values_.back());
     break;
   case eop_drop:
     if (values_.empty()) {
       ok = format_error("DROP on an empty stack");
       break;
+    }
+    if (values_.back().kind == a_value_kind::prvalue) {
+      const a_record_info *info =
+          record_info_of(values_.back().value.getType());
+      if (info != nullptr && info->nontrivial_abi && info->nontrivial_dtor) {
+        ok = format_error("DROP of a NONTRIVIAL_ABI record prvalue that "
+                          "has a destructor (materialize it and destroy it)");
+        break;
+      }
     }
     values_.pop_back();
     break;
@@ -1377,13 +1803,31 @@ Handle one expression record.
     target.kind = a_value_kind::glvalue;
     target.value = local->address;
     target.align = local->align;
-    if (!store_value(target, v, false, nullptr)) {
+    if (!store_value(target, v, false, nullptr, ECIL_STORE_INIT)) {
       ok = false;
       break;
     }
     push_glvalue(local->address, local->align);
     break;
   }
+  case eop_return_slot:
+    push_glvalue(return_slot(), static_cast<uint32_t>(
+                     type_align(type_at(fn_return_type_)->cir)));
+    break;
+  case eop_base_cast:
+  case eop_derived_cast:
+    ok = class_cast(r);
+    break;
+  case eop_zero_bytes:
+    ok = zero_bytes(r);
+    break;
+  case eop_new_array_size:
+  case eop_new_array_cookie:
+    ok = new_array_record(r);
+    break;
+  case eop_delete:
+    ok = delete_record(r);
+    break;
   case eop_add: case eop_sub: case eop_mul: case eop_div: case eop_rem:
   case eop_shl: case eop_shr: case eop_bit_and: case eop_bit_or:
   case eop_bit_xor: {
@@ -1468,9 +1912,18 @@ Handle one expression record.
       ok = false;
       break;
     }
+    /* A bool index (p + (a < b)) is promoted to int. */
+    if (mlir::isa<cir::BoolType>(index.getType()))
+      index = builder_.createCast(loc(), cir::CastKind::bool_to_int, index,
+                                  builder_.getSIntNTy(32));
     if (!mlir::isa<cir::PointerType>(pointer.getType()) ||
         !mlir::isa<cir::IntType>(index.getType())) {
-      ok = format_error("PTR_STRIDE needs a pointer and an integer");
+      std::string pt, it;
+      llvm::raw_string_ostream ps(pt), is(it);
+      ps << pointer.getType();
+      is << index.getType();
+      ok = format_error("PTR_STRIDE needs a pointer and an integer (got " +
+                        ps.str() + " and " + is.str() + ")");
       break;
     }
     auto it = mlir::cast<cir::IntType>(index.getType());
@@ -1485,8 +1938,10 @@ Handle one expression record.
       index = builder_.createCast(loc(), cir::CastKind::integral, index,
                                   wide);
       index = builder_.createMinus(loc(), index, false);
-    } else if (mlir::cast<cir::IntType>(index.getType()).getWidth() < 64 ||
-               !mlir::cast<cir::IntType>(index.getType()).isSigned()) {
+    }
+    /* The stride operand is a 64-bit integer (a 128-bit index is cut). */
+    if (mlir::cast<cir::IntType>(index.getType()).getWidth() != 64 ||
+        !mlir::cast<cir::IntType>(index.getType()).isSigned()) {
       index = builder_.createCast(loc(), cir::CastKind::integral, index,
                                   builder_.getSIntNTy(64));
     }

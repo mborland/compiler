@@ -1,0 +1,122 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++14 Test_name.c
+"Test_name.c", line 359: warning: CIR back end: the body of "__throw_bad_weak_ptr" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+    { (throw (bad_weak_ptr())); }
+                                ^
+
+"Test_name.c", line 365: warning: CIR back end: the body of "_Sp_counted_base" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+        : _M_use_count(1), _M_weak_count(1) { }
+                                              ^
+
+"Test_name.c", line 369: warning: CIR back end: the body of "~_Sp_counted_base" uses a virtual function, which the CIR back end does not support; the function is dropped
+        { }
+          ^
+
+"Test_name.c", line 376: warning: CIR back end: the body of "_M_destroy" uses a virtual function, which the CIR back end does not support; the function is dropped
+        { delete this; }
+                       ^
+
+"Test_name.c", line 399: warning: CIR back end: the body of "_M_release" uses a virtual call, which the CIR back end does not support; the function is dropped
+        }
+        ^
+
+"Test_name.c", line 410: warning: CIR back end: the body of "_M_weak_release" uses a virtual call, which the CIR back end does not support; the function is dropped
+        }
+        ^
+
+"Test_name.c", line 216: warning: function "operator new(my::size_t, void *)" has no corresponding operator delete (to be called if an exception is thrown during initialization of an allocated object)
+          { ::new((void*)p) U(args...); }
+              ^
+          detected during:
+            instantiation of "void my::allocator<T>::construct(U *, Args &&...) [with T=blob, U=blob, Args=<>]" at line 272
+            instantiation of "void my::allocator_traits<my::allocator<_Tp>>::construct(my::allocator_traits<my::allocator<_Tp>>::allocator_type &, _Up *, _Args &&...) [with _Tp=blob, _Up=blob, _Args=<>]" at line 466
+            instantiation of "my::_Sp_counted_ptr_inplace<_Tp, _Alloc>::_Sp_counted_ptr_inplace(_Alloc, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 508
+            instantiation of "my::__shared_count::__shared_count(_Tp *&, my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 636
+            instantiation of "my::shared_ptr<_Tp>::shared_ptr(my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 762
+            instantiation of "my::shared_ptr<_Tp> my::allocate_shared<_Tp,_Alloc,_Args...>(const _Alloc &, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 771
+            instantiation of "my::shared_ptr<_Tp> my::make_shared<_Tp,_Args...>(_Args &&...) [with _Tp=blob, _Args=<>]" at line 792
+
+"Test_name.c", line 467: warning: CIR back end: the body of "_Sp_counted_ptr_inplace" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+          }
+          ^
+          detected during:
+            instantiation of "my::_Sp_counted_ptr_inplace<_Tp, _Alloc>::_Sp_counted_ptr_inplace(_Alloc, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 508
+            instantiation of "my::__shared_count::__shared_count(_Tp *&, my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 636
+            instantiation of "my::shared_ptr<_Tp>::shared_ptr(my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 762
+            instantiation of "my::shared_ptr<_Tp> my::allocate_shared<_Tp,_Alloc,_Args...>(const _Alloc &, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 771
+            instantiation of "my::shared_ptr<_Tp> my::make_shared<_Tp,_Args...>(_Args &&...) [with _Tp=blob, _Args=<>]" at line 792
+
+"Test_name.c", line 469: warning: CIR back end: the body of "~_Sp_counted_ptr_inplace" uses a virtual function, which the CIR back end does not support; the function is dropped
+        ~_Sp_counted_ptr_inplace() noexcept { }
+                                              ^
+          detected during:
+            instantiation of "my::_Sp_counted_ptr_inplace<_Tp, _Alloc>::~_Sp_counted_ptr_inplace() [with _Tp=blob, _Alloc=my::allocator<blob>]" at line 467
+            instantiation of "my::_Sp_counted_ptr_inplace<_Tp, _Alloc>::_Sp_counted_ptr_inplace(_Alloc, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 508
+            instantiation of "my::__shared_count::__shared_count(_Tp *&, my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 636
+            instantiation of "my::shared_ptr<_Tp>::shared_ptr(my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 762
+            instantiation of "my::shared_ptr<_Tp> my::allocate_shared<_Tp,_Alloc,_Args...>(const _Alloc &, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 771
+            instantiation of "my::shared_ptr<_Tp> my::make_shared<_Tp,_Args...>(_Args &&...) [with _Tp=blob, _Args=<>]" at line 792
+
+"Test_name.c", line 475: warning: CIR back end: the body of "_M_dispose" uses a virtual function, which the CIR back end does not support; the function is dropped
+        }
+        ^
+          detected during:
+            instantiation of "void my::_Sp_counted_ptr_inplace<_Tp, _Alloc>::_M_dispose() [with _Tp=blob, _Alloc=my::allocator<blob>]" at line 467
+            instantiation of "my::_Sp_counted_ptr_inplace<_Tp, _Alloc>::_Sp_counted_ptr_inplace(_Alloc, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 508
+            instantiation of "my::__shared_count::__shared_count(_Tp *&, my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 636
+            instantiation of "my::shared_ptr<_Tp>::shared_ptr(my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 762
+            instantiation of "my::shared_ptr<_Tp> my::allocate_shared<_Tp,_Alloc,_Args...>(const _Alloc &, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 771
+            instantiation of "my::shared_ptr<_Tp> my::make_shared<_Tp,_Args...>(_Args &&...) [with _Tp=blob, _Args=<>]" at line 792
+
+"Test_name.c", line 483: warning: CIR back end: the body of "_M_destroy" uses a virtual function, which the CIR back end does not support; the function is dropped
+        }
+        ^
+          detected during:
+            instantiation of "void my::_Sp_counted_ptr_inplace<_Tp, _Alloc>::_M_destroy() [with _Tp=blob, _Alloc=my::allocator<blob>]" at line 467
+            instantiation of "my::_Sp_counted_ptr_inplace<_Tp, _Alloc>::_Sp_counted_ptr_inplace(_Alloc, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 508
+            instantiation of "my::__shared_count::__shared_count(_Tp *&, my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 636
+            instantiation of "my::shared_ptr<_Tp>::shared_ptr(my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 762
+            instantiation of "my::shared_ptr<_Tp> my::allocate_shared<_Tp,_Alloc,_Args...>(const _Alloc &, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 771
+            instantiation of "my::shared_ptr<_Tp> my::make_shared<_Tp,_Args...>(_Args &&...) [with _Tp=blob, _Args=<>]" at line 792
+
+"Test_name.c", line 507: warning: function "operator new(my::size_t, void *)" has no corresponding operator delete (to be called if an exception is thrown during initialization of an allocated object)
+          auto __pi = ::new (__mem)
+                        ^
+          detected during:
+            instantiation of "my::__shared_count::__shared_count(_Tp *&, my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 636
+            instantiation of "my::shared_ptr<_Tp>::shared_ptr(my::_Sp_alloc_shared_tag<_Alloc>, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 762
+            instantiation of "my::shared_ptr<_Tp> my::allocate_shared<_Tp,_Alloc,_Args...>(const _Alloc &, _Args &&...) [with _Tp=blob, _Alloc=my::allocator<blob>, _Args=<>]" at line 771
+            instantiation of "my::shared_ptr<_Tp> my::make_shared<_Tp,_Args...>(_Args &&...) [with _Tp=blob, _Args=<>]" at line 792
+
+"Test_name.c", line 785: warning: function "bar" was declared but never referenced
+  bar(my::shared_ptr<blob>)
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_base10_M_destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEE10_M_disposeEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEE10_M_destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of '_ZN2my20__throw_bad_weak_ptrEv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN2my16_Sp_counted_base10_M_releaseEv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN2my16_Sp_counted_base15_M_weak_releaseEv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEEC1IJEEES3_DpOT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEEC2IJEEES3_DpOT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+5 errors detected in the compilation of "Test_name.c".

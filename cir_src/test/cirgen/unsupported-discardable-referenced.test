@@ -1,0 +1,25 @@
+; Unsupported policy: a dropped discardable definition that is called is an
+; error in the default mode (and the unreferenced one beside it is erased).
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; CHECK: error [1003]: the definition of 'lo_used' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+; CHECK-NOT: lo_unused
+
+frame DECLS
+  STR 11 "lo_used"
+  STR 12 "lo_unused"
+  STR 13 "main"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 41 21 3 67 11
+  DECL_FUNC 42 21 3 67 12
+  DECL_FUNC 41 21 0 34 11
+  DECL_FUNC 42 21 0 34 12
+  DECL_FUNC 43 21 0 9 13
+frame REGION
+  FUNC_BEGIN 43 0
+  CALL 41 21 0 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

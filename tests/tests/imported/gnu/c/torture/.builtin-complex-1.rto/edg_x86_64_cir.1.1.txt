@@ -11,15 +11,15 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-"Test_name.c", line 99: warning: CIR back end: the body of "check_float" uses the builtin operation 48, which the CIR back end does not support; the function is dropped
+"Test_name.c", line 99: warning: CIR back end: the body of "check_float" uses the builtin operation "__builtin_complex", which the CIR back end does not support; the function is dropped
   }
   ^
 
-"Test_name.c", line 106: warning: CIR back end: the body of "check_double" uses the builtin operation 48, which the CIR back end does not support; the function is dropped
+"Test_name.c", line 106: warning: CIR back end: the body of "check_double" uses the builtin operation "__builtin_complex", which the CIR back end does not support; the function is dropped
   }
   ^
 
-"Test_name.c", line 113: warning: CIR back end: the body of "check_long_double" uses the builtin operation 48, which the CIR back end does not support; the function is dropped
+"Test_name.c", line 113: warning: CIR back end: the body of "check_long_double" uses the builtin operation "__builtin_complex", which the CIR back end does not support; the function is dropped
   }
   ^
 
@@ -29,10 +29,10 @@ Error: CIR back end: the definition of 'comparec' was dropped: it uses a constru
 
 Error: CIR back end: the definition of 'comparecl' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'check_float' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'check_float' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'check_double' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'check_double' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'check_long_double' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'check_long_double' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 6 errors detected in the compilation of "Test_name.c".

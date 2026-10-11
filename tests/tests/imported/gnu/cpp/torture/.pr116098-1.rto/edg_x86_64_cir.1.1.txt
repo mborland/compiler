@@ -1,0 +1,24 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 7: warning: unknown attribute "noipa"
+  static bool truthy(int type, unsigned char data) __attribute__((noipa));
+                                                                  ^
+
+"Test_name.c", line 15: warning: unknown attribute "noipa"
+  static bool truthy(void) __attribute__((noipa));
+                                          ^
+
+"Test_name.c", line 26: warning: CIR back end: the body of "truthy" uses the builtin operation "__builtin_bit_cast", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 31: warning: integer conversion resulted in a change of sign
+      bool b1 = !truthy(2, -1);
+                           ^
+
+"Test_name.c", line 15: warning: function "truthy()" was declared but never referenced
+  static bool truthy(void) __attribute__((noipa));
+              ^
+
+Error: CIR back end: the definition of '_ZL6truthyih' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

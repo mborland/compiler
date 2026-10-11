@@ -1,0 +1,225 @@
+; __int128 (!cir.int<s|u, 128>): constants (i128/u128 tags), shifts, unsigned
+; and signed arithmetic and comparisons (division through libgcc), casts to
+; and from narrower integers and double, by-value arguments and results
+; (CallConvLowering), bswap, globals with 128-bit initializers and stores.
+; Run on the box; the program returns the number of the first failing check.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK-DAG: !s128i = !cir.int<s, 128>
+; CHECK-DAG: !u128i = !cir.int<u, 128>
+; CHECK-DAG: cir.global external dso_local @g_i = #cir.int<170141183460469231731687303715884105723> : !s128i
+; CHECK-DAG: cir.add {{.*}} : !s128i
+
+frame DECLS
+  TY_INT 40 128 true 16 16
+  TY_INT 41 128 false 16 16
+  TY_FUNC 21 40 0 [40, 40]
+  TY_FUNC 22 1 0 []
+  TY_FUNC 23 1 0 [14, 40]
+  TY_ARRAY 42 1 4 0
+  STR 10 "add128"
+  DECL_FUNC 100 21 0 1 10
+  STR 11 "main"
+  DECL_FUNC 101 22 0 9 11
+  STR 14 "idx128"
+  DECL_FUNC 102 23 0 1 14
+  STR 15 "g_a"
+  DECL_VAR 203 42 0 1 16 15
+  C_AGG_BEGIN 42
+  C_SEL 0
+  C_INT 1 10
+  C_SEL 1
+  C_INT 1 20
+  C_SEL 2
+  C_INT 1 30
+  C_SEL 3
+  C_INT 1 40
+  C_AGG_END
+  VAR_INIT 203
+  STR 12 "g_i"
+  DECL_VAR 201 40 0 1 16 12
+  C_INT 40 i128:0x7ffffffffffffffffffffffffffffffb
+  VAR_INIT 201
+  STR 13 "g_u"
+  DECL_VAR 202 41 0 1 16 13
+  C_ZERO 41
+  VAR_INIT 202
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 40 40 nil 0
+  PARAM 2 40 40 nil 0
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  ADD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 102 0
+  PARAM 1 14 14 nil 0
+  PARAM 2 40 40 nil 0
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 101 0
+  CONST_INT 40 1
+  CONST_INT 1 100
+  SHL 0
+  CONST_INT 40 i128:0x10000000000000000000000000
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  CONST_INT 41 u128:0x10000000000000000
+  CONST_INT 41 3
+  MUL 0
+  CONST_INT 41 u128:0x30000000000000000
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  CONST_INT 40 i128:0x10000000000000000000000000
+  CONST_INT 40 1000
+  DIV 0
+  CONST_INT 40 i128:0x4189374bc6a7ef9db22d0e5
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  CONST_INT 40 i128:0x10000000000000000000000000
+  CONST_INT 40 1000
+  REM 0
+  CONST_INT 40 376
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  CONST_INT 40 i128:0x10000000000000000000000005
+  CAST 0 1
+  CONST_INT 1 5
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 5
+  RETURN_STMT true
+  IF_END
+  CONST_INT 3 -7
+  CAST 0 40
+  CONST_INT 40 i128:-7
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 6
+  RETURN_STMT true
+  IF_END
+  CONST_INT 2 18446744073709551615
+  CAST 0 41
+  CONST_INT 41 u128:0xffffffffffffffff
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 7
+  RETURN_STMT true
+  IF_END
+  CONST_INT 40 i128:0x10000000000000000000000000
+  CAST 6 10
+  CAST 7 40
+  CONST_INT 40 i128:0x10000000000000000000000000
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 8
+  RETURN_STMT true
+  IF_END
+  CONST_INT 40 0
+  CONST_INT 40 i128:0x10000000000000000000000000
+  SUB 0
+  CONST_INT 1 98
+  SHR 0
+  CONST_INT 40 -4
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 9
+  RETURN_STMT true
+  IF_END
+  CONST_INT 41 u128:0xffffffffffffffffffffffffffffffff
+  CONST_INT 41 1
+  CMP 2
+  CAST 4 1
+  CONST_INT 1 1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 10
+  RETURN_STMT true
+  IF_END
+  CONST_INT 40 -1
+  CONST_INT 40 1
+  CMP 0
+  CAST 4 1
+  CONST_INT 1 1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 11
+  RETURN_STMT true
+  IF_END
+  CONST_INT 41 u128:0x00112233445566778899aabbccddeeff
+  BUILTIN 5 1 41
+  CONST_INT 41 u128:0xffeeddccbbaa99887766554433221100
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 12
+  RETURN_STMT true
+  IF_END
+  CONST_INT 40 i128:0x10000000000000000000000000
+  CONST_INT 40 i128:0x400000000000000000
+  CALL 100 21 2 0
+  CONST_INT 40 i128:0x10000000400000000000000000
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 13
+  RETURN_STMT true
+  IF_END
+  GREF 201
+  LOAD 0
+  CONST_INT 40 i128:0x7ffffffffffffffffffffffffffffffb
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 14
+  RETURN_STMT true
+  IF_END
+  GREF 202
+  CONST_INT 41 u128:0xfedcba9876543210fedcba9876543210
+  STORE 0 2
+  CONST_INT 41 u128:0xfedcba9876543210fedcba9876543210
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 15
+  RETURN_STMT true
+  IF_END
+  GREF 203
+  ADDR
+  CAST 12 14
+  CONST_INT 40 2
+  CALL 102 23 2 0
+  CONST_INT 1 30
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 16
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

@@ -1,0 +1,36 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"./cpp2a/spaceship-scalar1a.C", line 13: warning: CIR back end: the body of "check" uses the operator "three-way comparison (<=>)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool check(T, U, R) [with T=int, U=int, R=std::strong_ordering]" at line 17
+
+"./cpp2a/spaceship-scalar1a.C", line 13: warning: CIR back end: the body of "check" uses the operator "three-way comparison (<=>)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool check(T, U, R) [with T=E1, U=int, R=std::strong_ordering]" at line 20
+
+"./cpp2a/spaceship-scalar1a.C", line 13: warning: CIR back end: the body of "check" uses the operator "three-way comparison (<=>)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool check(T, U, R) [with T=E2, U=E2, R=std::strong_ordering]" at line 23
+
+"./cpp2a/spaceship-scalar1a.C", line 13: warning: CIR back end: the body of "check" uses the operator "three-way comparison (<=>)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool check(T, U, R) [with T=int *, U=int *, R=std::strong_ordering]" at line 26
+
+"./cpp2a/spaceship-scalar1a.C", line 13: warning: CIR back end: the body of "check" uses the operator "three-way comparison (<=>)", which the CIR back end does not support; the function is dropped
+  }
+  ^
+          detected during instantiation of "bool check(T, U, R) [with T=double, U=double, R=std::partial_ordering]" at line 28
+
+Warning: CIR back end: the unused definition of '_Z5checkIiiSt15strong_orderingEbT_T0_T1_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z5checkIZ4mainE2E1iSt15strong_orderingEbT_T0_T1_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z5checkIZ4mainE2E2S0_St15strong_orderingEbT_T0_T1_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z5checkIPiS0_St15strong_orderingEbT_T0_T1_' was dropped and erased: it uses a construct the CIR back end cannot express
+
+Warning: CIR back end: the unused definition of '_Z5checkIddSt16partial_orderingEbT_T0_T1_' was dropped and erased: it uses a construct the CIR back end cannot express
+

@@ -154,18 +154,16 @@ Open and close the scope regions of a record that has a rule.
   return ok;
 }  /* a_bracket_tracker::apply_regions */
 
-void a_bracket_tracker::commit(a_id_tables &ids, bool kill_locals)
+void a_bracket_tracker::commit(a_id_tables &ids)
 /*
 Apply what the last record closed to the id tables.
 */
 {
   if (kill_from_ != std::numeric_limits<size_t>::max()) {
-    if (kill_locals) {
-      for (size_t k = kill_from_; k < scope_locals_.size(); ++k) {
-        a_lid_entry &entry = ids.lid_at_index(scope_locals_[k]);
-        if (entry.state == ls_value)
-          entry.state = ls_dead;
-      }
+    for (size_t k = kill_from_; k < scope_locals_.size(); ++k) {
+      a_lid_entry &entry = ids.lid_at_index(scope_locals_[k]);
+      if (entry.state == ls_value)
+        entry.state = ls_dead;
     }
     if (kill_from_ < scope_locals_.size())
       scope_locals_.resize(kill_from_);
@@ -201,6 +199,30 @@ open and no FULLEXPR encloses the outermost one in this function.
   return !covered;
 }  /* a_bracket_tracker::conditional_without_fullexpr */
 
+bool a_bracket_tracker::in_loop_condition() const
+/*
+True if the innermost scope region is reached directly through the condition
+or step of a loop (no FULLEXPR, block or other region in between): a cleanup
+begun there would never be closed by the loop's end.
+*/
+{
+  bool result = false;
+  size_t base = function_bases_.empty() ? 0 : function_bases_.back();
+
+  for (size_t k = brackets_.size(); k > base; --k) {
+    const a_bracket &b = brackets_[k - 1];
+    if (b.kind == bk_tern || b.kind == bk_land || b.kind == bk_lor ||
+        b.kind == bk_agg_init || b.kind == bk_const_agg ||
+        b.kind == bk_cleanup)
+      continue;
+    result = (b.kind == bk_while && b.phase == 0) ||
+             (b.kind == bk_do && b.phase == 1) ||
+             (b.kind == bk_for && (b.phase == 1 || b.phase == 2));
+    break;
+  }
+  return result;
+}  /* a_bracket_tracker::in_loop_condition */
+
 bool a_bracket_tracker::check_v1(const a_record &record,
                                  std::string &problem)
 /*
@@ -214,7 +236,8 @@ consumer's.
   uint8_t op = record.opcode;
   bool at_function_level = !function_bases_.empty() &&
                            brackets_.size() == function_bases_.back();
-  bool jump = op == eop_return_stmt || op == eop_goto_stmt ||
+  bool jump = op == eop_return_stmt || op == eop_return_from_slot ||
+              op == eop_goto_stmt ||
               op == eop_label || op == eop_break_stmt ||
               op == eop_continue_stmt;
   bool statement = jump || op == eop_block_begin || op == eop_if_begin ||
@@ -254,10 +277,20 @@ consumer's.
     problem = name + " is not allowed inside a static initializer (it is a "
               "single block)";
     ok = false;
+  } else if (static_init_depth_ != 0 &&
+             (op == eop_return_slot ||
+              (op == eop_local && (record.ops[4].u & ECIL_LOCAL_RETURN_SLOT)))) {
+    problem = name + " is not allowed inside a static initializer (it has "
+              "no return object)";
+    ok = false;
   } else if (op == eop_cleanup_begin) {
     uint64_t kind = 0;
     operand_u64(record.ops[0], kind);
-    if (kind == ecl_exit && static_init_depth_ == 0) {
+    if (kind != ecl_exit && in_loop_condition()) {
+      problem = "CLEANUP_BEGIN directly in a loop condition or step needs a "
+                "FULLEXPR";
+      ok = false;
+    } else if (kind == ecl_exit && static_init_depth_ == 0) {
       problem = "CLEANUP_BEGIN(exit) outside STATIC_INIT";
       ok = false;
     } else if (kind != ecl_exit && conditional_depth_ != 0 &&
@@ -301,7 +334,7 @@ consumer's.
   return ok;
 }  /* a_bracket_tracker::check_v1 */
 
-bool a_bracket_tracker::check(const a_record &record, uint16_t stream_minor,
+bool a_bracket_tracker::check(const a_record &record,
                               std::string &problem_text,
                               a_scope_event &event)
 /*
@@ -313,7 +346,6 @@ stacks, and reject mismatches.
   uint8_t op = record.opcode;
   const char *problem = nullptr;
   a_bracket *top = brackets_.empty() ? nullptr : &brackets_.back();
-  bool strict = stream_minor >= 7;
   size_t depth_before = brackets_.size();
   uint8_t top_kind = top != nullptr ? top->kind : 0;
   uint8_t action = eba_none;
@@ -325,7 +357,7 @@ stacks, and reject mismatches.
     problem = "";
   if (v1_ok) switch (op) {
   case eop_func_begin:
-    if (strict && !function_bases_.empty())
+    if (!function_bases_.empty())
       problem = "nested FUNC_BEGIN (function bodies are never nested)";
     else {
       function_bases_.push_back(brackets_.size());
@@ -459,7 +491,7 @@ stacks, and reject mismatches.
   case eop_case_default:
     if (switch_depth_ == 0)
       problem = "case label outside a switch";
-    else if (strict && !(top != nullptr && top->case_ok))
+    else if (!(top != nullptr && top->case_ok))
       problem = "case label not directly in a SWITCH body (or in BLOCKs "
                 "nested directly in it)";
     break;

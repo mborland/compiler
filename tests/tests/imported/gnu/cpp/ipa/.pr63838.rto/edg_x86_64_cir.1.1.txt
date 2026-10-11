@@ -1,0 +1,46 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"Test_name.c", line 9: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone)) static void bar (int);
+                           ^
+
+"Test_name.c", line 12: warning: a volatile operand to an increment expression is deprecated
+  struct S { S () { v++; } ~S () { v++; } }; // { dg-warning "deprecated" "" { target c++2a } }
+                    ^
+
+"Test_name.c", line 12: warning: a volatile operand to an increment expression is deprecated
+  struct S { S () { v++; } ~S () { v++; } }; // { dg-warning "deprecated" "" { target c++2a } }
+                                   ^
+
+"Test_name.c", line 14: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone)) static void
+                           ^
+
+"Test_name.c", line 17: warning: a volatile operand to an increment expression is deprecated
+    v++; // { dg-warning "deprecated" "" { target c++2a } }
+    ^
+
+"Test_name.c", line 22: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone)) static void
+                           ^
+
+"Test_name.c", line 25: warning: a volatile operand to an increment expression is deprecated
+    v++; // { dg-warning "deprecated" "" { target c++2a } }
+    ^
+
+"Test_name.c", line 32: warning: unknown attribute "noclone"
+  __attribute__((noinline, noclone)) void
+                           ^
+
+"Test_name.c", line 43: warning: CIR back end: the body of "throw0" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 57: warning: CIR back end: the body of "main" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of '_Z6throw0v' was dropped: it uses a construct the CIR back end cannot express
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+
+2 errors detected in the compilation of "Test_name.c".

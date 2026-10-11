@@ -1,0 +1,8 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
+"./cpp2a/spaceship-synth3.C", line 9: warning: CIR back end: the body of "operator<=>" uses the operator "three-way comparison (<=>)", which the CIR back end does not support; the function is dropped
+    auto operator<=>(int x) const { return i<=>x; }
+                                                  ^
+
+Error: CIR back end: the definition of '_ZNK1DssEi' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

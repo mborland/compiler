@@ -1,0 +1,55 @@
+; Emitter-side check (ECIL v1, slice S1): a fixed array loop needs a glvalue of an array of its element type.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: a fixed array loop needs a glvalue of an array of its element type
+
+frame DECLS
+  STR 10 "make"
+  STR 11 "take"
+  STR 12 "f"
+  STR 13 "ctor"
+  STR 14 "h"
+  STR 15 "A"
+  TY_RECORD_DECL 31 0 15
+  TY_RECORD_BODY 31 4 4 4 4 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 32 31
+  TY_FUNC 33 31 0 []
+  TY_FUNC 34 11 0 [31]
+  TY_FUNC 35 11 0 []
+  TY_FUNC 36 11 0 [32]
+  DECL_FUNC 100 33 0 1 10
+  DECL_FUNC 101 34 0 1 11
+  DECL_FUNC 102 35 0 1 12
+  DECL_FUNC 103 36 0 1 13
+  DECL_FUNC 104 33 0 1 14
+frame REGION
+  FUNC_BEGIN 103 0
+  PARAM 1 32 32 nil 1
+  FUNC_END 1
+  FUNC_BEGIN 100 0
+  RETURN_SLOT
+  ADDR
+  CALL 103 36 1 0
+  RETURN_FROM_SLOT
+  FUNC_END 0
+  FUNC_BEGIN 101 0
+  PARAM 1 31 31 nil 0
+  FUNC_END 1
+  FUNC_BEGIN 102 0
+  LOCAL 1 1 nil 4 0
+  LREF 1
+  ARRAY_CTOR_BEGIN 31 1
+  ARRAY_CTOR_END
+  FUNC_END 1
+  FUNC_BEGIN 104 0
+  RETURN_SLOT
+  ADDR
+  CALL 103 36 1 0
+  RETURN_FROM_SLOT
+  FUNC_END 0
+frame END
+  END auto 0

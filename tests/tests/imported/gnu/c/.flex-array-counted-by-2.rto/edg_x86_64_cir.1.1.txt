@@ -11,8 +11,8 @@ Warning: CIR back end: the initializer of "static_annotated" uses an initializer
 
 Warning: CIR back end: the initializer of "nested_static_annotated" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'static_annotated' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'static_annotated' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
-Error: CIR back end: the definition of 'nested_static_annotated' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'nested_static_annotated' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

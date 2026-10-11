@@ -7,8 +7,6 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: integer type of 128 bits is not supported
-
 "Test_name.c", line 38: error: integer constant is too large
   _BitInt(575) a575 = -37335077053906536248085160049937130279057714970866686325204063930452920311842187828021093674979068589644104434897698233644810906211958229904753029173357201859433853689386323wb;
                        ^
@@ -45,4 +43,4 @@ Error: CIR back end: integer type of 128 bits is not supported
       28118211215894977392565865673037386617935606989386978956879722328823984879196799189494004288149317857187005691459505594520051662846839338948136222520490158359458wb,
       ^
 
-10 errors detected in the compilation of "Test_name.c".
+9 errors detected in the compilation of "Test_name.c".

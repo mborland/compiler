@@ -1,0 +1,6 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+Warning: CIR back end: the initializer of "a" uses a large or aggregate repeated initializer, which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of 'a' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

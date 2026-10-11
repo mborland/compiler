@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --gcc Test_name.c
-ecil 0.7 features=0x00000000
+ecil 0.8 features=0x00000000
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""

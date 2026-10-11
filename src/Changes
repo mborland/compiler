@@ -1,6 +1,19 @@
 Version 7.1
 
 10/10/26
+Template instantiation default and a developer option in the CIR configuration
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it, the
+default template instantiation mode is now "used" (DEFAULT_INSTANTIATION_MODE
+is tim_used), so that the templates a translation unit uses are instantiated
+in it without a command-line option; the other configurations keep their
+defaults.  The same configuration has a new undocumented option,
+--ecil_allow_cxx, which permits compiling C++ while the CIR back end does not
+support it by default: without the option C++ is still rejected with the
+cir_error diagnostic as before.  The option exists only in the CIR
+configuration.
+
+10/10/26
 List of the C library functions that are builtins, for the CIR back end
 
 A new generated header, builtin_libc.h, lists the C library functions (libc

@@ -35,6 +35,13 @@ Steps (names for --only/--skip):
              (unless --allow-status-changes)
   modes      in-process and two-process output identical over the corpus
   stress     edg-cir-stress (deep nesting through the two-process path)
+  cpp-smoke  (--with-cpp or --only) cir-cpp-smoke through --cpp-configs
+             (--types rp): buckets, pass rate per --c++NN mode, failures by
+             C++ feature; fails on a crash, and (--cpp-smoke-all-pass) on any
+             test that does not pass
+  cpp-corpus the cir-cpp-corpus list (--types rp,lp), the same tables
+  cpp-modes  edg-cir-compare-modes --cxx over the C++ corpus
+  cpp-writer-stress  edg-cir-writer-stress --cxx
   writer-stress  edg-cir-writer-stress: the ASan debug front end with
              ECIL_GID_STRESS=1 over the C smoke list and tests/tests/cir/
              writer: same exit status and byte-identical streams as without
@@ -97,7 +104,10 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 STEPS = ('build', 'identity', 'isolation', 'smoke', 'corpus', 'modes',
-         'stress', 'writer-stress', 'rss', 'day', 'ctest', 'asm-diff', 'perf')
+         'stress', 'writer-stress', 'rss', 'day', 'ctest', 'asm-diff', 'perf',
+         'cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress')
+# The steps of the C++ milestones; they run only with --with-cpp or --only.
+CPP_STEPS = ('cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress')
 PRESETS = ('linux-gcc-debug', 'linux-gcc-release', 'linux-clang-debug',
            'linux-i686-gcc-debug')
 BUILD_JOBS = 12  # overridden by --jobs
@@ -189,13 +199,15 @@ def runs_before(ctx: Context) -> set:
 
 
 def summarize_run(ctx: Context, step: str, run: Path, config: str,
-                  json_name: str) -> Tuple[List[dict], str]:
+                  json_name: str, extra: Optional[List[str]] = None
+                  ) -> Tuple[List[dict], str]:
   '''Run edg-cir-summary on a run directory; return (results, text).'''
   json_file = ctx.out / step / json_name
   proc = subprocess.run(
     [sys.executable, str(ctx.tree / 'dev_tools/bin/edg-cir-summary'),
      str(run), config, '--top', '6', '--json', str(json_file),
-     '--reference', str(ctx.tree / 'tests/expectations/edg_x86_64')],
+     '--reference', str(ctx.tree / 'tests/expectations/edg_x86_64'),
+     *(extra or [])],
     cwd = ctx.tree, env = ctx.env, stdout = subprocess.PIPE,
     stderr = subprocess.STDOUT, text = True
   )
@@ -339,6 +351,64 @@ def step_modes(ctx: Context) -> Tuple[bool, str]:
   text = (ctx.out / 'modes' / 'log.txt').read_text()
   match = re.search(r'\d+ identical, .* different', text)
   return code == 0, match.group(0) if match else 'no result line'
+
+
+def _cpp_run_step(ctx: Context, step: str, filters: str, types: str,
+                  require_all: bool) -> Tuple[bool, str]:
+  '''Run a C++ filter list through the CIR configs and summarize it.
+
+  The summaries (summary-<config>.txt) have the buckets, the pass rate per
+  --c++NN mode and the failures by C++ feature.  The step fails on a front
+  end or library crash, and, with require_all, if a test does not pass.
+  '''
+  parts = []
+  ok = True
+  for config in ctx.args.cpp_configs.split(','):
+    run = edgy_run(ctx, step, config, filters, types)
+    if run is None:
+      return False, f"no run for {config}"
+    results, _ = summarize_run(ctx, step, run, config, f"{config}.json",
+                               ['--language', 'cxx', '--types', types])
+    counts: Dict[str, int] = {}
+    for result in results:
+      counts[result['bucket']] = counts.get(result['bucket'], 0) + 1
+    crashes = counts.get('FE_CRASH', 0) + counts.get('LIB_CRASH', 0)
+    passed = counts.get('PASS', 0)
+    parts.append(f"{config} {passed}/{len(results)} pass, {crashes} crashes")
+    ok = ok and bool(results) and crashes == 0 and (
+      not require_all or passed == len(results))
+  return ok, '; '.join(parts) + ' (summary-<config>.txt)'
+
+
+def step_cpp_smoke(ctx: Context) -> Tuple[bool, str]:
+  return _cpp_run_step(ctx, 'cpp-smoke', ctx.args.cpp_smoke_filter, 'rp',
+                       ctx.args.cpp_smoke_all_pass)
+
+
+def step_cpp_corpus(ctx: Context) -> Tuple[bool, str]:
+  return _cpp_run_step(ctx, 'cpp-corpus', ctx.args.cpp_corpus_filter,
+                       'rp,lp', False)
+
+
+def step_cpp_modes(ctx: Context) -> Tuple[bool, str]:
+  command = (f"python3 dev_tools/bin/edg-cir-compare-modes --cxx "
+             f"{shlex.quote(ctx.args.cpp_corpus_filter)} -j {BUILD_JOBS} "
+             f"--types rp,lp")
+  code = in_cir_env(ctx, 'cpp-modes', command)
+  text = (ctx.out / 'cpp-modes' / 'log.txt').read_text()
+  match = re.search(r'\d+ identical, .* different', text)
+  return code == 0, match.group(0) if match else 'no result line'
+
+
+def step_cpp_writer_stress(ctx: Context) -> Tuple[bool, str]:
+  code = in_cir_env(ctx, 'cpp-writer-stress',
+                    f"python3 dev_tools/bin/edg-cir-writer-stress --cxx "
+                    f"-j {BUILD_JOBS}")
+  text = (ctx.out / 'cpp-writer-stress' / 'log.txt').read_text()
+  match = re.search(r'RESULT: .*', text)
+  count = re.search(r'stressing (\d+) tests', text)
+  return code == 0, (f"{count.group(1) if count else '?'} tests; " +
+                     (match.group(0) if match else 'no result line'))
 
 
 def step_stress(ctx: Context) -> Tuple[bool, str]:
@@ -772,6 +842,8 @@ STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'isolation': step_isolation, 'smoke': step_smoke, 'corpus': step_corpus,
   'modes': step_modes, 'stress': step_stress,
   'writer-stress': step_writer_stress,
+  'cpp-smoke': step_cpp_smoke, 'cpp-corpus': step_cpp_corpus,
+  'cpp-modes': step_cpp_modes, 'cpp-writer-stress': step_cpp_writer_stress,
   'rss': step_rss,
   'day': step_day, 'ctest': step_ctest, 'asm-diff': step_asm_diff,
   'perf': step_perf
@@ -822,6 +894,19 @@ def main() -> None:
   parser.add_argument('--allow-status-changes', action = 'store_true',
                       help = 'the corpus step may differ from the recorded '
                              'expectations (it then lists the lines)')
+  parser.add_argument('--with-cpp', action = 'store_true',
+                      help = 'also run the C++ steps (cpp-smoke, cpp-corpus, '
+                             'cpp-modes, cpp-writer-stress)')
+  parser.add_argument('--cpp-configs',
+                      default = 'edg_x86_64_cir,edg_x86_64_cir_2p',
+                      help = 'the configs of the C++ steps')
+  parser.add_argument('--cpp-smoke-filter',
+                      default = '@tests/.edgy/filters/cir-cpp-smoke.txt')
+  parser.add_argument('--cpp-corpus-filter',
+                      default = '@tests/.edgy/filters/cir-cpp-corpus.txt')
+  parser.add_argument('--cpp-smoke-all-pass', action = 'store_true',
+                      help = 'cpp-smoke fails unless every test passes (the '
+                             'M3 gate)')
   parser.add_argument('--smoke-filter',
                       default = '@tests/.edgy/filters/cir-c-smoke.txt')
   parser.add_argument('--corpus-filter',
@@ -841,7 +926,8 @@ def main() -> None:
   BUILD_JOBS = args.jobs
   ctx = Context(args)
   ctx.out.mkdir(parents = True, exist_ok = True)
-  only = [s for s in args.only.split(',') if s] or list(STEPS)
+  only = [s for s in args.only.split(',') if s] or [
+    s for s in STEPS if args.with_cpp or s not in CPP_STEPS]
   skip = set(s for s in args.skip.split(',') if s)
   unknown = [s for s in [*only, *skip] if s not in STEPS]
   if unknown:

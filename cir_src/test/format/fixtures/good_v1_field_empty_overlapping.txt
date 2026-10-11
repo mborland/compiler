@@ -1,0 +1,16 @@
+; An empty [[no_unique_address]] member: EMPTY_FOR_ABI with POTENTIALLY_OVERLAPPING.
+ecil 0.8 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  TY_RECORD_DECL 3 0 nil
+  TY_RECORD_BODY 3 1 0 1 0 0
+  TY_RECORD_DECL 4 0 nil
+  TY_RECORD_BODY 4 4 4 4 0 2
+  REC_FIELD 3 0 nil nil nil 34
+  REC_FIELD 1 0 nil nil nil 0
+frame END
+  END 2 0

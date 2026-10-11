@@ -1,0 +1,10 @@
+struct K { long a; int b; K(); };
+struct L : K { int c; };
+struct L2 : L { char d; };
+struct E1 { E1(); };
+struct M : E1, K { };
+struct N : K { K k2; E1 e; };
+struct P { char c; P(); };
+struct Q : P { char d; };
+struct R : Q { char e; short f; };
+K gk; L gl; L2 gl2; M gm; N gn; P gp; Q gq; R gr;

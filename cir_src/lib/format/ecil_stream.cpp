@@ -142,9 +142,29 @@ feature bits it needs are set.
         problem = "record not allowed in F_HEADER";
       break;
     case efk_decls:
-    case efk_globals:
       if (!decl_ok || (sec & eos_header))
         problem = "record not allowed in a declaration frame";
+      break;
+    case efk_globals:
+      /* A declaration section, then (C++) a body section of STATIC_INIT
+         groups that starts at the first STATIC_INIT_BEGIN. */
+      if (!in_body) {
+        if (op == eop_static_init_begin)
+          in_body = true;
+        else if (!decl_ok || (sec & eos_header))
+          problem = (sec & eos_body)
+                      ? "body record before STATIC_INIT_BEGIN"
+                      : "record not allowed in a declaration frame";
+      }
+      if (in_body && problem == nullptr) {
+        bool body_ok = (sec & (eos_body | eos_const)) != 0 ||
+                       op == eop_loc || op == eop_ext;
+        if (!body_ok)
+          problem = "declaration record after STATIC_INIT_BEGIN";
+        else if ((sec & eos_body) && op != eop_static_init_begin &&
+                 tracker_.static_init_depth() == 0)
+          problem = "body record outside STATIC_INIT_BEGIN..STATIC_INIT_END";
+      }
       break;
     case efk_region:
       if (!in_body) {
@@ -213,9 +233,21 @@ Check that every id the record uses was introduced (see a_ref_checker).
   std::string problem;
   bool result = refs_.check(record, problem);
 
-  if (!result)
+  if (result && record.opcode == eop_hdr_lang) {
+    /* A C++ stream with exceptions needs a later ECIL (M4); v1 is
+       exceptions-off. */
+    uint64_t language = 0;
+    uint64_t lang_flags = 0;
+    operand_u64(record.ops[0], language);
+    operand_u64(record.ops[2], lang_flags);
+    if (language == elang_cxx && (lang_flags & ECIL_LANG_EXCEPTIONS))
+      result = fail(an_error_kind::version,
+                    "HDR_LANG: C++ with exceptions needs a newer ECIL (v1 "
+                    "is exceptions-off)", offset_);
+  } else if (!result) {
     result = fail(an_error_kind::format,
                   std::string(record.info->name) + ": " + problem, offset_);
+  }
   return result;
 }  /* a_stream_reader::check_refs */
 

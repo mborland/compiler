@@ -1,0 +1,122 @@
+# Filter list for edgy ("edgy @tests/.edgy/filters/<this file>"): one path
+# prefix per line, relative to the tests directory; "!" excludes.  Blank lines
+# and lines starting with "#" are ignored.
+#
+# cir-cpp-smoke: 53 small C++ run tests (use with "--types rp") for the M3
+# (core C++) smoke list of the CIR back end, drawn from imported/gnu/cpp, edg/
+# and cwg/.  None uses exceptions, virtual functions, RTTI, member pointers,
+# coroutines, thread_local, inline assembly, vector or complex types, atomics,
+# or a library header (the GNU tests are preprocessed; these have no line
+# markers).  Each entry is a whole file name so that it matches exactly one
+# test; the comment before it names the M3 feature it exercises.
+#
+# Features: classes/bases, ctor-initializers, dtors and cleanups, temporaries
+# and lifetime extension, copy elision/NRVO/by-value, guarded statics,
+# namespace-scope dynamic init, new/delete (arrays, placement, aligned),
+# lambdas, templates.
+# derived class with a ctor-initializer naming a POD base (value-init of the base subobject)
+imported/gnu/cpp/init/value7.sft.cpp
+# empty base classes plus a non-empty base, base ctor-initializers
+imported/gnu/cpp/init/empty1.sft.cpp
+# empty-base layout (Itanium empty base at offset 0, no_unique_address member)
+imported/gnu/cpp/abi/empty8.sft.cpp
+# base class with tail padding (dsize), global array of class objects, dynamic init
+imported/gnu/cpp/init/array41.sft.cpp
+# derived-to-base pointer conversion in a conditional, global dynamic init
+imported/gnu/cpp/inherit/conv2.sft.cpp
+# references to a class with a base and a destructor
+imported/gnu/cpp/init/ref12.sft.cpp
+# array initialized from ints with a default-argument temporary per element
+imported/gnu/cpp/init/array12.sft.cpp
+# ctors and dtors of a class with two bases, one empty
+imported/gnu/cpp/opt/flifetime-dse6.sft.cpp
+# return before a declaration with a dtor (cleanup scope not entered)
+imported/gnu/cpp/init/dtor2.sft.cpp
+# backward goto over a declaration of a class template object with a dtor (cleanup per iteration)
+imported/gnu/cpp/init/goto1.sft.cpp
+# NRVO of a trivial struct
+imported/gnu/cpp/opt/nrv3.sft.cpp
+# namespace-scope object: dynamic init and destructor registration, static data member
+imported/gnu/cpp/init/dtor3.sft.cpp
+# lifetime extension: reference bound to a member of a temporary
+imported/gnu/cpp/init/ref19.sft.cpp
+# lifetime extension: reference bound to an array element of a derived temporary
+imported/gnu/cpp/cpp0x/temp-extend1.sft.cpp
+# temporaries in mem-initializers of reference members (destroyed at end of the full-expression)
+imported/gnu/cpp/init/lifetime2.sft.cpp
+# lifetime extension through calls of a static member function, operator->
+imported/gnu/cpp/init/lifetime3.sft.cpp
+# rvalue reference bound to a static_cast of a temporary
+imported/gnu/cpp/cpp0x/rv-life.sft.cpp
+# range-for over a function result: temporary lifetime extension, break
+cwg/P2718R0.sft.cpp
+# NRVO: named return value with a non-trivial copy ctor and dtor
+imported/gnu/cpp/opt/nrv1.sft.cpp
+# NRVO of a struct returned in memory, assigned to a global
+imported/gnu/cpp/opt/nrv9.sft.cpp
+# copy elision of a temporary passed by value (non-trivial class parameter)
+imported/gnu/cpp/init/elide1.sft.cpp
+# non-trivially-copyable class passed by value (this-address identity)
+imported/gnu/cpp/init/byval1.sft.cpp
+# array element initialized from a temporary (copy ctor)
+imported/gnu/cpp/init/copy3.sft.cpp
+# lambda capturing a class object (implicit copy and move ctors of the closure)
+imported/gnu/cpp/cpp0x/lambda/lambda-ctors.sft.cpp
+# conditional operator with class operands (derived and base), copy ctor
+imported/gnu/cpp/expr/cond6.sft.cpp
+# conditional expression with class lvalue operands, copy assignment of the result
+imported/gnu/cpp/expr/cond12.sft.cpp
+# guarded static local of class type in an inline function, namespace-scope dynamic init
+imported/gnu/cpp/opt/static5.sft.cpp
+# guarded static local reference initialized from a function with a static local
+imported/gnu/cpp/opt/static6.sft.cpp
+# const aggregate-initialized object with a destructor
+imported/gnu/cpp/init/const14.sft.cpp
+# new of a class whose ctor-initializer sets a const member
+imported/gnu/cpp/init/new28.sft.cpp
+# default member initializers calling member functions, global dynamic init
+imported/gnu/cpp/cpp0x/nsdmi-defer4.sft.cpp
+# new[] of a class with a ctor (array cookie, array ctor loop)
+imported/gnu/cpp/init/new31.sft.cpp
+# new[]/delete[] of zero length for classes with and without ctors (cookies)
+imported/gnu/cpp/init/new42.sft.cpp
+# over-aligned new and delete
+imported/gnu/cpp/cpp1z/aligned-new6.sft.cpp
+# class-specific operator new with extra arguments (placement form)
+imported/gnu/cpp/init/new27.sft.cpp
+# placement new, delegating ctor, defaulted ctor, range-for over an array
+imported/gnu/cpp/cpp0x/dc10.sft.cpp
+# lambda capturing a reference by copy, immediate call
+imported/gnu/cpp/cpp0x/lambda/lambda-ref2.sft.cpp
+# lambda converted to a function pointer (static invoker)
+imported/gnu/cpp/cpp0x/lambda/lambda-conv2.sft.cpp
+# generic lambda (member template operator()) using a static local
+imported/gnu/cpp/cpp1y/lambda-generic-static1.sft.cpp
+# class template ctor, namespace-scope array of template objects (linkonce_odr)
+imported/gnu/cpp/template/ctor2.sft.cpp
+# class template with a static member function, instantiated ctor
+imported/gnu/cpp/template/call1.sft.cpp
+# member class template with a partial specialization, static inline function
+imported/gnu/cpp/template/mem-partial2.sft.cpp
+# array of class-template objects with a dtor (array ctor and dtor)
+imported/gnu/cpp/init/array14.sft.cpp
+# operator() member calls returning a class by value, chained
+imported/gnu/cpp/parse/functor1.sft.cpp
+# C++17 inline variable templates (template statics)
+edg/daveed/g21878a.sft.cpp
+# copy ctor and copy assignment of a class, by-value passing
+imported/gnu/cpp/other/copy2.sft.cpp
+# local class hierarchy: ctor-initializer chain, dtor chain, derived-to-base reference and pointer
+edg/rma/ctor_init06.sft.cpp
+# global arrays of classes (member of class type, base), static data members, ctor/dtor order
+edg/rma/ctor_array_init02.sft.cpp
+# break out of a for whose init declares a class object (cleanup on break)
+edg/rma/lifetime25.sft.cpp
+# guarded static local array of objects with a destructor
+edg/rma/init_static_local04.sft.cpp
+# static local in a destructor, temporaries in a global array initializer
+cwg/cwg3100.sft.cpp
+# user operator delete overloads, new int(0), delete
+edg/rma/del02.sft.cpp
+# copy ctor selection with conversion operators, by-value class parameters
+edg/rma/cctor16.sft.cpp

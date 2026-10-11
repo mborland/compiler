@@ -63,6 +63,7 @@ struct a_spec_row {
 #define SB eos_body
 #define SC eos_const
 #define SS (eos_body | eos_stmt)
+#define V1 eos_v1
 
 /* One row per opcode; the operand count must equal the table arity. */
 const a_spec_row spec_rows[] = {
@@ -85,22 +86,24 @@ const a_spec_row spec_rows[] = {
   {eop_ty_array, ST, {s_id, s_id, s_uintn, s_flags(3)}},
   {eop_ty_func, ST, {s_id, s_id, s_flags(3), s_arr}},
   {eop_ty_record_decl, ST, {s_id, s_enum(0, erk_class), s_idn}},
-  {eop_ty_record_body, ST, {s_id, s_uint, s_uint, s_uint, s_flags(3),
+  {eop_ty_record_body, ST, {s_id, s_uint, s_uint, s_uint, s_flags(0xF),
                             s_uint}},
   {eop_rec_field, ST, {s_id, s_uint, s_uintn, s_uintn, s_idn,
-                       s_flags(0xF)}},
+                       s_flags(0x3F)}},
   {eop_ty_opaque, ST, {s_id, s_uint, s_uint}},
-  {eop_decl_func, SD, {s_id, s_id, s_enum(0, elk_common), s_flags(0x3F),
+  {eop_decl_func, SD, {s_id, s_id, s_enum(0, elk_common), s_flags(0x7F),
                        s_idn}},
-  {eop_decl_var, SD, {s_id, s_id, s_enum(0, elk_common), s_flags(0x7F),
+  {eop_decl_var, SD, {s_id, s_id, s_enum(0, elk_common), s_flags(0x1FF),
                       s_uint, s_idn}},
   {eop_var_init, SD, {s_id}},
+  {eop_structor, SD | V1, {s_id, s_id, s_flags(3)}},
   {eop_func_begin, SS, {s_id, s_flags(0)}},
   {eop_func_end, SS, {s_flags(1)}},
-  {eop_param, SS, {s_id, s_id, s_id, s_idn, s_flags(0)}},
-  {eop_local, SS, {s_id, s_id, s_idn, s_uint, s_flags(0)}},
+  {eop_param, SS, {s_id, s_id, s_id, s_idn, s_flags(1)}},
+  {eop_local, SS, {s_id, s_id, s_idn, s_uint, s_flags(3)}},
   {eop_block_begin, SS, {}},
   {eop_block_end, SS, {}},
+  {eop_return_from_slot, SS | V1, {}},
   {eop_if_begin, SS, {s_bool}},
   {eop_if_else, SS, {}},
   {eop_if_end, SS, {}},
@@ -131,10 +134,21 @@ const a_spec_row spec_rows[] = {
   {eop_agg_init_begin, SB, {s_id, s_flags(1)}},
   {eop_agg_sel, SB, {s_uint}},
   {eop_agg_init_end, SB, {}},
+  {eop_cleanup_begin, SS | V1, {s_enum(ecl_normal, ecl_exit), s_idn,
+                                s_flags(0)}},
+  {eop_cleanup_body, SS | V1, {}},
+  {eop_cleanup_end, SS | V1, {}},
+  {eop_fullexpr_begin, SS | V1, {}},
+  {eop_fullexpr_end, SS | V1, {}},
+  {eop_static_init_begin, SS | V1, {s_id, s_flags(3)}},
+  {eop_static_init_end, SS | V1, {}},
+  {eop_meminit_begin, SS | V1, {s_enum(emk_vbase, emk_delegation), s_uint,
+                                s_flags(3)}},
+  {eop_meminit_end, SS | V1, {}},
   {eop_lref, SB, {s_id}},
   {eop_gref, SB, {s_id}},
   {eop_load, SB, {s_flags(1)}},
-  {eop_store, SB, {s_flags(1), s_enum(0, esr_prv)}},
+  {eop_store, SB, {s_flags(7), s_enum(0, esr_prv)}},
   {eop_field, SB, {s_id, s_uint}},
   {eop_extract, SB, {s_id, s_uint}},
   {eop_deref, SB, {}},
@@ -165,6 +179,17 @@ const a_spec_row spec_rows[] = {
   {eop_ptr_stride, SB, {s_flags(3)}},
   {eop_ptr_diff, SB, {s_id}},
   {eop_inc_dec, SB, {s_enum(0, eidk_post_dec), s_flags(3)}},
+  {eop_base_cast, SB | V1, {s_id, s_id, s_int, s_flags(1)}},
+  {eop_derived_cast, SB | V1, {s_id, s_id, s_int, s_flags(1)}},
+  {eop_return_slot, SB | V1, {}},
+  {eop_array_ctor_begin, SB | V1, {s_id, s_flags(1)}},
+  {eop_array_ctor_end, SB | V1, {}},
+  {eop_array_dtor_begin, SB | V1, {s_id, s_flags(1)}},
+  {eop_array_dtor_end, SB | V1, {}},
+  {eop_new_array_size, SB | V1, {s_id, s_uint}},
+  {eop_new_array_cookie, SB | V1, {s_id, s_uint}},
+  {eop_delete, SB | V1, {s_id, s_idn, s_id, s_flags(7)}},
+  {eop_zero_bytes, SB | V1, {s_uint}},
   {eop_cast, SB, {s_enum(0, eck_array_to_ptrdecay), s_id}},
   {eop_va_start, SB, {}},
   {eop_va_arg, SB, {s_id}},
@@ -200,6 +225,7 @@ const a_spec_row spec_rows[] = {
 #undef SB
 #undef SC
 #undef SS
+#undef V1
 
 struct a_schema {
   an_opcode_info info[256];

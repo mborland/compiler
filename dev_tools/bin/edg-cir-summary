@@ -48,7 +48,7 @@ A run with only C tests prints what it always did.
 Usage:
   edg-cir-summary [RUN_DIR [CONFIG]] [--top N] [--list BUCKET]
                   [--compare OTHER_RUN_DIR] [--json FILE]
-                  [--language {all,c,cxx}]
+                  [--language {all,c,cxx}] [--types rp,lp]
 
 RUN_DIR is tests/runs/<timestamp> (default: the newest one); CONFIG is a
 directory in it (default: every config whose name contains "cir").
@@ -150,19 +150,35 @@ _FEATURE_REGEXES = (
   ('modules', re.compile(r'\bmodule|header unit', re.IGNORECASE)),
   ('lambdas', re.compile(r'lambda|closure', re.IGNORECASE)),
   ('templates', re.compile(r'template|instantiat', re.IGNORECASE)),
-  ('atomics', re.compile(r'atomic', re.IGNORECASE))
+  ('atomics', re.compile(r'atomic', re.IGNORECASE)),
+  # The wording of the writer's "unsupported" notes (M3 slices turn these off).
+  ('class parameters and results', re.compile(
+    r'parameter of an unsupported type|return type that is unsupported',
+    re.IGNORECASE)),
+  ('object initialization (ctors)', re.compile(
+    r'this kind of initialization|aggregate member initializer',
+    re.IGNORECASE)),
+  ('dynamic initialization of statics', re.compile(
+    r'non-constant initializer of a static object', re.IGNORECASE)),
+  ('locals and temporaries', re.compile(
+    r'undeclared local variable', re.IGNORECASE)),
+  ('expressions and operators', re.compile(
+    r'expression kind|the operator \d|unsupported scalar type|'
+    r'this kind of statement', re.IGNORECASE))
 )
 
 
 class TestResult:
   def __init__(self, path: str, status: str, bucket: str,
-               message: str, variant: str = '') -> None:
+               message: str, variant: str = '',
+               test_type: str = '') -> None:
     self.ref_fail = False
     self.path = path
     self.status = status
     self.bucket = bucket
     self.message = message
     self.variant = variant
+    self.test_type = test_type
     self.language = 'cxx' if path.endswith(_CXX_EXTENSIONS) else 'c'
 
 
@@ -279,7 +295,8 @@ def load_config_results(config_dir: Path) -> List[TestResult]:
       run_output = outputs.get(2, '')
       bucket, message = classify(status, compile_output, run_output)
       results.append(TestResult(test_path, status, bucket, message,
-                                case['status'].get('variant', '')))
+                                case['status'].get('variant', ''),
+                                case['status'].get('type', '')))
   return results
 
 
@@ -425,6 +442,10 @@ def main() -> None:
   parser.add_argument('--language', choices = ('all', 'c', 'cxx'),
                       default = 'all',
                       help = 'summarize only the C or only the C++ tests')
+  parser.add_argument('--types', default = '',
+                      help = 'comma separated test types (rp,lp): count only '
+                             'the cases of these types (edgy runs every case '
+                             'of a test that has one)')
   parser.add_argument('--json', dest = 'json_file', default = None,
                       help = 'also write the results to this file')
   args = parser.parse_args()
@@ -445,6 +466,10 @@ def main() -> None:
     results = load_config_results(run_dir / config)
     if args.language != 'all':
       results = [r for r in results if r.language == args.language]
+    if args.types:
+      # A test that has a case of a selected type runs all its cases.
+      wanted = set(args.types.split(','))
+      results = [r for r in results if r.test_type in wanted]
     for result in results:
       result.ref_fail = fails_in_reference(result, reference)
     all_results[config] = results

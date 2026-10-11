@@ -11,6 +11,7 @@ and the BEGIN/ELSE/END brackets, plus the scope regions of spec 8.3 (the
 dead-local rule now, the cleanup ranges of C++ later).  Heap stacks only.
 */
 
+#include <algorithm>
 #include <limits>
 
 #include "ecil_reader.h"
@@ -47,7 +48,17 @@ const a_region_rule region_rules[] = {
   {eop_do_begin,     0, 1, rk_loop_body},
   {eop_do_cond,      1, 0, rk_none},
   {eop_switch_begin, 0, 1, rk_switch_body},
-  {eop_switch_end,   1, 0, rk_none}
+  {eop_switch_end,   1, 0, rk_none},
+  {eop_fullexpr_begin,    0, 1, rk_fullexpr},
+  {eop_fullexpr_end,      1, 0, rk_none},
+  {eop_static_init_begin, 0, 1, rk_static_init},
+  {eop_static_init_end,   1, 0, rk_none},
+  {eop_meminit_begin,     0, 1, rk_meminit},
+  {eop_meminit_end,       1, 0, rk_none},
+  {eop_array_ctor_begin,  0, 1, rk_array_body},
+  {eop_array_ctor_end,    1, 0, rk_none},
+  {eop_array_dtor_begin,  0, 1, rk_array_body},
+  {eop_array_dtor_end,    1, 0, rk_none}
 };
 
 }  /* anonymous namespace */
@@ -59,14 +70,17 @@ Return a readable name for a bracket kind.
 {
   static const char *const names[] = {
     "BLOCK", "IF", "WHILE", "DO", "FOR", "SWITCH", "TERN", "LAND", "LOR",
-    "AGG_INIT", "C_AGG"
+    "AGG_INIT", "C_AGG", "CLEANUP", "FULLEXPR", "STATIC_INIT", "MEMINIT",
+    "ARRAY"
   };
   return kind < sizeof names / sizeof names[0] ? names[kind] : "?";
 }  /* bracket_name */
 
 a_bracket_tracker::a_bracket_tracker()
-  : switch_depth_(0), kill_from_(std::numeric_limits<size_t>::max()),
-    ended_function_(false)
+  : switch_depth_(0), cleanup_code_depth_(0), static_init_depth_(0),
+    fullexpr_depth_(0), conditional_depth_(0), body_started_(false), meminit_count_(0),
+    meminit_delegation_(false), meminit_last_idx_(0),
+    kill_from_(std::numeric_limits<size_t>::max()), ended_function_(false)
 {
 }  /* a_bracket_tracker::a_bracket_tracker */
 
@@ -80,6 +94,14 @@ Every frame starts with nothing open.
   regions_.clear();
   scope_locals_.clear();
   switch_depth_ = 0;
+  cleanup_code_depth_ = 0;
+  static_init_depth_ = 0;
+  fullexpr_depth_ = 0;
+  conditional_depth_ = 0;
+  body_started_ = false;
+  meminit_count_ = 0;
+  meminit_delegation_ = false;
+  meminit_last_idx_ = 0;
   kill_from_ = std::numeric_limits<size_t>::max();
   ended_function_ = false;
 }  /* a_bracket_tracker::begin_frame */
@@ -110,7 +132,10 @@ Open and close the scope regions of a record that has a rule.
     }
     for (uint8_t k = 0; k < rule.closes; ++k) {
       event.closed_kind[event.closed++] = regions_.back().kind;
-      if (regions_.back().first < kill_from_)
+      /* A FULLEXPR is a scope region for cleanups only: the locals
+         introduced inside it belong to the enclosing region. */
+      if (regions_.back().kind != rk_fullexpr &&
+          regions_.back().first < kill_from_)
         kill_from_ = regions_.back().first;
       regions_.pop_back();
     }
@@ -152,6 +177,130 @@ Apply what the last record closed to the id tables.
   }
 }  /* a_bracket_tracker::commit */
 
+bool a_bracket_tracker::conditional_without_fullexpr() const
+/*
+True if a conditional region (TERN arms, the right operand of LAND/LOR) is
+open and no FULLEXPR encloses the outermost one in this function.
+*/
+{
+  size_t base = function_bases_.empty() ? 0 : function_bases_.back();
+  size_t outermost = brackets_.size();
+  bool covered = false;
+
+  for (size_t k = base; k < brackets_.size(); ++k) {
+    uint8_t kind = brackets_[k].kind;
+    if (kind == bk_tern || kind == bk_land || kind == bk_lor) {
+      outermost = k;
+      break;
+    }
+  }
+  for (size_t k = base; k < outermost; ++k) {
+    if (brackets_[k].kind == bk_fullexpr)
+      covered = true;
+  }
+  return !covered;
+}  /* a_bracket_tracker::conditional_without_fullexpr */
+
+bool a_bracket_tracker::check_v1(const a_record &record,
+                                 std::string &problem)
+/*
+The structural rules of the C++ records (spec 11): what may appear inside
+cleanup code and static initializers, where exit and conditional cleanups
+may be, CLEANUP_END, the MEMINIT prologue.  Value-stack rules are the
+consumer's.
+*/
+{
+  bool ok = true;
+  uint8_t op = record.opcode;
+  bool at_function_level = !function_bases_.empty() &&
+                           brackets_.size() == function_bases_.back();
+  bool jump = op == eop_return_stmt || op == eop_goto_stmt ||
+              op == eop_label || op == eop_break_stmt ||
+              op == eop_continue_stmt;
+  bool statement = jump || op == eop_block_begin || op == eop_if_begin ||
+                   op == eop_while_begin || op == eop_do_begin ||
+                   op == eop_for_begin || op == eop_switch_begin ||
+                   op == eop_case_value || op == eop_case_range ||
+                   op == eop_case_default;
+  const a_bracket *group = brackets_.empty() ? nullptr : &brackets_.back();
+  uint64_t kind_value = 0;
+  std::string name = record.info->name;
+
+  if (cleanup_code_depth_ != 0 &&
+      (jump || op == eop_local || op == eop_materialize_temp ||
+       op == eop_cleanup_begin || op == eop_fullexpr_begin)) {
+    problem = name + " is not allowed inside cleanup code";
+    ok = false;
+  } else if (fullexpr_depth_ != 0 && statement) {
+    problem = name + " is not allowed inside a FULLEXPR (it holds an "
+              "expression)";
+    ok = false;
+  } else if (group != nullptr && group->kind == bk_static_init &&
+             (group->flags & abf_exit_only) != 0 &&
+             op != eop_cleanup_begin && op != eop_static_init_end &&
+             op != eop_loc && op != eop_ext) {
+    problem = name + " is not allowed in a STATIC_INIT of a variable that "
+              "has a VAR_INIT (only its exit cleanup)";
+    ok = false;
+  } else if (group != nullptr && group->kind == bk_static_init &&
+             (group->flags & abf_exit_only) != 0 &&
+             op == eop_cleanup_begin &&
+             !(operand_u64(record.ops[0], kind_value) &&
+               kind_value == ecl_exit)) {
+    problem = "only exit cleanups are allowed in a STATIC_INIT of a "
+              "variable that has a VAR_INIT";
+    ok = false;
+  } else if (static_init_depth_ != 0 && jump) {
+    problem = name + " is not allowed inside a static initializer (it is a "
+              "single block)";
+    ok = false;
+  } else if (op == eop_cleanup_begin) {
+    uint64_t kind = 0;
+    operand_u64(record.ops[0], kind);
+    if (kind == ecl_exit && static_init_depth_ == 0) {
+      problem = "CLEANUP_BEGIN(exit) outside STATIC_INIT";
+      ok = false;
+    } else if (kind != ecl_exit && conditional_depth_ != 0 &&
+               conditional_without_fullexpr()) {
+      problem = "a conditional cleanup needs an enclosing FULLEXPR";
+      ok = false;
+    }
+  } else if (op == eop_cleanup_end) {
+    problem = "CLEANUP_END is reserved for M4 (v1 cleanups end with their "
+              "scope region or FULLEXPR)";
+    ok = false;
+  } else if (op == eop_meminit_begin) {
+    uint64_t kind = 0;
+    uint64_t idx = 0;
+    operand_u64(record.ops[0], kind);
+    operand_u64(record.ops[1], idx);
+    if (!at_function_level || body_started_) {
+      problem = "MEMINIT_BEGIN only starts a constructor body";
+      ok = false;
+    } else if (kind == emk_vbase) {
+      problem = "MEMINIT_BEGIN of a virtual base is not part of ECIL v1";
+      ok = false;
+    } else if (meminit_delegation_ ||
+               (kind == emk_delegation && meminit_count_ != 0)) {
+      problem = "a delegating MEMINIT must be the only initializer group";
+      ok = false;
+    } else if (kind != emk_delegation && meminit_count_ != 0 &&
+               idx <= meminit_last_idx_) {
+      problem = "MEMINIT idx must strictly increase";
+      ok = false;
+    } else {
+      ++meminit_count_;
+      meminit_last_idx_ = idx;
+      meminit_delegation_ = kind == emk_delegation;
+    }
+  }
+  /* A function's constructor prologue ends at its first other record. */
+  if (ok && at_function_level && op != eop_param && op != eop_loc &&
+      op != eop_ext && op != eop_meminit_begin && op != eop_cleanup_begin)
+    body_started_ = true;
+  return ok;
+}  /* a_bracket_tracker::check_v1 */
+
 bool a_bracket_tracker::check(const a_record &record, uint16_t stream_minor,
                               std::string &problem_text,
                               a_scope_event &event)
@@ -170,12 +319,21 @@ stacks, and reject mismatches.
   uint8_t action = eba_none;
   uint8_t kind = 0;
 
-  switch (op) {
+  bool v1_ok = check_v1(record, problem_text);
+
+  if (!v1_ok)
+    problem = "";
+  if (v1_ok) switch (op) {
   case eop_func_begin:
     if (strict && !function_bases_.empty())
       problem = "nested FUNC_BEGIN (function bodies are never nested)";
-    else
+    else {
       function_bases_.push_back(brackets_.size());
+      body_started_ = false;
+      meminit_count_ = 0;
+      meminit_delegation_ = false;
+      meminit_last_idx_ = 0;
+    }
     break;
   case eop_func_end:
     if (function_bases_.empty())
@@ -308,6 +466,7 @@ stacks, and reject mismatches.
   case eop_tern_begin: {
     a_bracket b = {bk_tern, 0, 0, 0};
     brackets_.push_back(b);
+    ++conditional_depth_;
     break;
   }
   case eop_tern_else:
@@ -317,9 +476,10 @@ stacks, and reject mismatches.
       problem = "TERN_ELSE without TERN_BEGIN";
     break;
   case eop_tern_end:
-    if (top && top->kind == bk_tern && top->phase == 1)
+    if (top && top->kind == bk_tern && top->phase == 1) {
       brackets_.pop_back();
-    else
+      --conditional_depth_;
+    } else
       problem = "TERN_END without TERN_ELSE";
     break;
   case eop_land_begin:
@@ -328,18 +488,21 @@ stacks, and reject mismatches.
                                                               : bk_lor),
                    0, 0, 0};
     brackets_.push_back(b);
+    ++conditional_depth_;
     break;
   }
   case eop_land_end:
-    if (top && top->kind == bk_land)
+    if (top && top->kind == bk_land) {
       brackets_.pop_back();
-    else
+      --conditional_depth_;
+    } else
       problem = "LAND_END without LAND_BEGIN";
     break;
   case eop_lor_end:
-    if (top && top->kind == bk_lor)
+    if (top && top->kind == bk_lor) {
       brackets_.pop_back();
-    else
+      --conditional_depth_;
+    } else
       problem = "LOR_END without LOR_BEGIN";
     break;
   case eop_agg_init_begin: {
@@ -373,11 +536,90 @@ stacks, and reject mismatches.
     else
       problem = "C_AGG_END without C_AGG_BEGIN";
     break;
+  case eop_cleanup_begin: {
+    uint64_t ckind = 0;
+    operand_u64(record.ops[0], ckind);
+    a_bracket b = {bk_cleanup, static_cast<uint8_t>(ckind), 0, 0};
+    brackets_.push_back(b);
+    ++cleanup_code_depth_;
+    break;
+  }
+  case eop_cleanup_body:
+    if (top && top->kind == bk_cleanup) {
+      brackets_.pop_back();
+      --cleanup_code_depth_;
+    } else {
+      problem = "CLEANUP_BODY without CLEANUP_BEGIN";
+    }
+    break;
+  case eop_fullexpr_begin: {
+    a_bracket b = {bk_fullexpr, 0, 0, 0, 0};
+    brackets_.push_back(b);
+    ++fullexpr_depth_;
+    break;
+  }
+  case eop_fullexpr_end:
+    if (top && top->kind == bk_fullexpr) {
+      brackets_.pop_back();
+      --fullexpr_depth_;
+    } else
+      problem = "FULLEXPR_END without FULLEXPR_BEGIN";
+    break;
+  case eop_static_init_begin: {
+    /* Outside a function (F_GLOBALS) the group has an L-id space of its
+       own, closed by STATIC_INIT_END. */
+    uint8_t own = function_bases_.empty() ? abf_own_ids : 0;
+    a_bracket b = {bk_static_init, 0, 0, 0, own};
+    brackets_.push_back(b);
+    ++static_init_depth_;
+    break;
+  }
+  case eop_static_init_end:
+    if (top && top->kind == bk_static_init) {
+      if (top->flags & abf_own_ids)
+        ended_function_ = true;
+      brackets_.pop_back();
+      --static_init_depth_;
+    } else {
+      problem = "STATIC_INIT_END without STATIC_INIT_BEGIN";
+    }
+    break;
+  case eop_meminit_begin: {
+    a_bracket b = {bk_meminit, 0, 0, 0};
+    brackets_.push_back(b);
+    break;
+  }
+  case eop_meminit_end:
+    if (top && top->kind == bk_meminit)
+      brackets_.pop_back();
+    else
+      problem = "MEMINIT_END without MEMINIT_BEGIN";
+    break;
+  case eop_array_ctor_begin:
+  case eop_array_dtor_begin: {
+    a_bracket b = {bk_array,
+                   static_cast<uint8_t>(op == eop_array_dtor_begin), 0, 0};
+    brackets_.push_back(b);
+    break;
+  }
+  case eop_array_ctor_end:
+    if (top && top->kind == bk_array && top->phase == 0)
+      brackets_.pop_back();
+    else
+      problem = "ARRAY_CTOR_END without ARRAY_CTOR_BEGIN";
+    break;
+  case eop_array_dtor_end:
+    if (top && top->kind == bk_array && top->phase == 1)
+      brackets_.pop_back();
+    else
+      problem = "ARRAY_DTOR_END without ARRAY_DTOR_BEGIN";
+    break;
   default:
     break;
   }
   if (problem != nullptr) {
-    problem_text = problem;
+    if (v1_ok)
+      problem_text = problem;
     if (top)
       problem_text += std::string(" (innermost open bracket: ") +
                       bracket_name(top_kind) + ")";

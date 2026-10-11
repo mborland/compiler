@@ -243,6 +243,9 @@ private:
   bool fail(an_edg_cir_status status, uint32_t code, const std::string &text);
   bool format_error(const std::string &text);
   bool unsupported(const std::string &text);
+  bool v1_flags(const ecil::an_operand &op, uint32_t mask, const char *what);
+  /* False (an unsupported error) if the flags operand has C++ bits of mask
+     set: ECIL v1 flags that no slice implements yet. */
   bool internal(const std::string &text);
   /* A failed internal check: the validator guarantees what was checked, so
      this is a library bug.  Always on (never an assert); sets

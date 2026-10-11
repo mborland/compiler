@@ -90,7 +90,10 @@ Process one decoded record.
   default:
     /* The class of every other record comes from the schema's section
        bits (ecil_schema.cpp), not from opcode ranges. */
-    if (r.info->section & ecil::eos_const)
+    if (r.info->section & ecil::eos_v1)
+      ok = unsupported(std::string(r.info->name) + ": C++ records (ECIL v1) "
+                       "are not supported yet");
+    else if (r.info->section & ecil::eos_const)
       ok = constant_record(r);
     else if (!in_function_ && r.opcode != eop_func_begin)
       ok = format_error(std::string(r.info->name) +
@@ -390,7 +393,9 @@ PARAM: an alloca of the declared type holding the (cast) argument.
   name = std::string(string_for(r.ops[3], good));
   abi = type_at(t_abi);
   decl = type_at(t_decl);
-  if (!good || abi == nullptr || decl == nullptr)
+  if (!v1_flags(r.ops[4], ECIL_PARAM_THIS, "PARAM"))
+    ok = false;
+  else if (!good || abi == nullptr || decl == nullptr)
     ok = false;
   else if (!type_is_complete(abi->cir) || !type_is_complete(decl->cir))
     ok = internal("PARAM of an incomplete record type");
@@ -462,6 +467,9 @@ LOCAL: an automatic variable at this point of the body.
   uint_operand(r.ops[3], align);
   t = type_at(tgid);
   if (!good || t == nullptr) {
+    ok = false;
+  } else if (!v1_flags(r.ops[4], ECIL_LOCAL_RETURN_SLOT |
+                                 ECIL_LOCAL_TEMPORARY, "LOCAL")) {
     ok = false;
   } else if (!type_is_complete(t->cir)) {
     ok = internal("LOCAL of an incomplete record type");

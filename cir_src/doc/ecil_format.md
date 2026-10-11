@@ -1,6 +1,6 @@
 # ECIL — EDG CIR IL stream format
 
-Status: **v0.7** (header minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
+Status: **v0.8** (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
 orchestrator.
 
 - **Normative source.** The definitions live in
@@ -627,3 +627,370 @@ D2                             TERN_END                [-> int]
 ```
 
 `ecil-asm` regenerates this example in M1 as a golden test.
+
+## 11. C++ (v1)
+
+Minor 8 declares every v1 record and flag (`ecil_format.h`). A later contract
+change bumps the minor again, and the M3 gate freezes the format as **1.0**.
+Background is in `research/m3_ecil_v1_design.md` (§8 has the spike verdicts),
+`research/cxx_cir_shapes.md` (CIR shapes at the pin) and
+`research/il_to_ecil_map_cxx.md` (IL facts).
+
+### 11.1 Language header and exceptions
+
+- `HDR_LANG(elang_cxx, std, flags)`. The `exceptions` flag must be 0 in v1;
+  a v1 reader rejects 1. Exception support (M4) adds it in a later version.
+- **No-exceptions stream.** The front end may compile with exceptions on,
+  which is the cpfe-cir default. The writer then sends a no-exceptions
+  stream:
+  - Every function and call is `nothrow`.
+  - A function the writer would emit that contains `try`, `throw` or a
+    function-try-block is diagnosed "unsupported" (8.11). Its body is
+    dropped and its declaration kept.
+  - Destructions that run only when an exception propagates (for example
+    freeing storage when a constructor throws, or destroying a partially
+    constructed aggregate) are sent as `CLEANUP_BEGIN(eh)`. A v1 consumer
+    decodes them and drops them. These cases arise:
+    - In a constructor, every base or member with a non-trivial destructor,
+      and the target object of a delegating constructor, gets
+      `CLEANUP_BEGIN(eh)` right after its `MEMINIT_END`, at function scope.
+      It therefore protects the later initializers and the body.
+    - Not sent in v1: freeing storage when the constructor in a `new`
+      throws, and destroying a partially constructed array. M4 designs
+      them with deactivatable cleanups (CIRGen deactivates rather than
+      closes them, so they do not nest with the initializer's temporaries).
+  - `olk_try_block` lifetimes are reached only through `try`, so they are
+    never sent.
+  - Exception specifications are ignored in v1.
+- **Late names.** A C++ stream sets `LATE_NAMES` and has an `F_NAMES` frame,
+  possibly empty, just before `F_END`.
+
+### 11.2 Names and linkage (writer rules)
+
+- **Mangling.** Every non-internal entity carries its Itanium-mangled name.
+- **Internal and individuated entities** use Itanium names with no module id
+  derived from file times or the directory, so names are deterministic
+  (rule 1.7). This covers:
+  - statics and anonymous-namespace members (`_ZL…`,
+    `_ZN12_GLOBAL__N_1…`);
+  - every entity the FE would otherwise individuate with a module id, such
+    as members of unnamed classes (`Ut_`) and entities whose types involve
+    anonymous-namespace types.
+  These entities have internal linkage.
+  - That also covers entities whose mangled name involves an internal or
+    individuated entity, for example a template instance with an argument
+    that is a local type or lambda of an internal function.
+  - **Internal wins.** Internal or individuated linkage takes precedence
+    over every vague-linkage rule below, including inline functions and
+    the local statics of inline functions. Otherwise Itanium names, which
+    are equal in every TU, would merge distinct internal entities across
+    TUs.
+- **Function-local statics** carry the local-entity name, for example
+  `_ZZ1fvE1a` and `_ZZ1fvE1a_0`.
+  - Linkage: a local static of a function that may exist in several TUs
+    (inline, template instance, defined in its class) is `linkonce_odr`
+    with `COMDAT`, and `GUARDED` when dynamically initialized. Otherwise it
+    is internal.
+- **Guard and lifetime-extension names** are derived from the variable's
+  name. The consumer derives guard names and the writer derives `_ZGR`
+  names.
+  - If the name is mangled (it starts with `_Z`), the guard is `_ZGV`
+    followed by the name without its `_Z` (`_ZZ1fvE1a` → `_ZGVZ1fvE1a`).
+  - Otherwise the guard is `_ZGV<length><name>` (`iv` → `_ZGV2iv`).
+  - Lifetime-extension temporaries follow the same rule with `_ZGR` and a
+    trailing `_<n>`: `_ZGR2sr_` for `sr`, and `_ZGRZ2h2vE2lr_` for a local.
+- **Late names.**
+  - A declaration whose name may still change is sent with a nil name and
+    bound by `NAME_BIND` in `F_NAMES`. Examples: a member of an unnamed class
+    that later gets a typedef name for linkage purposes; a lambda in a
+    default argument; members of nested anonymous unions.
+  - The writer resolves such names only when it hands off the file scope.
+  - CHECKING builds re-mangle every named non-internal entity at that point
+    and assert that the name has not changed.
+- **Definitions only.** `linkonce_odr`, `weak_odr` and `COMDAT` describe
+  definitions. A declaration that is not defined in this TU, or whose
+  definition is dropped as unsupported (8.11), is external and has no
+  `COMDAT`.
+- **COMDAT** follows the entity's final linkage, after any re-issue or
+  `NAME_BIND`; a re-issue updates it. If a late name also changes the
+  linkage to or from vague linkage, the writer re-issues the `DECL_*` with
+  the new linkage and `COMDAT` bit in the `F_GLOBALS` declaration section
+  before the `NAME_BIND`. `F_NAMES` itself holds only `NAME_BIND` records.
+- **Vague linkage.** A routine that may exist in several TUs
+  (`routine_might_exist_in_multiple_copies`, not `static`) is
+  `linkonce_odr` with `COMDAT`. An explicit instantiation definition is
+  `weak_odr` with `COMDAT`. Inline variables and template static data
+  members are `linkonce_odr` with `COMDAT`, and `GUARDED` when they are
+  dynamically initialized.
+
+### 11.3 Types
+
+- **References** are `TY_PTR`. Binding is `ADDR`; use is `LOAD DEREF`.
+- **Non-static member functions.** `TY_FUNC` lists the `T*` object
+  parameter first. `PARAM(l, T*, T*, "this", THIS)` comes first.
+- **`TY_RECORD_BODY`:**
+  - `data_size` is the Itanium dsize; it equals `size` for C.
+  - `NONTRIVIAL_ABI`: the record is passed and returned indirectly. That
+    holds if it is not bitwise copyable, if it has a deleted or non-trivial
+    destructor, or if all its copy and move constructors are deleted
+    (Itanium).
+  - `NONTRIVIAL_DTOR`.
+- **`REC_FIELD`:**
+  - `BASE` marks a direct non-virtual base. Bases come first, in declaration
+    order, then the data members. Every base is listed, so `FIELD` indexes
+    stay stable.
+  - `empty_for_abi` is set on these only:
+    - empty bases;
+    - empty potentially-overlapping members (`[[no_unique_address]]`,
+      together with `POTENTIALLY_OVERLAPPING`);
+    - C zero-size members.
+
+    Any other empty C++ data member is an ordinary field of size 1.
+  - `POTENTIALLY_OVERLAPPING` marks a member laid out with the
+    base-subobject type (dsize bytes).
+- **Base and overlapping fields.** `FIELD`, `EXTRACT`, `AGG_SEL` and
+  `C_SEL` on a `BASE` or `POTENTIALLY_OVERLAPPING` field yield the complete
+  field type T, not its base-subobject type. The consumer casts from its
+  `.base` storage, and computes the address of an omitted empty base from
+  its offset.
+- **vptr.** A class with a vptr has an unnamed
+  `TY_OPAQUE(ptr_size, ptr_align)` field at the vptr offset, so it is
+  ABI-opaque (8.11) until v2.
+
+### 11.4 Structors
+
+- **`STRUCTOR(g_complete, g_base, flags{dtor, has_vbases})`** (declaration
+  section):
+  - It pairs C1 with C2, or D1 with D2. Both are declared functions of the
+    same type and linkage, and their names differ only in the variant
+    digit.
+  - The body is streamed under `g_base` only. `FUNC_BEGIN(g_complete)` is an
+    error while `has_vbases` is 0, and `has_vbases` is 0 in v1.
+  - Call sites use `g_complete` for complete objects and `g_base` for base
+    subobjects, including the elements of `ARRAY_CTOR`. Clang uses C2
+    there; the difference is visible only in a byte-compare.
+- **Consumer: C1 strategy.** It applies only when `g_base` ends up defined:
+  not unsupported, not retracted, and not merely declared (for example
+  `extern template`). Otherwise C1 stays an external declaration.
+  - External linkage: C1 is an alias of C2.
+  - `weak_odr`: C2 goes in comdat C5 (D5 for destructors), and C1 is a
+    `weak_odr` alias.
+  - Discardable linkage: C1 references are redirected to C2 by the
+    finish-time substitution.
+- **`MEMINIT_BEGIN(kind, idx, flags{compiler_generated, default_member_init})`
+  … `MEMINIT_END`:**
+  - The groups come only at the start of a constructor body.
+  - The kinds are `vbase` 0 (an error in v1), `base` 1, `field` 2 and
+    `delegation` 3. A delegation must be the only group, and its `idx` is
+    0.
+  - `idx` is the `REC_FIELD` index and strictly increases.
+  - The writer sends one group per entry of the FE's constructor-initializer
+    list. Trivially constructible members without an initializer have no
+    entry and no group.
+  - Compiler-generated entries have `compiler_generated`, and default member
+    initializers have `default_member_init`.
+  - For an implicit copy or move constructor, the writer builds the source
+    subobject (the same member of the parameter, or a base cast of it).
+- **Destructors.** A destructor body starts with one `CLEANUP_BEGIN(all)`
+  per member and base with a non-trivial destructor, in construction order.
+  Destruction then runs in reverse order, including on early returns.
+  The FE's list for a destructor is already in destruction order, so the
+  writer reverses it.
+
+### 11.5 Object lifetimes and cleanups
+
+**Scope regions** are those of 8.3, plus `FULLEXPR`, `STATIC_INIT`,
+`MEMINIT` and the `ARRAY_*` loop bodies. **Conditional regions** are `TERN`
+arms and the right operand of `LAND`/`LOR`.
+
+**`CLEANUP_BEGIN(kind, g|nil, flags)` … code … `CLEANUP_BODY`**
+- **Kinds:** `normal` 1, `eh` 2, `all` 3 (= `cir::CleanupKind`), `exit` 4.
+- **Placement.** It is emitted right after the object is completely
+  constructed.
+- **The code** is stack-neutral and never consumes values pushed before it.
+  It contains no `LOCAL`, `LABEL`, jumps, nested `CLEANUP` or `FULLEXPR`.
+- **Range.**
+  - `normal`/`eh`/`all` protect from `CLEANUP_BODY` to `CLEANUP_END`, or to
+    the end of the innermost scope region. Cleanups close innermost first.
+  - `exit` is allowed only inside `STATIC_INIT`, requires `g`, and protects
+    nothing. It registers the code for program exit.
+- **Conditional cleanups.** A `CLEANUP_BEGIN` in a conditional region
+  requires an enclosing `FULLEXPR` in the same function or `STATIC_INIT`. It protects until
+  that `FULLEXPR` ends, and destruction is in reverse construction order
+  across the full-expression.
+  - The consumer opens a flag-guarded cleanup scope before the outermost
+    conditional record.
+  - Unconditional cleanups begun later in the same full-expression nest
+    inside that scope. Otherwise the destruction order reverses.
+- **v1 consumers** map `all` to `normal` and drop `eh`.
+
+**`CLEANUP_END`** is reserved for M4: deactivating a cleanup that need not be
+the innermost. v1 writers never emit it, and a v1 reader rejects it. Every v1
+cleanup ends with its scope region or `FULLEXPR`.
+
+**`FULLEXPR_BEGIN` … `FULLEXPR_END`** closes every cleanup begun inside it.
+It carries out at most one scalar prvalue or glvalue, never a record
+prvalue. Values pushed before `FULLEXPR_BEGIN` are not consumed inside.
+
+**Locals in a FULLEXPR.** `FULLEXPR` is a scope region for cleanups only. A
+`LOCAL` or `MATERIALIZE_TEMP` introduced inside a `FULLEXPR` belongs to the
+enclosing scope region, so its L-id stays valid after `FULLEXPR_END`. The
+other v1 scope regions (`STATIC_INIT`, `MEMINIT`, `ARRAY_*`) end their locals
+too.
+
+**Lifetime extension.** A temporary bound to a local reference is
+constructed inside the `FULLEXPR`, and its `CLEANUP_BEGIN` follows
+`FULLEXPR_END`. A temporary that is extended only conditionally (for
+example `const A& r = c ? A() : a;`) cannot be expressed in v1 and is
+diagnosed "unsupported".
+
+**Jumps.**
+- `GOTO_STMT.n_cleanups` must be 0. The consumer finds the exits itself.
+- While a cleanup is open, the consumer routes every value return through
+  the return slot.
+
+### 11.6 Class prvalues and copy elision
+
+- **Consuming a `NONTRIVIAL_ABI` prvalue.** It is consumed only by one of:
+  - `STORE(INIT)` into a destination glvalue pushed before the call's
+    arguments;
+  - `MATERIALIZE_TEMP`;
+  - `DROP`, and only if the record lacks `NONTRIVIAL_DTOR`. Otherwise the
+    writer materializes the prvalue and pushes a cleanup;
+  - a `STORE` performing a bitwise copy, when the prvalue is a `LOAD`.
+- **Arguments.** As a call argument, such a value is `LOAD` of a `LREF` that
+  names a `LOCAL`, `PARAM` or temporary: the load of that storage itself.
+  To pass a subobject (`FIELD` … `LOAD`) or `*p`, the writer copies it into
+  a temporary first.
+- **Errors.** `DUP`, a `TERN` result and `RETURN_STMT(true)` of such a type
+  are errors.
+- **Returns** of a `NONTRIVIAL_ABI` record use `RETURN_SLOT` …
+  `RETURN_FROM_SLOT`. A trivially copyable record may use them too. The
+  writer does so when the returned expression has temporaries (a
+  `FULLEXPR`), so the value is complete before the cleanups run.
+- **NRVO.** `LOCAL` with `RETURN_SLOT` names the NRVO variable.
+- **`STORE` flags:** `INIT` (fresh storage) and `DSIZE` (copy `data_size`
+  bytes). `ZERO_BYTES(bytes)` zero-fills an overlapping base.
+- **Casts.** `BASE_CAST`/`DERIVED_CAST(t_from, t_to, offset,
+  flags{nonnull})` map prv pointer to prv pointer. Without `nonnull`, null
+  stays null. Each cast is to or from a *direct* base; a conversion through
+  several levels is a chain of casts.
+- **Bitwise copies.** A record whose copy is trivial but whose destructor is
+  not is still `NONTRIVIAL_ABI` (Itanium 3.1.2.3: a non-trivial destructor
+  makes the class non-trivial for calls). When the FE copies it bitwise, the
+  copy is a `LOAD` consumed directly by `STORE` (`STORE(DSIZE)` for an
+  overlapping subobject).
+- **By-value arguments.** The caller destroys them, as Itanium requires: a
+  callee never pushes a cleanup for a by-value parameter.
+- **Conditional class results.** A `TERN` whose result is a
+  `NONTRIVIAL_ABI` record is encoded as a void `TERN`. Each arm pushes its
+  own glvalue of the same destination (a value pushed before `TERN_BEGIN`
+  cannot be consumed by both arms) and ends with a `STORE(INIT)` into it.
+
+### 11.7 Static storage duration
+
+**`STATIC_INIT_BEGIN(g, flags{inline_var, template_instance})` …
+`STATIC_INIT_END`**
+- **In a function body:** `g` is a `static_local|GUARDED` definition with no
+  `VAR_INIT` (except the exit-only case below).
+- **In the `F_GLOBALS` body section** (from its first `STATIC_INIT_BEGIN`):
+  initialization order is record order, and `GUARDED` variables are
+  initialized under the guard.
+  - Each `STATIC_INIT_BEGIN` there opens a fresh L-id space, dense from 1
+    as in a function, and `STATIC_INIT_END` closes it.
+  - `LOCAL` and `MATERIALIZE_TEMP` are allowed inside. Their storage
+    belongs to the initializer, and the consumer places the allocas in the
+    ctor region.
+  - In a function body, `STATIC_INIT` uses the function's L-id space.
+- **Restrictions.** The content is stack-neutral, with no jumps or labels:
+  the region stays single-block.
+- **Consumer facts.** For `cir.global`/`cir.local_init`,
+  `dynamic_init_info` is derived as follows:
+  - the template kind is "implicit instantiation" if `template_instance` is
+    set, otherwise "undeclared";
+  - the TLS kind comes from `DECL_VAR_TLS` and whether the variable is
+    dynamically initialized.
+- **Destruction** uses `CLEANUP_BEGIN(exit, g)`. An `exit` cleanup for
+  another variable (a `_ZGR…` temporary) registers that object's
+  destruction.
+- **Constant initializer with a non-trivial destructor.** Any variable of
+  static storage duration with a constant initializer and a non-trivial
+  destructor has three parts:
+  - it is defined with `VAR_INIT`;
+  - it has a `STATIC_INIT` that contains only its `exit` cleanup;
+  - it is `GUARDED` if it is a function-local static or has vague linkage,
+    so the registration happens exactly once.
+
+  This applies at namespace and class scope as well as to local statics.
+  It is the one case where `STATIC_INIT` is allowed for a `g` that has a
+  `VAR_INIT`. The consumer emits a dtor-only `cir.global` region, or a
+  `cir.local_init` with an empty ctor region.
+
+### 11.8 Arrays, new and delete
+
+- **`ARRAY_CTOR_BEGIN`/`_END`, `ARRAY_DTOR_BEGIN`/`_END(t_elem,
+  flags{fixed})`.** With `fixed` they pop a glv of an array type; otherwise
+  a prv `elem*` and a prv `size_t` count. The element pointer is pushed for
+  the body, which is stack-neutral. For a multi-dimensional array, `t_elem`
+  is the innermost element type and the count is the total number of
+  elements.
+- **`NEW_ARRAY_SIZE(t_elem, cookie)`**: count → `size_t`. Overflow or a
+  negative count gives `SIZE_MAX`.
+- **`NEW_ARRAY_COOKIE(t_elem, cookie)`**: (void*, count) → `elem*`. As
+  Itanium requires, the count is stored at `ptr + cookie - sizeof(size_t)`,
+  immediately before the elements, which start at `ptr + cookie`.
+  `DELETE(array)` reads it from the same place. This matters for
+  over-aligned elements, where the cookie is larger than `sizeof(size_t)`.
+- **The cookie size** is computed by the FE: 0, or max(`sizeof(size_t)`,
+  `alignof(t_elem)`). ARM variant cookies are rejected in v1.
+- **`DELETE(g_delete_fn, g_dtor|nil, t_obj, flags{array, sized,
+  aligned})`** includes the null check.
+- **Destroying and type-aware `operator delete`** (C++20/26) cannot be
+  expressed in v1 and are diagnosed "unsupported".
+- **Implicit operators.** The writer always names the allocation or
+  deallocation function. The IL leaves it implicit (null) for array `new` of
+  a class with a constructor and for scalar `delete` of a class with a
+  non-trivial destructor, both of which use the global operator. In those
+  cases the writer looks the function up itself.
+
+### 11.9 Lambdas
+
+- A closure type is an ordinary record.
+- Its call operator is a member function whose body is a function frame.
+  For a lambda in a function body, that frame is in the enclosing function's
+  `F_REGION`, after the function's body. Lambdas at namespace scope, and
+  instances of generic lambdas, get their own `F_REGION` like any other
+  routine. Bodies are never nested (8.3).
+- **Static invoker.** For a lambda without captures, the writer synthesizes
+  the static invoker (the conversion to a function pointer) when it is
+  used, for generic lambdas too. The invoker's body calls the call operator
+  with a null object pointer and forwards the parameters. Its linkage and
+  `COMDAT` are those of the call operator.
+
+### 11.10 Templates and retraction
+
+- **Filters.** The writer emits only instances that are needed. Prototype
+  instantiations, uninstantiated templates, deduction guides and consteval
+  routines are never sent.
+- **`RETRACT(g)`** may appear in `F_GLOBALS`, only for internal or
+  `linkonce_odr` entities that were already streamed. The writer evaluates
+  the retraction rule itself when it hands off the file scope: an instance
+  that was instantiated only to deduce a return type, or that is covered by
+  `extern template`. The consumer marks the definition discardable, and
+  GlobalDCE removes it if it is unreferenced.
+  - RETRACT also clears the entity's "unsupported" obligation (8.11). A
+    G-id whose definition was dropped as unsupported may be retracted
+    whatever its current linkage: an instance that is no longer needed
+    must not turn an unsupported body into an error.
+  - For a structor pair, RETRACT names `g_base`. It applies to the pair.
+
+### 11.11 Worked encodings
+
+The ten encodings are in `research/m3_ecil_v1_design.md` §2, with the §8
+corrections:
+- the `DROP` rule;
+- conditional-cleanup placement;
+- the C1 strategy;
+- `empty_for_abi`.
+
+They are checked into `cir_src/test/cirgen` as lit tests during M3b.

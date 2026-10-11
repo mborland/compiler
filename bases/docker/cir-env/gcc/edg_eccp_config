@@ -22,8 +22,12 @@ EDG_DEFAULT_CPP_DEFINES="-D_POSIX_SOURCE"
 # Use GCC.
 EDG_C_TO_OBJ_COMPILER=gcc
 
-# The generated code runs on libstdc++/glibc, so use their headers by default.
-EDG_USE_SYSTEM_HEADERS=${EDG_USE_SYSTEM_HEADERS-1}
+# As in the dev-env base: the EDG headers by default, and the GCC (libstdc++,
+# glibc) headers, with --gnu_version injected, for a test that asks for them
+# (//use_system_includes, which makes edgy set EDG_USE_SYSTEM_HEADERS=1).
+# Injecting --gnu_version for every test conflicts with the tests that select
+# an old EDG language mode (-A, --strict, --cfront_*, -b, -r -x).
+EDG_USE_SYSTEM_HEADERS=${EDG_USE_SYSTEM_HEADERS-0}
 if [ $EDG_USE_SYSTEM_HEADERS -eq 0 ] ; then
   # Use EDG include paths only.
   EDG_INCLDIR=${EDG_INCLDIR-"$EDG_BASE/include"}
@@ -35,6 +39,10 @@ else
   # Inject --gnu_version to the scraped GCC version.
   EDG_CPFE_DEFAULT_OPTIONS="--gnu_version=$EDG_GCC_VER_SCRAPE $EDG_CPFE_DEFAULT_OPTIONS"
 fi
+# C++ is rejected by cpfe-cir unless this undocumented option is given; the
+# test configurations pass it while the C++ support is being developed (M3).
+# Remove it when the M3 gate makes C++ the default.
+EDG_CPFE_DEFAULT_OPTIONS="--ecil_allow_cxx $EDG_CPFE_DEFAULT_OPTIONS"
 # The generated assembly needs the small CIR runtime shim (libedg_cir_rt) and
 # the Itanium ABI libraries.  EDG_CIR_RT_LIBDIR is exported by the CMake build
 # (environment.sh).

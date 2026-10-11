@@ -1426,16 +1426,32 @@ Double the slot table and reinsert every entry; return FALSE on failure.
 
 void ecil_word_register(const uint32_t *words, size_t count, uint32_t gid)
 /*
-Register a key for a G-id.  The key must not be registered yet.
+Register a key for a G-id.  If the key has an entry (live, or left with
+gid 0 by ecil_word_unregister) that entry gets the G-id, so that there is
+never more than one entry per key (the table is reinserted in entry order
+when it grows).
 */
 {
   an_ecil_stream  *stream = &ecil_stream;
   a_boolean       ok = TRUE;
+  size_t          existing_slot = 0;
+  a_boolean       found = FALSE;
 
-  if ((stream->num_word_entries + 1) * 2 > stream->num_word_slots) {
+  if (stream->num_word_slots != 0) {
+    existing_slot = ecil_word_find_slot(stream, words, count,
+                                        ecil_hash_words(words, count));
+    if (stream->word_slots[existing_slot] != 0) {
+      stream->word_entries[stream->word_slots[existing_slot] - 1].gid = gid;
+      found = TRUE;
+    }  /* if */
+  }  /* if */
+  if (found) {
+    /* Done. */
+  } else if ((stream->num_word_entries + 1) * 2 > stream->num_word_slots) {
     ok = ecil_word_table_grow(stream);
   }  /* if */
-  if (ok && stream->num_word_entries == stream->word_entries_capacity) {
+  if (!found && ok &&
+      stream->num_word_entries == stream->word_entries_capacity) {
     size_t              new_capacity = (stream->word_entries_capacity == 0) ?
                                   128 : stream->word_entries_capacity * 2;
     an_ecil_word_entry  *new_entries = (an_ecil_word_entry *)realloc(
@@ -1449,7 +1465,8 @@ Register a key for a G-id.  The key must not be registered yet.
       stream->word_entries_capacity = new_capacity;
     }  /* if */
   }  /* if */
-  if (ok && stream->word_arena_size + count > stream->word_arena_capacity) {
+  if (!found && ok &&
+      stream->word_arena_size + count > stream->word_arena_capacity) {
     size_t    new_capacity = (stream->word_arena_capacity == 0) ?
                              1024 : stream->word_arena_capacity * 2;
     uint32_t  *new_arena;
@@ -1464,7 +1481,9 @@ Register a key for a G-id.  The key must not be registered yet.
       stream->word_arena_capacity = new_capacity;
     }  /* if */
   }  /* if */
-  if (!ok) {
+  if (found) {
+    /* The existing entry was updated above. */
+  } else if (!ok) {
     ecil_note_unsupported("out of memory in the ECIL writer");
   } else {
     uint32_t            hash = ecil_hash_words(words, count);

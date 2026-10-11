@@ -23,7 +23,7 @@ ECIL_VERSION_MAJOR or ECIL_VERSION_MINOR (section 9 of the spec).
 #include <stdint.h>
 
 #define ECIL_VERSION_MAJOR 0
-#define ECIL_VERSION_MINOR 7
+#define ECIL_VERSION_MINOR 8
 
 /*
 The stream preamble: 8 magic bytes, then u16 major, u16 minor and
@@ -147,6 +147,7 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(decl_func,        0x30, 5)  /* g, t, linkage, flags, sid|nil */          \
   X(decl_var,         0x31, 6)  /* g, t, linkage, flags, align, sid|nil */   \
   X(var_init,         0x32, 1)  /* g; pops one constant */                   \
+  X(structor,         0x33, 3)  /* g complete, g base, flags (v1) */         \
   /* Bodies and statements. */                                               \
   X(func_begin,       0x40, 2)  /* g, flags */                               \
   X(func_end,         0x41, 1)  /* flags */                                  \
@@ -154,6 +155,7 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(local,            0x43, 5)  /* l, t, sid|nil, align, flags */            \
   X(block_begin,      0x44, 0)                                               \
   X(block_end,        0x45, 0)                                               \
+  X(return_from_slot, 0x46, 0)  /* v1 */                                     \
   X(if_begin,         0x47, 1)  /* has_else; pops bool */                    \
   X(if_else,          0x48, 0)                                               \
   X(if_end,           0x49, 0)                                               \
@@ -185,6 +187,15 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(agg_init_begin,   0x62, 2)  /* t, flags; glv */                          \
   X(agg_sel,          0x63, 1)  /* idx; -> glv of sub-object */              \
   X(agg_init_end,     0x64, 0)                                               \
+  X(cleanup_begin,    0x65, 3)  /* kind, g|nil, flags (v1) */                \
+  X(cleanup_body,     0x66, 0)  /* v1 */                                     \
+  X(cleanup_end,       0x67, 0)  /* reserved (M4); rejected in v1 */         \
+  X(fullexpr_begin,   0x68, 0)  /* v1 */                                     \
+  X(fullexpr_end,     0x69, 0)  /* carries <= 1 value (v1) */                \
+  X(static_init_begin,0x6A, 2)  /* g, flags (v1) */                          \
+  X(static_init_end,  0x6B, 0)  /* v1 */                                     \
+  X(meminit_begin,    0x6C, 3)  /* kind, idx, flags (v1) */                  \
+  X(meminit_end,      0x6D, 0)  /* v1 */                                     \
   /* References, memory and values. */                                       \
   X(lref,             0x70, 1)  /* l -> glv */                               \
   X(gref,             0x71, 1)  /* g -> glv */                               \
@@ -221,6 +232,17 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(ptr_stride,       0x8F, 1)  /* flags; prv ptr prv int -> prv ptr */      \
   X(ptr_diff,         0x90, 1)  /* t result; prv ptr prv ptr -> prv */       \
   X(inc_dec,          0x91, 2)  /* kind, flags; glv -> prv */                \
+  X(base_cast,        0x92, 4)  /* t der, t base, offset, flags (v1) */      \
+  X(derived_cast,     0x93, 4)  /* t base, t der, offset, flags (v1) */      \
+  X(return_slot,      0x94, 0)  /* -> glv (v1) */                            \
+  X(array_ctor_begin, 0x95, 2)  /* t elem, flags (v1) */                     \
+  X(array_ctor_end,   0x96, 0)  /* v1 */                                     \
+  X(array_dtor_begin, 0x97, 2)  /* t elem, flags (v1) */                     \
+  X(array_dtor_end,   0x98, 0)  /* v1 */                                     \
+  X(new_array_size,   0x99, 2)  /* t elem, cookie (v1) */                    \
+  X(new_array_cookie, 0x9A, 2)  /* t elem, cookie (v1) */                    \
+  X(delete,           0x9B, 4)  /* g fn, g dtor|nil, t, flags (v1) */        \
+  X(zero_bytes,       0x9C, 1)  /* bytes; glv (v1) */                        \
   /* Calls, casts and varargs (C0, C1 and C7-C9 are never assigned). */     \
   X(cast,             0xC2, 2)  /* kind, t; prv -> prv */                    \
   X(va_start,         0xC3, 0)  /* prv ap */                                 \
@@ -333,6 +355,22 @@ typedef enum an_ecil_cast_kind {
   eck_array_to_ptrdecay = 12
 } an_ecil_cast_kind;
 
+/* CLEANUP_BEGIN kinds (v1).  1-3 equal cir::CleanupKind. */
+typedef enum an_ecil_cleanup_kind {
+  ecl_normal = 1,  /* Normal exits only. */
+  ecl_eh     = 2,  /* Exception exits only (dropped while exceptions=0). */
+  ecl_all    = 3,  /* Both. */
+  ecl_exit   = 4   /* Program exit of static-duration object g. */
+} an_ecil_cleanup_kind;
+
+/* MEMINIT_BEGIN kinds (v1), in EDG's constructor-initializer order. */
+typedef enum an_ecil_meminit_kind {
+  emk_vbase      = 0,  /* Virtual base (M4; an error in v1). */
+  emk_base       = 1,
+  emk_field      = 2,
+  emk_delegation = 3
+} an_ecil_meminit_kind;
+
 typedef enum an_ecil_inc_dec_kind {
   eidk_pre_inc  = 0,
   eidk_pre_dec  = 1,
@@ -401,11 +439,22 @@ typedef enum an_ecil_builtin {
 
 #define ECIL_RECORD_PACKED              0x01u
 #define ECIL_RECORD_FLEXIBLE_ARRAY      0x02u
+#define ECIL_RECORD_NONTRIVIAL_ABI      0x04u
+                        /* v1: passed and returned indirectly (not
+                           bitwise copyable, a deleted or non-trivial
+                           destructor, or all copy and move constructors
+                           deleted). */
+#define ECIL_RECORD_NONTRIVIAL_DTOR     0x08u  /* v1 */
 
 #define ECIL_FIELD_UNNAMED              0x01u
 #define ECIL_FIELD_EMPTY_FOR_ABI        0x02u
 #define ECIL_FIELD_BITFIELD_SIGNED      0x04u
 #define ECIL_FIELD_FLEXIBLE_ARRAY       0x08u
+#define ECIL_FIELD_BASE                 0x10u
+                        /* v1: a direct non-virtual base subobject. */
+#define ECIL_FIELD_POTENTIALLY_OVERLAPPING 0x20u
+                        /* v1: laid out with the base-subobject type
+                           (data_size bytes). */
 
 #define ECIL_DECL_FUNC_DEFINED_HERE     0x01u
 #define ECIL_DECL_FUNC_INLINE           0x02u
@@ -418,6 +467,9 @@ typedef enum an_ecil_builtin {
 #define ECIL_DECL_FUNC_UNSUPPORTED      0x20u
                         /* The body used a construct ECIL cannot express;
                            only the declaration is available. */
+#define ECIL_DECL_FUNC_COMDAT           0x40u
+                        /* v1: own comdat named after the symbol (iff the
+                           linkage is linkonce_odr or weak_odr). */
 
 #define ECIL_DECL_VAR_DEFINITION        0x01u
 #define ECIL_DECL_VAR_CONST             0x02u
@@ -428,10 +480,27 @@ typedef enum an_ecil_builtin {
 #define ECIL_DECL_VAR_UNSUPPORTED       0x40u
                         /* The initializer used a construct ECIL cannot
                            express; the definition was dropped. */
+#define ECIL_DECL_VAR_COMDAT            0x80u  /* v1: as for functions. */
+#define ECIL_DECL_VAR_GUARDED           0x100u
+                        /* v1: dynamically initialized under the Itanium
+                           guard (spec 11.2 gives the guard name). */
+
+#define ECIL_STRUCTOR_DTOR              0x01u  /* v1: D1/D2, not C1/C2. */
+#define ECIL_STRUCTOR_HAS_VBASES        0x02u  /* M4; 0 in v1. */
+
+#define ECIL_PARAM_THIS                 0x01u  /* v1 */
+
+#define ECIL_LOCAL_RETURN_SLOT          0x01u  /* v1: NRVO variable. */
+#define ECIL_LOCAL_TEMPORARY            0x02u  /* v1: naming hint. */
 
 #define ECIL_FUNC_END_REACHABLE         0x01u
 
 #define ECIL_ACCESS_VOLATILE            0x01u
+#define ECIL_STORE_INIT                 0x02u
+                        /* v1 (STORE): the target is fresh storage; a call
+                           result is stored directly (copy elision). */
+#define ECIL_STORE_DSIZE                0x04u
+                        /* v1 (STORE): copy only data_size bytes. */
 
 #define ECIL_ARITH_NSW                  0x01u
 #define ECIL_ARITH_NUW                  0x02u
@@ -448,6 +517,24 @@ typedef enum an_ecil_builtin {
 #define ECIL_CALL_VARIADIC_CALLEE       0x01u
 #define ECIL_CALL_NORETURN              0x02u
 #define ECIL_CALL_RESULT_UNUSED         0x04u
+
+#define ECIL_CAST_NONNULL               0x01u
+                        /* v1 (BASE_CAST, DERIVED_CAST): the operand is
+                           known non-null; no null check. */
+
+#define ECIL_STATIC_INIT_INLINE_VAR     0x01u  /* v1 */
+#define ECIL_STATIC_INIT_TEMPLATE_INSTANCE 0x02u  /* v1 */
+
+#define ECIL_MEMINIT_COMPILER_GENERATED 0x01u  /* v1 */
+#define ECIL_MEMINIT_DEFAULT_MEMBER_INIT 0x02u  /* v1 */
+
+#define ECIL_ARRAY_LOOP_FIXED           0x01u
+                        /* v1 (ARRAY_CTOR/DTOR_BEGIN): the operand is a glv
+                           of an array type, not a pointer and a count. */
+
+#define ECIL_DELETE_ARRAY               0x01u  /* v1 */
+#define ECIL_DELETE_SIZED               0x02u  /* v1 */
+#define ECIL_DELETE_ALIGNED             0x04u  /* v1 */
 
 /* Supplementary blob keys (all optional; readers skip unknown keys). */
 typedef enum an_ecil_supp_key {

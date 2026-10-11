@@ -57,7 +57,8 @@ True for a function or variable.
 }  /* anonymous namespace */
 
 a_ref_checker::a_ref_checker(a_id_tables &ids, a_bracket_tracker &tracker)
-  : ids_(ids), tracker_(tracker), fields_pending_(0)
+  : ids_(ids), tracker_(tracker), fields_pending_(0), cur_record_(0),
+    members_seen_(false)
 {
 }  /* a_ref_checker::a_ref_checker */
 
@@ -229,6 +230,34 @@ one must be free.
   return ok;
 }  /* a_ref_checker::apply_name */
 
+bool a_ref_checker::check_comdat(uint64_t decl_flags, uint64_t linkage,
+                                 a_gid_kind kind, std::string &problem) const
+/*
+COMDAT, linkonce_odr and weak_odr describe definitions: a declaration that is
+not defined here is external without COMDAT, and COMDAT is set if and only if
+a definition has linkonce_odr or weak_odr linkage (spec 11.2).
+*/
+{
+  bool ok = true;
+  uint64_t comdat = kind == gk_func ? ECIL_DECL_FUNC_COMDAT
+                                    : ECIL_DECL_VAR_COMDAT;
+  bool defined = (decl_flags & 1) != 0;  /* DEFINED_HERE / DEFINITION. */
+  bool vague = linkage == elk_linkonce_odr || linkage == elk_weak_odr;
+
+  if (vague && !defined) {
+    problem = "linkonce_odr/weak_odr is only for definitions (the "
+              "declaration is not defined here)";
+    ok = false;
+  } else if ((decl_flags & comdat) != 0 && !(defined && vague)) {
+    problem = "COMDAT is only for linkonce_odr/weak_odr definitions";
+    ok = false;
+  } else if (defined && vague && !(decl_flags & comdat)) {
+    problem = "a linkonce_odr/weak_odr definition needs COMDAT";
+    ok = false;
+  }
+  return ok;
+}  /* a_ref_checker::check_comdat */
+
 bool a_ref_checker::declare(const a_record &r, a_gid_kind kind,
                             std::string &problem)
 /*
@@ -284,10 +313,20 @@ entity or re-issue it (the same kind only).
     }
   }
   if (ok) {
+    uint64_t dflags = 0;
+    bool fresh = e->kind == kind && e->decl_flags == 0 && e->name_sid == 0 &&
+                 !(e->flags & gf_named);
     operand_u64(r.ops[2], linkage);
+    operand_u64(r.ops[3], dflags);
     operand_id(name_op, name);
     e->element = static_cast<uint32_t>(t);
-    ok = apply_name(g, *e, name, linkage, problem);
+    ok = check_comdat(dflags, linkage, kind, problem);
+    if (fresh && name == 0)
+      e->decl_flags |= decl_flag_nil_introduced;
+    e->decl_flags = static_cast<uint32_t>(dflags) |
+                    (e->decl_flags & decl_flag_nil_introduced);
+    if (ok)
+      ok = apply_name(g, *e, name, linkage, problem);
   }
   return ok;
 }  /* a_ref_checker::declare */
@@ -362,6 +401,219 @@ AGG_SEL / C_SEL / C_REPEAT: the index (and run) is within the current target.
   return ok;
 }  /* a_ref_checker::check_selector */
 
+bool a_ref_checker::returns_aggregate() const
+/*
+True inside a function that returns a record or an array.
+*/
+{
+  bool result = false;
+
+  if (!fns_.empty()) {
+    const a_gid_entry *t = ids_.find_gid(fns_.back().ret_type);
+    result = t != nullptr && (t->kind == gk_record || t->kind == gk_array);
+  }
+  return result;
+}  /* a_ref_checker::returns_aggregate */
+
+bool a_ref_checker::check_structor(const a_record &r, std::string &problem)
+/*
+STRUCTOR(g_complete, g_base, flags): two declared functions of one type and
+one linkage, not in a group yet, whose names differ in exactly one character
+(1 and 2).
+*/
+{
+  bool ok = true;
+  uint64_t gc = 0;
+  uint64_t gb = 0;
+  uint64_t sflags = 0;
+  a_gid_entry *c = nullptr;
+  a_gid_entry *b = nullptr;
+
+  operand_u64(r.ops[2], sflags);
+  if (!operand_id(r.ops[0], gc) || !operand_id(r.ops[1], gb) ||
+      (c = ids_.find_gid(gc)) == nullptr || c->kind != gk_func ||
+      (b = ids_.find_gid(gb)) == nullptr || b->kind != gk_func || gc == gb) {
+    problem = "STRUCTOR names two distinct declared functions";
+    ok = false;
+  } else if (c->element != b->element || c->linkage != b->linkage) {
+    problem = "STRUCTOR functions must have the same type and linkage";
+    ok = false;
+  } else if ((c->flags | b->flags) & gf_in_group) {
+    problem = "STRUCTOR function is already in a group";
+    ok = false;
+  } else if ((c->flags & gf_named) && (b->flags & gf_named)) {
+    std::string_view nc = ids_.string(c->name_sid);
+    std::string_view nb = ids_.string(b->name_sid);
+    size_t diff = 0;
+    bool digits = true;
+    if (nc.size() != nb.size()) {
+      diff = 2;
+    } else {
+      for (size_t k = 0; k < nc.size(); ++k) {
+        if (nc[k] != nb[k]) {
+          ++diff;
+          digits = digits && nc[k] == '1' && nb[k] == '2';
+        }
+      }
+    }
+    if (diff != 1 || !digits) {
+      problem = "STRUCTOR names must differ in exactly one character, 1 "
+                "(complete) and 2 (base)";
+      ok = false;
+    }
+  }
+  if (ok) {
+    c->flags |= gf_in_group;
+    b->flags |= gf_in_group;
+    c->role = static_cast<uint8_t>(1 | ((sflags & ECIL_STRUCTOR_HAS_VBASES)
+                                        ? 4 : 0));
+    b->role = 2;
+  }
+  return ok;
+}  /* a_ref_checker::check_structor */
+
+bool a_ref_checker::check_v1(const a_record &r, std::string &problem)
+/*
+Operand rules of the C++ records that need the id tables (the structural
+ones are the bracket tracker's).
+*/
+{
+  bool ok = true;
+  uint64_t v = 0;
+  uint64_t w = 0;
+  uint64_t x = 0;
+  a_gid_entry *ne = nullptr;
+
+  switch (r.opcode) {
+  case eop_structor:
+    ok = check_structor(r, problem);
+    break;
+  case eop_return_from_slot:
+  case eop_return_slot:
+    if (!returns_aggregate()) {
+      problem = std::string(r.info->name) + " in a function that does not "
+                "return a record or array";
+      ok = false;
+    }
+    break;
+  case eop_cleanup_begin: {
+    bool is_exit = operand_u64(r.ops[0], v) && v == ecl_exit;
+    bool has_g = operand_id(r.ops[1], w);
+    if (is_exit != has_g) {
+      problem = "CLEANUP_BEGIN has a G-id if and only if its kind is exit";
+      ok = false;
+    } else if (has_g) {
+      const a_gid_entry *g = ids_.find_gid(w);
+      if (g == nullptr || g->kind != gk_var) {
+        problem = "CLEANUP_BEGIN(exit) names G-id " + number(w) +
+                  ", which is not a declared variable";
+        ok = false;
+      }
+    }
+    break;
+  }
+  case eop_static_init_begin: {
+    bool vague = false;
+    ok = operand_id(r.ops[0], v) && (ne = ids_.find_gid(v)) != nullptr &&
+         ne->kind == gk_var;
+    if (ok)
+      vague = ne->linkage == elk_linkonce_odr || ne->linkage == elk_weak_odr;
+    if (!ok) {
+      problem = "STATIC_INIT_BEGIN names a G-id that is not a declared "
+                "variable";
+    } else if (!(ne->decl_flags & ECIL_DECL_VAR_DEFINITION)) {
+      problem = "STATIC_INIT_BEGIN of G-id " + number(v) +
+                ", which is not a definition";
+      ok = false;
+    } else if (ne->role & vr_static_init) {
+      problem = "G-id " + number(v) + " is initialized twice "
+                "(STATIC_INIT_BEGIN already seen)";
+      ok = false;
+    } else if (tracker_.function_depth() != 0 &&
+               (ne->decl_flags & (ECIL_DECL_VAR_STATIC_LOCAL |
+                                  ECIL_DECL_VAR_GUARDED)) !=
+               (ECIL_DECL_VAR_STATIC_LOCAL | ECIL_DECL_VAR_GUARDED)) {
+      problem = "STATIC_INIT_BEGIN in a function needs a static_local, "
+                "guarded variable (G-id " + number(v) + ")";
+      ok = false;
+    } else if (vague && !(ne->decl_flags & ECIL_DECL_VAR_GUARDED)) {
+      problem = "STATIC_INIT_BEGIN of a vague-linkage variable needs GUARDED "
+                "(G-id " + number(v) + ")";
+      ok = false;
+    } else {
+      bool own = tracker_.static_init_is_global();
+      /* With a VAR_INIT the group may hold only the exit cleanup. */
+      if (ne->role & vr_var_init)
+        tracker_.mark_static_init_exit_only();
+      ne->role |= vr_static_init;
+      static_own_ids_.push_back(own);
+      if (own) {
+        /* Each initializer in F_GLOBALS has its own L-id space. */
+        a_fn_state state = {0, 0};
+        ids_.begin_function();
+        fns_.push_back(state);
+      }
+    }
+    break;
+  }
+  case eop_static_init_end:
+    if (!static_own_ids_.empty()) {
+      if (static_own_ids_.back() && !fns_.empty())
+        fns_.pop_back();
+      static_own_ids_.pop_back();
+    }
+    break;
+  case eop_base_cast:
+  case eop_derived_cast: {
+    bool derived = r.opcode == eop_derived_cast;
+    uint64_t t_der = 0;
+    uint64_t t_base = 0;
+    ok = need_type(r.ops[0], false, problem) &&
+         need_type(r.ops[1], false, problem);
+    if (ok) {
+      operand_u64(r.ops[derived ? 1 : 0], t_der);
+      operand_u64(r.ops[derived ? 0 : 1], t_base);
+      if (!operand_u64(r.ops[2], x) ||
+          !ids_.has_base(static_cast<uint32_t>(t_der),
+                         static_cast<uint32_t>(t_base), x)) {
+        problem = std::string(r.info->name) + ": G-id " + number(t_der) +
+                  " has no BASE field of G-id " + number(t_base) +
+                  " at that offset";
+        ok = false;
+      }
+    }
+    break;
+  }
+  case eop_array_ctor_begin:
+  case eop_array_dtor_begin:
+  case eop_new_array_size:
+  case eop_new_array_cookie:
+    ok = need_type(r.ops[0], false, problem);
+    break;
+  case eop_delete: {
+    const a_gid_entry *fn = nullptr;
+    ok = operand_id(r.ops[0], v) && (fn = ids_.find_gid(v)) != nullptr &&
+         fn->kind == gk_func;
+    if (!ok) {
+      problem = "DELETE names a G-id that is not a declared function";
+    } else if (operand_id(r.ops[1], w)) {
+      const a_gid_entry *d = ids_.find_gid(w);
+      if (d == nullptr || d->kind != gk_func) {
+        problem = "DELETE destructor G-id " + number(w) +
+                  " is not a declared function";
+        ok = false;
+      }
+    }
+    if (ok)
+      ok = need_type(r.ops[2], false, problem);
+    break;
+  }
+  default:
+    break;
+  }
+  return ok;
+}  /* a_ref_checker::check_v1 */
+
 bool a_ref_checker::end_frame(std::string &problem)
 /*
 At the end of a frame no TY_RECORD_BODY may still await REC_FIELD records.
@@ -431,18 +683,44 @@ Apply the reference rules of one record.
       ok = need_sid(r.ops[1], false, "the name", problem);
     }
     if (ok) {
+      a_gid_entry *target = ids_.find_gid(v);
       operand_u64(r.ops[2], linkage);
       operand_id(r.ops[1], w);
-      ok = apply_name(v, *ids_.find_gid(v), w, linkage, problem);
+      if (!(target->decl_flags & decl_flag_nil_introduced)) {
+        problem = "NAME_BIND names G-id " + number(v) + ", which was "
+                  "introduced with a name";
+        ok = false;
+      } else {
+        ok = check_comdat(target->decl_flags, linkage,
+                          static_cast<a_gid_kind>(target->kind),
+                          problem) &&
+             apply_name(v, *target, w, linkage, problem);
+      }
     }
     break;
   }
-  case eop_retract:
-    ok = operand_id(r.ops[0], v) && ids_.find_gid(v) != nullptr;
-    if (!ok)
-      problem = "unknown declaration: RETRACT names a G-id that was not "
-                "introduced";
+  case eop_retract: {
+    const a_gid_entry *g = nullptr;
+    ok = operand_id(r.ops[0], v) && (g = ids_.find_gid(v)) != nullptr &&
+         is_declaration(g);
+    if (!ok) {
+      problem = "unknown declaration: RETRACT names a G-id that is not a "
+                "declared function or variable";
+    } else if (g->linkage != elk_internal && g->linkage != elk_linkonce_odr) {
+      problem = "RETRACT of G-id " + number(v) + ": only internal or "
+                "linkonce_odr entities can be retracted";
+      ok = false;
+    } else if ((g->role & sr_complete) && g->kind == gk_func) {
+      problem = "RETRACT of a STRUCTOR pair names g_base (G-id " +
+                number(v) + " is the complete variant)";
+      ok = false;
+    } else if (!(g->kind == gk_func ? (g->flags & gf_defined) != 0
+                                    : (g->decl_flags & 1) != 0)) {
+      problem = "RETRACT of G-id " + number(v) + ", which is not defined";
+      ok = false;
+    }
     break;
+  }
   case eop_ty_void:
     ok = introduce(r.ops[0], gk_void, problem) != nullptr;
     break;
@@ -497,8 +775,14 @@ Apply the reference rules of one record.
         ok = false;
       }
     }
-    if (ok)
-      ok = introduce(r.ops[0], gk_func_type, problem) != nullptr;
+    if (ok) {
+      ne = introduce(r.ops[0], gk_func_type, problem);
+      ok = ne != nullptr;
+      if (ok) {
+        operand_u64(r.ops[1], w);
+        ne->element = static_cast<uint32_t>(w);
+      }
+    }
     break;
   }
   case eop_ty_record_decl: {
@@ -528,6 +812,8 @@ Apply the reference rules of one record.
       rec->flags |= gf_complete;
       rec->extent = w;
       fields_pending_ = w;
+      cur_record_ = static_cast<uint32_t>(v);
+      members_seen_ = false;
     }
     break;
   }
@@ -560,6 +846,27 @@ Apply the reference rules of one record.
                     " has no body yet";
           ok = false;
         }
+        if (ok) {
+          uint64_t fflags = 0;
+          operand_u64(r.ops[5], fflags);
+          if ((fflags & (ECIL_FIELD_BASE | ECIL_FIELD_POTENTIALLY_OVERLAPPING))
+              && e->kind != gk_record) {
+            problem = "REC_FIELD BASE/POTENTIALLY_OVERLAPPING needs a record "
+                      "type (G-id " + number(v) + ")";
+            ok = false;
+          } else if (fflags & ECIL_FIELD_BASE) {
+            if (members_seen_ || r.ops[3].kind != an_operand_kind::nil) {
+              problem = "a BASE field comes before the data members and is "
+                        "not a bit-field";
+              ok = false;
+            } else {
+              operand_u64(r.ops[1], w);
+              ids_.add_base(cur_record_, static_cast<uint32_t>(v), w);
+            }
+          } else {
+            members_seen_ = true;
+          }
+        }
       }
     }
     break;
@@ -577,6 +884,7 @@ Apply the reference rules of one record.
       problem = "unknown declaration: VAR_INIT names a G-id that is not a "
                 "declared variable";
     } else {
+      ne->role |= vr_var_init;
       /* The variable's type must be complete by now. */
       const a_gid_entry *t = ids_.find_gid(ne->element);
       while (t != nullptr && t->kind == gk_array)
@@ -597,9 +905,16 @@ Apply the reference rules of one record.
     } else if (ne->flags & gf_defined) {
       problem = "function G-id " + number(v) + " is defined twice";
       ok = false;
+    } else if ((ne->role & 1) && !(ne->role & 4)) {
+      problem = "FUNC_BEGIN of complete structor G-id " + number(v) +
+                " (the body is streamed under the base variant)";
+      ok = false;
     } else {
+      const a_gid_entry *ft = ids_.find_gid(ne->element);
+      a_fn_state state = {ft != nullptr ? ft->element : 0u, 0};
       ne->flags |= gf_defined;
       ids_.begin_function();
+      fns_.push_back(state);
     }
     break;
   case eop_func_end:
@@ -609,6 +924,8 @@ Apply the reference rules of one record.
     } else {
       size_t first = ids_.function_lid_begin();
       size_t count = ids_.lid_table_size();
+      if (!fns_.empty())
+        fns_.pop_back();
       for (size_t k = first + 1; k < count; ++k) {
         const a_lid_entry &entry = ids_.lid_at_index(k);
         if ((entry.flags & lf_goto_target) && entry.state != ls_label) {
@@ -620,17 +937,39 @@ Apply the reference rules of one record.
       }
     }
     break;
-  case eop_param:
+  case eop_param: {
+    uint64_t pflags = 0;
+    operand_u64(r.ops[4], pflags);
     ok = need_object(r.ops[1], "PARAM", problem) &&
          need_object(r.ops[2], "PARAM", problem) &&
          need_sid(r.ops[3], true, "the parameter name", problem) &&
          introduce_local(r.ops[0], ls_value, problem);
+    if (ok && (pflags & ECIL_PARAM_THIS)) {
+      const a_gid_entry *pt = ids_.find_gid(
+                                 operand_u64(r.ops[2], w) ? w : 0);
+      if ((!fns_.empty() && fns_.back().params != 0) ||
+          pt == nullptr || pt->kind != gk_ptr) {
+        problem = "PARAM THIS must be the first parameter and a pointer";
+        ok = false;
+      }
+    }
+    if (ok && !fns_.empty())
+      ++fns_.back().params;
     break;
-  case eop_local:
+  }
+  case eop_local: {
+    uint64_t lflags = 0;
+    operand_u64(r.ops[4], lflags);
     ok = need_object(r.ops[1], "LOCAL", problem) &&
          need_sid(r.ops[2], true, "the local name", problem) &&
          introduce_local(r.ops[0], ls_value, problem);
+    if (ok && (lflags & ECIL_LOCAL_RETURN_SLOT) && !returns_aggregate()) {
+      problem = "LOCAL RETURN_SLOT in a function that does not return a "
+                "record or array";
+      ok = false;
+    }
     break;
+  }
   case eop_materialize_temp:
     ok = need_object(r.ops[1], "MATERIALIZE_TEMP", problem) &&
          introduce_local(r.ops[0], ls_value, problem);
@@ -810,6 +1149,8 @@ Apply the reference rules of one record.
     ok = need_type(r.ops[0], false, problem);
     break;
   default:
+    if (r.info->section & eos_v1)
+      ok = check_v1(r, problem);
     break;
   }
   return ok;

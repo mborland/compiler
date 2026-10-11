@@ -187,3 +187,26 @@ suite against a baseline.
   frame pointer) are absent from the spike's LLVM IR. They are not needed
   for correctness. cir-lib adds `nounwind` for C functions in M2, and the
   rest later.
+
+## 10. M3: core C++ (session 2)
+
+The contract is `ecil_format.md` §11 (ECIL 0.8 declares every v1 record; 1.0
+at the M3 gate). The research behind it:
+- `research/m3_ecil_v1_design.md` (the design, with the spike verdicts in §8);
+- `research/cxx_cir_shapes.md` (CIR shapes at the pin);
+- `research/il_to_ecil_map_cxx.md` (IL facts and writer mapping).
+
+| Topic | Decision | Evidence |
+| --- | --- | --- |
+| Exceptions | The FE keeps exceptions on. The writer sends a no-exceptions stream (`HDR_LANG.exceptions` = 0): emitted functions with try/throw are dropped and diagnosed, and EH-only cleanups are sent as `eh` and ignored until M4 (user decision) | ~450 of 1,728 preprocessed gnu/cpp tests contain try/throw in expanded headers |
+| Instantiation | `DEFAULT_INSTANTIATION_MODE=tim_used` in the cpfe-cir cmakedef (user decision) | `il_to_ecil_map_cxx.md` O2 |
+| Internal names | Itanium internal manglings (`_ZL…`, `_ZN12_GLOBAL__N_1…`); no module id from mtime or cwd (user decision) | The module id made names nondeterministic (`il_to_ecil_map_cxx.md` 2.1) |
+| Local statics | `_ZZ<fn>E<name>[_n]` from a CIR-gated `lower_name.c` helper | `get_mangled_variable_name` gives `_Z3cnt` (2.2) |
+| C2/D2/D0 names | A CIR-gated helper overriding `ctor_dtor_kind` | 2.2 |
+| C1 strategy | Alias of C2 (external), C5 comdat + alias (weak_odr), substitution (discardable) | Spike 4 |
+| Returns | Through `__retval` while any cleanup is open | Spike 2: a silent miscompile otherwise |
+| Copy elision | Exact store/load shapes for NONTRIVIAL_ABI records; `DROP` only with a trivial dtor | Spike 1 |
+| Conditional cleanups | Flag-guarded scope opened at the outermost conditional record | Spike 3 |
+| Late names | NAME_BIND resolved at the file-scope hand-off, with a CHECKING re-mangle | 3 of 1809 names change after hand-off (2.1) |
+| RETRACT | Evaluated by the writer at the file-scope hand-off; the consumer marks the definition discardable | `remove_unneeded_instantiations` skips freed regions (2.3) |
+| Vague linkage | `routine_might_exist_in_multiple_copies` and not static → linkonce_odr + COMDAT; explicit instantiation → weak_odr | `use_comdat` is lowering-only (2.5) |

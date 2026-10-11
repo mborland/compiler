@@ -1,0 +1,62 @@
+# Filter list for edgy ("edgy @tests/.edgy/filters/<this file>"): one path
+# prefix per line, relative to the tests directory; "!" excludes.  Blank lines
+# and lines starting with "#" are ignored.
+#
+# The M3 C++ corpus of the CIR back end: the run and link tests (use with
+# "--types rp,lp") of the GNU C++ testsuite (imported/gnu/cpp, preprocessed),
+# plus the run tests of the EDG regression suites edg/ and cwg/.  The tests
+# that use constructs M3 diagnoses as unsupported (virtual functions, RTTI,
+# member pointers, ...) stay in: they are counted as UNSUPPORTED, which is the
+# progress metric.  So do the tests with try/throw/catch text (about 450, most
+# of them in expanded library headers): the front end keeps exceptions on and
+# the writer drops only the functions that contain try/throw, so such a test
+# can pass if that code is never emitted.  Whole subdirectories about
+# something else than compiling and running C++ are excluded.
+imported/gnu/cpp/
+# sanitizers
+!imported/gnu/cpp/asan/
+# sanitizers
+!imported/gnu/cpp/hwasan/
+# sanitizers
+!imported/gnu/cpp/tsan/
+# sanitizers
+!imported/gnu/cpp/ubsan/
+# contracts (not in M3)
+!imported/gnu/cpp/contracts/
+# coroutines (not in M3)
+!imported/gnu/cpp/coroutines/
+# exception handling (M4)
+!imported/gnu/cpp/eh/
+# typeid and dynamic_cast (M4)
+!imported/gnu/cpp/rtti/
+# thread_local with dynamic init (not in M3)
+!imported/gnu/cpp/tls/
+# coverage instrumentation
+!imported/gnu/cpp/gcov/
+# debug-info quality
+!imported/gnu/cpp/guality/
+# debug info
+!imported/gnu/cpp/debug/
+# thread simulation
+!imported/gnu/cpp/simulate-thread/
+# decimal float
+!imported/gnu/cpp/dfp/
+# loop optimizer dumps
+!imported/gnu/cpp/graphite/
+# link-time optimization
+!imported/gnu/cpp/lto/
+# modules (not in M3)
+!imported/gnu/cpp/modules/
+# warning tests
+!imported/gnu/cpp/warn/
+# diagnostic format tests
+!imported/gnu/cpp/diagnostic/
+# preprocessor tests
+!imported/gnu/cpp/cpp/
+# precompiled headers
+!imported/gnu/cpp/pch/
+# compiler plugins
+!imported/gnu/cpp/plugin/
+# the EDG regression suites: run tests only (the filter types select them)
+edg/
+cwg/

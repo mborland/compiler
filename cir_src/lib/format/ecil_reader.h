@@ -143,8 +143,9 @@ enum an_opcode_section : uint8_t {
   eos_meta     = 8,  /* Allowed in the sections of their own list. */
   eos_body     = 16, /* Function body records (inside FUNC_BEGIN..END). */
   eos_const    = 32, /* C_* records: declaration sections and bodies. */
-  eos_stmt     = 64  /* With eos_body: a statement record (the rest of the
+  eos_stmt     = 64, /* With eos_body: a statement record (the rest of the
                         body records are expression records). */
+  eos_v1       = 128 /* A C++ (ECIL v1, minor 8) record. */
 };  /* an_opcode_section */
 
 struct an_opcode_info {
@@ -210,7 +211,10 @@ bool supp_pairs(const a_record &record, std::vector<std::pair<uint64_t,
 
 enum a_bracket_kind : uint8_t {
   bk_block, bk_if, bk_while, bk_do, bk_for, bk_switch, bk_tern, bk_land,
-  bk_lor, bk_agg_init, bk_const_agg
+  bk_lor, bk_agg_init, bk_const_agg,
+  bk_cleanup,      /* CLEANUP_BEGIN .. CLEANUP_BODY: the cleanup code */
+  bk_fullexpr, bk_static_init, bk_meminit,
+  bk_array         /* ARRAY_CTOR/DTOR_BEGIN .. END (phase 0: ctor, 1: dtor) */
 };  /* a_bracket_kind */
 
 const char *bracket_name(uint8_t kind);
@@ -230,7 +234,11 @@ enum a_region_kind : uint8_t {
   rk_if_arm,       /* IF_BEGIN .. IF_ELSE, IF_ELSE .. IF_END */
   rk_loop_body,    /* WHILE_BODY .. WHILE_END, DO_BEGIN .. DO_COND,
                       FOR_BODY .. FOR_END */
-  rk_switch_body   /* SWITCH_BEGIN .. SWITCH_END */
+  rk_switch_body,  /* SWITCH_BEGIN .. SWITCH_END */
+  rk_fullexpr,     /* FULLEXPR_BEGIN .. FULLEXPR_END */
+  rk_static_init,  /* STATIC_INIT_BEGIN .. STATIC_INIT_END */
+  rk_meminit,      /* MEMINIT_BEGIN .. MEMINIT_END */
+  rk_array_body    /* ARRAY_CTOR/DTOR_BEGIN .. END */
 };  /* a_region_kind */
 
 enum a_bracket_action : uint8_t {
@@ -284,6 +292,22 @@ public:
 
   size_t function_depth() const
     { return function_bases_.size(); }
+  size_t static_init_depth() const
+    { return static_init_depth_; }
+  bool static_init_is_global() const
+  /* The innermost bracket is a STATIC_INIT opened outside a function: it
+     has an L-id space of its own. */
+    {
+      return !brackets_.empty() && brackets_.back().kind == bk_static_init &&
+             (brackets_.back().flags & abf_own_ids) != 0;
+    }
+  void mark_static_init_exit_only()
+  /* The STATIC_INIT just opened may only hold the exit cleanup of a
+     variable that has a VAR_INIT. */
+    {
+      if (!brackets_.empty() && brackets_.back().kind == bk_static_init)
+        brackets_.back().flags |= abf_exit_only;
+    }
   size_t bracket_depth() const
     { return brackets_.size(); }
   const char *innermost_name() const
@@ -296,14 +320,21 @@ private:
     uint8_t has_else;
     uint8_t case_ok;   /* A case label may sit here (a SWITCH body or BLOCKs
                           nested directly in it). */
+    uint8_t flags = 0; /* bk_static_init: abf_*. */
   };  /* a_bracket */
+  enum { abf_exit_only = 1,   /* Only the exit cleanup of a variable that has
+                                 a VAR_INIT. */
+         abf_own_ids = 2 };   /* Opened outside a function: fresh L-id
+                                 space. */
   struct a_region {
     uint8_t kind;
     size_t  first;     /* Index into scope_locals_ of its first local. */
   };  /* a_region */
-
   bool apply_regions(uint8_t opcode, std::string &problem,
                      a_scope_event &event);
+  bool check_v1(const a_record &record, std::string &problem);
+  /* The structural rules of the C++ (minor 8) records. */
+  bool conditional_without_fullexpr() const;
 
   std::vector<a_bracket>   brackets_;
   std::vector<size_t>      function_bases_;  /* Bracket depth at each
@@ -311,6 +342,14 @@ private:
   std::vector<a_region>    regions_;
   std::vector<size_t>      scope_locals_;
   uint32_t                 switch_depth_;
+  uint32_t                 cleanup_code_depth_;  /* Open cleanup code parts. */
+  uint32_t                 static_init_depth_;
+  uint32_t                 fullexpr_depth_;
+  uint32_t                 conditional_depth_;   /* Open TERN/LAND/LOR. */
+  bool                     body_started_;        /* Past the ctor prologue. */
+  uint32_t                 meminit_count_;
+  bool                     meminit_delegation_;
+  uint64_t                 meminit_last_idx_;
   size_t                   kill_from_;       /* Lowest region start closed by
                                                 the last record. */
   bool                     ended_function_;
@@ -356,9 +395,27 @@ private:
   bool check_selector(uint64_t index, uint64_t repeat, bool is_const,
                       std::string &problem);
 
+  /* The function whose body is being read (a stack: minor-6 streams may
+     nest bodies). */
+  struct a_fn_state {
+    uint32_t  ret_type;   /* Return type G-id. */
+    uint32_t  params;     /* PARAM records so far. */
+  };  /* a_fn_state */
+  bool returns_aggregate() const;
+  bool check_v1(const a_record &record, std::string &problem);
+  /* The operand rules of the C++ records that need the id tables. */
+  bool check_structor(const a_record &record, std::string &problem);
+  bool check_comdat(uint64_t decl_flags, uint64_t linkage, a_gid_kind kind,
+                    std::string &problem) const;
+  /* COMDAT, linkonce_odr and weak_odr describe definitions (spec 11.2). */
+
   a_id_tables             &ids_;
   a_bracket_tracker       &tracker_;
   uint64_t                 fields_pending_;
+  uint32_t                 cur_record_;     /* TY_RECORD_BODY being read. */
+  bool                     members_seen_;   /* A non-base field was read. */
+  std::vector<a_fn_state>  fns_;
+  std::vector<bool>        static_own_ids_;  /* Per open STATIC_INIT. */
   std::vector<uint32_t>    agg_targets_;
   std::vector<uint32_t>    const_targets_;
 };  /* a_ref_checker */

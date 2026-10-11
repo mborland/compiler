@@ -157,7 +157,7 @@ differ:
 | `EDG_GEN_C_SUFFIX` | unset (`.int.c`, line 247) | `".int.s"` | generated file is assembly; `gen_o_suffix` becomes `.int.o` (line 249) |
 | `EDG_RUNTIME_LIB` | image ENV `edgrt` (`build-base/Dockerfile`, default `C` at line 198) | `""` | `[ ! -z $EDG_RUNTIME_LIB ]` (line 3141) is false for an empty value, so no `-ledgrt`; the config must **assign** the empty string (set but empty beats the image ENV) |
 | `EDG_C_TO_OBJ_LIBRARIES` | `-lstdc++ -lgcc_s -lpthread` (line 33) | `-L$EDG_CIR_RT_LIBDIR -ledg_cir_rt -lstdc++ -lgcc_s -lm -lpthread` | libraries follow the objects on the link line (3084-3095: `$object_files ... $EDG_STD_LIBS $EDG_C_TO_OBJ_LIBRARIES`); `-L` is needed because `LIBDIR` (`ECCP_LIBDIR`, line 80) is the EDG lib dir, not `build/cir` |
-| `EDG_USE_SYSTEM_HEADERS` | default 0 (EDG headers) | default **1** | libstdc++/glibc are the runtime, so the matching headers must be used (scrape via `EDG_GCC_INCL_SCRAPE`, exported by `edg-container-exec:67`); C smoke tests have no includes, C++ tests (M3) need this. Per-test `//use_system_includes` already forces 1 (`exec/__init__.py:1035`) |
+| `EDG_USE_SYSTEM_HEADERS` | default 0 (EDG headers) | default 0 since M3a (was **1**; see §9.7) | libstdc++/glibc are the runtime, so the matching headers must be used (scrape via `EDG_GCC_INCL_SCRAPE`, exported by `edg-container-exec:67`); C smoke tests have no includes, C++ tests (M3) need this. Per-test `//use_system_includes` already forces 1 (`exec/__init__.py:1035`) |
 | `EDG_SUPPRESS_PATCH_MUNCH`, `EDG_STD_LIBS` | 1, empty | same | no munch/patch step (static init is CIR global ctors) |
 | `EDG_C_TO_OBJ_DEFAULT_OPTIONS_linux_x86_64` | `-w ... -m64 -march=x86-64` | same | gcc assembles the `.int.s`; `-D`/`-f` flags are harmless to the assembler |
 | `-g` | `EDG_C_TO_OBJ_COMPILER_DEBUG_FLAG` | n/a | CIR emits no debug info |
@@ -406,7 +406,10 @@ The M2 gate compares `edg_x86_64_cir` with `edg_x86_64`, so the differences of
 `bases/docker/cir-env/gcc/edg_eccp_config` from `bases/docker/dev-env/gcc/`
 matter:
 
-* **`EDG_USE_SYSTEM_HEADERS` is 1 (dev-env: 0).** The generated code links
+* **`EDG_USE_SYSTEM_HEADERS` was 1 until M3a; it is now 0 like dev-env
+  (§9.7: parity, and the injected `--gnu_version` broke old EDG language
+  modes). Tests that need the system headers say `//use_system_includes`.**
+  The original rationale: the generated code links
   against libstdc++/glibc (Itanium ABI), so the front end must see those
   libraries' headers (`EDG_GCC_INCL_SCRAPE`/`EDG_GCC_CINCL_SCRAPE`), not EDG's
   `include_c++` headers written for the `edgrt` runtime. A test that includes a
@@ -469,3 +472,227 @@ running the back end on them is useful as a no-crash check on a large input
 set (this is how the 11254 `fp` tests of `imported/gnu/c` can be used as an
 extra robustness corpus).
 
+
+## 9. C++ (M3): how a C++ test reaches `cpfe-cir`, the link, and the headers
+
+Findings of cir-config (session 2), from reading `util/eccp.sh`,
+`bases/docker/cir-env/gcc/edg_eccp_config`, `edgtest/exec/__init__.py`, the FE
+(`statements.c`, `expr.c`) and the test files. Nothing was run: `cpfe-cir`
+still rejects C++, so these points need a first real run to confirm.
+
+### 9.1 What decides C or C++, and how `--c++NN` arrives
+
+* `eccp` starts with `c_mode=0` (**C++**, `eccp.sh:397`). A C option (`--c`,
+  `--c99`, `--c11`, `--c17`, `--c23`, `--gcc`, `--ms_c11`, ...) sets it to 1; a
+  C++ option (`--c++`, `--c++03`, `--c++11` ... `--c++26`, `--g++`, `-b`, ...)
+  sets it back to 0 (`eccp.sh:1938-1952`). **The source suffix (`.cpp`, `.cc`,
+  `.C`) is not looked at** for this. The language of a C test therefore comes
+  from the options of its case (`--c11`, `--gcc`, ...), that of a C++ test from
+  its `--c++NN` option (or from nothing, which means C++ with the front end's
+  default dialect).
+* Per-case options come from the test's `//options:` lines
+  (`-DTEST_NUMBER=<n> --c++17 ...`). `eccp` copies unknown options to the front
+  end unchanged, so `--c++NN` reaches `cpfe-cir` as written. The bare `cpfe-cir`
+  rejects C++ today (`cmd_line.c`); M3 lifts that gate.
+* The front end command line that `eccp` builds is
+  `$CPFE $EDG_CPFE_DEFAULT_OPTIONS $feoptions --gen_c_file_name=X.int.s
+  [--old_line_commands] X.cpp`, where `feoptions` has, for C++, the options of
+  the case, `-D__CHAR_BIT__=8 -D_POSIX_SOURCE` (`EDG_DEFAULT_DEFINES`,
+  `EDG_DEFAULT_CPP_DEFINES` of the base), `--sys_include=` for every directory of
+  `INCLDIR` (see 9.4), and `-tused` (9.2). In the cir-env base
+  `EDG_CPFE_DEFAULT_OPTIONS` is `--gnu_version=<scraped GCC version>`, as for C.
+* `edgy` runs every C++ test of a CIR config with the same `CPFE`
+  (`cpfe-cir`); `CPFE_CP` is not used (the `cir` entry of `config.json` has one
+  `bin_path_env`, `CPFE_CIR`), so there is no `cpfe`/`cpfe-cp` split to handle.
+
+### 9.2 Templates, `-tused`, the prelinker
+
+* For a single-source compile-and-link (`rp`, `lp` tests) in C++ mode `eccp`
+  appends **`-tused`** (`eccp.sh:2629-2634`), so the front end instantiates every
+  used template in the one translation unit. Multi-file (`.mft.cpp`) tests are
+  compiled one `cpfe-cir` run per file, with no `-tused`; the CIR configuration
+  has `INSTANTIATE_TEMPLATES_EVERYWHERE_USED=1` and
+  `AUTOMATIC_TEMPLATE_INSTANTIATION=0`, so every TU must emit the instances it
+  uses as `linkonce_odr` (COMDAT) definitions: this matters for `mft` tests and
+  for the C1/D1 strategy.
+* `eccp` also keeps `automatic_instantiation=1` (`eccp.sh:154`) in C++ mode, so
+  at link time it runs **`edg_prelink`** on the object files (the build step
+  builds that target; `EDG_PRELINK_PATH` is exported by `environment.sh`, and
+  the base adds `-c "nm -og 2>/dev/null"`). `cpfe-cir` writes no `.ii`/`.ti`
+  files (no automatic instantiation), so the prelinker should find nothing to
+  do. This is **unverified**. If it misbehaves, the base can set
+  `EDG_PRELINK_PATH=/bin/true` (the config file is sourced before the variable is
+  read, `eccp.sh:53` and `:107`); there is no switch in the config for
+  `automatic_instantiation` itself (it is assigned after the config is sourced).
+  Native macOS `edg_prelink` fails with templates (see the native workflow
+  note); the Linux container build is the target here.
+
+### 9.3 The link line and static initialization
+
+* `eccp` links with `gcc` (not `g++`): `gcc <c_to_obj options> -L<LIBDIR>
+  -o exe X.o -L$EDG_CIR_RT_LIBDIR -ledg_cir_rt -lstdc++ -lgcc_s -lm -lpthread`.
+  `-lstdc++` is on the line for C and C++ tests alike, so no change is needed
+  for C++ itself. The link output is passed through `edg_decode`
+  (demangling); an undefined `_ZTV...` therefore shows as a demangled name
+  (`vtable for X`) in the test output, which `edg-cir-summary`'s feature table
+  also recognizes ("vtable", "typeinfo", ...). Which of the two spellings the
+  link messages have must be checked on the first C++ run.
+* The `patch`/`munch` step that finds and runs static constructors and
+  destructors in the EDG runtime model is **skipped** (`EDG_SUPPRESS_PATCH_MUNCH=1`
+  in the base, `eccp.sh` end). Static initialization must therefore come from
+  the object file itself: `llvm.global_ctors` lowered to `.init_array` (what
+  LoweringPrepare builds from `cir.global` ctor regions) and destructors
+  registered with `__cxa_atexit`, run by glibc's `crt1`/`libc`. A C++ test that
+  prints from a namespace-scope constructor is the first check of that.
+* No EDG runtime library is linked (`EDG_RUNTIME_LIB=""`): `operator new` and
+  friends, `__cxa_*`, `__gxx_personality_v0`, and the type-info classes come
+  from `libstdc++`/`libsupc++`.
+
+### 9.4 Headers: what the tests include
+
+* **`imported/gnu/cpp` is preprocessed.** The files start with
+  `# 0 "./cpp0x/initlist5.C"` / `# 0 "<built-in>"` and contain the expansion of
+  every `#include`: 495 of its 1688 run/link tests (`rp`/`lp`) have expanded
+  headers (all of them `stdc-predef.h`, 331 `c++config.h`, i.e. libstdc++), made
+  by GCC 15.0.0 (snapshot 20250112, `/mds/gnu/build/gcc-15-20250112/...`) on
+  glibc. They compile with the preprocessed text as it is, so `cpfe-cir` never
+  looks for libstdc++ headers for them; at link time the container's libstdc++
+  (GCC 15.3) provides the library, which is ABI-compatible with the 15.0
+  headers' symbols as long as the headers' inline code only uses stable
+  entry points. (A skew would show up as an undefined or a mismatching symbol
+  of `std::`.)
+* **`edg/` and `cwg/` are not preprocessed**, but almost nothing includes
+  anything: of their 272 run tests (`rp`/`lp`) only 7 have an `#include`
+  (`<assert.h>` 2, `<stdio.h>` 2, `<coroutine>`, `<typeinfo>`,
+  `<initializer_list>`, `"../coro.h"`); the rest declare `extern "C"`
+  functions themselves (`printf`, `abort`) or use `__builtin_*`. Those 7 get
+  the system headers only with `//use_system_includes` (the cir-env base
+  default is 0 since M3a, §9.7). With it,
+  `--sys_include=` points at the GCC C++ include directories scraped at
+  container start (`EDG_GCC_INCL_SCRAPE`, from `edg-scrape-compiler gcc --lang
+  c++ includes`, set by `edg-container-exec`; C++ mode uses `INCLDIR`, C mode
+  `CINCLDIR`). Under `edg_x86_64` the same tests use the EDG headers
+  (`EDG_USE_SYSTEM_HEADERS` 0), so a status difference there is not necessarily
+  a CIR bug (section 7).
+* `<coroutine>` and `<typeinfo>` tests are out of the M3 scope.
+
+### 9.5 FE exceptions stay on (user decision); what that means for the tests
+
+An earlier draft of this section recorded what happens with the front end's
+exceptions switched off, which the M3 plan had assumed: with
+`exceptions_enabled` false a `try` block is a front-end error
+(`pos_error(ec_no_exception_support)`, `statements.c:4841`) and a `throw`
+expression too (`expr_pos_error`, `expr.c:38305`), so the whole translation
+unit fails with `FE_DIAG`, not just the function. The **preprocessed GNU tests
+have the library code expanded** with GCC's default `-fexceptions` already
+applied (libstdc++'s `__try`/`__catch`/`__throw_exception_again` are plain
+`try`/`catch`/`throw` in the text), and inline bodies are parsed whether used
+or not. By word count 325 of the 495 `rp`/`lp` tests with expanded headers and
+128 of the other 1233 contain `try`, `throw` or `catch`: about 450 of 1728
+tests could never have got past the front end.
+
+**Decision (user, 2026-10-10):** the front end keeps exceptions **on** in
+`cpfe-cir`. There is no `--exceptions` rejection and no exceptions-off default.
+The writer emits a no-exceptions stream and diagnoses `try`/`throw` per
+emitted function (the function is dropped, as for other unsupported
+constructs); cleanups needed only for exception paths go out as `eh` cleanups
+and are ignored until M4. Consequences for the tests:
+
+* The ~450 tests with `try`/`throw`/`catch` text are **in scope** of
+  `cir-cpp-corpus.txt`: they can pass when the `try`/`throw` code is in
+  functions that are never emitted (unused inline library code), and are
+  `UNSUPPORTED` when it is emitted. `edg-cir-summary`'s "exceptions" feature row
+  counts the second group.
+* Expanded libstdc++ code that is emitted (it is `linkonce_odr`, so only what a
+  test uses) is parsed with the same semantics as in the other configurations
+  (`noexcept` and implicit destructor `noexcept` rules, placement `new` /
+  `delete` pairing), so the headers parse as they do elsewhere.
+* The M3 gate counts for the corpus should be read per feature: the number of
+  tests whose only failure reason is "exceptions" is the M4 work list.
+
+### 9.6 Corpus and reference
+
+* `tests/.edgy/filters/cir-cpp-smoke.txt` (46 run tests, each with a feature
+  comment) and `cir-cpp-corpus.txt` (the `imported/gnu/cpp` `rp`/`lp` tests
+  minus the out-of-scope subdirectories, plus `edg/` and `cwg/`; 1688 test files
+  match with `--types rp,lp`; many `edg/` tests have one case per `--c++NN`
+  mode: 122 of the 241 `edg/` run tests have more than one case).
+  Run them with `--types rp` (smoke) and `--types rp,lp` (corpus), as for C
+  (section 8: the `fp`/`fn` types run the back end too).
+* The reference configuration for "also fails without CIR" is `edg_x86_64`
+  (it compiles C++ through the C-generating back end; its `imported.log` has
+  2959 `gnu/cpp` lines). `edg-cir-summary` now matches C++ cases per
+  (path, options), because a C++ test has one case per language mode.
+* `tests/expectations/edg_x86_64_cir/` has `cir.log` and `imported.log` only;
+  M3 adds `edg.log`/`cwg.log` lines when the first runs are recorded
+  (recording on the x86-64 box, as for the other expectations).
+* The default per-program timeout is now 120 s for every config (C1).
+
+### 9.7 First end-to-end run (M3a, 2026-10-10)
+
+With `--ecil_allow_cxx` (a dev-only option of `cpfe-cir`, undocumented; the
+default still rejects C++), `DEFAULT_INSTANTIATION_MODE=tim_used` in the
+cpfe-cir cmakedef, and the option injected through `EDG_CPFE_DEFAULT_OPTIONS`
+of the cir-env base (to be removed at the M3 gate), C++ goes through `eccp`
+in both configs (`edg_x86_64_cir` and `edg_x86_64_cir_2p`):
+
+* A program with a namespace, a function template and an aggregate, compiled
+  `eccp --c++17 t.cpp -o t`, builds and runs in both modes (output correct).
+  The `eccp` flow is as in 9.1-9.3: `cpfe-cir --ecil_allow_cxx --gnu_version=...
+  --c++17 --sys_include=<libstdc++ 15 dirs> -tused --gen_c_file_name=t.int.s`,
+  then `gcc -c t.int.s`, then **`edg_prelink t.o --` (a no-op: no change needed,
+  exit status 0)**, then `gcc ... t.o -ledg_cir_rt -lstdc++ -lgcc_s -lm
+  -lpthread`.
+* **Names are not mangled yet**: `nm t.o` shows `f`, `twice` and `main`
+  as plain `T` symbols (`N::f` and `N::twice<int>` should be `_ZN1N1fEi`
+  and a weak `_ZN1N5twiceIiEET_S1_`). The writer sends the source name; that is
+  slice S1 (mangled names, `linkonce_odr`).
+* Static initialization with a constructor (`A g;`) is still dropped by the
+  writer ("non-constant initializer of a static object"), so `.init_array`
+  could not be checked yet.
+* **The cir-env base's `--gnu_version=<GCC version>` conflicted with the old
+  EDG language modes** (`-A`, `--strict`, `--cfront_*`, `-b`, `-r -x`):
+  "Command-line error: language modes specified are incompatible" (rc 4,
+  before any code is generated) for 154 of the 356 run/link cases of `edg/`
+  and `cwg/` (all of `cwg/` has `-A`). Cause: the base copied the dev-env
+  rule "with `EDG_USE_SYSTEM_HEADERS=1` inject `--gnu_version`" but made 1 the
+  default. **Resolved (option parity with `edg_x86_64`):** the cir-env base now
+  defaults `EDG_USE_SYSTEM_HEADERS` to 0 like the dev-env base, so nothing is
+  injected, and a test that needs the system headers (and the GNU version they
+  need) says `//use_system_includes`, which makes edgy set
+  `EDG_USE_SYSTEM_HEADERS=1`. No test of `edg/`, `cwg/` or `imported/gnu/cpp`
+  has that tag today. Evidence on the C side: the C smoke list is 40/40 in
+  both configs and the C corpus is still 1599/2560 with 0 FE_CRASH/LIB_CRASH;
+  two tests changed their recorded status (`torture/c23-stdarg-split-1a` and
+  `c2x-stdarg-split-1a`, `FAIL(COMPILE)` to `CATASTROPHE(COMPILE)`: the second
+  source file `#include <stdarg.h>` is not found in the EDG include directory;
+  `edg_x86_64` records exactly this status), re-recorded on the box. The seven
+  `edg/`/`cwg/` tests that had been replaced in the smoke list are back in it.
+* `edgy` runs **every case of a test that has one case of the selected type**
+  (a `--types rp` run also runs the `cn`/`fn` cases of `edg/rma` tests), so
+  `edg-cir-summary --types rp,lp` (new) counts only the cases of those types.
+
+Baseline of `cir-cpp-smoke.txt` (53 tests, `--types rp`; in-process, the 2p
+numbers are within 3): 4 PASS (abi/empty8, inherit/conv2, init/dtor2,
+template/mem-partial2), 43 UNSUPPORTED (by feature: class parameters and
+results 11, expressions and operators 11, locals and temporaries 7, object
+initialization 7, dynamic initialization of statics 5), 3 LIB_ERROR
+(2 "a function's type changed after its body was emitted", 1 "FUNC_BEGIN:
+function G-id defined twice"; `edg-cir-writer-stress --cxx` shows that the
+streams of the same three are rejected by ecil-dump), 1 FE_DIAG (init/goto4:
+"transfer of control bypasses initialization", which `edg_x86_64` also fails;
+it and ext/cond4, a GNU `?:` extension test that is out of the M3 scope, have
+since been replaced in the smoke list by expr/cond12 and init/goto1),
+1 LINK_ERROR (edg/daveed/g21878a, inline variable templates), **1 RUN_FAIL
+(opt/nrv3: a trivial `struct A { int i; }` returned by value from a function
+and copied in `main` gives the wrong result, a wrong-code bug)**.
+
+
+**Two reminders for the M3 gate.** (1) The `--ecil_allow_cxx` injection in
+`bases/docker/cir-env/gcc/edg_eccp_config` (the line that prepends it to
+`EDG_CPFE_DEFAULT_OPTIONS`) must be removed at the M3 gate, together with the
+option itself (`cmd_line.c`/`cmd_line.h`), once C++ is accepted by default.
+(2) **Before slice S1 the C++ smoke PASS counts mean little:** names are not
+mangled yet (section 9.7), so a test passes when its functions and symbols
+happen to link with plain C names; the four current PASS tests are of that
+kind. Judge progress after S1.

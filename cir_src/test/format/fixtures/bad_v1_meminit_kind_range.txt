@@ -1,0 +1,44 @@
+; expect: format MEMINIT_BEGIN operand 1: value 4 out of range 0..3
+ecil 0.8 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame REGION
+  TY_INT 1 32 true 4 4
+  TY_VOID 2
+  STR 2 "B"
+  STR 3 "D"
+  STR 4 "f"
+  STR 5 "g"
+  STR 6 "_ZN1DC1Ev"
+  STR 7 "_ZN1DC2Ev"
+  STR 8 "v"
+  STR 9 "_ZdlPv"
+  TY_RECORD_DECL 3 0 2
+  TY_RECORD_BODY 3 4 4 4 4 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_RECORD_DECL 4 0 3
+  TY_RECORD_BODY 4 8 8 4 12 2
+  REC_FIELD 3 0 nil nil nil 48
+  REC_FIELD 1 4 nil nil nil 0
+  TY_PTR 5 4
+  TY_PTR 6 3
+  TY_PTR 7 2
+  TY_FUNC 8 2 0 [5]
+  TY_FUNC 9 2 0 []
+  TY_FUNC 10 4 0 []
+  TY_FUNC 11 2 0 [7]
+  DECL_FUNC 20 8 0 1 6
+  DECL_FUNC 21 8 0 1 7
+  DECL_FUNC 22 9 0 1 4
+  DECL_FUNC 23 10 0 1 5
+  DECL_FUNC 24 11 0 1 9
+  DECL_VAR 25 1 0 1 4 8
+  DECL_VAR 26 1 1 273 4 nil
+  FUNC_BEGIN 21 0
+  MEMINIT_BEGIN 4 0 0
+  MEMINIT_END
+  FUNC_END 0
+frame END
+  END 2 0

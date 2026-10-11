@@ -6,18 +6,18 @@ SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 */
 
 /*
-session.cpp -- the session: chunked consume, F_HEADER to MLIR module, sticky
-errors, diagnostics delivered on the calling thread, finish.
-
-M1 scope: the empty-module path (F_HEADER, empty F_GLOBALS, F_END).  Any
-other ECIL record is accepted by the format layer and answered here with
-EDG_CIR_ERROR_UNSUPPORTED until the M2 emitter exists.
+session.cpp -- the session: frame-wise consume under crash recovery, F_HEADER
+to MLIR module (the header's type records are replayed into the emitter once
+the module exists), records handed to the emitter, sticky errors, diagnostics
+delivered on the calling thread, statistics, finish.
 */
 
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#include <sys/resource.h>
 
 #include "cir_module.h"
 #include "emitter.h"
@@ -55,6 +55,8 @@ struct an_edg_cir_session::a_handler : public ecil::a_stream_handler {
 
   bool string_operand(const ecil::an_operand &op, std::string &out,
                       bool allow_nil);
+  bool emit_record(const ecil::a_record &record,
+                   const ecil::a_record_context &context);
 
   an_edg_cir_session &s;
   uint32_t            end_status = 0;
@@ -74,12 +76,9 @@ allowed.
   out.clear();
   if (op.kind == ecil::an_operand_kind::nil) {
     result = allow_nil;
-  } else if (operand_uint(op, sid)) {
-    auto found = s.strings.find(sid);
-    if (found == s.strings.end())
-      result = false;
-    else
-      out = found->second;
+  } else if (operand_uint(op, sid) && s.reader->ids().has_string(sid)) {
+    std::string_view text = s.reader->ids().string(sid);
+    out.assign(text.data(), text.size());
   } else {
     result = false;
   }
@@ -89,6 +88,25 @@ allowed.
   return result;
 }  /* an_edg_cir_session::a_handler::string_operand */
 
+bool an_edg_cir_session::a_handler::emit_record(
+                              const ecil::a_record &record,
+                              const ecil::a_record_context &context)
+/*
+Pass a record to the emitter, timing it when statistics are requested.
+*/
+{
+  bool result;
+
+  if (s.stats_on) {
+    uint64_t start = edg_cir::stats_now_ns();
+    result = s.emitter->on_record(record, context);
+    s.stats.emit_ns += edg_cir::stats_now_ns() - start;
+  } else {
+    result = s.emitter->on_record(record, context);
+  }
+  return result;
+}  /* an_edg_cir_session::a_handler::emit_record */
+
 bool an_edg_cir_session::a_handler::on_frame_begin(
                                             const ecil::a_frame_info &frame)
 /*
@@ -97,6 +115,7 @@ An abort frame ends the session with EDG_CIR_ERROR_ABORTED.
 {
   bool result = true;
 
+  ++s.stats.frames;
   if (frame.kind == efk_abort) {
     s.abort_stream("the front end aborted the ECIL stream (F_ABORT)");
     result = false;
@@ -142,8 +161,8 @@ status the front end reported.
         s.emitter.reset(new edg_cir::a_emitter(s));
         while (result && cursor.remaining() > 0 &&
                ecil::decode_record(cursor, decode, record, error)) {
-          if ((record.opcode >= eop_ty_void && record.opcode <= eop_ty_opaque)
-              || record.opcode == eop_loc)
+          if ((record.info->section & ecil::eos_type) ||
+              record.opcode == eop_loc)
             result = s.emitter->on_record(record, context);
         }
       }
@@ -169,8 +188,8 @@ Process one record.
 */
 {
   bool result = true;
-  uint64_t v = 0;
 
+  ++s.stats.records;
   if (s.flags & EDG_CIR_FLAG_TRACE) {
     char buffer[64];
     std::snprintf(buffer, sizeof buffer, "trace @%llu %s",
@@ -179,13 +198,9 @@ Process one record.
     s.report(EDG_CIR_SEVERITY_NOTE, edc_trace, buffer);
   }
   switch (record.opcode) {
-  case eop_str: {
-    std::string text(reinterpret_cast<const char *>(record.ops[1].data),
-                     record.ops[1].length);
-    if (operand_uint(record.ops[0], v))
-      s.strings[v] = text;
+  case eop_str:
+    /* The reader already copied the string into the id tables. */
     break;
-  }
   case eop_hdr_target: {
     a_header_facts &h = s.header;
     uint64_t n = 0;
@@ -234,16 +249,6 @@ Process one record.
     result = s.status == EDG_CIR_OK;
     break;
   }
-  case eop_ty_int: {
-    uint64_t gid = 0;
-    uint64_t bits = 0;
-    operand_uint(record.ops[0], gid);
-    operand_uint(record.ops[1], bits);
-    s.int_widths[gid] = static_cast<uint32_t>(bits);
-    if (s.emitter)
-      result = s.emitter->on_record(record, context);
-    break;
-  }
   case eop_end: {
     uint64_t status = 0;
     operand_uint(record.ops[1], status);
@@ -252,9 +257,8 @@ Process one record.
   }
   default:
     if (s.emitter) {
-      result = s.emitter->on_record(record, context);
-    } else if (record.opcode >= eop_ty_void &&
-               record.opcode <= eop_ty_opaque) {
+      result = emit_record(record, context);
+    } else if (record.info->section & ecil::eos_type) {
       /* Type introductions in F_HEADER are replayed once the module and
          the emitter exist (at the end of the header frame). */
     } else if (record.opcode == eop_loc || record.opcode == eop_ext) {
@@ -282,7 +286,9 @@ Copy the options (strings included) and set up the stream reader.
     have_triple_override(options.target_triple_override != nullptr),
     opt_level(options.opt_level), flags(options.flags),
     status(EDG_CIR_OK), finished(false), in_worker(false), tee(nullptr),
-    poisoned(false), last_line(0), last_column(0)
+    crash_held(false), poisoned(false),
+    stats_on((options.flags & EDG_CIR_FLAG_PRINT_STATS) != 0),
+    last_line(0), last_column(0)
 {
   if (options.output_path != nullptr)
     output_path = options.output_path;
@@ -325,6 +331,8 @@ destroyed.
       (void)module.release();
     }
   }
+  if (crash_held)
+    edg_cir::release_crash_recovery();
 }  /* an_edg_cir_session::~an_edg_cir_session */
 
 void an_edg_cir_session::report(an_edg_cir_severity severity, uint32_t code,
@@ -406,6 +414,10 @@ kill the front end.
   if (std::getenv("EDG_CIR_NO_GUARD") != nullptr)
     return reader->consume(bytes, length);
 #endif
+  if (!crash_held) {
+    edg_cir::hold_crash_recovery();
+    crash_held = true;
+  }
   bool completed = edg_cir::run_guarded(
       [this, bytes, length, &accepted] {
 #if EDG_CIR_TEST_HOOKS
@@ -434,6 +446,80 @@ kill the front end.
   return accepted;
 }  /* an_edg_cir_session::consume_guarded */
 
+bool an_edg_cir_session::consume_timed(const void *bytes, size_t length)
+/*
+consume_guarded, with the byte count and time recorded when statistics are
+requested.
+*/
+{
+  bool accepted;
+
+  if (stats_on) {
+    uint64_t start = edg_cir::stats_now_ns();
+    accepted = consume_guarded(bytes, length);
+    stats.consume_ns += edg_cir::stats_now_ns() - start;
+    stats.bytes += length;
+  } else {
+    accepted = consume_guarded(bytes, length);
+  }
+  return accepted;
+}  /* an_edg_cir_session::consume_timed */
+
+void an_edg_cir_session::print_stats()
+/*
+EDG_CIR_FLAG_PRINT_STATS: report the counters, stage times and peak memory as
+notes.
+*/
+{
+  char line[256];
+  struct rusage usage;
+  unsigned long long peak_kib = 0;
+  const a_session_stats &t = stats;
+  double decode_ns = t.consume_ns > t.emit_ns
+                         ? static_cast<double>(t.consume_ns - t.emit_ns) : 0;
+
+  if (getrusage(RUSAGE_SELF, &usage) == 0) {
+#ifdef __APPLE__
+    peak_kib = static_cast<unsigned long long>(usage.ru_maxrss) / 1024;
+#else
+    peak_kib = static_cast<unsigned long long>(usage.ru_maxrss);
+#endif
+  }
+  std::snprintf(line, sizeof line,
+                "stats: %llu frames, %llu records, %llu bytes, peak RSS "
+                "%llu KiB",
+                static_cast<unsigned long long>(t.frames),
+                static_cast<unsigned long long>(t.records),
+                static_cast<unsigned long long>(t.bytes), peak_kib);
+  report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
+  {
+    const ecil::a_id_tables &ids = reader->ids();
+    std::snprintf(line, sizeof line,
+                  "stats: %llu G-ids (%llu holes), %llu string ids (%llu "
+                  "holes), %llu symbol renames, %llu substitution walks",
+                  static_cast<unsigned long long>(ids.gids_introduced()),
+                  static_cast<unsigned long long>(ids.gid_holes()),
+                  static_cast<unsigned long long>(ids.sids_introduced()),
+                  static_cast<unsigned long long>(ids.sid_holes()),
+                  static_cast<unsigned long long>(
+                      emitter ? emitter->rename_count() : 0),
+                  static_cast<unsigned long long>(
+                      emitter ? emitter->walk_count() : 0));
+    report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
+  }
+  std::snprintf(line, sizeof line,
+                "stats: decode+validate %.2f ms, emit %.2f ms, finish %.2f "
+                "ms, verify %.2f ms, cir passes %.2f ms, lower %.2f ms, "
+                "codegen %.2f ms",
+                decode_ns / 1e6, static_cast<double>(t.emit_ns) / 1e6,
+                static_cast<double>(t.finish_ns) / 1e6,
+                static_cast<double>(t.verify_ns) / 1e6,
+                static_cast<double>(t.passes_ns) / 1e6,
+                static_cast<double>(t.lower_ns) / 1e6,
+                static_cast<double>(t.codegen_ns) / 1e6);
+  report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
+}  /* an_edg_cir_session::print_stats */
+
 an_edg_cir_status an_edg_cir_session::abort_stream(const std::string &why)
 /*
 F_ABORT or a failing END status: the front end has already reported its
@@ -461,7 +547,7 @@ Feed the next bytes of the stream.
   if (status == EDG_CIR_OK) {
     if (finished) {
       fail(EDG_CIR_ERROR_USAGE, edc_usage, "consume after finish");
-    } else if (!consume_guarded(bytes, length)) {
+    } else if (!consume_timed(bytes, length)) {
       if (status == EDG_CIR_OK && !reader->error().ok()) {
         const ecil::an_error &e = reader->error();
         char where[48];
@@ -501,6 +587,12 @@ Finish the stream and run the pipeline.
       fail(EDG_CIR_ERROR_INTERNAL, edc_internal, "no module was created");
     } else {
       edg_cir::run_pipeline(*this);
+      if (stats_on)
+        print_stats();
+    }
+    if (crash_held) {
+      edg_cir::release_crash_recovery();
+      crash_held = false;
     }
   }
   return status;

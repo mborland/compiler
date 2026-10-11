@@ -42,6 +42,17 @@ _TOOL_PATH_NORMALIZE = edgutil.RequiredToolPath('edg-normalize-test-output')
 # GIL is held (regex work in a thread would still serialize on the GIL).
 _NONTRIVIAL_NORMALIZE_OUTPUT_BYTES = 4096
 
+# Every config runs its processes in a session of their own, and kills them
+# (with their children) when a test is cancelled, e.g. by edgy's --timeout:
+# otherwise a cancelled test leaves its process behind, say a miscompiled
+# program in an infinite loop.  EDG_TEST_KILL_ON_CANCEL=0 turns that off.
+#
+# A program that a test compiled and runs gets this many seconds before it is
+# killed; its status is then 124 and the run counts as failed.  In a full day
+# run (8088 program runs) the longest took 5 s and 99.9% took less than 1 s.
+# EDG_TEST_EXEC_TIMEOUT overrides the limit in seconds (0 = no limit).
+_DEFAULT_EXEC_TIMEOUT_SECONDS = 120
+
 # Match --target NAME or --target=NAME in joined option strings.
 _TARGET_OPTION_REGEX = re.compile(
   r'(?:^|(?<=\s))--target(?:=|\s+)(\S+)'
@@ -367,11 +378,12 @@ async def invoke_recorded_process(
   if debug:
     print(f"Recording command: {shlex.join(cmd_line)}")
 
-  # Opt-in (the config sets EDG_TEST_KILL_ON_CANCEL): run the process in its
-  # own session, and kill it with all of its children if this coroutine is
-  # cancelled (e.g. by edgy's --timeout).  Without it, a cancelled test leaves
-  # its process (say, a miscompiled program in an infinite loop) running.
-  kill_on_cancel = env.get('EDG_TEST_KILL_ON_CANCEL') == '1'
+  # Run the process in its own session, and kill it with all of its children
+  # if this coroutine is cancelled (e.g. by edgy's --timeout).
+  kill_on_cancel = env.get('EDG_TEST_KILL_ON_CANCEL', '1') != '0'
+  # Process groups exist only on POSIX hosts; elsewhere only the process
+  # itself is killed.
+  own_session = kill_on_cancel and hasattr(os, 'killpg')
 
   with tempfile.TemporaryFile(mode='w+b') as test_process_output:
     # Launch the tested process.
@@ -382,7 +394,7 @@ async def invoke_recorded_process(
       stdout = asyncio.subprocess.PIPE,
       stderr = asyncio.subprocess.STDOUT,
       limit = sys.maxsize,
-      start_new_session = kill_on_cancel
+      start_new_session = own_session
     )
 
     try:
@@ -403,7 +415,10 @@ async def invoke_recorded_process(
     except asyncio.CancelledError:
       if kill_on_cancel:
         try:
-          os.killpg(tested_process.pid, signal.SIGKILL)
+          if own_session:
+            os.killpg(tested_process.pid, signal.SIGKILL)
+          else:
+            tested_process.kill()
         except ProcessLookupError:
           pass
       raise
@@ -858,11 +873,11 @@ async def run_test_with_options(test_descript: runtest.TestDescription,
       filter_command = test_descript.filter,
       debug = debug
     )
-    # Opt-in (the config sets EDG_TEST_EXEC_TIMEOUT, in seconds): limit the
-    # run of the compiled program; a program that does not finish gets exit
-    # status 124 and counts as a failed run.  (Needs EDG_TEST_KILL_ON_CANCEL
-    # to stop the program.)
-    exec_timeout = int(env.get('EDG_TEST_EXEC_TIMEOUT', '0'))
+    # Limit the run of the compiled program; a program that does not finish
+    # gets exit status 124 and counts as a failed run.  (Needs
+    # EDG_TEST_KILL_ON_CANCEL to stop the program.)
+    exec_timeout = int(env.get('EDG_TEST_EXEC_TIMEOUT',
+                               str(_DEFAULT_EXEC_TIMEOUT_SECONDS)))
     if exec_timeout > 0:
       try:
         return_code = await asyncio.wait_for(execution, exec_timeout)

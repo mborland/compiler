@@ -59,6 +59,10 @@ typedef struct an_ecil_buffer {
   a_boolean     failed;
 } an_ecil_buffer;
 
+/* A frame that grew beyond this many bytes in a section gives the storage
+   back when it is reset (the frame of the stream is reused). */
+#define ECIL_FRAME_KEEP_BYTES (256u * 1024u)
+
 /*
 A frame under construction: a declaration section, then (for F_REGION) a
 body section.  Records go to the "current" section.  At submit the two
@@ -74,6 +78,11 @@ typedef struct an_ecil_frame {
   int             pending_operands;
                         /* CHECKING: operands still owed by the open
                            record, or -1 if no record is open. */
+#if CHECKING
+  unsigned int    intro_kind;
+                        /* CHECKING: what the first operand of the open
+                           record is (an an_ecil_intro_kind). */
+#endif /* CHECKING */
 } an_ecil_frame;
 
 /*
@@ -82,10 +91,20 @@ sequence can be abandoned (spec rule F4: the stacks are empty at every
 frame end, so a writer that gives up on a body truncates to a mark).
 */
 typedef struct an_ecil_mark {
-  size_t        decl_size;
   size_t        body_size;
   a_boolean     in_body;
 } an_ecil_mark;
+
+#if CHECKING
+/*
+Introduction checks (spec 7, id density): the writer verifies, from the
+records it writes, that G-ids and sids are introduced densely in increasing
+order at assignment time and that nothing it allocated is left unintroduced.
+*/
+extern void ecil_check_function_lids(uint32_t num_lids);
+
+extern void ecil_check_all_introduced(void);
+#endif /* CHECKING */
 
 /* Buffer and tag encoders (spec section 5; shortest encodings). */
 
@@ -226,9 +245,10 @@ typedef enum an_ecil_gid_kind {
 #define ECIL_GF_OPAQUE      0x01u   /* An opaque scalar (TY_OPAQUE). */
 #define ECIL_GF_ABI_OPAQUE  0x02u   /* Contains opaque storage by value. */
 #define ECIL_GF_COMPLETE    0x04u   /* A record whose body was emitted. */
-#define ECIL_GF_DEFINED     0x08u   /* egk_func: a body was streamed. */
-#define ECIL_GF_VARARGS     0x10u   /* egk_func_type: variadic. */
-#define ECIL_GF_NO_PROTO    0x20u   /* egk_func_type: unprototyped. */
+#define ECIL_GF_DEFINED     0x08u   /* egk_func: a body was streamed.
+                                       egk_var: DECL_VAR(definition) was
+                                       sent (its initializer may still be
+                                       queued). */
 #define ECIL_GF_VECTOR      0x40u   /* An opaque GNU vector type. */
 #define ECIL_GF_COMPLEX     0x80u   /* An opaque complex/imaginary type. */
 #define ECIL_GF_FAILED      0x100u  /* A record whose body could not be
@@ -254,14 +274,28 @@ typedef struct an_ecil_gid_info {
   uint32_t      decl_name;
   unsigned int  decl_flags;
   unsigned int  decl_linkage;
-  uint32_t      decl_align;
   a_boolean     decl_emitted;
 } an_ecil_gid_info;
 
-/* Why the current function or initializer cannot be expressed, or NULL. */
+/* Why the current function or initializer cannot be expressed, or NULL.  The
+   text is owned by the stream. */
 extern const char *ecil_unsupported_reason;
 
+/* Note a reason (the first one wins); the text is copied. */
 extern void ecil_note_unsupported(const char *reason);
+
+/* A reason taken aside by ecil_save_reason. */
+#define ECIL_REASON_MAX 256
+
+typedef struct an_ecil_saved_reason {
+  a_boolean     is_set;
+  char          text[ECIL_REASON_MAX];
+} an_ecil_saved_reason;
+
+/* Take the current reason aside (and clear it) / put it back. */
+extern void ecil_save_reason(an_ecil_saved_reason *saved);
+
+extern void ecil_restore_reason(const an_ecil_saved_reason *saved);
 
 /* Note the reason for an unsupported use of the type with G-id gid:
    "vector types are not supported" and the like, else fallback. */
@@ -270,6 +304,9 @@ extern void ecil_note_unsupported_type(uint32_t gid, const char *fallback);
 /* The G-id table. */
 extern uint32_t ecil_new_gid(an_ecil_gid_kind kind);
 
+/* The record of a G-id.  The pointer is valid only until the next G-id is
+   assigned (the table moves): look it up again after any call that can
+   introduce a type, function or variable. */
 extern an_ecil_gid_info *ecil_gid_info(uint32_t gid);
 
 extern uint32_t ecil_num_gids(void);
@@ -285,6 +322,8 @@ extern void ecil_word_register(const uint32_t *words,
                                size_t         count,
                                uint32_t       gid);
 
+extern void ecil_word_unregister(const uint32_t *words, size_t count);
+
 /*
 Per-IL-entry ids.  G-ids live on types, routines, variables, fields; L-ids
 on local variables and labels.  With the ecil_id prefix field (CIR builds)
@@ -298,7 +337,9 @@ extern uint32_t ecil_lid_of(void *entry);
 
 extern void ecil_set_lid(void *entry, uint32_t lid);
 
-extern void ecil_forget_lids(void);
+/* End of a function frame that used num_lids L-ids: ids set so far are
+   stale from now on (ecil_lid_of returns 0 for them). */
+extern void ecil_end_lid_epoch(uint32_t num_lids);
 
 /* Symbol names must be unique among statics and string literals. */
 extern uint32_t ecil_unique_symbol_name(an_ecil_frame *frame,
@@ -322,6 +363,35 @@ extern uint32_t ecil_intern_float_type(an_ecil_frame *frame,
                                        unsigned int  format,
                                        unsigned int  size,
                                        unsigned int  alignment);
+
+/* The target's int, double and pointer-sized unsigned types, and the type a
+   value of a type has after the integer (and, with an IL type, the default
+   argument) promotions. */
+extern unsigned int ecil_int_bits(void);
+
+extern uint32_t ecil_target_int_type(an_ecil_frame *frame);
+
+extern uint32_t ecil_target_double_type(an_ecil_frame *frame);
+
+extern uint32_t ecil_target_uintptr_type(an_ecil_frame *frame);
+
+extern uint32_t ecil_promote_gid(an_ecil_frame *frame,
+                                 uint32_t      gid,
+                                 a_type_ptr    il_type);
+
+/* The linkage (an an_ecil_linkage value) of a function or variable. */
+extern unsigned int ecil_linkage_for(a_storage_class     storage_class,
+                                     unsigned int        name_linkage,
+                                     a_boolean           is_weak);
+
+/* Send DECL_VAR (an introduction or a re-issue) and remember its facts. */
+extern void ecil_emit_decl_var(an_ecil_frame *frame,
+                               uint32_t      gid,
+                               uint32_t      type,
+                               unsigned int  linkage,
+                               unsigned int  flags,
+                               uint32_t      alignment,
+                               uint32_t      name_sid);
 
 extern uint32_t ecil_void_type(an_ecil_frame *frame);
 
@@ -403,7 +473,11 @@ typedef struct an_init_level {
      the entries, merged, in order. */
   an_init_entry *entries;
   size_t        num_entries;
+  size_t        entries_capacity;
   size_t        entry_pos;
+  /* The members of a record, by index (built by ecil_member_type_gid). */
+  a_field_ptr   *members;
+  uint64_t      num_members;
   /* The entry last returned by ecil_init_level_next. */
   uint64_t      entry_count;
   a_boolean     entry_is_char;    /* The entry is a character of a string. */
@@ -437,8 +511,18 @@ extern void ecil_init_level_end(an_init_level *level);
 extern void ecil_emit_string_char(an_ecil_frame *frame, an_init_level *level,
                                   a_constant_ptr str, uint64_t pos);
 
-extern a_boolean ecil_emit_float_constant(an_ecil_frame *frame,
-                                           a_constant_ptr c);
+/* The record of an integer or floating constant of ECIL type t: C_INT and
+   the like if is_initializer, else CONST_INT and the like. */
+extern a_boolean ecil_emit_scalar_constant(an_ecil_frame *frame,
+                                           a_constant_ptr c,
+                                           uint32_t       t,
+                                           a_boolean      is_initializer);
+
+/* The G-id an address constant points into (*is_function: a function), 0 if
+   not expressible. */
+extern uint32_t ecil_address_constant_gid(an_ecil_frame *frame,
+                                          a_constant_ptr c,
+                                          a_boolean      *is_function);
 
 extern uint32_t ecil_member_type_gid(an_ecil_frame *frame,
                                      an_init_level  *level,
@@ -454,15 +538,22 @@ extern a_boolean ecil_emit_constant_typed(an_ecil_frame *frame,
                                           a_constant_ptr constant,
                                           uint32_t       target_type);
 
-extern a_boolean ecil_emit_constant(an_ecil_frame *frame,
-                                    a_constant_ptr constant);
-
 extern uint32_t ecil_string_literal_id(an_ecil_frame *frame,
                                        a_constant_ptr constant);
 
 extern void ecil_define_variable(an_ecil_frame *frame,
                                  a_variable_ptr var,
                                  a_scope_ptr    scope);
+
+/*
+Introduce a static local with no declaration statement and queue its
+initializer; build the queued initializers.  Constants never nest: building
+one only queues the static locals it refers to.
+*/
+extern uint32_t ecil_queue_variable_definition(an_ecil_frame *frame,
+                                               a_variable_ptr var);
+
+extern void ecil_drain_variable_definitions(an_ecil_frame *frame);
 
 extern void ecil_emit_globals(an_ecil_frame *frame);
 
@@ -475,7 +566,25 @@ extern void cir_be_warning(const char *message);
 extern void ecil_stream_function_region(an_ecil_frame        *frame,
                                         a_memory_region_number region_number);
 
-extern a_boolean ecil_function_is_streamed(a_routine_ptr rout);
+/*
+What the writer has done with a routine's body, by function definition
+number.  efs_delayed (the body waits for a name that is not final yet) and
+efs_retracted (the entity was made discardable) are set by the C++ hooks.
+*/
+typedef enum an_ecil_function_state {
+  efs_none,       /* Nothing yet. */
+  efs_streamed,   /* The body was sent. */
+  efs_dropped,    /* The body was dropped as unsupported. */
+  efs_retracted,  /* RETRACT was sent for it. */
+  efs_delayed     /* Waiting; not handled yet. */
+} an_ecil_function_state;
+
+extern an_ecil_function_state ecil_function_state(a_routine_ptr rout);
+
+extern void ecil_set_function_state(a_routine_ptr          rout,
+                                    an_ecil_function_state state);
+
+extern a_boolean ecil_function_is_handled(a_routine_ptr rout);
 
 #if CHECKING
 extern size_t ecil_code_stack_high;
@@ -485,9 +594,46 @@ extern void ecil_code_reset(void);
 
 extern void ecil_check_variable_attributes(a_variable_ptr var);
 
-extern const char *ecil_library_builtin_name(const char *name);
+/*
+Internal builtin ids, besides the an_ecil_builtin values, for the builtins
+that are translated by a sequence of records (or by a record of their own).
+*/
+#define ECIL_SPECIAL_C23_VA_START 100U
+#define ECIL_SPECIAL_ALLOCA_ALIGN 101U
+#define ECIL_SPECIAL_ADD_OVERFLOW_P 102U
+#define ECIL_SPECIAL_SUB_OVERFLOW_P 103U
+#define ECIL_SPECIAL_MUL_OVERFLOW_P 104U
+#define ECIL_SPECIAL_FP_ISNAN 110U
+#define ECIL_SPECIAL_FP_ISINF 111U
+#define ECIL_SPECIAL_FP_ISFINITE 112U
+#define ECIL_SPECIAL_FP_ISNORMAL 113U
+#define ECIL_SPECIAL_FP_ISSIGNALING 114U
+#define ECIL_SPECIAL_FP_SIGNBIT 115U
+#define ECIL_SPECIAL_FP_ISINF_SIGN 116U
+#define ECIL_SPECIAL_FP_FPCLASSIFY 117U
+#define ECIL_SPECIAL_FP_ISLESS 120U
+#define ECIL_SPECIAL_FP_ISGREATER 121U
+#define ECIL_SPECIAL_FP_ISLESSEQUAL 122U
+#define ECIL_SPECIAL_FP_ISGREATEREQUAL 123U
+#define ECIL_SPECIAL_FP_ISLESSGREATER 124U
+#define ECIL_SPECIAL_FP_ISUNORDERED 125U
+#define ECIL_SPECIAL_CLZG 130U
+#define ECIL_SPECIAL_CTZG 131U
+#define ECIL_SPECIAL_FP_FIRST 110U
+#define ECIL_SPECIAL_FP_LAST 125U
 
-extern a_boolean ecil_is_library_function(const char *name);
+/* What a routine name is, by one hashed lookup. */
+typedef struct an_ecil_name_class {
+  unsigned int  special_id;       /* __builtin_X: the builtin ECIL has a
+                                     record for (0 if none). */
+  const char    *library_name;    /* __builtin_X: X, if X is a libc function;
+                                     a pointer into the name. */
+  a_boolean     is_library_function;
+                                  /* The name as written is a libc function. */
+} an_ecil_name_class;
+
+extern void ecil_classify_function_name(const char         *name,
+                                        an_ecil_name_class *cls);
 
 /* Stream-level helpers. */
 
@@ -502,8 +648,6 @@ extern a_boolean ecil_stream_is_active(void);
 extern void ecil_stream_open(void);
 
 extern void ecil_hand_off_region(a_memory_region_number region_number);
-
-extern void ecil_stream_globals(void);
 
 extern void ecil_stream_finish(void);
 

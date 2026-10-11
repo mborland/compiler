@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# EDG_CIR_FLAG_PRINT_STATS (edg-cir --stats): counters, peak memory and the
+# stage times; nothing is printed without the flag, and the output is the same
+# with and without it.
+# RUN: %ecil-asm %S/Inputs/empty.txt -o %t.ecil
+# RUN: %edg-cir --stats --emit=asm -o %t.s %t.ecil 2>&1 | %FileCheck %s
+# RUN: %edg-cir --emit=asm -o %t.plain.s %t.ecil 2>&1 | %FileCheck %s --check-prefix=QUIET --allow-empty
+# RUN: cmp %t.s %t.plain.s
+
+# CHECK: stats: {{[0-9]+}} frames, {{[0-9]+}} records, {{[0-9]+}} bytes, peak RSS {{[0-9]+}} KiB
+# CHECK: stats: decode+validate {{[0-9.]+}} ms, emit {{[0-9.]+}} ms, finish {{[0-9.]+}} ms, verify {{[0-9.]+}} ms, cir passes {{[0-9.]+}} ms, lower {{[0-9.]+}} ms, codegen {{[0-9.]+}} ms
+# QUIET-NOT: stats:

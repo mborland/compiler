@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Stress the ECIL writer's G-id table handling with the debug (ASan) front end.
+
+With ECIL_GID_STRESS set the writer moves its G-id table at every growth and
+keeps the old tables poisoned, so a pointer held across an allocation (the bug
+class of the M2.1 review's W1) shows up as an AddressSanitizer report or an
+assertion.  For every case of the tests selected (by default the C smoke list
+and tests/tests/cir/writer) this compiles the test twice with the debug
+front end of build/gcc-cir, writing an ECIL stream:
+
+  - without ECIL_GID_STRESS (the reference), and
+  - with ECIL_GID_STRESS=1.
+
+A case passes if
+
+  - the exit status of the stressed run is that of the reference run,
+  - the stressed run printed no AddressSanitizer or LeakSanitizer report, no
+    "Assertion failed" and no internal error,
+  - the two streams are byte-identical (moving the table must not change the
+    output), and
+  - ecil-dump accepts the stream of every run that succeeded.
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-cir and build/cir:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-writer-stress \\
+      [-j 8] [--filters @tests/.edgy/filters/cir-c-smoke.txt,cir/writer]
+
+Exit status 1 and a line per failing case if any case fails; the last line is
+`RESULT: PASS` or `RESULT: n case(s) FAILED`.
+'''
+
+import argparse
+import concurrent.futures
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import edgtest
+import edgtest.runtest as runtest
+
+STANDARD_OPTIONS = [
+  '-DTEST_NUMBER=1', '--gnu_version=999999', '-e', '200', '--no_wrap',
+  '--no_wrap_diagnostics', '--gcc'
+]
+_BAD_OUTPUT_REGEX = re.compile(
+  r'AddressSanitizer|LeakSanitizer|Assertion failed|assertion failed at|'
+  r'internal error|Segmentation fault|SIGSEGV|SIGABRT'
+)
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  '''Parse the `export NAME="value"` lines of a CMake environment.sh.'''
+  exports = {}
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  return exports
+
+
+def read_filter_list(spec: str, root: Path) -> List[str]:
+  '''The lines of a "@file" filter, or the comma separated prefixes.'''
+  lines: List[str] = []
+  for part in spec.split(','):
+    if part.startswith('@'):
+      for line in (root / part[1:]).read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith('#'):
+          lines.append(line)
+    elif part:
+      lines.append(part)
+  return lines
+
+
+def find_tests(tests_dir: Path, filters: List[str]) -> List[Path]:
+  positive = [l for l in filters if not l.startswith('!')]
+  negative = [l[1:] for l in filters if l.startswith('!')]
+  found = []
+  for suite in sorted(p for p in tests_dir.iterdir()
+                      if p.is_dir() and not p.name.startswith('.')):
+    for path in sorted(edgtest.walk_test_directory(
+        suite, edgtest.DEFAULT_TEST_EXTENSIONS)):
+      rel = f"{suite.name}/{path.relative_to(suite).as_posix()}"
+      if positive and not any(rel.startswith(p) for p in positive):
+        continue
+      if any(rel.startswith(n) for n in negative):
+        continue
+      found.append(path)
+  return found
+
+
+def compile_to_stream(source: Path, options: List[str], env: Dict[str, str],
+                      work: Path, stress: bool
+                      ) -> Tuple[int, str, Optional[bytes]]:
+  '''Run the front end on a copy of the source; return (rc, output, stream).'''
+  work.mkdir(parents = True, exist_ok = True)
+  local = work / source.name
+  shutil.copy2(source, local)
+  for extra in source.parent.glob('*.h'):
+    shutil.copy2(extra, work / extra.name)
+  stream = work / 'out.ecil'
+  run_env = dict(env)
+  run_env['EDG_CPFE_DEFAULT_OPTIONS'] = f"--ecil_output={stream}"
+  if stress:
+    run_env['ECIL_GID_STRESS'] = '1'
+  else:
+    run_env.pop('ECIL_GID_STRESS', None)
+  try:
+    proc = subprocess.run(
+      [env['ECCP'], '-S', *options, local.name], cwd = work, env = run_env,
+      stdout = subprocess.PIPE, stderr = subprocess.STDOUT, text = True,
+      timeout = 600
+    )
+    rc, output = proc.returncode, proc.stdout
+  except subprocess.TimeoutExpired:
+    return 124, 'timeout', None
+  return rc, output, stream.read_bytes() if stream.exists() else None
+
+
+def check_case(test: Path, tests_dir: Path, env: Dict[str, str]
+               ) -> List[str]:
+  '''Return the problems of every case of a test (empty if none).'''
+  problems: List[str] = []
+  top = tests_dir / test.relative_to(tests_dir).parts[0]
+  description = runtest.load_description(test, top_dir = top)
+  name = test.relative_to(tests_dir).as_posix()
+  for number, (mode, base_options, case_options) in enumerate(
+      description.traverse_cases()):
+    options = [*STANDARD_OPTIONS, *base_options, *case_options]
+    work = Path(tempfile.mkdtemp(prefix = 'writer-stress.'))
+    try:
+      rc_ref, out_ref, stream_ref = compile_to_stream(
+        test, options, env, work / 'ref', stress = False)
+      rc_str, out_str, stream_str = compile_to_stream(
+        test, options, env, work / 'stress', stress = True)
+      tag = f"{name}#{number}"
+      if rc_ref != rc_str:
+        problems.append(f"{tag}: exit status {rc_str} under stress, "
+                        f"{rc_ref} without")
+      bad = _BAD_OUTPUT_REGEX.search(out_str)
+      if bad:
+        problems.append(f"{tag}: {bad.group(0)} in the stressed run")
+      if stream_ref != stream_str:
+        problems.append(f"{tag}: the stream differs under stress")
+      if rc_str == 0 and stream_str is not None:
+        dump = subprocess.run(
+          [env['ECIL_DUMP'], str(work / 'stress' / 'out.ecil')],
+          stdout = subprocess.PIPE, stderr = subprocess.STDOUT, text = True
+        )
+        if dump.returncode != 0:
+          problems.append(f"{tag}: ecil-dump rejects the stream: "
+                          f"{dump.stdout.strip().splitlines()[-1:]}")
+    finally:
+      shutil.rmtree(work, ignore_errors = True)
+  return problems
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(description = __doc__.split('\n')[0])
+  parser.add_argument('--root', default = '.')
+  parser.add_argument('--filters',
+                      default = '@tests/.edgy/filters/cir-c-smoke.txt,'
+                                'cir/writer',
+                      help = '"@file" lists and path prefixes, comma '
+                             'separated')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir',
+                      help = 'the (ASan) front end build to stress')
+  parser.add_argument('-j', dest = 'jobs', type = int,
+                      default = os.cpu_count() or 1)
+  args = parser.parse_args()
+
+  root = Path(args.root).resolve()
+  tests_dir = root / 'tests' / 'tests'
+  exports = load_exports(root / args.fe_build / 'environment.sh')
+  env = dict(os.environ)
+  env.update(exports)
+  env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+  env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+  env['ECCP'] = str(root / 'util/eccp.sh')
+  env['CPFE'] = exports['CPFE_CIR']
+  tests = find_tests(tests_dir, read_filter_list(args.filters, root))
+  print(f"stressing {len(tests)} tests with {args.jobs} jobs", flush = True)
+
+  problems: List[str] = []
+  with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+    for result in pool.map(lambda t: check_case(t, tests_dir, env), tests):
+      problems.extend(result)
+  for problem in sorted(problems):
+    print(f"FAIL {problem}")
+  print('RESULT:', 'PASS' if not problems else f"{len(problems)} case(s) FAILED")
+  sys.exit(1 if problems else 0)
+
+
+main()

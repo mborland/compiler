@@ -1,0 +1,563 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Reproducible performance measurement of the CIR front end and library.
+
+The primary metric is the number of user-mode instructions executed (valgrind
+cachegrind `Ir`, because perf is not usable in the containers and the x86-64
+box is shared, so times vary with the load; instruction counts do not).  CPU
+time (user + system) and peak RSS are measured in separate native runs.
+
+Two measurements, both with the non-ASan release front end
+(build/gcc-release-cir) and the library tools of build/cir:
+
+  big     one generated C file of many functions (edg-cir-rss's generator,
+          6000 functions by default) in four configurations: `2p-fe` (the
+          front end writing an ECIL file), `2p-edg-cir` (edg-cir on that
+          file), `inproc` (front end with the library in-process) and `keep`
+          (`inproc` with --ecil_keep_regions)
+  corpus  the sum over every test case of a filter list (the C corpus):
+          `fe` (the front end writing the ECIL stream, the work of the writer)
+          and `cir` (edg-cir on the saved stream, the work of the library)
+
+Run it inside the cir-env image from the repository root, after building
+cir_src (build/cir) and the release front end:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-perf \\
+      --json perf.json -j 12
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-perf \\
+      --json perf-after.json --baseline perf.json
+
+With --baseline the before/after table is printed too (`--table-only` prints
+it for two existing JSON files without measuring: --baseline and --json).
+Instruction counts of the same commit repeat exactly, so a difference of the
+corpus or big-file counts between commits is real.  The corpus numbers
+are the sums over the cases that compile in both runs.  Use --sample N to
+measure every Nth test only (for trying the script).
+'''
+
+import argparse
+import concurrent.futures
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+VALGRIND = ['valgrind', '--tool=cachegrind', '--cache-sim=no', '-q']
+STANDARD_OPTIONS = [
+  '-DTEST_NUMBER=1', '--gnu_version=999999', '-e', '200', '--no_wrap',
+  '--no_wrap_diagnostics', '--gcc'
+]
+BIG_ROWS = ('2p-fe', '2p-edg-cir', 'inproc', 'keep')
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  '''Parse the `export NAME="value"` lines of a CMake environment.sh.'''
+  exports = {}
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  return exports
+
+
+def cachegrind_total(path: Path) -> int:
+  '''The `summary:` instruction count of a cachegrind output file.'''
+  total = 0
+  for line in path.read_text().splitlines():
+    if line.startswith('summary:'):
+      total = int(line.split()[1])
+  return total
+
+
+# Runs a command and appends `wall user system maxrss_kb` of it to a file:
+# GNU time reports CPU time only in 10 ms steps, too coarse for these runs.
+TIMER_SOURCE = '''
+import os, subprocess, sys, time
+start = time.time()
+child = subprocess.Popen(sys.argv[2:])
+_, status, usage = os.wait4(child.pid, 0)
+with open(sys.argv[1], 'a') as out:
+  out.write(f"{time.time() - start:.6f} {usage.ru_utime:.6f} "
+            f"{usage.ru_stime:.6f} {usage.ru_maxrss}\\n")
+sys.exit(os.waitstatus_to_exitcode(status))
+'''
+
+
+def make_wrapper(path: Path, body: str) -> Path:
+  path.write_text('#!/bin/sh\n' + body + '\n')
+  path.chmod(0o755)
+  return path
+
+
+class Tools:
+  '''The wrappers around the front end that count instructions or time it.
+
+  The wrappers append to files in the directory named by the environment
+  variable EDG_PERF_DIR, which differs per measured run.
+  '''
+
+  def __init__(self, root: Path, fe_build: str, work: Path) -> None:
+    self.root = root
+    exports = load_exports(root / fe_build / 'environment.sh')
+    self.exports = exports
+    self.cpfe_cir = exports['CPFE_CIR']
+    self.edg_cir = exports['EDG_CIR_TOOL']
+    self.eccp = str(root / 'util/eccp.sh')
+    self.env = dict(os.environ)
+    self.env.update(exports)
+    self.env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+    self.env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+    # valgrind spends seconds on the debug info and symbols of the 400 MB
+    # library per run; the instruction counts do not depend on them.
+    stripped = work / 'stripped'
+    stripped.mkdir()
+    library = Path(exports['EDG_CIR_LIB'])
+    subprocess.run(['strip', '--strip-all', '-o',
+                    str(stripped / library.name), str(library)], check = True)
+    self.counted_env = dict(self.env)
+    self.counted_env['LD_LIBRARY_PATH'] = str(stripped)
+    self.timer = work / 'timer.py'
+    self.timer.write_text(TIMER_SOURCE)
+    valgrind = ' '.join(VALGRIND)
+    self.fe_counted = make_wrapper(
+      work / 'fe-counted',
+      f"LD_LIBRARY_PATH={stripped} exec {valgrind} "
+      f"--cachegrind-out-file=\"$EDG_PERF_DIR/fe.$$.cg\" "
+      f"{self.cpfe_cir} \"$@\""
+    )
+    self.fe_timed = make_wrapper(
+      work / 'fe-timed',
+      f"exec {sys.executable} {self.timer} \"$EDG_PERF_DIR/fe.time\" "
+      f"{self.cpfe_cir} \"$@\""
+    )
+
+
+def read_times(path: Path) -> Tuple[float, float, float]:
+  '''(wall s, CPU s, peak RSS MB) summed over the lines of a time file.
+
+  Lines are `wall user system maxrss_kb`; the peak RSS is the maximum.
+  '''
+  wall = cpu = rss = 0.0
+  if path.exists():
+    for line in path.read_text().splitlines():
+      parts = line.split()
+      if len(parts) == 4:
+        try:
+          values = [float(p) for p in parts]
+        except ValueError:
+          continue
+        wall += values[0]
+        cpu += values[1] + values[2]
+        rss = max(rss, values[3] / 1024.0)
+  return wall, cpu, rss
+
+
+def run_eccp(tools: Tools, wrapper: Path, source: Path, options: List[str],
+             work: Path, extra_env: Dict[str, str]) -> int:
+  '''Compile source through eccp -S with the front end replaced by wrapper.'''
+  env = dict(tools.env)
+  env['CPFE'] = str(wrapper)
+  env['EDG_PERF_DIR'] = str(work)
+  env.update(extra_env)
+  proc = subprocess.run(
+    [tools.eccp, '-S', *options, source.name], cwd = work, env = env,
+    stdout = subprocess.PIPE, stderr = subprocess.STDOUT, text = True
+  )
+  return proc.returncode
+
+
+def count_edg_cir(tools: Tools, stream: Path, work: Path) -> Tuple[int, int]:
+  '''(instructions, rc) of edg-cir --emit=asm on a stream, under cachegrind.'''
+  out = work / 'cir.cg'
+  proc = subprocess.run(
+    [*VALGRIND, f"--cachegrind-out-file={out}", tools.edg_cir,
+     '--emit=asm', '-o', str(work / 'cir.s'), str(stream)],
+    cwd = work, env = tools.counted_env, stdout = subprocess.PIPE,
+    stderr = subprocess.STDOUT, text = True
+  )
+  return (cachegrind_total(out) if out.exists() else 0), proc.returncode
+
+
+_STATS_REGEX = re.compile(
+  r'stats: (\d+) G-ids .*?, (\d+) symbol renames, (\d+) substitution walks')
+
+
+def read_edg_cir_stats(tools: Tools, stream: Path, work: Path
+                       ) -> Dict[str, int]:
+  '''The G-id, rename and walk counts of `edg-cir --stats` on a stream.'''
+  proc = subprocess.run(
+    [tools.edg_cir, '--emit=asm', '--stats', '-o', str(work / 'stats.s'),
+     str(stream)],
+    cwd = work, env = tools.env, stdout = subprocess.PIPE,
+    stderr = subprocess.STDOUT, text = True
+  )
+  match = _STATS_REGEX.search(proc.stdout)
+  if not match:
+    return {}
+  return {'cir_gids': int(match.group(1)), 'cir_renames': int(match.group(2)),
+          'cir_walks': int(match.group(3))}
+
+
+def time_edg_cir(tools: Tools, stream: Path, work: Path) -> None:
+  subprocess.run(
+    [sys.executable, str(tools.timer), str(work / 'cir.time'),
+     tools.edg_cir, '--emit=asm', '-o',
+     str(work / 'cir.s'), str(stream)],
+    cwd = work, env = tools.env, stdout = subprocess.DEVNULL,
+    stderr = subprocess.DEVNULL
+  )
+
+
+def measure_big(tools: Tools, source: Path, repeat: int) -> Dict[str, dict]:
+  '''Measure the four configurations of the big file.'''
+  results: Dict[str, dict] = {}
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf-big.'))
+  try:
+    stream = work / 'big.ecil'
+    for row in BIG_ROWS:
+      times = []
+      if row == '2p-edg-cir':
+        if not stream.exists():
+          continue
+        ir, rc = count_edg_cir(tools, stream, work)
+        for _ in range(repeat):
+          (work / 'cir.time').unlink(missing_ok = True)
+          time_edg_cir(tools, stream, work)
+          times.append(read_times(work / 'cir.time'))
+      else:
+        extra = {}
+        if row == '2p-fe':
+          extra['EDG_CPFE_DEFAULT_OPTIONS'] = f"--ecil_output={stream}"
+        elif row == 'keep':
+          extra['EDG_CPFE_DEFAULT_OPTIONS'] = '--ecil_keep_regions'
+        # Run 0 counts instructions; the others time the same command.
+        for index in range(repeat + 1):
+          run_dir = work / f"{row}-{index}"
+          run_dir.mkdir()
+          shutil.copy2(source, run_dir / source.name)
+          wrapper = tools.fe_counted if index == 0 else tools.fe_timed
+          rc = run_eccp(tools, wrapper, run_dir / source.name, ['--c11'],
+                        run_dir, extra)
+          if index == 0:
+            ir = sum(cachegrind_total(p) for p in run_dir.glob('fe.*.cg'))
+            first_rc = rc
+          else:
+            times.append(read_times(run_dir / 'fe.time'))
+        rc = first_rc
+      # Wall and CPU time: the minimum over the repeats; RSS: the maximum.
+      results[row] = {
+        'ir': ir, 'rc': rc, 'wall_s': round(min(t[0] for t in times), 3),
+        'cpu_s': round(min(t[1] for t in times), 3),
+        'rss_mb': round(max(t[2] for t in times), 1)
+      }
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+  return results
+
+
+def measure_case(tools: Tools, test: Path, options: List[str],
+                 native: bool) -> dict:
+  '''Measure one corpus case: the writer (fe) and the library (cir).'''
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf-case.'))
+  entry: Dict[str, object] = {}
+  try:
+    shutil.copy2(test, work / test.name)
+    for extra in test.parent.glob('*.h'):
+      shutil.copy2(extra, work / extra.name)
+    stream = work / 'case.ecil'
+    extra_env = {'EDG_CPFE_DEFAULT_OPTIONS': f"--ecil_output={stream}"}
+    rc = run_eccp(tools, tools.fe_counted, work / test.name, options, work,
+                  extra_env)
+    entry['fe_ir'] = sum(cachegrind_total(p) for p in work.glob('fe.*.cg'))
+    entry['fe_rc'] = rc
+    ok = rc == 0 and stream.exists() and stream.stat().st_size > 0
+    if native:
+      run_eccp(tools, tools.fe_timed, work / test.name, options, work,
+               extra_env)
+      _, entry['fe_cpu_s'], entry['fe_rss_mb'] = read_times(work / 'fe.time')
+    if ok:
+      entry['cir_ir'], entry['cir_rc'] = count_edg_cir(tools, stream, work)
+      entry.update(read_edg_cir_stats(tools, stream, work))
+      if native:
+        time_edg_cir(tools, stream, work)
+        _, entry['cir_cpu_s'], entry['cir_rss_mb'] = read_times(
+          work / 'cir.time')
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+  return entry
+
+
+def find_cases(root: Path, spec: str, types: str, sample: int
+               ) -> List[Tuple[str, Path, List[str]]]:
+  '''The (name, source, eccp options) of every case of the filter list.'''
+  import edgtest
+  import edgtest.runtest as runtest
+  tests_dir = root / 'tests' / 'tests'
+  lines: List[str] = []
+  if spec.startswith('@'):
+    for line in (root / spec[1:]).read_text().splitlines():
+      line = line.strip()
+      if line and not line.startswith('#'):
+        lines.append(line)
+  else:
+    lines = spec.split(',')
+  positive = [l for l in lines if not l.startswith('!')]
+  negative = [l[1:] for l in lines if l.startswith('!')]
+  wanted = set(types.split(',')) if types else set()
+  cases = []
+  for suite in sorted(p for p in tests_dir.iterdir()
+                      if p.is_dir() and not p.name.startswith('.')):
+    for path in sorted(edgtest.walk_test_directory(
+        suite, edgtest.DEFAULT_TEST_EXTENSIONS)):
+      rel = f"{suite.name}/{path.relative_to(suite).as_posix()}"
+      if positive and not any(rel.startswith(p) for p in positive):
+        continue
+      if any(rel.startswith(n) for n in negative):
+        continue
+      description = runtest.load_description(path, top_dir = suite)
+      for number, (mode, base, case) in enumerate(
+          description.traverse_cases()):
+        if wanted and runtest.test_type_to_string(mode) not in wanted:
+          continue
+        cases.append((f"{rel}#{number}", path,
+                      [*STANDARD_OPTIONS, *base, *case]))
+  return cases[::sample] if sample > 1 else cases
+
+
+def measure_corpus(tools: Tools, root: Path, args: argparse.Namespace
+                   ) -> dict:
+  cases = find_cases(root, args.corpus, args.types, args.sample)
+  print(f"corpus: {len(cases)} cases, {args.jobs} jobs", flush = True)
+  per_case: Dict[str, dict] = {}
+  with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+    futures = {
+      pool.submit(measure_case, tools, path, options, not args.no_native):
+        name for name, path, options in cases
+    }
+    done = 0
+    for future in concurrent.futures.as_completed(futures):
+      per_case[futures[future]] = future.result()
+      done += 1
+      if done % 250 == 0:
+        print(f"  {done}/{len(cases)}", flush = True)
+  return per_case
+
+
+def summarize_corpus(per_case: Dict[str, dict]) -> dict:
+  fe_ok = [e for e in per_case.values() if e.get('fe_rc') == 0]
+  cir_ok = [e for e in per_case.values() if e.get('cir_rc') == 0]
+  def total(entries: List[dict], key: str) -> float:
+    return sum(e.get(key, 0) for e in entries)
+  def peak(entries: List[dict], key: str) -> float:
+    return max((e.get(key, 0) for e in entries), default = 0)
+  return {
+    'cases': len(per_case), 'fe_ok': len(fe_ok), 'cir_ok': len(cir_ok),
+    'fe_ir': total(list(per_case.values()), 'fe_ir'),
+    'fe_ir_ok': total(fe_ok, 'fe_ir'),
+    'fe_cpu_s': round(total(list(per_case.values()), 'fe_cpu_s'), 2),
+    'fe_peak_rss_mb': round(peak(list(per_case.values()), 'fe_rss_mb'), 1),
+    'cir_ir': total(cir_ok, 'cir_ir'),
+    'cir_cpu_s': round(total(cir_ok, 'cir_cpu_s'), 2),
+    'cir_peak_rss_mb': round(peak(cir_ok, 'cir_rss_mb'), 1),
+    'cir_gids': total(cir_ok, 'cir_gids'),
+    'cir_renames': total(cir_ok, 'cir_renames'),
+    'cir_walks': total(cir_ok, 'cir_walks'),
+    'rename_cases': sorted(n for n, e in per_case.items()
+                           if e.get('cir_renames', 0) > 0)
+  }
+
+
+def delta(before: float, after: float) -> str:
+  if not before:
+    return 'n/a'
+  return f"{(after - before) / before * 100:+.2f}%"
+
+
+def common_totals(base: dict, new: dict) -> Optional[Dict[str, float]]:
+  '''Instruction sums over the cases that succeeded in both measurements.'''
+  base_cases = base.get('per_case')
+  new_cases = new.get('per_case')
+  if not base_cases or not new_cases:
+    return None
+  names = [n for n in new_cases if n in base_cases]
+  sums = {'cases': len(names), 'fe_before': 0, 'fe_after': 0,
+          'cir_before': 0, 'cir_after': 0, 'cir_cases': 0}
+  for name in names:
+    old, cur = base_cases[name], new_cases[name]
+    if old.get('fe_rc') == 0 and cur.get('fe_rc') == 0:
+      sums['fe_before'] += old.get('fe_ir', 0)
+      sums['fe_after'] += cur.get('fe_ir', 0)
+    if old.get('cir_rc') == 0 and cur.get('cir_rc') == 0:
+      sums['cir_before'] += old.get('cir_ir', 0)
+      sums['cir_after'] += cur.get('cir_ir', 0)
+      sums['cir_cases'] += 1
+  return sums
+
+
+def format_table(new: dict, base: Optional[dict]) -> str:
+  '''The measurement as a table, with before/after columns if base is given.'''
+  lines = []
+  def millions(value: float) -> str:
+    return f"{value / 1e6:,.1f}"
+  head = '| measurement | before | after | change |' if base else \
+    '| measurement | value |'
+  rule = '| --- | ---: | ---: | ---: |' if base else '| --- | ---: |'
+  def row(label: str, before: Optional[float], after: float,
+          fmt = millions) -> None:
+    if base:
+      lines.append(
+        f"| {label} | {fmt(before) if before is not None else 'n/a'} | "
+        f"{fmt(after)} | {delta(before or 0, after)} |")
+    else:
+      lines.append(f"| {label} | {fmt(after)} |")
+  lines += [head, rule]
+  big = new.get('big', {})
+  base_big = (base or {}).get('big', {})
+  functions = new.get('meta', {}).get('big_functions', '?')
+  for name in BIG_ROWS:
+    if name not in big:
+      continue
+    prefix = f"big TU ({functions} functions) {name}"
+    old = base_big.get(name, {})
+    row(f"{prefix}: instructions (M)", old.get('ir'), big[name]['ir'])
+    row(f"{prefix}: CPU s", old.get('cpu_s'), big[name]['cpu_s'],
+        lambda v: f"{v:.2f}")
+    row(f"{prefix}: peak RSS MB", old.get('rss_mb'), big[name]['rss_mb'],
+        lambda v: f"{v:.0f}")
+  corpus = new.get('corpus')
+  if corpus:
+    old_corpus = (base or {}).get('corpus', {})
+    cases = corpus['cases']
+    sums = common_totals(base, new) if base else None
+    if sums:
+      cases_note = f"{int(sums['cases'])} common cases"
+      lines.append(
+        f"| corpus {cases_note}: front end (writer) instructions (M) | "
+        f"{millions(sums['fe_before'])} | {millions(sums['fe_after'])} | "
+        f"{delta(sums['fe_before'], sums['fe_after'])} |")
+      lines.append(
+        f"| corpus {int(sums['cir_cases'])} common cases: edg-cir (library) "
+        f"instructions (M) | {millions(sums['cir_before'])} | "
+        f"{millions(sums['cir_after'])} | "
+        f"{delta(sums['cir_before'], sums['cir_after'])} |")
+    else:
+      row(f"corpus ({cases} cases): front end instructions (M)",
+          old_corpus.get('fe_ir'), corpus['fe_ir'])
+      row(f"corpus ({corpus['cir_ok']} streams): edg-cir instructions (M)",
+          old_corpus.get('cir_ir'), corpus['cir_ir'])
+    for key, label, fmt in (
+        ('fe_cpu_s', 'front end CPU s (sum)', lambda v: f"{v:.1f}"),
+        ('cir_cpu_s', 'edg-cir CPU s (sum)', lambda v: f"{v:.1f}"),
+        ('fe_peak_rss_mb', 'front end peak RSS MB (max)',
+         lambda v: f"{v:.0f}"),
+        ('cir_peak_rss_mb', 'edg-cir peak RSS MB (max)',
+         lambda v: f"{v:.0f}")):
+      if key in corpus:
+        row(f"corpus {label}", old_corpus.get(key), corpus[key], fmt)
+    for key, label in (('cir_gids', 'G-ids (edg-cir --stats)'),
+                       ('cir_renames', 'symbol renames (edg-cir --stats)'),
+                       ('cir_walks', 'substitution walks (edg-cir --stats)')):
+      if key in corpus:
+        row(f"corpus {label}", old_corpus.get(key), corpus[key],
+            lambda v: f"{v:,.0f}")
+    if 'rename_cases' in corpus:
+      lines.append(f"| corpus cases with a symbol rename | "
+                   f"{len(corpus['rename_cases'])} |" +
+                   (' |  |' if base else ''))
+  return '\n'.join(lines)
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2]
+  )
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--fe-build', default = 'build/gcc-release-cir',
+                      help = 'build directory of the (non-ASan) cpfe-cir')
+  parser.add_argument('--only', default = 'big,corpus',
+                      help = 'comma separated: big, corpus')
+  parser.add_argument('--big-functions', type = int, default = 6000)
+  parser.add_argument('--big', default = '',
+                      help = 'measure this C file instead of a generated '
+                             'one')
+  parser.add_argument('--repeat', type = int, default = 3,
+                      help = 'native timing repeats of the big file (the '
+                             'minimum time is kept)')
+  parser.add_argument('--corpus',
+                      default = '@tests/.edgy/filters/cir-c-corpus.txt')
+  parser.add_argument('--types', default = 'rp,lp')
+  parser.add_argument('--sample', type = int, default = 1,
+                      help = 'measure every Nth corpus case only')
+  parser.add_argument('--no-native', action = 'store_true',
+                      help = 'skip the native CPU time and RSS runs of the '
+                             'corpus')
+  parser.add_argument('-j', dest = 'jobs', type = int,
+                      default = os.cpu_count() or 1)
+  parser.add_argument('--json', default = '',
+                      help = 'write the measurement here (with --table-only: '
+                             'the file to read)')
+  parser.add_argument('--baseline', default = '',
+                      help = 'an earlier --json file: print before/after')
+  parser.add_argument('--table-only', action = 'store_true',
+                      help = 'only print the table of --json (and '
+                             '--baseline)')
+  args = parser.parse_args()
+
+  base = json.loads(Path(args.baseline).read_text()) if args.baseline \
+    else None
+  if args.table_only:
+    if not args.json:
+      parser.error('--table-only needs --json')
+    print(format_table(json.loads(Path(args.json).read_text()), base))
+    return
+
+  root = Path(args.root).resolve()
+  sys.path.insert(0, str(root / 'dev_tools/pylibs'))
+  only = [s for s in args.only.split(',') if s]
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf.'))
+  result: Dict[str, object] = {
+    'meta': {'fe_build': args.fe_build, 'big_functions': args.big_functions,
+             'sample': args.sample, 'corpus': args.corpus,
+             'types': args.types, 'metric': 'cachegrind Ir (user mode)'}
+  }
+  try:
+    tools = Tools(root, args.fe_build, work)
+    if 'big' in only:
+      big = Path(args.big) if args.big else work / 'big.c'
+      if not args.big:
+        subprocess.run(
+          [sys.executable, str(root / 'dev_tools/bin/edg-cir-rss'),
+           '--generate-functions', str(args.big_functions), '-o', str(big)],
+          check = True, stdout = subprocess.DEVNULL
+        )
+      print(f"big: {big}", flush = True)
+      result['big'] = measure_big(tools, big.resolve(), args.repeat)
+    if 'corpus' in only:
+      per_case = measure_corpus(tools, root, args)
+      result['corpus'] = summarize_corpus(per_case)
+      result['per_case'] = per_case
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+
+  if args.json:
+    Path(args.json).write_text(json.dumps(result, indent = 1,
+                                          sort_keys = True) + '\n')
+    print(f"wrote {args.json}")
+  print(format_table(result, base))
+
+
+main()

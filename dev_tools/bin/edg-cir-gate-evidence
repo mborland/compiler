@@ -5,7 +5,7 @@
 # See https://edgcpp.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-'''Produce the M2 gate evidence of the CIR back end in one go.
+'''Produce the gate evidence of the CIR back end in one go.
 
 Run it on the machine that runs the docker images (the x86-64 box), from any
 directory, as a user that can run docker (`sg docker -c "..."`):
@@ -30,23 +30,64 @@ Steps (names for --only/--skip):
   isolation  edg-cir-check-isolation
   smoke      cir-c-smoke is 100% PASS in edg_x86_64_cir and edg_x86_64_cir_2p
   corpus     the C corpus in edg_x86_64_cir: summary, CIR-specific failures
-             against edg_x86_64's expectations; 0 FE_CRASH and 0 LIB_CRASH
+             against edg_x86_64's expectations; 0 FE_CRASH and 0 LIB_CRASH, and
+             no difference from the recorded edg_x86_64_cir expectations
+             (unless --allow-status-changes)
   modes      in-process and two-process output identical over the corpus
   stress     edg-cir-stress (deep nesting through the two-process path)
+  writer-stress  edg-cir-writer-stress: the ASan debug front end with
+             ECIL_GID_STRESS=1 over the C smoke list and tests/tests/cir/
+             writer: same exit status and byte-identical streams as without
+             the variable, no sanitizer report or assertion, ecil-dump clean
   rss        peak memory and time: ASan with the quarantine off, and non-ASan
   day        the default full day suite (edg_x86_64, edg_x86_64_cp) has the same
              test statuses as the M0 baseline run
-  ctest      the cir_src tests in every cir_src preset
+  ctest      the cir_src tests in every cir_src preset, each built from
+             scratch (its build directory is wiped first, unless
+             --keep-ctest-builds): ninja decides what to rebuild by file
+             times, and a tree synced with `rsync -a` keeps the sources'
+             old times, so an older build directory would not be rebuilt
+  asm-diff   the in-process assembly of every corpus test case of this tree
+             against that of an earlier commit (--asm-baseline, a directory
+             that `edg-cir-compare-modes --save-asm D --in-process-only`
+             wrote, e.g. at the previous gate): identical files, files that
+             differ only in the order of their symbols, only in the numbering
+             of the labels inside a function, in the symbols they define,
+             or in a function's code, and cases whose exit status or
+             assembly existence changed; a source hint (for-init, alloca)
+             is printed with every difference.  Passes
+             only if all are identical (or, with --asm-allow-order, only
+             reordered); report.txt has the details
+  perf       edg-cir-perf (instruction counts, CPU time and RSS of a big
+             generated file and of the whole corpus) and, with --perf-baseline
+             (the JSON of an earlier run), the before/after table;
+             --perf-max-regression PERCENT makes an increase of an
+             instruction count beyond it a failure
+
+For the step asm-diff, the baseline of a commit is made with this tree's
+scripts on a tree of that commit (a `git archive` of it will do):
+
+  edg-exec --img cir-env -- python3 <this tree>/dev_tools/bin/edg-cir-compare-modes \\
+      @tests/.edgy/filters/cir-c-corpus.txt --types rp,lp -j 12 \\
+      --save-asm .tmp/asm --in-process-only      (in the old tree, built)
 
 Use --smoke-filter, --corpus-filter and --types to test the script on a small
 selection first.
+
+Syncing a tree to the box: use `rsync -a --checksum` (or wipe build/cir*,
+build/gcc-cir and build/gcc-release-cir) when the tree has been built before.
+`rsync -a` keeps the modification times of the sources, which can be older than
+the objects of an earlier build of the same directory from a previous sync, so
+ninja then rebuilds nothing and the evidence is for the old code.
 '''
 
 import argparse
+import difflib
 import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -56,7 +97,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 STEPS = ('build', 'identity', 'isolation', 'smoke', 'corpus', 'modes',
-         'stress', 'rss', 'day', 'ctest')
+         'stress', 'writer-stress', 'rss', 'day', 'ctest', 'asm-diff', 'perf')
 PRESETS = ('linux-gcc-debug', 'linux-gcc-release', 'linux-clang-debug',
            'linux-i686-gcc-debug')
 BUILD_JOBS = 12  # overridden by --jobs
@@ -273,11 +314,20 @@ def step_corpus(ctx: Context) -> Tuple[bool, str]:
   specific = [r for r in results if not r['ref_fail'] and
               r['bucket'] != 'PASS']
   total = len(results)
+  # edgy prints a "+"/"-" line for every test whose status or output differs
+  # from the recorded expectations (tests/expectations/<config>).
+  log_text = (ctx.out / 'corpus' / 'log.txt').read_text(errors = 'replace')
+  changes = [l for l in log_text.splitlines() if re.match(r'^[+-] \S', l)]
+  (ctx.out / 'corpus' / 'status-changes.txt').write_text(
+    '\n'.join(changes) + ('\n' if changes else ''))
   detail = (f"{counts.get('PASS', 0)}/{total} pass; FE_CRASH "
             f"{counts.get('FE_CRASH', 0)}, LIB_CRASH "
             f"{counts.get('LIB_CRASH', 0)}; CIR-specific failures "
-            f"{len(specific)} (the rest also fail in edg_x86_64)")
-  return crashes == 0, detail
+            f"{len(specific)} (the rest also fail in edg_x86_64); "
+            f"{len(changes)} lines differ from the recorded expectations "
+            f"(status-changes.txt)")
+  return crashes == 0 and (
+    not changes or ctx.args.allow_status_changes), detail
 
 
 def step_modes(ctx: Context) -> Tuple[bool, str]:
@@ -296,6 +346,17 @@ def step_stress(ctx: Context) -> Tuple[bool, str]:
   text = (ctx.out / 'stress' / 'log.txt').read_text()
   match = re.search(r'RESULT: .*', text)
   return code == 0, match.group(0) if match else 'no result line'
+
+
+def step_writer_stress(ctx: Context) -> Tuple[bool, str]:
+  code = in_cir_env(ctx, 'writer-stress',
+                    f"python3 dev_tools/bin/edg-cir-writer-stress "
+                    f"-j {BUILD_JOBS}")
+  text = (ctx.out / 'writer-stress' / 'log.txt').read_text()
+  match = re.search(r'RESULT: .*', text)
+  count = re.search(r'stressing (\d+) tests', text)
+  return code == 0, (f"{count.group(1) if count else '?'} tests; " +
+                     (match.group(0) if match else 'no result line'))
 
 
 def step_rss(ctx: Context) -> Tuple[bool, str]:
@@ -391,7 +452,8 @@ def step_ctest(ctx: Context) -> Tuple[bool, str]:
     name = preset['name']
     binary = preset['binaryDir'].replace('${sourceDir}', 'cir_src')
     binary = os.path.normpath(binary)
-    commands = [
+    commands = [] if ctx.args.keep_ctest_builds else [f"rm -rf {binary}"]
+    commands += [
       f"cd cir_src && cmake --preset {name}",
       f"cmake --build {binary} -j{BUILD_JOBS}",
       f"ctest --test-dir {binary} --output-on-failure -j{BUILD_JOBS}"
@@ -405,11 +467,314 @@ def step_ctest(ctx: Context) -> Tuple[bool, str]:
                            if failures else ''))
 
 
+# A label that starts a symbol block: a name, or a local label that names
+# data (.L.str.3) rather than a place in a function body.
+_SYMBOL_LABEL_REGEX = re.compile(
+  r'^([A-Za-z_$][\w.$@]*|\.L(?!BB\d|tmp\d|func_end\d|func_begin\d|cfi\d|'
+  r'pcsection\d|exception\d)[\w.$@]*):')
+# Labels of a function body, numbered per function by the code generator.
+_BODY_LABEL_REGEX = re.compile(
+  r'\.(LBB|Ltmp|Lfunc_end|Lcfi|Lfunc_begin|Lpcsection)\d+(_\d+)?')
+# Lines that end the block before them (they belong to the previous symbol).
+_BLOCK_END_REGEX = re.compile(r'^\s*(\.size\b|\.cfi_endproc\b|#)')
+
+
+def split_symbol_blocks(text: str) -> List[Tuple[str, List[str]]]:
+  '''Split assembly into (symbol name, lines) blocks.
+
+  A block runs from the directives before a (non-local) symbol label, such as
+  .globl and .type, through the lines after it, up to the directives of the
+  next symbol.  Lines before the first symbol form a block named "".
+  '''
+  lines = text.splitlines()
+  starts = [i for i, l in enumerate(lines) if _SYMBOL_LABEL_REGEX.match(l)]
+  boundaries = []
+  for index in starts:
+    # Walk back over the directives that belong to this symbol.
+    begin = index
+    while begin > 0:
+      previous = lines[begin - 1]
+      if (_BLOCK_END_REGEX.match(previous) or previous.strip() == '' or
+          not previous.lstrip().startswith('.') or
+          re.match(r'^\.?[A-Za-z_$][\w.$@]*:', previous)):
+        break
+      begin -= 1
+    boundaries.append(begin)
+  blocks: List[Tuple[str, List[str]]] = []
+  if not starts:
+    return [('', lines)]
+  if boundaries[0] > 0:
+    blocks.append(('', lines[:boundaries[0]]))
+  for number, index in enumerate(starts):
+    end = boundaries[number + 1] if number + 1 < len(starts) else len(lines)
+    name = _SYMBOL_LABEL_REGEX.match(lines[index]).group(1)
+    blocks.append((name, lines[boundaries[number]:end]))
+  return blocks
+
+
+def renumber_body_labels(lines: List[str]) -> List[str]:
+  '''Rename the per-function labels of a block in order of appearance.'''
+  names: Dict[str, str] = {}
+  def replace(match: 're.Match[str]') -> str:
+    name = match.group(0)
+    if name not in names:
+      names[name] = f".L{match.group(1)}{len(names)}"
+    return names[name]
+  return [_BODY_LABEL_REGEX.sub(replace, l) for l in lines]
+
+
+def normalize_layout(lines: List[str]) -> List[str]:
+  '''The block without trivial branches and unused labels, labels renumbered.
+
+  A `jmp L` that is followed directly by `L:` is dropped, then so is every
+  per-function label that no line refers to.  This is what merging two
+  basic blocks looks like in assembly.
+  '''
+  kept: List[str] = []
+  index = 0
+  while index < len(lines):
+    line = lines[index]
+    jump = re.match(r'^\s*jmp\s+(\.\w+)\s*$', line)
+    if (jump and index + 1 < len(lines) and
+        lines[index + 1].strip() == f"{jump.group(1)}:"):
+      index += 1
+      continue
+    kept.append(line)
+    index += 1
+  text = '\n'.join(kept)
+  result = []
+  for line in kept:
+    label = re.match(r'^(\.(?:LBB|Ltmp)\d+(?:_\d+)?):\s*(#.*)?$', line)
+    if label and len(re.findall(re.escape(label.group(1)) + r'(?![\w$.])',
+                                text)) <= 1:
+      continue
+    result.append(line)
+  return renumber_body_labels(result)
+
+
+def classify_asm_difference(old: str, new: str) -> Tuple[str, List[str]]:
+  '''Classify two different assembly texts; return (kind, details).
+
+  Both are split into symbol blocks (a symbol with its directives and body).
+  The kind is one of:
+
+    order    the same blocks (line for line), in a different order
+    labels   the same after the per-function labels (.LBB0_3, .Ltmp1, ...)
+             are renumbered in each block, perhaps in a different order
+    layout   the same after also dropping jumps to the next line and unused
+             labels (basic blocks merged or split), blocks possibly reordered
+    symbols  blocks were added, removed or renamed (e.g. .N suffixes)
+    other    a block with the same name has other content; details say, per
+             block, whether it has the same lines in another order
+             ("reordered") or other lines ("changed")
+  '''
+  old_blocks = split_symbol_blocks(old)
+  new_blocks = split_symbol_blocks(new)
+  old_map = {n: '\n'.join(b) for n, b in old_blocks}
+  new_map = {n: '\n'.join(b) for n, b in new_blocks}
+  if len(old_map) == len(old_blocks) and len(new_map) == len(new_blocks):
+    if old_map == new_map:
+      return 'order', []
+    old_norm = {n: '\n'.join(renumber_body_labels(b)) for n, b in old_blocks}
+    new_norm = {n: '\n'.join(renumber_body_labels(b)) for n, b in new_blocks}
+    if old_norm == new_norm:
+      changed = sorted(n for n in old_map if old_map[n] != new_map[n])
+      return 'labels', [f"labels renumbered in {len(changed)} block(s): "
+                        f"{', '.join(changed[:6])}"]
+    if set(old_map) == set(new_map):
+      layout = [n for n in old_map if old_norm[n] != new_norm[n]]
+      if all(normalize_layout(dict(old_blocks)[n]) ==
+             normalize_layout(dict(new_blocks)[n]) for n in layout):
+        return 'layout', [f"block layout (jumps to the next block, unused "
+                          f"labels) in {len(layout)} block(s): "
+                          f"{', '.join(layout[:6])}"]
+      details = []
+      for name in sorted(old_map):
+        if old_norm[name] == new_norm[name]:
+          continue
+        same = sorted(old_norm[name].splitlines()) == sorted(
+          new_norm[name].splitlines())
+        details.append(f"{name}: {'reordered' if same else 'changed'}")
+      return 'other', details
+  only_old = sorted(set(old_map) - set(new_map))
+  only_new = sorted(set(new_map) - set(old_map))
+  if only_old or only_new:
+    return 'symbols', [f"only in baseline: {', '.join(only_old[:8])}",
+                       f"only now: {', '.join(only_new[:8])}"]
+  return 'other', ['duplicate symbol names; compare by hand']
+
+
+# Hints from the source of a test for the cause of a difference.
+_CAUSE_REGEXES = (
+  ('for-init (W3)', re.compile(
+    r'\bfor\s*\(\s*(?:(?:const|volatile|unsigned|signed|long|short|register|struct\s+'
+    r'\w+|enum\s+\w+|union\s+\w+)\s+)*[A-Za-z_]\w*\s*\**\s*[A-Za-z_]\w*'
+    r'\s*(?:=|;|\[|,)')),
+  ('alloca (B3)', re.compile(r'\balloca\s*\(|__builtin_alloca')),
+)
+
+
+def source_of(tests_dir: Path, asm_name: str) -> str:
+  '''The text of the test an assembly file name (see --save-asm) is for.'''
+  stem = asm_name.rsplit('.', 2)[0]
+  path = tests_dir / stem.replace('__', '/')
+  try:
+    text = path.read_text(errors = 'replace')
+  except OSError:
+    return ''
+  # Not the declarations and line markers of preprocessed headers.
+  return re.sub(r'^\s*(extern\b|#).*$', '', text, flags = re.M)
+
+
+def compare_asm_dirs(baseline_dir: Path, new_dir: Path, tests_dir: Path
+                     ) -> Tuple[Dict[str, List[str]], List[str]]:
+  '''Compare two --save-asm directories.
+
+  Returns (groups, report lines): the case names by class and the
+  description of every case that is not identical.
+  '''
+  old_manifest = json.loads((baseline_dir / 'manifest.json').read_text())
+  new_manifest = json.loads((new_dir / 'manifest.json').read_text())
+  groups: Dict[str, List[str]] = {
+    'identical': [], 'order': [], 'labels': [], 'layout': [],
+    'symbols': [], 'other': [],
+    'status': [], 'only-old': [], 'only-new': []
+  }
+  details: List[str] = []
+  alloca_users: Dict[str, str] = {}
+  for name in sorted(set(old_manifest) | set(new_manifest)):
+    if name in new_manifest and name in old_manifest and (
+        _CAUSE_REGEXES[1][1].search(source_of(tests_dir, name))):
+      alloca_users[name] = 'identical'
+    if name not in new_manifest:
+      groups['only-old'].append(name)
+      details.append(f"ONLY-OLD {name}")
+      continue
+    if name not in old_manifest:
+      groups['only-new'].append(name)
+      details.append(f"ONLY-NEW {name}")
+      continue
+    old, new = old_manifest[name], new_manifest[name]
+    if old != new:
+      groups['status'].append(name)
+      details.append(f"STATUS {name}: baseline {old}, now {new}")
+      continue
+    if not old['asm']:
+      groups['identical'].append(name)
+      continue
+    old_text = (baseline_dir / name).read_bytes().decode('utf-8', 'replace')
+    new_text = (new_dir / name).read_bytes().decode('utf-8', 'replace')
+    if old_text == new_text:
+      groups['identical'].append(name)
+      continue
+    kind, why = classify_asm_difference(old_text, new_text)
+    groups[kind].append(name)
+    if name in alloca_users:
+      alloca_users[name] = kind
+    source = source_of(tests_dir, name)
+    causes = [c for c, regex in _CAUSE_REGEXES if regex.search(source)]
+    details.append(f"{kind.upper()} {name} (exit status {new['rc']}; "
+                   f"source has: {', '.join(causes) or 'no known cause'})")
+    details.extend('    ' + w[:200] for w in why[:12])
+    if kind in ('other', 'symbols') and not causes:
+      diff = list(difflib.unified_diff(
+        old_text.splitlines(), new_text.splitlines(), 'baseline', 'now',
+        lineterm = '', n = 0))
+      details.extend('    ' + line[:160] for line in diff[:16])
+  details.append(f"ALLOCA-USERS {len(alloca_users)} corpus cases call "
+                 f"alloca or __builtin_alloca* (name: class of the diff)")
+  details.extend(f"    {n}: {k}" for n, k in sorted(alloca_users.items()))
+  return groups, details
+
+
+def step_asm_diff(ctx: Context) -> Tuple[bool, str]:
+  baseline = ctx.args.asm_baseline
+  if not baseline:
+    return False, '--asm-baseline is required'
+  baseline_dir = Path(baseline).resolve()
+  if not (baseline_dir / 'manifest.json').exists():
+    return False, f"{baseline_dir} has no manifest.json"
+  if ctx.args.asm_new:
+    # Re-classify assembly that an earlier run produced.
+    new_dir = Path(ctx.args.asm_new).resolve()
+  else:
+    # The corpus assembly of this tree; in a container, so inside the tree.
+    new_dir = ctx.tree / '.tmp' / 'gate-asm' / ctx.out.name
+    command = (f"python3 dev_tools/bin/edg-cir-compare-modes "
+               f"{shlex.quote(ctx.args.corpus_filter)} -j {BUILD_JOBS} "
+               f"--save-asm {shlex.quote(rel(ctx, new_dir))} "
+               f"--in-process-only")
+    if ctx.args.types:
+      command += f" --types {ctx.args.types}"
+    in_cir_env(ctx, 'asm-diff', command)
+  if not (new_dir / 'manifest.json').exists():
+    return False, 'could not produce the assembly of this tree'
+  groups, details = compare_asm_dirs(baseline_dir, new_dir,
+                                     ctx.tree / 'tests' / 'tests')
+  (ctx.out / 'asm-diff').mkdir(parents = True, exist_ok = True)
+  (ctx.out / 'asm-diff' / 'report.txt').write_text('\n'.join(details) + '\n')
+  differing = sum(len(v) for k, v in groups.items() if k != 'identical')
+  detail = (f"{len(groups['identical'])} identical, {len(groups['order'])} "
+            f"order only, {len(groups['labels'])} label numbers only, "
+            f"{len(groups['layout'])} block layout only, "
+            f"{len(groups['symbols'])} symbols added/removed/renamed, "
+            f"{len(groups['other'])} other, {len(groups['status'])} status "
+            f"changed, {len(groups['only-old'])}/{len(groups['only-new'])} "
+            f"only in baseline/now (report.txt)")
+  allowed = len(groups['order']) if ctx.args.asm_allow_order else 0
+  return differing == allowed, detail
+
+
+def step_perf(ctx: Context) -> Tuple[bool, str]:
+  work = ctx.tree / '.tmp' / 'gate-perf' / ctx.out.name
+  work.mkdir(parents = True, exist_ok = True)
+  new_json = work / 'perf.json'
+  command = (f"python3 dev_tools/bin/edg-cir-perf -j {BUILD_JOBS} "
+             f"--big-functions {ctx.args.rss_functions} "
+             f"--json {shlex.quote(rel(ctx, new_json))}")
+  if ctx.args.perf_sample > 1:
+    command += f" --sample {ctx.args.perf_sample}"
+  if in_cir_env(ctx, 'perf', command) != 0 or not new_json.exists():
+    return False, 'edg-cir-perf failed (see log.txt)'
+  shutil.copy2(new_json, ctx.out / 'perf' / 'perf.json')
+  table_command = [sys.executable,
+                   str(ctx.tree / 'dev_tools/bin/edg-cir-perf'),
+                   '--table-only', '--json', str(new_json)]
+  baseline = ctx.args.perf_baseline
+  if baseline:
+    table_command += ['--baseline', str(Path(baseline).resolve())]
+  proc = subprocess.run(table_command, env = ctx.env, text = True,
+                        stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+  (ctx.out / 'perf' / 'table.md').write_text(proc.stdout)
+  print(proc.stdout, flush = True)
+  if proc.returncode != 0:
+    return False, 'could not print the table'
+  if not baseline:
+    return True, 'measured (no --perf-baseline: no before/after table)'
+  limit = ctx.args.perf_max_regression
+  after = json.loads(new_json.read_text())
+  before = json.loads(Path(baseline).read_text())
+  worst = 0.0
+  for name, entry in after.get('big', {}).items():
+    old = before.get('big', {}).get(name, {}).get('ir')
+    if old:
+      worst = max(worst, 100.0 * (entry['ir'] - old) / old)
+  for key in ('fe_ir', 'cir_ir'):
+    old = before.get('corpus', {}).get(key)
+    if old and 'corpus' in after:
+      worst = max(worst, 100.0 * (after['corpus'][key] - old) / old)
+  detail = f"largest instruction count change {worst:+.2f}% (table.md)"
+  return limit is None or worst <= limit, detail
+
+
 STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'build': step_build, 'identity': step_identity,
   'isolation': step_isolation, 'smoke': step_smoke, 'corpus': step_corpus,
-  'modes': step_modes, 'stress': step_stress, 'rss': step_rss,
-  'day': step_day, 'ctest': step_ctest
+  'modes': step_modes, 'stress': step_stress,
+  'writer-stress': step_writer_stress,
+  'rss': step_rss,
+  'day': step_day, 'ctest': step_ctest, 'asm-diff': step_asm_diff,
+  'perf': step_perf
 }
 
 
@@ -434,6 +799,29 @@ def main() -> None:
   parser.add_argument('--day-filter', default = '',
                       help = 'run only these suites in the day step (for '
                              'trying the script; the gate run has none)')
+  parser.add_argument('--asm-baseline', default = '',
+                      help = 'directory of the corpus assembly of the '
+                             'baseline commit (step asm-diff)')
+  parser.add_argument('--asm-new', default = '',
+                      help = 'compare this --save-asm directory instead of '
+                             'compiling the corpus (step asm-diff)')
+  parser.add_argument('--asm-allow-order', action = 'store_true',
+                      help = 'asm-diff passes if files differ only in the '
+                             'order of their lines')
+  parser.add_argument('--perf-baseline', default = '',
+                      help = 'perf.json of the baseline commit (step perf)')
+  parser.add_argument('--perf-max-regression', type = float, default = None,
+                      help = 'step perf fails if an instruction count grows '
+                             'by more than this many percent')
+  parser.add_argument('--perf-sample', type = int, default = 1,
+                      help = 'step perf measures every Nth corpus case only '
+                             '(for trying the script)')
+  parser.add_argument('--keep-ctest-builds', action = 'store_true',
+                      help = 'the ctest step reuses the existing cir_src '
+                             'build directories instead of wiping them')
+  parser.add_argument('--allow-status-changes', action = 'store_true',
+                      help = 'the corpus step may differ from the recorded '
+                             'expectations (it then lists the lines)')
   parser.add_argument('--smoke-filter',
                       default = '@tests/.edgy/filters/cir-c-smoke.txt')
   parser.add_argument('--corpus-filter',

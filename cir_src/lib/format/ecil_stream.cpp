@@ -38,23 +38,6 @@ Read a little-endian u16.
   return static_cast<uint16_t>(p[0] | (p[1] << 8));
 }  /* le16 */
 
-enum a_bracket_kind : uint8_t {
-  bk_block, bk_if, bk_while, bk_do, bk_for, bk_switch, bk_tern, bk_land,
-  bk_lor, bk_agg_init, bk_const_agg
-};  /* a_bracket_kind */
-
-const char *bracket_name(uint8_t kind)
-/*
-Return a readable name for a bracket kind.
-*/
-{
-  static const char *const names[] = {
-    "BLOCK", "IF", "WHILE", "DO", "FOR", "SWITCH", "TERN", "LAND", "LOR",
-    "AGG_INIT", "C_AGG"
-  };
-  return kind < sizeof names / sizeof names[0] ? names[kind] : "?";
-}  /* bracket_name */
-
 }  /* anonymous namespace */
 
 a_stream_reader::a_stream_reader(a_stream_handler &handler,
@@ -64,7 +47,7 @@ Create a reader that reports to handler.
 */
   : handler_(handler), options_(options), state_(state_preamble),
     stopped_(false), aborted_(false), seen_end_(false), offset_(0),
-    frame_count_(0), end_n_frames_(0), end_status_(0), switch_depth_(0)
+    frame_count_(0), end_n_frames_(0), end_status_(0), refs_(ids_, tracker_)
 {
   preamble_.major = 0;
   preamble_.minor = 0;
@@ -177,14 +160,12 @@ feature bits it needs are set.
                        op == eop_loc || op == eop_ext || op == eop_refs;
         if (!body_ok)
           problem = "declaration record after FUNC_BEGIN";
-        else if (op == eop_refs && !function_bases_.empty())
+        else if (op == eop_refs && tracker_.function_depth() != 0)
           problem = "REFS inside a function body";
         else if ((sec & eos_body) && op != eop_func_begin &&
-                 function_bases_.empty())
+                 tracker_.function_depth() == 0)
           problem = "body record outside FUNC_BEGIN..FUNC_END";
       }
-      if (op == eop_refs && problem == nullptr && !function_bases_.empty())
-        problem = "REFS inside a function body";
       break;
     case efk_names:
       if (!(op == eop_name_bind || op == eop_str || op == eop_loc ||
@@ -210,223 +191,17 @@ feature bits it needs are set.
 }  /* a_stream_reader::check_section */
 
 bool a_stream_reader::check_brackets(const a_record &record,
-                                     const a_frame_info &frame)
+                                     a_scope_event &event)
 /*
-Track FUNC_BEGIN/FUNC_END and the BEGIN/ELSE/END brackets with an explicit
-stack, and reject mismatches.
+Track FUNC_BEGIN/FUNC_END, the BEGIN/ELSE/END brackets and the scope regions
+(a_bracket_tracker), and reject mismatches.
 */
 {
-  bool result = true;
-  uint8_t op = record.opcode;
-  const char *problem = nullptr;
-  a_bracket *top = brackets_.empty() ? nullptr : &brackets_.back();
+  std::string problem;
+  bool result = tracker_.check(record, preamble_.minor, problem, event);
 
-  (void)frame;
-
-  switch (op) {
-  case eop_func_begin:
-    function_bases_.push_back(brackets_.size());
-    break;
-  case eop_func_end:
-    if (function_bases_.empty())
-      problem = "FUNC_END without FUNC_BEGIN";
-    else if (brackets_.size() != function_bases_.back())
-      problem = "unclosed bracket at FUNC_END";
-    else
-      function_bases_.pop_back();
-    break;
-  case eop_block_begin: {
-    a_bracket b = {bk_block, 0, 0};
-    brackets_.push_back(b);
-    break;
-  }
-  case eop_block_end:
-    if (top && top->kind == bk_block)
-      brackets_.pop_back();
-    else
-      problem = "BLOCK_END without BLOCK_BEGIN";
-    break;
-  case eop_if_begin: {
-    uint64_t has_else = 0;
-    operand_u64(record.ops[0], has_else);
-    if (record.ops[0].kind == an_operand_kind::boolean)
-      has_else = record.ops[0].u;
-    a_bracket b = {bk_if, 0, static_cast<uint8_t>(has_else)};
-    brackets_.push_back(b);
-    break;
-  }
-  case eop_if_else:
-    if (top && top->kind == bk_if && top->phase == 0 && top->has_else)
-      top->phase = 1;
-    else
-      problem = "IF_ELSE without a matching IF_BEGIN(has_else)";
-    break;
-  case eop_if_end:
-    if (top && top->kind == bk_if && (top->has_else ? top->phase == 1
-                                                    : top->phase == 0))
-      brackets_.pop_back();
-    else
-      problem = "IF_END does not match IF_BEGIN/IF_ELSE";
-    break;
-  case eop_while_begin: {
-    a_bracket b = {bk_while, 0, 0};
-    brackets_.push_back(b);
-    break;
-  }
-  case eop_while_body:
-    if (top && top->kind == bk_while && top->phase == 0)
-      top->phase = 1;
-    else
-      problem = "WHILE_BODY without WHILE_BEGIN";
-    break;
-  case eop_while_end:
-    if (top && top->kind == bk_while && top->phase == 1)
-      brackets_.pop_back();
-    else
-      problem = "WHILE_END without WHILE_BODY";
-    break;
-  case eop_do_begin: {
-    a_bracket b = {bk_do, 0, 0};
-    brackets_.push_back(b);
-    break;
-  }
-  case eop_do_cond:
-    if (top && top->kind == bk_do && top->phase == 0)
-      top->phase = 1;
-    else
-      problem = "DO_COND without DO_BEGIN";
-    break;
-  case eop_do_end:
-    if (top && top->kind == bk_do && top->phase == 1)
-      brackets_.pop_back();
-    else
-      problem = "DO_END without DO_COND";
-    break;
-  case eop_for_begin: {
-    a_bracket b = {bk_for, 0, 0};
-    brackets_.push_back(b);
-    break;
-  }
-  case eop_for_cond:
-    if (top && top->kind == bk_for && top->phase == 0)
-      top->phase = 1;
-    else
-      problem = "FOR_COND out of order";
-    break;
-  case eop_for_step:
-    if (top && top->kind == bk_for && top->phase == 1)
-      top->phase = 2;
-    else
-      problem = "FOR_STEP out of order";
-    break;
-  case eop_for_body:
-    if (top && top->kind == bk_for && top->phase == 2)
-      top->phase = 3;
-    else
-      problem = "FOR_BODY out of order";
-    break;
-  case eop_for_end:
-    if (top && top->kind == bk_for && top->phase == 3)
-      brackets_.pop_back();
-    else
-      problem = "FOR_END without FOR_BODY";
-    break;
-  case eop_switch_begin: {
-    a_bracket b = {bk_switch, 0, 0};
-    brackets_.push_back(b);
-    ++switch_depth_;
-    break;
-  }
-  case eop_switch_end:
-    if (top && top->kind == bk_switch) {
-      brackets_.pop_back();
-      --switch_depth_;
-    } else {
-      problem = "SWITCH_END without SWITCH_BEGIN";
-    }
-    break;
-  case eop_case_value:
-  case eop_case_range:
-  case eop_case_default:
-    if (switch_depth_ == 0)
-      problem = "case label outside a switch";
-    break;
-  case eop_tern_begin: {
-    a_bracket b = {bk_tern, 0, 0};
-    brackets_.push_back(b);
-    break;
-  }
-  case eop_tern_else:
-    if (top && top->kind == bk_tern && top->phase == 0)
-      top->phase = 1;
-    else
-      problem = "TERN_ELSE without TERN_BEGIN";
-    break;
-  case eop_tern_end:
-    if (top && top->kind == bk_tern && top->phase == 1)
-      brackets_.pop_back();
-    else
-      problem = "TERN_END without TERN_ELSE";
-    break;
-  case eop_land_begin:
-  case eop_lor_begin: {
-    a_bracket b = {op == eop_land_begin ? bk_land : bk_lor, 0, 0};
-    brackets_.push_back(b);
-    break;
-  }
-  case eop_land_end:
-    if (top && top->kind == bk_land)
-      brackets_.pop_back();
-    else
-      problem = "LAND_END without LAND_BEGIN";
-    break;
-  case eop_lor_end:
-    if (top && top->kind == bk_lor)
-      brackets_.pop_back();
-    else
-      problem = "LOR_END without LOR_BEGIN";
-    break;
-  case eop_agg_init_begin: {
-    a_bracket b = {bk_agg_init, 0, 0};
-    brackets_.push_back(b);
-    break;
-  }
-  case eop_agg_sel:
-    if (!(top && top->kind == bk_agg_init))
-      problem = "AGG_SEL outside AGG_INIT_BEGIN";
-    break;
-  case eop_agg_init_end:
-    if (top && top->kind == bk_agg_init)
-      brackets_.pop_back();
-    else
-      problem = "AGG_INIT_END without AGG_INIT_BEGIN";
-    break;
-  case eop_c_agg_begin: {
-    a_bracket b = {bk_const_agg, 0, 0};
-    brackets_.push_back(b);
-    break;
-  }
-  case eop_c_sel:
-  case eop_c_repeat:
-    if (!(top && top->kind == bk_const_agg))
-      problem = "C_SEL/C_REPEAT outside C_AGG_BEGIN";
-    break;
-  case eop_c_agg_end:
-    if (top && top->kind == bk_const_agg)
-      brackets_.pop_back();
-    else
-      problem = "C_AGG_END without C_AGG_BEGIN";
-    break;
-  default:
-    break;
-  }
-  if (problem != nullptr) {
-    std::string message = problem;
-    if (top)
-      message += std::string(" (innermost open bracket: ") +
-                 bracket_name(top->kind) + ")";
-    result = fail(an_error_kind::format, message, offset_);
-  }
+  if (!result)
+    result = fail(an_error_kind::format, problem, offset_);
   return result;
 }  /* a_stream_reader::check_brackets */
 
@@ -454,13 +229,13 @@ Decode and check every record of the frame and pass it to the handler.
   uint32_t end_records = 0;
   a_cursor cursor(frame.payload, frame.payload + frame.length);
   a_decode_context context;
+  a_scope_event event;
+  std::string frame_problem;
 
   context.stream_minor = preamble_.minor;
   context.allow_supp = (frame.flags & ECIL_FRAME_FLAG_HAS_SUPP) != 0;
-  brackets_.clear();
-  function_bases_.clear();
+  tracker_.begin_frame();
   refs_.begin_frame();
-  switch_depth_ = 0;
   while (result && cursor.remaining() > 0) {
     a_record record;
     an_error decode_error;
@@ -473,6 +248,7 @@ Decode and check every record of the frame and pass it to the handler.
       result = fail(decode_error.kind, decode_error.message, record_offset);
     } else {
       offset_ = record_offset;  /* For messages from the checks. */
+      event = a_scope_event();
       if (options_.check) {
         an_error operand_error;
         if (!check_record_operands(record, preamble_.minor, operand_error))
@@ -480,14 +256,15 @@ Decode and check every record of the frame and pass it to the handler.
                         record_offset);
         else
           result = check_section(record, frame, in_body) &&
-                   check_brackets(record, frame) && check_refs(record);
+                   check_brackets(record, event) && check_refs(record);
       }
       if (result) {
         a_record_context rc;
         rc.frame = &frame;
         rc.in_body = in_body;
-        rc.function_depth = static_cast<uint32_t>(function_bases_.size());
+        rc.function_depth = static_cast<uint32_t>(tracker_.function_depth());
         rc.offset = record_offset;
+        rc.scope = event;
         if (record.opcode == eop_end) {
           ++end_records;
           uint64_t v = 0;
@@ -504,19 +281,25 @@ Decode and check every record of the frame and pass it to the handler.
         if (!handler_.on_record(record, rc)) {
           stopped_ = true;
           result = false;
+        } else if (options_.check) {
+          /* After the handler: the closed scopes' locals die and a finished
+             function's L-ids go, so the handler saw them intact. */
+          tracker_.commit(ids_, preamble_.minor >= 7);
         }
       }
     }
   }
   if (result && options_.check) {
-    if (!function_bases_.empty())
+    if (tracker_.function_depth() != 0)
       result = fail(an_error_kind::format,
                     "frame ends inside a function body", frame.offset);
-    else if (!brackets_.empty())
+    else if (tracker_.bracket_depth() != 0)
       result = fail(an_error_kind::format,
                     std::string("frame ends with an open ") +
-                    bracket_name(brackets_.back().kind) + " bracket",
+                    tracker_.innermost_name() + std::string(" bracket"),
                     frame.offset);
+    else if (!refs_.end_frame(frame_problem))
+      result = fail(an_error_kind::format, frame_problem, frame.offset);
     else if (frame.kind == efk_end && end_records != 1)
       result = fail(an_error_kind::format,
                     "F_END must contain exactly one END record",

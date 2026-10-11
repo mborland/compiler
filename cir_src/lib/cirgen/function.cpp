@@ -17,6 +17,8 @@ the matching ECIL record arrives.  Shapes follow clang/lib/CIR/CodeGen
 
 #include <cstring>
 
+#include "llvm/ADT/bit.h"
+
 #include "emitter.h"
 
 namespace edg_cir {
@@ -24,7 +26,7 @@ namespace edg_cir {
 /* Dispatch. */
 
 bool a_emitter::on_record(const ecil::a_record &r,
-                          const ecil::a_record_context &)
+                          const ecil::a_record_context &context)
 /*
 Process one decoded record.
 */
@@ -46,11 +48,11 @@ Process one decoded record.
     bool good = true;
     uint64_t line = 0;
     uint64_t col = 0;
-    std::string file = string_for(r.ops[0], good);
+    std::string_view file = string_for(r.ops[0], good);
     uint_operand(r.ops[1], line);
     uint_operand(r.ops[2], col);
     if (!file.empty())
-      session_.last_file = file;
+      session_.last_file.assign(file.data(), file.size());
     loc_ = mlir::FileLineColLoc::get(ctx_, session_.last_file,
                                      static_cast<unsigned>(line),
                                      static_cast<unsigned>(col));
@@ -85,29 +87,28 @@ Process one decoded record.
   case eop_name_bind:
     ok = name_bind(r);
     break;
-  case eop_c_int:
-  case eop_c_float:
-  case eop_c_null:
-  case eop_c_zero:
-  case eop_c_string:
-  case eop_c_addr:
-  case eop_c_ptr:
-  case eop_c_agg_begin:
-  case eop_c_sel:
-  case eop_c_repeat:
-  case eop_c_agg_end:
-    ok = constant_record(r);
-    break;
   default:
-    if (!in_function_ && r.opcode != eop_func_begin)
+    /* The class of every other record comes from the schema's section
+       bits (ecil_schema.cpp), not from opcode ranges. */
+    if (r.info->section & ecil::eos_const)
+      ok = constant_record(r);
+    else if (!in_function_ && r.opcode != eop_func_begin)
       ok = format_error(std::string(r.info->name) +
                         " outside a function body");
-    else if (r.opcode >= eop_func_begin && r.opcode <= eop_unreachable)
+    else if (r.info->section & ecil::eos_stmt)
       ok = statement(r);
     else
       ok = expression(r);
     break;
   }
+  /* The reader's bracket tracker is the only bracket matcher; the emitter's
+     frame stacks must follow it exactly (function bodies are not brackets,
+     constant aggregates have a stack of their own). */
+  if (ok && session_.status == EDG_CIR_OK &&
+      frames_.size() + const_aggs_.size() !=
+          context.scope.bracket_depth + (in_function_ ? 1u : 0u))
+    ok = internal("the emitter's frames and the reader's brackets differ "
+                  "after " + std::string(r.info->name));
   return ok && session_.status == EDG_CIR_OK;
 }  /* a_emitter::on_record */
 
@@ -120,10 +121,10 @@ type definition is left half way.
   bool ok = true;
 
   if (pending_body_gid_ != 0)
-    ok = format_error("a TY_RECORD_BODY is missing REC_FIELD records at the "
+    ok = internal("a TY_RECORD_BODY is missing REC_FIELD records at the "
                       "end of its frame");
   else if (in_function_ || !frames_.empty())
-    ok = format_error("a function body is open at the end of its frame");
+    ok = internal("a function body is open at the end of its frame");
   else if (!values_.empty() || !consts_.empty() || !const_aggs_.empty() ||
            !targets_.empty())
     ok = format_error("a stack is not empty at the end of a frame");
@@ -132,8 +133,7 @@ type definition is left half way.
 
 /* Frame helpers. */
 
-bool a_emitter::open_frame(a_frame_kind kind, mlir::Operation *op,
-                           mlir::Block *alloca_block)
+bool a_emitter::open_frame(a_frame_kind kind, mlir::Operation *op)
 /*
 Push a frame.
 */
@@ -142,7 +142,6 @@ Push a frame.
 
   f.kind = kind;
   f.op = op;
-  f.alloca_block = alloca_block;
   f.value_base = values_.size();
   f.target_base = targets_.size();
   frames_.push_back(f);
@@ -151,7 +150,9 @@ Push a frame.
 
 a_frame *a_emitter::top_frame(a_frame_kind kind, const char *what)
 /*
-Return the innermost frame if it has the kind; else report a format error.
+Return the innermost frame if it has the kind.  The bracket tracker already
+matched every closing record against its opening one, so a mismatch is an
+internal error.
 */
 {
   a_frame *result = nullptr;
@@ -159,7 +160,7 @@ Return the innermost frame if it has the kind; else report a format error.
   if (!frames_.empty() && frames_.back().kind == kind)
     result = &frames_.back();
   else
-    format_error(std::string(what) + " does not match the open construct");
+    internal(std::string(what) + " does not match the open construct");
   return result;
 }  /* a_emitter::top_frame */
 
@@ -176,28 +177,78 @@ Pop the innermost frame, checking the value stack height.
   return ok;
 }  /* a_emitter::pop_frame */
 
-mlir::Block *a_emitter::current_alloca_block()
-/*
-The block that receives allocas: the first block of the innermost region.
-*/
-{
-  return frames_.empty() ? fn_entry_ : frames_.back().alloca_block;
-}  /* a_emitter::current_alloca_block */
-
 mlir::Value a_emitter::alloca_in(mlir::Block *block, mlir::Type type,
                                  const std::string &name, uint32_t align)
 /*
-Create an alloca at the best alloca point of block (the builder's own point is
-kept).
+Create an alloca at the alloca point of block (the builder's own point is
+kept).  The function's entry block tracks its last alloca explicitly, so the
+cost is constant; any other block uses the upstream backward scan.
 */
 {
   mlir::OpBuilder::InsertionGuard guard(builder_);
+  mlir::Value result;
 
-  builder_.restoreInsertionPoint(
-      compat::a_builder::getBestAllocaInsertPoint(block));
-  return builder_.createAlloca(loc(), cir::PointerType::get(type), name,
-                               builder_.getAlignmentAttr(align));
+  if (block == fn_entry_)
+    builder_.restoreInsertionPoint(mlir::OpBuilder::InsertPoint(
+        block, last_alloca_ != nullptr
+                   ? ++mlir::Block::iterator(last_alloca_) : block->begin()));
+  else
+    builder_.restoreInsertionPoint(
+        compat::a_builder::getBestAllocaInsertPoint(block));
+  result = builder_.createAlloca(loc(), cir::PointerType::get(type), name,
+                                 alignment_attr(align));
+  if (block == fn_entry_)
+    last_alloca_ = result.getDefiningOp();
+  return result;
 }  /* a_emitter::alloca_in */
+
+mlir::IntegerAttr a_emitter::alignment_attr(uint64_t align)
+/*
+The i64 alignment attribute for align (empty for 0), cached for the powers
+of two up to 32768.
+*/
+{
+  mlir::IntegerAttr result;
+  unsigned index = 0;
+
+  if (align != 0 && (align & (align - 1)) == 0 &&
+      (index = static_cast<unsigned>(llvm::countr_zero(align))) < 16) {
+    if (!align_attrs_[index])
+      align_attrs_[index] = builder_.getAlignmentAttr(
+                                              static_cast<int64_t>(align));
+    result = align_attrs_[index];
+  } else {
+    result = builder_.getAlignmentAttr(static_cast<int64_t>(align));
+  }
+  return result;
+}  /* a_emitter::alignment_attr */
+
+cir::GlobalLinkageKindAttr a_emitter::linkage_attr(
+                                                cir::GlobalLinkageKind kind)
+/*
+The linkage attribute for kind, cached.
+*/
+{
+  unsigned index = static_cast<unsigned>(kind);
+  cir::GlobalLinkageKindAttr result;
+
+  if (index < 16) {
+    if (!linkage_attrs_[index])
+      linkage_attrs_[index] = cir::GlobalLinkageKindAttr::get(ctx_, kind);
+    result = linkage_attrs_[index];
+  } else {
+    result = cir::GlobalLinkageKindAttr::get(ctx_, kind);
+  }
+  return result;
+}  /* a_emitter::linkage_attr */
+
+mlir::NamedAttribute a_emitter::nothrow_attr()
+/*
+The call-site / function attribute meaning "cannot unwind".
+*/
+{
+  return mlir::NamedAttribute(nothrow_name_, unit_attr_);
+}  /* a_emitter::nothrow_attr */
 
 mlir::Value a_emitter::alloca_here(mlir::Type type, const std::string &name,
                                    uint32_t align)
@@ -286,9 +337,9 @@ FUNC_BEGIN: create the entry block and open the function frame.
     ok = unsupported("nested function bodies (lambdas) are not supported "
                      "in ECIL v0");
   else if (e == nullptr)
-    ok = format_error("FUNC_BEGIN for a function that was not declared");
+    ok = false;
   else if (e->has_body)
-    ok = format_error("function " + e->name + " defined twice");
+    ok = internal("function " + std::string(e->want) + " defined twice");
   if (ok) {
     t = type_at(e->type);
     fn = mlir::cast<cir::FuncOp>(e->op);
@@ -297,21 +348,21 @@ FUNC_BEGIN: create the entry block and open the function frame.
     apply_function_attributes(*e, fn);
     /* As CIRGen: a definition compiled without exceptions cannot throw. */
     if (!(session_.header.lang_flags & ECIL_LANG_EXCEPTIONS))
-      fn->setAttr(cir::CIRDialect::getNoThrowAttrName(),
-                  builder_.getUnitAttr());
+      fn->setAttr(nothrow_name_, unit_attr_);
     compat::set_dso_local(fn.getOperation(), true);
     fn_ = fn;
     fn_entity_ = e;
     fn_entry_ = fn.addEntryBlock();
     fn_return_type_ = t->target;
     builder_.setInsertionPointToStart(fn_entry_);
-    locals_.clear();
+    local_store_.clear();
+    last_alloca_ = nullptr;
     params_seen_ = 0;
     fn_retval_ = mlir::Value();
     temp_counter_ = 0;
     in_function_ = true;
     values_.clear();
-    open_frame(a_frame_kind::function, fn.getOperation(), fn_entry_);
+    open_frame(a_frame_kind::function, fn.getOperation());
   }
   return ok;
 }  /* a_emitter::func_begin */
@@ -336,13 +387,13 @@ PARAM: an alloca of the declared type holding the (cast) argument.
   uint_operand(r.ops[0], l);
   uint_operand(r.ops[1], t_abi);
   uint_operand(r.ops[2], t_decl);
-  name = string_for(r.ops[3], good);
+  name = std::string(string_for(r.ops[3], good));
   abi = type_at(t_abi);
   decl = type_at(t_decl);
   if (!good || abi == nullptr || decl == nullptr)
-    ok = format_error("PARAM names an unknown type or string");
+    ok = false;
   else if (!type_is_complete(abi->cir) || !type_is_complete(decl->cir))
-    ok = format_error("PARAM of an incomplete record type");
+    ok = internal("PARAM of an incomplete record type");
   else if (frames_.size() != 1 ||
            params_seen_ >= fn_entry_->getNumArguments())
     ok = format_error("PARAM out of place or too many parameters");
@@ -377,13 +428,16 @@ PARAM: an alloca of the declared type holding the (cast) argument.
     }
   }
   if (ok) {
-    a_local local;
+    a_local *local = new_local(l);
     builder_.createStore(loc(), argument, address, false, false,
-                         builder_.getAlignmentAttr(align));
-    local.address = address;
-    local.align = align;
-    local.type = t_decl;
-    locals_[l] = local;
+                         alignment_attr(align));
+    if (local == nullptr) {
+      ok = false;
+    } else {
+      local->address = address;
+      local->align = align;
+      local->type = t_decl;
+    }
   }
   return ok;
 }  /* a_emitter::param */
@@ -400,26 +454,27 @@ LOCAL: an automatic variable at this point of the body.
   bool good = true;
   std::string name;
   a_type *t;
-  a_local local;
+  a_local *local;
 
   uint_operand(r.ops[0], l);
   uint_operand(r.ops[1], tgid);
-  name = string_for(r.ops[2], good);
+  name = std::string(string_for(r.ops[2], good));
   uint_operand(r.ops[3], align);
   t = type_at(tgid);
   if (!good || t == nullptr) {
-    ok = format_error("LOCAL names an unknown type or string");
+    ok = false;
   } else if (!type_is_complete(t->cir)) {
-    ok = format_error("LOCAL of an incomplete record type");
+    ok = internal("LOCAL of an incomplete record type");
+  } else if ((local = new_local(l)) == nullptr) {
+    ok = false;
   } else {
     if (name.empty())
       name = "tmp" + std::to_string(l);
     if (align == 0)
       align = type_align(t->cir);
-    local.address = alloca_here(t->cir, name, static_cast<uint32_t>(align));
-    local.align = static_cast<uint32_t>(align);
-    local.type = tgid;
-    locals_[l] = local;
+    local->address = alloca_here(t->cir, name, static_cast<uint32_t>(align));
+    local->align = static_cast<uint32_t>(align);
+    local->type = tgid;
   }
   return ok;
 }  /* a_emitter::local_decl */
@@ -474,7 +529,7 @@ FUNC_END: apply the fall-off-the-end rule and close the function.
   bool terminated;
 
   if (frames_.size() != 1 || frames_.back().kind != a_frame_kind::function)
-    ok = format_error("FUNC_END inside an open construct");
+    ok = internal("FUNC_END inside an open construct");
   else if (params_seen_ != fn_entry_->getNumArguments())
     ok = format_error("fewer PARAM records than the function has "
                       "parameters");
@@ -510,7 +565,7 @@ FUNC_END: apply the fall-off-the-end rule and close the function.
     builder_.setInsertionPointToEnd(module_.getBody());
     in_function_ = false;
     fn_entity_ = nullptr;
-    locals_.clear();
+    local_store_.clear();
   }
   return ok;
 }  /* a_emitter::func_end */
@@ -543,7 +598,7 @@ RETURN_STMT: cir.return directly at the statement (no shared return block).
       uint32_t align = static_cast<uint32_t>(type_align(ret->cir));
       mlir::Value slot = return_slot();
       builder_.createStore(loc(), v, slot, false, false,
-                           builder_.getAlignmentAttr(align));
+                           alignment_attr(align));
       v = builder_.createLoad(loc(), slot, false, align);
     }
     if (ok)
@@ -582,7 +637,7 @@ Function-level records and statements.
   case eop_block_begin: {
     cir::ScopeOp scope = compat::open_scope(builder_, loc());
     mlir::Block *block = &scope.getScopeRegion().front();
-    open_frame(a_frame_kind::scope, scope.getOperation(), block);
+    open_frame(a_frame_kind::scope, scope.getOperation());
     builder_.setInsertionPointToStart(block);
     break;
   }
@@ -605,7 +660,7 @@ Function-level records and statements.
     } else {
       cir::IfOp op = compat::open_if(builder_, loc(), cond);
       mlir::Block *block = &op.getThenRegion().front();
-      open_frame(a_frame_kind::if_stmt, op.getOperation(), block);
+      open_frame(a_frame_kind::if_stmt, op.getOperation());
       builder_.setInsertionPointToStart(block);
     }
     break;
@@ -619,7 +674,7 @@ Function-level records and statements.
     } else {
       cir::IfOp op = mlir::cast<cir::IfOp>(f->op);
       terminate_region(op.getThenRegion());
-      f->alloca_block = builder_.createBlock(&op.getElseRegion());
+      builder_.createBlock(&op.getElseRegion());
       f->phase = 1;
     }
     break;
@@ -640,7 +695,7 @@ Function-level records and statements.
   case eop_while_begin: {
     cir::WhileOp op = compat::open_while(builder_, loc());
     mlir::Block *block = &op.getCond().front();
-    open_frame(a_frame_kind::while_stmt, op.getOperation(), block);
+    open_frame(a_frame_kind::while_stmt, op.getOperation());
     builder_.setInsertionPointToStart(block);
     break;
   }
@@ -656,9 +711,8 @@ Function-level records and statements.
     } else {
       cir::WhileOp op = mlir::cast<cir::WhileOp>(f->op);
       builder_.createCondition(cond);
-      f->alloca_block = &op.getBody().front();
       f->phase = 1;
-      builder_.setInsertionPointToStart(f->alloca_block);
+      builder_.setInsertionPointToStart(&op.getBody().front());
     }
     break;
   }
@@ -677,7 +731,7 @@ Function-level records and statements.
   case eop_do_begin: {
     cir::DoWhileOp op = compat::open_do(builder_, loc());
     mlir::Block *block = &op.getBody().front();
-    open_frame(a_frame_kind::do_stmt, op.getOperation(), block);
+    open_frame(a_frame_kind::do_stmt, op.getOperation());
     builder_.setInsertionPointToStart(block);
     break;
   }
@@ -690,9 +744,8 @@ Function-level records and statements.
     } else {
       cir::DoWhileOp op = mlir::cast<cir::DoWhileOp>(f->op);
       terminate_region(op.getBody());
-      f->alloca_block = &op.getCond().front();
       f->phase = 1;
-      builder_.setInsertionPointToStart(f->alloca_block);
+      builder_.setInsertionPointToStart(&op.getCond().front());
     }
     break;
   }
@@ -714,7 +767,7 @@ Function-level records and statements.
   case eop_for_begin: {
     cir::ScopeOp scope = compat::open_scope(builder_, loc());
     mlir::Block *block = &scope.getScopeRegion().front();
-    open_frame(a_frame_kind::for_stmt, nullptr, block);
+    open_frame(a_frame_kind::for_stmt, nullptr);
     frames_.back().scope_op = scope.getOperation();
     builder_.setInsertionPointToStart(block);
     break;
@@ -724,16 +777,15 @@ Function-level records and statements.
     if (f == nullptr) {
       ok = false;
     } else if (f->phase != 0) {
-      ok = format_error("FOR_COND out of order");
+      ok = internal("FOR_COND out of order");
     } else if (values_.size() != f->value_base) {
       ok = format_error("values left on the stack at FOR_COND");
     } else {
       cir::ForOp op = compat::open_for(builder_, loc());
       f->op = op.getOperation();
       f->has_cond = r.ops[0].u != 0;
-      f->alloca_block = &op.getCond().front();
       f->phase = 1;
-      builder_.setInsertionPointToStart(f->alloca_block);
+      builder_.setInsertionPointToStart(&op.getCond().front());
     }
     break;
   }
@@ -743,7 +795,7 @@ Function-level records and statements.
     if (f == nullptr) {
       ok = false;
     } else if (f->phase != 1) {
-      ok = format_error("FOR_STEP out of order");
+      ok = internal("FOR_STEP out of order");
     } else {
       if (f->has_cond) {
         cond = pop_bool_condition();
@@ -756,9 +808,8 @@ Function-level records and statements.
       if (ok) {
         cir::ForOp op = mlir::cast<cir::ForOp>(f->op);
         builder_.createCondition(cond);
-        f->alloca_block = &op.getStep().front();
         f->phase = 2;
-        builder_.setInsertionPointToStart(f->alloca_block);
+        builder_.setInsertionPointToStart(&op.getStep().front());
       }
     }
     break;
@@ -768,15 +819,14 @@ Function-level records and statements.
     if (f == nullptr) {
       ok = false;
     } else if (f->phase != 2) {
-      ok = format_error("FOR_BODY out of order");
+      ok = internal("FOR_BODY out of order");
     } else if (values_.size() != f->value_base) {
       ok = format_error("values left on the stack at FOR_BODY");
     } else {
       cir::ForOp op = mlir::cast<cir::ForOp>(f->op);
       terminate_region(op.getStep());
-      f->alloca_block = &op.getBody().front();
       f->phase = 3;
-      builder_.setInsertionPointToStart(f->alloca_block);
+      builder_.setInsertionPointToStart(&op.getBody().front());
     }
     break;
   }
@@ -785,7 +835,7 @@ Function-level records and statements.
     if (f == nullptr) {
       ok = false;
     } else if (f->phase != 3) {
-      ok = format_error("FOR_END out of order");
+      ok = internal("FOR_END out of order");
     } else {
       cir::ForOp op = mlir::cast<cir::ForOp>(f->op);
       cir::ScopeOp scope = mlir::cast<cir::ScopeOp>(f->scope_op);
@@ -807,7 +857,7 @@ Function-level records and statements.
     if (ok) {
       cir::SwitchOp op = compat::open_switch(builder_, loc(), cond);
       mlir::Block *block = &op.getBody().front();
-      open_frame(a_frame_kind::switch_stmt, op.getOperation(), block);
+      open_frame(a_frame_kind::switch_stmt, op.getOperation());
       frames_.back().switch_type = cond.getType();
       builder_.setInsertionPointToStart(block);
     }
@@ -825,7 +875,7 @@ Function-level records and statements.
         sw = &frames_[k - 1];
     }
     if (sw == nullptr) {
-      ok = format_error("case label outside a switch");
+      ok = internal("case label outside a switch");
     } else {
       auto cond_type = mlir::cast<cir::IntType>(sw->switch_type);
       if (r.opcode != eop_case_default) {

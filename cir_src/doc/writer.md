@@ -1,6 +1,6 @@
 # The ECIL writer (what the code does today)
 
-Status: M2 (C, v0 of the stream, ECIL minor 6). This document describes the
+Status: M2.1 (C, v0 of the stream, ECIL minor 7). This document describes the
 implementation in `src/ecil_*.c`, `src/cir_be.c` and the front-end hooks. The
 format is `ecil_format.md`; the design rationale is `design.md`; this file is
 what a reviewer should check the code against. File:function names, not line
@@ -24,7 +24,7 @@ Everything is compiled only when `BACK_END_TYPE == BACK_END_TYPE_CIR` (or
 ## 2. Entry points and lifecycle
 
 `ecil_stream_open` (from `fe_init.c`, after the option processing) opens the
-sink; the preamble and `F_HEADER` are written with the first frame.
+sink and writes the preamble. `F_HEADER` is sent with the first hand-off, because the triple's operating system comes from the predefined macros, which do not exist at open (section 7).
 `ecil_hand_off_region(n)` is called from `mem_manage.c`
 (`hand_off_memory_region`): for a function region it builds one `F_REGION`
 frame per function; for the file-scope region it builds `F_GLOBALS`.
@@ -46,9 +46,11 @@ State machine: `ess_closed` -> `ess_open` -> `ess_ended` | `ess_aborted` |
   (constexpr, local class types, `--ecil_keep_regions`). It is freed unless
   it is kept (keep tests, `--ecil_keep_regions`).
 * The end-of-compilation sweep (`check_for_done_with_all_function_memory_regions`)
-  streams every function region not yet streamed (a bitmap indexed by
-  `function_def_number` in `ecil_code.c` records the ones that were) and
-  frees it unless `--ecil_keep_regions`.
+  streams every function region not yet streamed. A function-state map
+  indexed by `function_def_number` in `ecil_code.c` records which ones were;
+  its states are streamed, dropped, retracted and delayed, and number 0 is
+  never tracked. The sweep frees each region it streams unless
+  `--ecil_keep_regions`.
 * `free_memory_region` clears `function_def_table[n].scope` for the
   functions of the freed region (CIR only), so no stale scope pointer
   survives; `scope_for_function_def` already returns NULL for a freed region.
@@ -72,6 +74,9 @@ only after the API call returns; the F_ABORT submission discards them.
   use; L-ids are per function frame; sids (strings) are dense in order of
   first use. All are assigned in the declaration section of the frame that
   first needs them, and the id tables remember them for later frames.
+* L-ids are stored in the IL entry as base + n. The base is the number of
+  L-ids used by earlier functions (`ecil_end_lid_epoch`), so the ids of an
+  earlier function read as 0.
 * Where the id lives: with `ECIL_ID_IN_PREFIX` (CIR builds) in
   `an_il_entry_prefix.ecil_id` (a `uint32_t` that fits the prefix padding;
   `mem_tables.h` has static assertions and `clear_il_entry_prefix` clears it
@@ -135,9 +140,16 @@ uses that need a complete record are unsupported.
 ### Builtins
 
 * Library rule: a call to `__builtin_X` is an ordinary `CALL` of X for the
-  names in `ecil_library_builtin_name` (`ecil_type.c`): the libc/libm names
-  of C99 plus common POSIX/GNU string and ctype functions. The list is by
-  name because the front end's builtin tables do not mark libc functions.
+  names in `builtin_libc_names` (M2.1). That list is in
+  `src/builtin_libc.h`, which `dev_tools/builtins/generate-libc-builtins.py`
+  generates from the scraped `builtins_*.txt` data:
+  - a name X is included when every scrape that lists both `__builtin_X` and
+    X gives them the same signature;
+  - names with special semantics, or that are not usable with glibc, are
+    excluded by a documented list.
+
+  Only `ecil_type.c` includes the header. The large FE builtin tables are
+  untouched (see `research/builtin_table_regen.md`).
 * `BUILTIN` records: `expect`, `unreachable`, `trap`, `alloca` (also
   `alloca_with_align`), `bswap16/32/64`, `clz`, `ctz`, `popcount`, `parity`,
   `ffs`, `clrsb` (plain, `l`, `ll`, `g` variants), `clzg`/`ctzg` (with a
@@ -181,25 +193,41 @@ values. Verified by running every corpus file twice and comparing bytes
 
 There is no recursion on IL depth: types, expressions, statements,
 initializers and constants run on explicit heap stacks (`ecil_type.c`,
-`ecil_code.c`, `ecil_const.c`).  A call-graph check over the six source
-files (252 functions) finds one cycle: constant emission (`emit_leaf`) can
-reach `ecil_variable_id`, which defines a static local that has no
-declaration statement (`__func__`, a compound literal) on first use, and that
-definition emits its own constant.  The nesting is bounded by the nesting of
-such objects in the source (one level for `__func__`), not by IL depth, and
-the nested call uses its own scratch buffer.  A pathological nesting of
-compound literals in static initializers would recurse once per level.  In
-CHECKING builds
+`ecil_code.c`, `ecil_const.c`).
+
+The call-graph check (`cir_src/test/writer/tools/callgraph_check.py`) finds
+230 functions and **0 cycles** (M2.1). At M2 there was one cycle:
+`emit_leaf` could define a static local (`__func__`, a compound literal)
+while building a constant. Since M2.1, such a static local is introduced at
+once (`DECL_VAR`). Its initializer is queued and built at the end of the
+function or of `F_GLOBALS` (`ecil_queue_variable_definition`,
+`ecil_drain_variable_definitions`), so building a constant never builds
+another.
+
+In CHECKING builds
 `ecil_code_stack_high` records the work-stack high-water mark
 (`ECIL_STATS=1` prints it from the writer-only harness).
 
 ## 7. Target
 
-The header's target triple is derived from the front end's target flags (the
-architecture) and from the operating system of the host the front end was
-built on (`__linux__`, `__APPLE__`, `_WIN32` at build time); a cross-configured
-front end would therefore be mislabelled, and the library rejects such a
-triple. The library accepts x86-64 Linux only; other
+The header's target triple has two parts:
+- the architecture, from the front end's target flags;
+- the operating system, from the target's predefined macros (`__linux__`,
+  `__APPLE__`, `_WIN32`), looked up at the first hand-off.
+
+The sizes of `int`, `double` and pointers, and the integer promotion width,
+come from the FE target.
+
+`CHEAP_UNALIGNED_BF` is set for x86 and AArch64.
+
+The in-process sink requires x86-64.
+
+Follow-up: a source-level `#undef __linux__` before the first function would
+mislabel the triple. The library then rejects it, so it is an error, not a
+miscompile. A later milestone should capture the OS before user source is
+processed.
+
+The library accepts x86-64 Linux only; other
 front-end targets (the Mac's aarch64) produce valid streams that are only
 useful for the writer-only loop, and their goldens are not authoritative.
 
@@ -210,3 +238,14 @@ integration driver (the real front end with a test back end), probes and
 `tools/` (decoder, `stackcheck.py` value-stack checker, corpus sweep).
 `tests/tests/cir/writer/` has the regression tests (`//script:
 edg-cir-ecil-dump`, recorded on the x86-64 box).
+
+CHECKING builds verify id introduction (spec 7): G-ids and sids at `F_END`,
+L-ids at `FUNC_END`. For the first 160 G-ids (or all of them with
+`ECIL_GID_STRESS`) they also move the G-id table on every new G-id, so ASan
+catches stale `gids[]` pointers.
+
+The tools in `cir_src/test/writer/tools/` include:
+- `callgraph_check.py`;
+- `perf_ir.sh`, `cg_prof.py` and `cg_sum.py` (callgrind Ir);
+- `gen_perf_tus.py`;
+- `asm_cmp.sh`.

@@ -49,12 +49,36 @@ enum an_ecil_stream_state {
   ess_failed      /* The stream could not be opened or broke. */
 };
 
+#if CHECKING
+/* Below this many G-ids the table moves at every new one (see
+   ecil_new_gid). */
+#define ECIL_GID_MOVE_LIMIT 160u
+
+/* A table a move leaves is freed (AddressSanitizer reports a stale use).
+   Under ECIL_GID_STRESS the whole table is filled with this byte and kept
+   (the last ECIL_RETIRED_TABLES of them) and verified, so that a write
+   through a stale pointer changes the pattern, which
+   ecil_check_retired_tables notices.  The pattern alternates between this
+   byte and its complement from one entry to the next, so that a write that
+   clears a flag (a no-op on a poison bit that is already clear) is seen on
+   half of the entries and a write that sets one on the other half. */
+#define ECIL_POISON_BYTE 0xA5
+#define ECIL_RETIRED_TABLES 32
+
+typedef struct an_ecil_retired_table {
+  unsigned char *table;
+  size_t        bytes;
+} an_ecil_retired_table;
+#endif /* CHECKING */
+
 /* An entry of the string table (a copy of the interned text). */
 typedef struct an_ecil_string {
   char          *text;
   size_t        length;
   uint32_t      hash;
   a_boolean     symbol_used;      /* Taken as a symbol name. */
+  uint32_t      next_suffix;      /* As a base name: the first suffix that
+                                     may still be free (0: none tried). */
 } an_ecil_string;
 
 /* A word-sequence key of the structural interning table. */
@@ -100,6 +124,26 @@ typedef struct an_ecil_stream {
   size_t        word_entries_capacity;
   size_t        *word_slots;      /* Open addressing; index + 1. */
   size_t        num_word_slots;   /* A power of two, or 0. */
+  a_boolean     header_sent;      /* F_HEADER has been submitted. */
+  uint32_t      lid_base;         /* L-ids assigned before the current
+                                     function (see ecil_lid_of). */
+  an_ecil_frame work_frame;       /* The frame of region hand-offs, reused. */
+  a_boolean     work_frame_ready;
+#if CHECKING
+  uint32_t      gids_introduced;  /* The highest G-id introduced by a record
+                                     written so far. */
+  uint32_t      sids_introduced;
+  uint32_t      lids_introduced;  /* In the current function. */
+  a_boolean     gid_stress;       /* Move the G-id table at every new G-id
+                                     (finds stale an_ecil_gid_info
+                                     pointers). */
+  an_ecil_retired_table
+                retired[ECIL_RETIRED_TABLES];
+                                  /* The last tables the G-id table moved
+                                     from, kept filled with the poison
+                                     pattern. */
+  unsigned int  num_retired;
+#endif /* CHECKING */
   an_ecil_id_map
                 gid_map;          /* Test builds only. */
   an_ecil_id_map
@@ -115,14 +159,39 @@ The producer name written to HDR_PRODUCER.
 #define ECIL_PRODUCER_NAME \
   "EDG C/C++ front end " VERSION_NUMBER " (ECIL writer)"
 
+static a_boolean ecil_predefined_macro_is_defined(const char *name)
+/*
+Return TRUE if the preprocessor has a macro of that name: the predefined
+macros are the front end's own description of the target (they come from
+the target configuration's auxiliary information).
+*/
+{
+  a_symbol_locator  locator;
+  a_boolean         defined = FALSE;
+
+  /* The file scope of the translation unit is created right after the
+     predefined macros; before that (an error during start-up) the symbol
+     table cannot be asked. */
+  if (curr_translation_unit != NULL &&
+      curr_translation_unit->primary_scope != NULL) {
+    clear_locator(&locator, &null_source_position);
+    defined = find_macro_symbol_by_name(name, (sizeof_t)strlen(name),
+                                        &locator) != NULL;
+  }  /* if */
+  return defined;
+}  /* ecil_predefined_macro_is_defined */
+
+
 static const char *ecil_target_triple(void)
 /*
 The target triple, derived from the front end's target configuration: the
 architecture from the targ_supports_* flags, the operating system from the
-host the front end was built for (the front end targets its host).  The CIR
-library supports x86-64 Linux only and rejects any other triple; a front end
-for another target still writes a valid stream, so the writer-only test loop
-works there, but its output is not authoritative.
+target's predefined macros (not from the host the front end was built on, so
+a cross-configured front end is labelled correctly).  The CIR library
+supports x86-64 Linux only and rejects any other triple, including the
+"unknown" one written when the target defines none of the known system
+macros; a front end for another target still writes a valid stream, so the
+writer-only test loop works there, but its output is not authoritative.
 */
 {
   const char  *arch;
@@ -136,15 +205,15 @@ works there, but its output is not authoritative.
   } else {
     arch = target_is_64_bits() ? "x86_64" : "i686";
   }  /* if */
-#if defined(__linux__)
-  os = "unknown-linux-gnu";
-#elif defined(__APPLE__) && defined(__MACH__)
-  os = "apple-macosx";
-#elif defined(_WIN32)
-  os = "pc-windows-msvc";
-#else
-  os = "unknown-unknown";
-#endif
+  if (ecil_predefined_macro_is_defined("__linux__")) {
+    os = "unknown-linux-gnu";
+  } else if (ecil_predefined_macro_is_defined("__APPLE__")) {
+    os = "apple-macosx";
+  } else if (ecil_predefined_macro_is_defined("_WIN32")) {
+    os = "pc-windows-msvc";
+  } else {
+    os = "unknown-unknown";
+  }  /* if */
   (void)snprintf(triple, sizeof(triple), "%s-%s", arch, os);
   return triple;
 }  /* ecil_target_triple */
@@ -160,6 +229,20 @@ environment variable EDG_CIR_WRAPV, for experiments.
 #define ECIL_DEFAULT_WRAPV FALSE
 #endif /* ifndef ECIL_DEFAULT_WRAPV */
 a_boolean ecil_wrapv = ECIL_DEFAULT_WRAPV;
+
+#if CHECKING
+/* What the first operand of a record introduces. */
+enum an_ecil_intro_kind {
+  eik_none,
+  eik_sid,          /* STR: a string id. */
+  eik_gid,          /* TY_*: a G-id, which must be the next. */
+  eik_gid_or_reissue,
+                    /* DECL_*: the next G-id, or an earlier one (re-issue). */
+  eik_gid_existing, /* TY_RECORD_BODY: an introduced G-id. */
+  eik_lid,          /* LOCAL, PARAM, MATERIALIZE_TEMP, LABEL: an L-id. */
+  eik_function      /* FUNC_BEGIN: the L-ids start over. */
+};
+#endif /* CHECKING */
 
 /* Buffer and tag encoders. */
 
@@ -255,6 +338,39 @@ Append the low num_bytes bytes of value, least significant first.
 }  /* ecil_buf_put_le */
 
 
+static char *ecil_buf_room(an_ecil_buffer *buf, size_t length)
+/*
+Make room for length more bytes and return the address to write them at, or
+NULL if the buffer failed.  The caller advances buf->size.
+*/
+{
+  ecil_buf_reserve(buf, length);
+  return buf->failed ? NULL : buf->data + buf->size;
+}  /* ecil_buf_room */
+
+
+static void ecil_buf_put_tagged(an_ecil_buffer *buf,
+                                unsigned int   tag,
+                                uint64_t       value,
+                                unsigned int   num_bytes)
+/*
+Append a tag byte and the low num_bytes bytes of value (at most 8), with one
+check for room.
+*/
+{
+  char          *p = ecil_buf_room(buf, 9);
+  unsigned int  i;
+
+  if (p != NULL) {
+    p[0] = (char)(unsigned char)tag;
+    for (i = 0; i < num_bytes; i++) {
+      p[1 + i] = (char)(unsigned char)((value >> (8 * i)) & 0xFF);
+    }  /* for */
+    buf->size += 1 + num_bytes;
+  }  /* if */
+}  /* ecil_buf_put_tagged */
+
+
 void ecil_put_uint(an_ecil_buffer *buf, uint64_t value)
 /*
 Append an unsigned integer in its shortest encoding.
@@ -263,17 +379,13 @@ Append an unsigned integer in its shortest encoding.
   if (value <= ECIL_TAG_FIXUINT_MAX) {
     ecil_buf_put_byte(buf, (unsigned int)value);
   } else if (value <= 0xFF) {
-    ecil_buf_put_byte(buf, ECIL_TAG_U8);
-    ecil_buf_put_le(buf, value, 1);
+    ecil_buf_put_tagged(buf, ECIL_TAG_U8, value, 1);
   } else if (value <= 0xFFFF) {
-    ecil_buf_put_byte(buf, ECIL_TAG_U16);
-    ecil_buf_put_le(buf, value, 2);
+    ecil_buf_put_tagged(buf, ECIL_TAG_U16, value, 2);
   } else if (value <= 0xFFFFFFFFu) {
-    ecil_buf_put_byte(buf, ECIL_TAG_U32);
-    ecil_buf_put_le(buf, value, 4);
+    ecil_buf_put_tagged(buf, ECIL_TAG_U32, value, 4);
   } else {
-    ecil_buf_put_byte(buf, ECIL_TAG_U64);
-    ecil_buf_put_le(buf, value, 8);
+    ecil_buf_put_tagged(buf, ECIL_TAG_U64, value, 8);
   }  /* if */
 }  /* ecil_put_uint */
 
@@ -289,17 +401,13 @@ the unsigned encodings (readers accept any width).
   } else if (value >= -32) {
     ecil_buf_put_byte(buf, (unsigned int)(256 + value));
   } else if (value >= -128) {
-    ecil_buf_put_byte(buf, ECIL_TAG_I8);
-    ecil_buf_put_le(buf, (uint64_t)value, 1);
+    ecil_buf_put_tagged(buf, ECIL_TAG_I8, (uint64_t)value, 1);
   } else if (value >= -32768) {
-    ecil_buf_put_byte(buf, ECIL_TAG_I16);
-    ecil_buf_put_le(buf, (uint64_t)value, 2);
+    ecil_buf_put_tagged(buf, ECIL_TAG_I16, (uint64_t)value, 2);
   } else if (value >= -2147483647 - 1) {
-    ecil_buf_put_byte(buf, ECIL_TAG_I32);
-    ecil_buf_put_le(buf, (uint64_t)value, 4);
+    ecil_buf_put_tagged(buf, ECIL_TAG_I32, (uint64_t)value, 4);
   } else {
-    ecil_buf_put_byte(buf, ECIL_TAG_I64);
-    ecil_buf_put_le(buf, (uint64_t)value, 8);
+    ecil_buf_put_tagged(buf, ECIL_TAG_I64, (uint64_t)value, 8);
   }  /* if */
 }  /* ecil_put_int */
 
@@ -454,16 +562,32 @@ Initialize a frame of the given kind, with the declaration section current.
   frame->kind = kind;
   frame->flags = 0;
   frame->pending_operands = -1;
+#if CHECKING
+  frame->intro_kind = 0;
+#endif /* CHECKING */
 }  /* ecil_frame_init */
 
 
 void ecil_frame_reset(an_ecil_frame *frame, unsigned int kind)
 /*
-Empty a frame for reuse, keeping its storage.
+Empty a frame for reuse, keeping its storage unless a section grew beyond
+ECIL_FRAME_KEEP_BYTES (one huge function must not pin its memory for the rest
+of the compilation).
 */
 {
+  if (frame->decl.capacity > ECIL_FRAME_KEEP_BYTES) {
+    ecil_buf_free(&frame->decl);
+  }  /* if */
+  if (frame->body.capacity > ECIL_FRAME_KEEP_BYTES) {
+    ecil_buf_free(&frame->body);
+  }  /* if */
   frame->decl.size = 0;
+  frame->decl.failed = FALSE;
+#if CHECKING
+  frame->intro_kind = eik_none;
+#endif /* CHECKING */
   frame->body.size = 0;
+  frame->body.failed = FALSE;
   frame->current = &frame->decl;
   frame->kind = kind;
   frame->flags = 0;
@@ -521,7 +645,6 @@ Return the current position of a frame.
 {
   an_ecil_mark  mark;
 
-  mark.decl_size = frame->decl.size;
   mark.body_size = frame->body.size;
   mark.in_body = (frame->current == &frame->body);
   return mark;
@@ -542,6 +665,109 @@ string tables, so dropping them would leave later references dangling.
 }  /* ecil_frame_truncate */
 
 
+#if CHECKING
+
+/* Per-opcode tables for the record checks: the operand count and what the
+   first operand introduces.  Built on first use from ecil_opcode_arity. */
+static signed char  ecil_arity_table[256];
+static unsigned char
+                    ecil_intro_table[256];
+static a_boolean    ecil_tables_ready;
+
+static void ecil_build_check_tables(void)
+/*
+Build the per-opcode tables of the record checks.
+*/
+{
+  unsigned int  opcode;
+
+  for (opcode = 0; opcode < 256; opcode++) {
+    ecil_arity_table[opcode] = (signed char)ecil_opcode_arity(opcode);
+    ecil_intro_table[opcode] = (unsigned char)eik_none;
+  }  /* for */
+  ecil_intro_table[eop_str] = (unsigned char)eik_sid;
+  ecil_intro_table[eop_ty_void] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_bool] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_int] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_float] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_ptr] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_array] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_func] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_record_decl] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_opaque] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_decl_func] = (unsigned char)eik_gid_or_reissue;
+  ecil_intro_table[eop_decl_var] = (unsigned char)eik_gid_or_reissue;
+  ecil_intro_table[eop_ty_record_body] = (unsigned char)eik_gid_existing;
+  ecil_intro_table[eop_local] = (unsigned char)eik_lid;
+  ecil_intro_table[eop_param] = (unsigned char)eik_lid;
+  ecil_intro_table[eop_materialize_temp] = (unsigned char)eik_lid;
+  ecil_intro_table[eop_label] = (unsigned char)eik_lid;
+  ecil_intro_table[eop_func_begin] = (unsigned char)eik_function;
+  ecil_tables_ready = TRUE;
+}  /* ecil_build_check_tables */
+
+
+static void ecil_check_introduction(unsigned int kind, uint64_t id)
+/*
+Account for the id a record introduces (see ecil_check_all_introduced).  A
+new G-id or sid must be the highest introduced so far plus 1 (spec 7).
+*/
+{
+  an_ecil_stream  *stream = &ecil_stream;
+
+  switch (kind) {
+    case eik_sid:
+      check_assertion(id == (uint64_t)stream->sids_introduced + 1);
+      stream->sids_introduced++;
+      break;
+    case eik_gid:
+      check_assertion(id == (uint64_t)stream->gids_introduced + 1);
+      stream->gids_introduced++;
+      break;
+    case eik_gid_or_reissue:
+      if (id == (uint64_t)stream->gids_introduced + 1) {
+        stream->gids_introduced++;
+      } else {
+        check_assertion(id != 0 && id <= stream->gids_introduced);
+      }  /* if */
+      break;
+    case eik_gid_existing:
+      check_assertion(id != 0 && id <= stream->gids_introduced);
+      break;
+    case eik_lid:
+      stream->lids_introduced++;
+      break;
+    case eik_function:
+      stream->lids_introduced = 0;
+      break;
+    default:
+      break;
+  }  /* switch */
+}  /* ecil_check_introduction */
+
+
+void ecil_check_function_lids(uint32_t num_lids)
+/*
+At FUNC_END: the function allocated num_lids L-ids and every one of them was
+introduced (a forward goto's label counts when its LABEL was written).
+*/
+{
+  check_assertion(ecil_stream.lids_introduced == num_lids);
+}  /* ecil_check_function_lids */
+
+
+void ecil_check_all_introduced(void)
+/*
+At F_END: every G-id and sid the writer allocated was introduced.
+*/
+{
+  check_assertion(ecil_stream.gids_introduced == ecil_stream.num_gids);
+  check_assertion(ecil_stream.sids_introduced == ecil_stream.num_strings);
+}  /* ecil_check_all_introduced */
+
+#endif /* CHECKING */
+
+
 /* Record helpers. */
 
 void ecil_rec_begin(an_ecil_frame *frame, unsigned int opcode)
@@ -549,16 +775,19 @@ void ecil_rec_begin(an_ecil_frame *frame, unsigned int opcode)
 Start a record: write its opcode byte.
 */
 {
-  LOCAL_UNUSED int  arity = ecil_opcode_arity(opcode);
-
   check_assertion(frame->pending_operands == -1);
-  check_assertion(arity >= 0);
-  ecil_buf_put_byte(frame->current, opcode);
 #if CHECKING
-  frame->pending_operands = arity;
-#else /* !CHECKING */
-  (void)arity;
+  {
+    int  arity;
+
+    if (!ecil_tables_ready) ecil_build_check_tables();
+    arity = ecil_arity_table[opcode & 0xFF];
+    check_assertion(arity >= 0 && opcode < 256);
+    frame->pending_operands = arity;
+    frame->intro_kind = ecil_intro_table[opcode];
+  }
 #endif /* CHECKING */
+  ecil_buf_put_byte(frame->current, opcode);
 }  /* ecil_rec_begin */
 
 
@@ -581,6 +810,12 @@ void ecil_arg_uint(an_ecil_frame *frame, uint64_t value)
 Append an unsigned operand.
 */
 {
+#if CHECKING
+  if (frame->intro_kind != eik_none) {
+    ecil_check_introduction(frame->intro_kind, value);
+    frame->intro_kind = eik_none;
+  }  /* if */
+#endif /* CHECKING */
   ecil_note_operand(frame);
   ecil_put_uint(frame->current, value);
 }  /* ecil_arg_uint */
@@ -843,6 +1078,7 @@ first use.
       stream->strings[stream->num_strings].length = length;
       stream->strings[stream->num_strings].hash = hash;
       stream->strings[stream->num_strings].symbol_used = FALSE;
+      stream->strings[stream->num_strings].next_suffix = 0;
       stream->num_strings++;
       sid = stream->num_strings;
       slot = hash & (stream->num_string_slots - 1);
@@ -879,22 +1115,115 @@ Intern a NUL-terminated string.
 
 const char *ecil_unsupported_reason;
 
+/* The text of the first reason, owned by the stream (callers pass literals
+   and temporary buffers). */
+static char     ecil_reason_text[ECIL_REASON_MAX];
+
 void ecil_note_unsupported(const char *reason)
 /*
 Record why the current function or initializer cannot be expressed.  The
 first reason wins; the caller of the traversal checks
-ecil_unsupported_reason and discards its partial output.
+ecil_unsupported_reason and discards its partial output.  The text is copied,
+so the argument need not outlive the call.
 */
 {
-  if (ecil_unsupported_reason == NULL) ecil_unsupported_reason = reason;
+  if (ecil_unsupported_reason == NULL) {
+    (void)snprintf(ecil_reason_text, sizeof(ecil_reason_text), "%s", reason);
+    ecil_unsupported_reason = ecil_reason_text;
+  }  /* if */
 }  /* ecil_note_unsupported */
+
+
+void ecil_save_reason(an_ecil_saved_reason *saved)
+/*
+Take the current reason (if any) aside and clear it, so that the caller can
+run code that may note and discard reasons of its own.
+*/
+{
+  saved->is_set = (ecil_unsupported_reason != NULL);
+  if (saved->is_set) {
+    (void)snprintf(saved->text, sizeof(saved->text), "%s",
+                   ecil_unsupported_reason);
+  } else {
+    saved->text[0] = '\0';
+  }  /* if */
+  ecil_unsupported_reason = NULL;
+}  /* ecil_save_reason */
+
+
+void ecil_restore_reason(const an_ecil_saved_reason *saved)
+/*
+Put back a reason taken aside by ecil_save_reason.  It replaces any reason
+noted since, because the first reason wins.  If none was saved, a reason noted
+since stays.
+*/
+{
+  if (saved->is_set) {
+    ecil_unsupported_reason = NULL;
+    ecil_note_unsupported(saved->text);
+  }  /* if */
+}  /* ecil_restore_reason */
 
 
 /* The G-id table. */
 
+#if CHECKING
+
+static unsigned char ecil_poison_byte(size_t offset)
+/*
+Return the poison byte for an offset into a retired G-id table: the pattern
+alternates from one an_ecil_gid_info entry to the next.
+*/
+{
+  return ((offset / sizeof(an_ecil_gid_info)) & 1) ?
+                    (unsigned char)~ECIL_POISON_BYTE :
+                    (unsigned char)ECIL_POISON_BYTE;
+}  /* ecil_poison_byte */
+
+
+static void ecil_poison_table(unsigned char *table, size_t bytes)
+/*
+Fill a table that was just retired with the poison pattern.
+*/
+{
+  size_t  j;
+
+  for (j = 0; j < bytes; j++) {
+    table[j] = ecil_poison_byte(j);
+  }  /* for */
+}  /* ecil_poison_table */
+
+
+static void ecil_check_retired_tables(an_ecil_stream *stream,
+                                      unsigned int   first,
+                                      unsigned int   end)
+/*
+Assert that the retired G-id tables first to end-1 still hold the poison
+pattern: nothing wrote through a stale an_ecil_gid_info pointer.
+*/
+{
+  unsigned int  i;
+  size_t        j;
+
+  for (i = first; i < end; i++) {
+    for (j = 0; j < stream->retired[i].bytes; j++) {
+      check_assertion(stream->retired[i].table[j] == ecil_poison_byte(j));
+    }  /* for */
+  }  /* for */
+}  /* ecil_check_retired_tables */
+
+#endif /* CHECKING */
+
+
 uint32_t ecil_new_gid(an_ecil_gid_kind kind)
 /*
-Assign the next G-id (dense from 1) and record what it names.
+Assign the next G-id (dense from 1) and record what it names.  The table may
+move: an an_ecil_gid_info pointer must not be held across a call that can
+assign a G-id.  CHECKING builds move the table at every new G-id while
+there are few (and at every one if ECIL_GID_STRESS is set in the
+environment), so that a stale pointer is a use-after-free that
+AddressSanitizer reports in every small test.  Only under ECIL_GID_STRESS are
+the old tables kept and verified (a stale write is invisible otherwise).
 */
 {
   an_ecil_stream  *stream = &ecil_stream;
@@ -915,6 +1244,46 @@ Assign the next G-id (dense from 1) and record what it names.
       stream->gids_capacity = new_capacity;
     }  /* if */
   }  /* if */
+#if CHECKING
+  if ((stream->gid_stress || stream->num_gids < ECIL_GID_MOVE_LIMIT) &&
+      stream->gids != NULL) {
+    size_t            bytes = stream->gids_capacity * sizeof(an_ecil_gid_info);
+    an_ecil_gid_info  *moved = (an_ecil_gid_info *)malloc(bytes);
+
+    if (moved != NULL) {
+      size_t  used = ((size_t)stream->num_gids + 1) * sizeof(an_ecil_gid_info);
+
+      memcpy(moved, stream->gids, used);
+      if (!stream->gid_stress) {
+        /* Plain CHECKING: free the old table (AddressSanitizer reports a
+           later use of it).  O(1) amortized per G-id: the move window is
+           short, and nothing is scanned or poisoned (that costs 1M
+           instructions per small test under cachegrind). */
+        free(stream->gids);
+      } else {
+        /* ECIL_GID_STRESS: keep the old tables poisoned and verify them
+           (a stale write is a lost update that no ordinary run sees). */
+        if (stream->num_retired != 0) {
+          ecil_check_retired_tables(stream, stream->num_retired - 1,
+                                    stream->num_retired);
+        }  /* if */
+        ecil_poison_table((unsigned char *)stream->gids, bytes);
+        if (stream->num_retired == ECIL_RETIRED_TABLES) {
+          ecil_check_retired_tables(stream, 0, 1);
+          free(stream->retired[0].table);
+          memmove(&stream->retired[0], &stream->retired[1],
+                  (ECIL_RETIRED_TABLES - 1) * sizeof(an_ecil_retired_table));
+          stream->num_retired--;
+        }  /* if */
+        stream->retired[stream->num_retired].table =
+                                              (unsigned char *)stream->gids;
+        stream->retired[stream->num_retired].bytes = bytes;
+        stream->num_retired++;
+      }  /* if */
+      stream->gids = moved;
+    }  /* if */
+  }  /* if */
+#endif /* CHECKING */
   if (stream->gids != NULL && stream->num_gids + 1 < stream->gids_capacity) {
     gid = ++stream->num_gids;
     memset(&stream->gids[gid], 0, sizeof(an_ecil_gid_info));
@@ -949,7 +1318,9 @@ Return the number of G-ids assigned so far.
 
 static uint32_t ecil_hash_words(const uint32_t *words, size_t count)
 /*
-Hash a word sequence (FNV-1a over the words).
+Hash a word sequence (FNV-1a over the words).  A mixer with better low bits
+was tried and measured no faster on the corpus and the generated TUs (the
+tables hold some hundreds of keys, so collisions are rare).
 */
 {
   uint32_t  hash = 2166136261u;
@@ -1007,6 +1378,25 @@ Return the G-id registered for the key, or 0.
   }  /* if */
   return gid;
 }  /* ecil_word_lookup */
+
+
+void ecil_word_unregister(const uint32_t *words, size_t count)
+/*
+Forget the G-id registered for the key (it reads as 0 afterwards).  Nothing
+happens if the key is not registered.
+*/
+{
+  an_ecil_stream  *stream = &ecil_stream;
+
+  if (stream->num_word_slots != 0) {
+    uint32_t  hash = ecil_hash_words(words, count);
+    size_t    slot = ecil_word_find_slot(stream, words, count, hash);
+
+    if (stream->word_slots[slot] != 0) {
+      stream->word_entries[stream->word_slots[slot] - 1].gid = 0;
+    }  /* if */
+  }  /* if */
+}  /* ecil_word_unregister */
 
 
 static a_boolean ecil_word_table_grow(an_ecil_stream *stream)
@@ -1206,50 +1596,53 @@ Record the G-id of an IL entry.
 
 uint32_t ecil_lid_of(void *entry)
 /*
-Return the frame-local id of a local variable or label, or 0.
+Return the frame-local id of a local variable or label in the current function
+frame, or 0.  An entry keeps the id it was given by ecil_set_lid with the
+base of its function added (the number of L-ids all earlier functions used),
+so an id left by an earlier function (stale) is not above the current base
+and reads as 0.
 */
 {
+  uint32_t  stored;
+
 #if ECIL_ID_IN_PREFIX
-  return il_entry_prefix_of(entry).ecil_id;
+  stored = il_entry_prefix_of(entry).ecil_id;
 #else /* !ECIL_ID_IN_PREFIX */
   uint32_t  *slot = ecil_id_map_slot(&ecil_stream.lid_map, entry, FALSE);
 
-  return slot == NULL ? 0 : *slot;
+  stored = (slot == NULL) ? 0 : *slot;
 #endif /* ECIL_ID_IN_PREFIX */
+  return stored > ecil_stream.lid_base ? stored - ecil_stream.lid_base : 0;
 }  /* ecil_lid_of */
 
 
 void ecil_set_lid(void *entry, uint32_t lid)
 /*
-Record the frame-local id of a local variable or label.
+Record the frame-local id (1 or more) of a local variable or label of the
+current function.
 */
 {
+  uint32_t  stored = ecil_stream.lid_base + lid;
+
 #if ECIL_ID_IN_PREFIX
-  il_entry_prefix_of(entry).ecil_id = lid;
+  il_entry_prefix_of(entry).ecil_id = stored;
 #else /* !ECIL_ID_IN_PREFIX */
   uint32_t  *slot = ecil_id_map_slot(&ecil_stream.lid_map, entry, TRUE);
 
-  if (slot != NULL) *slot = lid;
+  if (slot != NULL) *slot = stored;
 #endif /* ECIL_ID_IN_PREFIX */
 }  /* ecil_set_lid */
 
 
-void ecil_forget_lids(void)
+void ecil_end_lid_epoch(uint32_t num_lids)
 /*
-End of a function frame: forget the local ids.  (With the prefix id the
-entries are freed with their region, so nothing is needed.)
+End of a function frame, which used num_lids L-ids: every id set so far
+becomes stale (ecil_lid_of returns 0 for it).  Nothing is cleared.
 */
 {
-#if !ECIL_ID_IN_PREFIX
-  an_ecil_id_map  *map = &ecil_stream.lid_map;
-
-  if (map->capacity != 0) {
-    memset(map->keys, 0, map->capacity * sizeof(void *));
-    memset(map->values, 0, map->capacity * sizeof(uint32_t));
-    map->count = 0;
-  }  /* if */
-#endif /* !ECIL_ID_IN_PREFIX */
-}  /* ecil_forget_lids */
+  check_assertion(num_lids <= 0xFFFFFFFFu - ecil_stream.lid_base - 1);
+  ecil_stream.lid_base += num_lids;
+}  /* ecil_end_lid_epoch */
 
 
 /* Unique symbol names. */
@@ -1285,18 +1678,26 @@ Return TRUE if the string has been taken as a symbol name.
 uint32_t ecil_unique_symbol_name(an_ecil_frame *frame, const char *base)
 /*
 Return the sid of a name that no other static or string literal has: the
-base itself, or base.1, base.2, ... in order of first use.
+base itself, or base.1, base.2, ... in order of first use.  Names are never
+released, so every suffix below the one a base last got is taken: the base
+keeps the first suffix still worth trying (its probing is not quadratic).
 */
 {
   char      name[1024];
-  uint32_t  sid = ecil_intern_cstring(frame, base);
-  unsigned  suffix = 0;
+  uint32_t  base_sid = ecil_intern_cstring(frame, base);
+  uint32_t  sid = base_sid;
 
-  while (sid != 0 && ecil_symbol_name_used(sid)) {
-    suffix++;
-    (void)snprintf(name, sizeof(name), "%.1000s.%u", base, suffix);
-    sid = ecil_intern_cstring(frame, name);
-  }  /* while */
+  if (sid != 0 && ecil_symbol_name_used(sid)) {
+    unsigned  suffix = ecil_string_of(base_sid)->next_suffix;
+
+    if (suffix == 0) suffix = 1;
+    do {
+      (void)snprintf(name, sizeof(name), "%.1000s.%u", base, suffix);
+      sid = ecil_intern_cstring(frame, name);
+      suffix++;
+    } while (sid != 0 && ecil_symbol_name_used(sid));
+    if (sid != 0) ecil_string_of(base_sid)->next_suffix = suffix;
+  }  /* if */
   if (sid != 0) ecil_mark_symbol_name(sid);
   return sid;
 }  /* ecil_unique_symbol_name */
@@ -1379,15 +1780,19 @@ obtained from the sink and submit it.  The frame is left empty.
 }  /* ecil_submit_frame */
 
 
-static a_boolean ecil_target_is_supported(void)
+static a_boolean ecil_target_is_supported(a_boolean in_process)
 /*
-Return TRUE if the FE target configuration is x86-64 SysV (ILP32 int, LP64
-long and pointers, little endian, 8-bit chars): the only target the CIR
-library supports.
+Return TRUE if the FE target configuration is one the writer can describe:
+ILP32 int, LP64 long and pointers, little endian, 8-bit chars.  The in-process
+library accepts only x86-64 SysV, so there the architecture is checked too
+(the x86 family in 64-bit mode); a stream written to a file for another
+architecture (the writer-only test loop on an AArch64 Mac) is valid, and the
+library rejects its target triple if it is ever consumed.
 */
 {
   return targ_sizeof_pointer == 8 && targ_sizeof_int == 4 &&
-         targ_sizeof_long == 8 && targ_char_bit == 8 && targ_little_endian;
+         targ_sizeof_long == 8 && targ_char_bit == 8 && targ_little_endian &&
+         (!in_process || (target_is_x86_based() && target_is_64_bits()));
 }  /* ecil_target_is_supported */
 
 
@@ -1404,7 +1809,7 @@ need, then HDR_TARGET, HDR_LANG, HDR_PRODUCER and HDR_TYPE_ROLE.
   uint32_t      int_type;
   uint32_t      size_type;
   uint32_t      ptrdiff_type;
-  unsigned int  target_flags = ECIL_TARGET_CHEAP_UNALIGNED_BF;
+  unsigned int  target_flags = 0;
   unsigned int  lang_flags = 0;
   unsigned int  ptr_bits = (unsigned int)(targ_sizeof_pointer *
                                           targ_char_bit);
@@ -1430,6 +1835,12 @@ need, then HDR_TARGET, HDR_LANG, HDR_PRODUCER and HDR_TYPE_ROLE.
                                (unsigned int)targ_sizeof_pointer,
                                (unsigned int)targ_sizeof_pointer);
   if (targ_has_signed_chars) target_flags |= ECIL_TARGET_CHAR_SIGNED;
+  /* Unaligned bit-field access is cheap on x86 and AArch64 (clang's
+     hasCheapUnalignedBitFieldAccess); not assumed elsewhere. */
+  if (target_is_x86_based() || (target_is_arm_based() &&
+                                target_is_64_bits())) {
+    target_flags |= ECIL_TARGET_CHEAP_UNALIGNED_BF;
+  }  /* if */
   ecil_rec_begin(frame, eop_hdr_target);
   ecil_arg_uint(frame, triple_sid);
   ecil_arg_uint(frame, abi_sid);
@@ -1476,10 +1887,15 @@ Free the tables of the stream.
   for (i = 0; i < stream->num_strings; i++) free(stream->strings[i].text);
   free(stream->strings);
   free(stream->string_slots);
+#if CHECKING
+  ecil_check_retired_tables(stream, 0, stream->num_retired);
+  for (i = 0; i < stream->num_retired; i++) free(stream->retired[i].table);
+#endif /* CHECKING */
   free(stream->gids);
   free(stream->word_arena);
   free(stream->word_entries);
   free(stream->word_slots);
+  if (stream->work_frame_ready) ecil_frame_free(&stream->work_frame);
   free(stream->gid_map.keys);
   free(stream->gid_map.values);
   free(stream->lid_map.keys);
@@ -1491,19 +1907,23 @@ Free the tables of the stream.
 void ecil_stream_open(void)
 /*
 Open the stream: choose the sink (the --ecil_output file or the in-process
-library session), submit the preamble and F_HEADER.  Called where the IL
-file would be started.  If the stream cannot be opened an error is
-reported and later calls do nothing.
+library session) and submit the preamble.  F_HEADER follows with the first
+hand-off (or the end of the stream), when the predefined macros that name the
+target's operating system exist.  Called where the IL file would be started.
+If the stream cannot be opened an error is reported and later calls do
+nothing.
 */
 {
   an_ecil_stream  *stream = &ecil_stream;
-  an_ecil_frame   frame;
   char            *preamble;
 
   if (stream->state == ess_closed) {
     memset(stream, 0, sizeof(*stream));
     stream->state = ess_failed;
-    if (!ecil_target_is_supported()) {
+#if CHECKING
+    stream->gid_stress = (getenv("ECIL_GID_STRESS") != NULL);
+#endif /* CHECKING */
+    if (!ecil_target_is_supported(ecil_output_file_name == NULL)) {
       cir_be_report_status("the CIR back end supports only x86-64 SysV "
                            "targets", -1);
     } else {
@@ -1543,11 +1963,6 @@ reported and later calls do nothing.
           if (!ecil_sink_submit(stream->sink, preamble,
                                 ECIL_PREAMBLE_SIZE)) {
             stream->state = ess_failed;
-          } else {
-            ecil_frame_init(&frame, efk_header);
-            ecil_write_header(&frame);
-            ecil_submit_frame(&frame);
-            ecil_frame_free(&frame);
           }  /* if */
         }  /* if */
       }  /* if */
@@ -1556,39 +1971,53 @@ reported and later calls do nothing.
 }  /* ecil_stream_open */
 
 
-void ecil_stream_globals(void)
+static void ecil_send_header(void)
 /*
-Submit F_GLOBALS: the definitions of the file-scope variables and the final
-re-issued declarations.  Called once, when the file-scope region is handed
-off.
+Submit F_HEADER if the stream is open and it has not been sent yet.
 */
 {
-  ecil_hand_off_region(FILE_SCOPE_REGION_NUMBER);
-}  /* ecil_stream_globals */
+  an_ecil_stream  *stream = &ecil_stream;
+  an_ecil_frame   frame;
+
+  if (stream->state == ess_open && !stream->header_sent) {
+    stream->header_sent = TRUE;
+    ecil_frame_init(&frame, efk_header);
+    ecil_write_header(&frame);
+    ecil_submit_frame(&frame);
+    ecil_frame_free(&frame);
+  }  /* if */
+}  /* ecil_send_header */
 
 
 void ecil_hand_off_region(a_memory_region_number region_number)
 /*
 Hand a completed memory region to the stream.  A function region becomes an
 F_REGION frame; the file-scope region becomes F_GLOBALS.  Does nothing once
-the stream has failed, been aborted or ended.
+the stream has failed, been aborted or ended.  The frame is reused from one
+hand-off to the next (its storage is released only when it grew large).
 */
 {
-  if (ecil_stream.state == ess_open) {
-    an_ecil_frame frame;
+  an_ecil_stream  *stream = &ecil_stream;
 
+  ecil_send_header();
+  if (stream->state == ess_open) {
+    an_ecil_frame *frame = &stream->work_frame;
+
+    if (!stream->work_frame_ready) {
+      ecil_frame_init(frame, efk_region);
+      stream->work_frame_ready = TRUE;
+    }  /* if */
     if (region_number == FILE_SCOPE_REGION_NUMBER) {
-      ecil_frame_init(&frame, efk_globals);
-      ecil_emit_globals(&frame);
+      ecil_frame_reset(frame, efk_globals);
+      ecil_emit_globals(frame);
     } else {
-      ecil_frame_init(&frame, efk_region);
-      ecil_stream_function_region(&frame, region_number);
+      ecil_frame_reset(frame, efk_region);
+      ecil_stream_function_region(frame, region_number);
     }  /* if */
-    if (frame.decl.size != 0 || frame.body.size != 0 ||
-        frame.kind == efk_globals) {
-      ecil_submit_frame(&frame);
+    if (frame->decl.size != 0 || frame->body.size != 0 ||
+        frame->kind == efk_globals) {
+      ecil_submit_frame(frame);
     }  /* if */
-    ecil_frame_free(&frame);
   }  /* if */
 }  /* ecil_hand_off_region */
 
@@ -1624,6 +2053,10 @@ Does nothing if the stream is not open (and is idempotent).
     if (is_at_least_one_error()) {
       ecil_abort();
     } else {
+      ecil_send_header();
+#if CHECKING
+      ecil_check_all_introduced();
+#endif /* CHECKING */
       ecil_frame_init(&frame, efk_end);
       ecil_rec2(&frame, eop_end, stream->num_frames, 0);
       ecil_submit_frame(&frame);
@@ -1646,6 +2079,7 @@ library diagnostics are only reported after an API call has returned.
   an_ecil_frame   frame;
 
   if (stream->state == ess_open) {
+    ecil_send_header();
     stream->state = ess_aborted;
     if (stream->sink != NULL) ecil_sink_begin_abort(stream->sink);
     ecil_frame_init(&frame, efk_abort);

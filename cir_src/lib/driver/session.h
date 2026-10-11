@@ -14,6 +14,7 @@ of the C API in edg_cir.h) and the helpers shared by the driver sources.
 #define EDG_CIR_SESSION_H 1
 
 #include <cstdint>
+#include <chrono>
 #include <cstdio>
 #include <functional>
 #include <map>
@@ -39,7 +40,8 @@ enum a_diagnostic_code : uint32_t {
   edc_llvm         = 2002,
   edc_pipeline     = 2003,
   edc_internal     = 2004,
-  edc_io           = 2005
+  edc_io           = 2005,
+  edc_stats        = 3001
 };  /* a_diagnostic_code */
 
 struct a_diagnostic {
@@ -74,6 +76,29 @@ struct a_header_facts {
       lang_flags(0) {}
 };  /* a_header_facts */
 
+/* EDG_CIR_FLAG_PRINT_STATS: counters and stage times in nanoseconds.  The
+   clocks are read only when the flag is set. */
+struct a_session_stats {
+  uint64_t frames = 0;
+  uint64_t records = 0;
+  uint64_t bytes = 0;
+  uint64_t consume_ns = 0;   /* Every consume call: decode, checks, emit. */
+  uint64_t emit_ns = 0;      /* The emitter's share of consume_ns. */
+  uint64_t finish_ns = 0;    /* Emitter finish: names, layouts, policy. */
+  uint64_t verify_ns = 0;
+  uint64_t passes_ns = 0;    /* CIR-to-CIR passes. */
+  uint64_t lower_ns = 0;     /* CIR to LLVM IR, GlobalDCE and the optimizer. */
+  uint64_t codegen_ns = 0;   /* Target code generation or printing. */
+};  /* a_session_stats */
+
+inline uint64_t stats_now_ns()
+/* A monotonic clock in nanoseconds. */
+{
+  return static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now().time_since_epoch()).count());
+}  /* stats_now_ns */
+
 class a_cir_module;  /* LLVM-dependent; defined in cir_module.h. */
 class a_emitter;     /* The ECIL-to-CIR emitter; defined in emitter.h. */
 
@@ -102,12 +127,13 @@ struct an_edg_cir_session {
   bool                                  finished;
   bool                                  in_worker;
   std::FILE                            *tee;  /* EDG_CIR_TEE debug copy */
+  bool                                  crash_held;  /* hold_crash_recovery */
   bool                                  poisoned;  /* A crash was recovered:
                                                       the MLIR state may be
                                                       corrupt. */
+  edg_cir::a_session_stats              stats;
+  bool                                  stats_on;  /* PRINT_STATS */
   std::vector<edg_cir::a_diagnostic>    queue;
-  std::map<uint64_t, std::string>       strings;
-  std::map<uint64_t, uint32_t>          int_widths;
   std::map<uint32_t, uint64_t>          type_roles;
   edg_cir::a_header_facts               header;
   std::unique_ptr<edg_cir::a_cir_module>
@@ -118,8 +144,10 @@ struct an_edg_cir_session {
   uint32_t                              last_line;
   uint32_t                              last_column;
 
+  void print_stats();
   an_edg_cir_status consume(const void *bytes, size_t length);
   bool consume_guarded(const void *bytes, size_t length);
+  bool consume_timed(const void *bytes, size_t length);
   an_edg_cir_status finish();
 
   /* Report a diagnostic: delivered now on the calling thread, or queued
@@ -145,6 +173,11 @@ namespace edg_cir {
 /* pipeline.cpp: run the CIR passes, lowering and code generation on the
    worker thread and fill session.output. */
 an_edg_cir_status run_pipeline(an_edg_cir_session &session);
+
+/* A session holds crash recovery enabled from its first consumed frame until
+   finish (or destruction): one sigaction round trip per session. */
+void hold_crash_recovery();
+void release_crash_recovery();
 
 /* Run body under crash recovery and a fatal-error handler (process-global,
    serialized by a mutex).  False means body crashed; message holds the

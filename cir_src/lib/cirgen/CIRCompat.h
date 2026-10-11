@@ -337,6 +337,93 @@ inline cir::RecordLayoutAttr record_layout(mlir::MLIRContext *ctx,
                                     /*has_trivial_dtor=*/true, align);
 }
 
+/* Builtin operations whose op classes and builders have churned upstream. */
+
+enum class a_overflow_kind : uint8_t { add, sub, mul };
+
+inline void overflow_op(a_builder &b, mlir::Location loc, a_overflow_kind kind,
+                        mlir::Type result_type, mlir::Value x, mlir::Value y,
+                        mlir::Value &value, mlir::Value &overflow)
+/* Create cir.add/sub/mul.overflow: the wrapped value and the overflow bit. */
+{
+  switch (kind) {
+  case a_overflow_kind::add: {
+    auto op = cir::AddOverflowOp::create(b, loc, result_type, x, y);
+    value = op.getResult();
+    overflow = op.getOverflow();
+    break;
+  }
+  case a_overflow_kind::sub: {
+    auto op = cir::SubOverflowOp::create(b, loc, result_type, x, y);
+    value = op.getResult();
+    overflow = op.getOverflow();
+    break;
+  }
+  default: {
+    auto op = cir::MulOverflowOp::create(b, loc, result_type, x, y);
+    value = op.getResult();
+    overflow = op.getOverflow();
+    break;
+  }
+  }
+}
+
+enum class a_bit_op : uint8_t {
+  byte_swap, count_leading_zeros, count_trailing_zeros, population_count,
+  parity, find_first_set, redundant_sign_bits
+};
+
+inline mlir::Value bit_op(a_builder &b, mlir::Location loc, a_bit_op kind,
+                          mlir::Value x)
+/*
+Create the cir bit operation on x (the result type is the operand type; the
+zero-undefined flag of clz/ctz is set, as for the GNU builtins).
+*/
+{
+  mlir::Value result;
+
+  switch (kind) {
+  case a_bit_op::byte_swap:
+    result = cir::ByteSwapOp::create(b, loc, x);
+    break;
+  case a_bit_op::count_leading_zeros:
+    result = cir::BitClzOp::create(b, loc, x, true).getResult();
+    break;
+  case a_bit_op::count_trailing_zeros:
+    result = cir::BitCtzOp::create(b, loc, x, true).getResult();
+    break;
+  case a_bit_op::population_count:
+    result = cir::BitPopcountOp::create(b, loc, x).getResult();
+    break;
+  case a_bit_op::parity:
+    result = cir::BitParityOp::create(b, loc, x).getResult();
+    break;
+  case a_bit_op::find_first_set:
+    result = cir::BitFfsOp::create(b, loc, x).getResult();
+    break;
+  default:
+    result = cir::BitClrsbOp::create(b, loc, x).getResult();
+    break;
+  }
+  return result;
+}
+
+inline mlir::Value sign_bit(a_builder &b, mlir::Location loc, mlir::Value x)
+/* Create cir.signbit (a bool). */
+{ return cir::SignBitOp::create(b, loc, b.getBoolTy(), x); }
+
+inline mlir::Value is_fp_class(a_builder &b, mlir::Location loc,
+                               mlir::Value x, uint64_t mask)
+/* Create cir.is_fp_class with an llvm.is.fpclass test mask (a bool). */
+{
+  return cir::IsFPClassOp::create(b, loc, b.getBoolTy(), x,
+                                  static_cast<cir::FPClassTest>(mask));
+}
+
+inline void clear_initial_value(cir::GlobalOp global)
+/* Turn a definition back into a declaration: remove its initializer. */
+{ global->removeAttr("initial_value"); }
+
 inline llvm::StringRef record_layouts_attr_name()
 /* The module attribute that carries the per-record ABI metadata. */
 { return cir::CIRDialect::getRecordLayoutsAttrName(); }

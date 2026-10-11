@@ -211,12 +211,62 @@ Open a session, consume the ECIL file ("-" is stdin), finish and close.
       result = session->fail(EDG_CIR_ERROR_IO, edc_io,
                              std::string("cannot read ") + path);
     } else {
-      static const size_t chunk = 1 << 16;
-      std::vector<char> buffer(chunk);
-      size_t n;
-      while (result == EDG_CIR_OK &&
-             (n = std::fread(buffer.data(), 1, chunk, file)) > 0)
+      /* Read whole units: the preamble, then each frame by its header, so
+         the reader decodes every frame in place (no 64 KiB chunking and no
+         re-copy of a frame split across chunks). */
+      std::vector<unsigned char> buffer(ECIL_PREAMBLE_SIZE);
+      size_t n = std::fread(buffer.data(), 1, ECIL_PREAMBLE_SIZE, file);
+
+      if (n > 0)
         result = edg_cir_session_consume(session, buffer.data(), n);
+      while (result == EDG_CIR_OK && n == ECIL_PREAMBLE_SIZE) {
+        unsigned char header[ECIL_FRAME_HEADER_SIZE];
+        size_t got = std::fread(header, 1, sizeof header, file);
+
+        if (got == 0)
+          break;
+        if (got < sizeof header) {
+          /* Truncated header: the reader reports it at finish. */
+          result = edg_cir_session_consume(session, header, got);
+          break;
+        }
+        {
+          uint32_t length = static_cast<uint32_t>(header[0]) |
+                            static_cast<uint32_t>(header[1]) << 8 |
+                            static_cast<uint32_t>(header[2]) << 16 |
+                            static_cast<uint32_t>(header[3]) << 24;
+          size_t have = sizeof header;
+
+          /* An absurd length is left for the reader to reject. */
+          if (length <= (1u << 30)) {
+            /* Read the payload in bounded steps: the buffer never grows
+               beyond the bytes the file really holds, whatever the header
+               claims. */
+            static const size_t step = size_t(1) << 20;
+            size_t payload = 0;
+
+            buffer.assign(header, header + sizeof header);
+            while (payload < length) {
+              size_t want = length - payload < step ? length - payload : step;
+              size_t n_read;
+
+              buffer.resize(sizeof header + payload + want);
+              n_read = std::fread(buffer.data() + sizeof header + payload,
+                                  1, want, file);
+              payload += n_read;
+              if (n_read < want)
+                break;
+            }
+            have = sizeof header + payload;
+            result = edg_cir_session_consume(session, buffer.data(), have);
+            if (payload < length)
+              break;
+          } else {
+            result = edg_cir_session_consume(session, header, sizeof header);
+            break;
+          }
+        }
+      }
       if (file != stdin)
         std::fclose(file);
       if (result == EDG_CIR_OK)

@@ -32,6 +32,9 @@ are visited, which breaks cycles.
 
 /* Additional header files. */
 #include "ecil_write.h"
+/* Defines builtin_libc_names: the libc/libm functions that are builtins,
+   sorted and NULL-terminated, generated from the builtin tables. */
+#include "builtin_libc.h"
 
 #if ECIL_WRITER_ENABLED
 
@@ -57,6 +60,12 @@ typedef struct a_type_work_item {
   a_boolean     promote_params;   /* Function: K&R promoted form. */
 } a_type_work_item;
 
+/* A record declared while incomplete: its G-id and its IL type. */
+typedef struct an_ecil_pending_record {
+  uint32_t      gid;
+  a_type_ptr    type;
+} an_ecil_pending_record;
+
 /* The type work stack and the list of records still awaiting a body. */
 STATIC_THREAD a_type_work_item
                 *type_stack;
@@ -64,12 +73,14 @@ STATIC_THREAD size_t
                 type_stack_size;
 STATIC_THREAD size_t
                 type_stack_capacity;
-STATIC_THREAD uint32_t
+STATIC_THREAD an_ecil_pending_record
                 *pending_records;
 STATIC_THREAD size_t
                 num_pending_records;
 STATIC_THREAD size_t
                 pending_records_capacity;
+
+static void free_name_table(void);
 
 void ecil_type_reset(void)
 /*
@@ -78,6 +89,7 @@ Forget the writer's type state at the end of a compilation.
 {
   free(type_stack);
   free(pending_records);
+  free_name_table();
   type_stack = NULL;
   pending_records = NULL;
   type_stack_size = type_stack_capacity = 0;
@@ -92,6 +104,134 @@ Return the plain (C) name of an entity, or NULL if it has none.
 {
   return scp->name;
 }  /* ecil_entity_name */
+
+
+/* Target types the writer needs that the front end does not hand it. */
+
+unsigned int ecil_int_bits(void)
+/*
+The width of the target's int.
+*/
+{
+  return (unsigned int)(targ_sizeof_int * targ_char_bit);
+}  /* ecil_int_bits */
+
+
+uint32_t ecil_target_int_type(an_ecil_frame *frame)
+/*
+The G-id of the target's int.
+*/
+{
+  return ecil_intern_int_type(frame, ecil_int_bits(), TRUE,
+                              (unsigned int)targ_sizeof_int,
+                              (unsigned int)targ_alignof_int);
+}  /* ecil_target_int_type */
+
+
+uint32_t ecil_target_double_type(an_ecil_frame *frame)
+/*
+The G-id of the target's double (IEEE binary64).
+*/
+{
+  return ecil_intern_float_type(frame, (unsigned int)eff_ieee_double,
+                                (unsigned int)targ_sizeof_double,
+                                (unsigned int)targ_alignof_double);
+}  /* ecil_target_double_type */
+
+
+uint32_t ecil_target_uintptr_type(an_ecil_frame *frame)
+/*
+The G-id of the unsigned integer type as wide as a pointer.
+*/
+{
+  return ecil_intern_int_type(frame,
+                       (unsigned int)(targ_sizeof_pointer * targ_char_bit),
+                       FALSE, (unsigned int)targ_sizeof_pointer,
+                       (unsigned int)targ_sizeof_pointer);
+}  /* ecil_target_uintptr_type */
+
+
+uint32_t ecil_promote_gid(an_ecil_frame *frame, uint32_t gid,
+                          a_type_ptr il_type)
+/*
+The type a value of ECIL type gid has after the integer promotions (bool and
+integers narrower than int become int) and, if il_type is not NULL, after
+the default argument promotions of an unprototyped call or a K&R definition
+(the float of the IL type il_type, which must be plain float, becomes
+double).  The G-id is unchanged if no promotion applies.  The caller must
+not hold an an_ecil_gid_info across the call (it can assign a G-id).
+*/
+{
+  an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+  if (info->kind == egk_bool ||
+      (info->kind == egk_int && info->bits < ecil_int_bits())) {
+    gid = ecil_target_int_type(frame);
+  } else if (il_type != NULL && info->kind == egk_float &&
+             ecil_is_plain_float_type(il_type)) {
+    gid = ecil_target_double_type(frame);
+  }  /* if */
+  return gid;
+}  /* ecil_promote_gid */
+
+
+unsigned int ecil_linkage_for(a_storage_class    storage_class,
+                              unsigned int       name_linkage,
+                              a_boolean          is_weak)
+/*
+The ECIL linkage of a function or variable (an an_ecil_linkage value):
+internal for a static or an entity with internal linkage, weak for a weak
+one, else external.
+*/
+{
+  unsigned int  linkage = (unsigned int)elk_external;
+
+  if (storage_class == (a_storage_class)sc_static ||
+      name_linkage == (unsigned int)nlk_internal) {
+    linkage = (unsigned int)elk_internal;
+  } else if (is_weak) {
+    linkage = (unsigned int)elk_weak;
+  }  /* if */
+  return linkage;
+}  /* ecil_linkage_for */
+
+
+void ecil_emit_decl_var(an_ecil_frame *frame,
+                        uint32_t      gid,
+                        uint32_t      type,
+                        unsigned int  linkage,
+                        unsigned int  flags,
+                        uint32_t      alignment,
+                        uint32_t      name_sid)
+/*
+Emit DECL_VAR (an introduction or a re-issue) into the declaration section
+and remember its facts as the last ones emitted for the G-id.
+*/
+{
+  an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
+  an_ecil_gid_info
+                  *info;
+
+  ecil_rec_begin(frame, eop_decl_var);
+  ecil_arg_uint(frame, gid);
+  ecil_arg_uint(frame, type);
+  ecil_arg_uint(frame, linkage);
+  ecil_arg_uint(frame, flags);
+  ecil_arg_uint(frame, alignment);
+  if (name_sid != 0) {
+    ecil_arg_uint(frame, name_sid);
+  } else {
+    ecil_arg_nil(frame);
+  }  /* if */
+  ecil_rec_end(frame);
+  ecil_frame_leave_decl(frame, saved);
+  info = ecil_gid_info(gid);
+  info->decl_type = type;
+  info->decl_linkage = linkage;
+  info->decl_flags = flags;
+  info->decl_name = name_sid;
+  info->decl_emitted = TRUE;
+}  /* ecil_emit_decl_var */
 
 
 /* Small introductions. */
@@ -435,68 +575,20 @@ Make the ptr type of a pointer whose pointee has an id.
 }  /* finish_pointer */
 
 
-uint32_t ecil_array_of(an_ecil_frame *frame, uint32_t elem, uint64_t count)
+static uint32_t intern_array(an_ecil_frame *frame,
+                             uint32_t      elem,
+                             uint64_t      count,
+                             unsigned int  flags,
+                             uint64_t      size)
 /*
-Return the G-id of the complete array type of count elements of type elem
-(for a type the front end does not have, such as the one-element array of a
-tentative definition with an incomplete array type, C11 6.9.2p5).
+Return the G-id of the array type of elem with these facts, introducing it
+once per key.  An incomplete array has count 0 and ECIL_ARRAY_INCOMPLETE and
+is sent with a nil count.
 */
 {
   uint32_t  key[4];
   uint32_t  gid;
 
-  key[0] = (uint32_t)egk_array;
-  key[1] = elem;
-  key[2] = (uint32_t)(count & 0xFFFFFFFFu);
-  key[3] = (uint32_t)(count >> 32);
-  gid = ecil_word_lookup(key, 4);
-  if (gid == 0) {
-    gid = ecil_new_gid(egk_array);
-    if (gid != 0) {
-      an_ecil_gid_info  *info = ecil_gid_info(gid);
-      an_ecil_gid_info  *einfo = ecil_gid_info(elem);
-      an_ecil_buffer    *saved;
-
-      info->ref = elem;
-      info->count = count;
-      info->size = (uint32_t)(einfo->size * count);
-      info->align = einfo->align;
-      info->flags = einfo->flags & (ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE |
-                                    ECIL_GF_FAILED);
-      if (info->flags != 0) {
-        info->flags = ECIL_GF_ABI_OPAQUE | (info->flags & ECIL_GF_FAILED);
-      }  /* if */
-      ecil_word_register(key, 4, gid);
-      saved = ecil_frame_enter_decl(frame);
-      ecil_rec_begin(frame, eop_ty_array);
-      ecil_arg_uint(frame, gid);
-      ecil_arg_uint(frame, elem);
-      ecil_arg_uint(frame, count);
-      ecil_arg_uint(frame, 0);
-      ecil_rec_end(frame);
-      ecil_frame_leave_decl(frame, saved);
-    }  /* if */
-  }  /* if */
-  return gid;
-}  /* ecil_array_of */
-
-
-static uint32_t finish_array(an_ecil_frame *frame, a_type_ptr t)
-/*
-Make the array type of an array whose element type has an id.
-*/
-{
-  uint32_t      elem = known_type_id(t->variant.array.element_type);
-  uint32_t      key[4];
-  uint32_t      gid;
-  a_boolean     incomplete = t->incomplete &&
-                             !t->variant.array.bound_is_zero;
-  uint64_t      count = incomplete ? 0 :
-                        (uint64_t)t->variant.array.variant.number_of_elements;
-  unsigned int  flags = 0;
-
-  if (incomplete) flags |= ECIL_ARRAY_INCOMPLETE;
-  if (t->variant.array.bound_is_zero) flags |= ECIL_ARRAY_ZERO_LENGTH;
   key[0] = (uint32_t)egk_array;
   key[1] = elem;
   key[2] = (uint32_t)(count & 0xFFFFFFFFu);
@@ -511,7 +603,7 @@ Make the array type of an array whose element type has an id.
 
       info->ref = elem;
       info->count = count;
-      info->size = (uint32_t)t->size;
+      info->size = (uint32_t)size;
       info->align = einfo->align;
       info->flags = einfo->flags & (ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE |
                                     ECIL_GF_FAILED);
@@ -523,7 +615,7 @@ Make the array type of an array whose element type has an id.
       ecil_rec_begin(frame, eop_ty_array);
       ecil_arg_uint(frame, gid);
       ecil_arg_uint(frame, elem);
-      if (incomplete) {
+      if ((flags & ECIL_ARRAY_INCOMPLETE) != 0) {
         ecil_arg_nil(frame);
       } else {
         ecil_arg_uint(frame, count);
@@ -534,6 +626,36 @@ Make the array type of an array whose element type has an id.
     }  /* if */
   }  /* if */
   return gid;
+}  /* intern_array */
+
+
+uint32_t ecil_array_of(an_ecil_frame *frame, uint32_t elem, uint64_t count)
+/*
+Return the G-id of the complete array type of count elements of type elem
+(for a type the front end does not have, such as the one-element array of a
+tentative definition with an incomplete array type, C11 6.9.2p5).
+*/
+{
+  return intern_array(frame, elem, count, 0u,
+                      (uint64_t)ecil_gid_info(elem)->size * count);
+}  /* ecil_array_of */
+
+
+static uint32_t finish_array(an_ecil_frame *frame, a_type_ptr t)
+/*
+Make the array type of an array whose element type has an id.
+*/
+{
+  a_boolean     incomplete = t->incomplete &&
+                             !t->variant.array.bound_is_zero;
+  uint64_t      count = incomplete ? 0 :
+                        (uint64_t)t->variant.array.variant.number_of_elements;
+  unsigned int  flags = 0;
+
+  if (incomplete) flags |= ECIL_ARRAY_INCOMPLETE;
+  if (t->variant.array.bound_is_zero) flags |= ECIL_ARRAY_ZERO_LENGTH;
+  return intern_array(frame, known_type_id(t->variant.array.element_type),
+                      count, flags, (uint64_t)t->size);
 }  /* finish_array */
 
 
@@ -548,29 +670,6 @@ default argument promotions (not _Float32 and the like).
   return t->kind == tk_float &&
          t->variant.float_kind == (a_float_kind)fk_float;
 }  /* ecil_is_plain_float_type */
-
-
-static a_type_ptr promoted_param_type(a_type_ptr type,
-                                      uint32_t   *promoted_gid,
-                                      an_ecil_frame *frame)
-/*
-For a K&R definition: the default-promoted ECIL type of a parameter type.
-Sets *promoted_gid to the G-id (the parameter's own G-id if unchanged).
-Returns the IL type (unused by callers other than for symmetry).
-*/
-{
-  uint32_t          gid = known_type_id(type);
-  an_ecil_gid_info  *info = ecil_gid_info(gid);
-
-  if ((info->kind == egk_int && info->bits < 32) || info->kind == egk_bool) {
-    gid = ecil_intern_int_type(frame, 32, TRUE, 4, 4);
-  } else if (info->kind == egk_float &&
-             ecil_is_plain_float_type(type)) {
-    gid = ecil_intern_float_type(frame, (unsigned int)eff_ieee_double, 8, 8);
-  }  /* if */
-  *promoted_gid = gid;
-  return type;
-}  /* promoted_param_type */
 
 
 static uint32_t finish_function_type(an_ecil_frame *frame,
@@ -611,7 +710,7 @@ parameter types (spec 8.2).
       for (p = supp->param_type_list; p != NULL; p = p->next) {
         uint32_t  pg = known_type_id(p->type);
 
-        if (no_proto) (void)promoted_param_type(p->type, &pg, frame);
+        if (no_proto) pg = ecil_promote_gid(frame, pg, p->type);
         params[i++] = pg;
       }  /* for */
     }  /* if */
@@ -628,8 +727,6 @@ parameter types (spec 8.2).
 
         info->ref = ret;
         info->count = n;
-        if (supp->has_ellipsis) info->flags |= ECIL_GF_VARARGS;
-        if (no_proto) info->flags |= ECIL_GF_NO_PROTO;
         ecil_word_register(key, n + 3, gid);
         saved = ecil_frame_enter_decl(frame);
         ecil_rec_begin(frame, eop_ty_func);
@@ -650,16 +747,17 @@ parameter types (spec 8.2).
 
 /* Records. */
 
-static void note_pending_record(uint32_t gid)
+static void note_pending_record(uint32_t gid, a_type_ptr type)
 /*
 Remember a record that was declared while still incomplete.
 */
 {
   if (num_pending_records == pending_records_capacity) {
-    size_t    new_capacity = (pending_records_capacity == 0) ?
-                             32 : pending_records_capacity * 2;
-    uint32_t  *new_list = (uint32_t *)realloc(pending_records,
-                                       new_capacity * sizeof(uint32_t));
+    size_t                  new_capacity = (pending_records_capacity == 0) ?
+                                           32 : pending_records_capacity * 2;
+    an_ecil_pending_record  *new_list = (an_ecil_pending_record *)realloc(
+                              pending_records,
+                              new_capacity * sizeof(an_ecil_pending_record));
 
     if (new_list != NULL) {
       pending_records = new_list;
@@ -667,7 +765,9 @@ Remember a record that was declared while still incomplete.
     }  /* if */
   }  /* if */
   if (num_pending_records < pending_records_capacity) {
-    pending_records[num_pending_records++] = gid;
+    pending_records[num_pending_records].gid = gid;
+    pending_records[num_pending_records].type = type;
+    num_pending_records++;
   } else {
     ecil_note_unsupported("out of memory in the ECIL writer");
   }  /* if */
@@ -945,7 +1045,7 @@ Process the work stack down to depth base.
             ecil_rec_end(frame);
             ecil_frame_leave_decl(frame, saved);
             if (t->incomplete) {
-              note_pending_record(gid);
+              note_pending_record(gid, t);
               type_stack_size--;
             } else {
               type_stack[idx].phase = tph_fields;
@@ -1082,40 +1182,43 @@ Emit the body of every record that was declared incomplete and has been
 completed since.  Those still incomplete stay pending.  A record the stream
 cannot describe (an _Atomic member, a _BitInt bit-field, an unsupported
 member) is marked failed instead; that never makes the caller's own
-construct unsupported, so the reason of the caller is kept aside.
+construct unsupported, so the reason of the caller is kept aside.  Running a
+record's field types can assign G-ids and move the G-id table, so the
+record's an_ecil_gid_info is looked up again after it.
 */
 {
-  size_t      i;
-  size_t      kept = 0;
-  const char  *caller_reason = ecil_unsupported_reason;
+  size_t                i;
+  size_t                kept = 0;
+  an_ecil_saved_reason  caller_reason;
 
-  ecil_unsupported_reason = NULL;
-  for (i = 0; i < num_pending_records; i++) {
-    uint32_t          gid = pending_records[i];
-    an_ecil_gid_info  *info = ecil_gid_info(gid);
-    a_type_ptr        t = (a_type_ptr)info->entity;
+  if (num_pending_records != 0) {
+    ecil_save_reason(&caller_reason);
+    for (i = 0; i < num_pending_records; i++) {
+      uint32_t    gid = pending_records[i].gid;
+      a_type_ptr  t = pending_records[i].type;
 
-    if (t->incomplete) {
-      pending_records[kept++] = gid;
-    } else if (has_bit_precise_bit_field(t) || record_has_atomic_member(t)) {
-      info->flags |= ECIL_GF_FAILED | ECIL_GF_ABI_OPAQUE;
-    } else {
-      size_t            base = type_stack_size;
-      a_type_work_item  *item = push_type(t, tph_fields);
+      if (t->incomplete) {
+        pending_records[kept++] = pending_records[i];
+      } else if (has_bit_precise_bit_field(t) || record_has_atomic_member(t)) {
+        ecil_gid_info(gid)->flags |= ECIL_GF_FAILED | ECIL_GF_ABI_OPAQUE;
+      } else {
+        size_t            base = type_stack_size;
+        a_type_work_item  *item = push_type(t, tph_fields);
 
-      if (item != NULL) {
-        item->field_cursor = t->variant.class_struct_union.field_list;
-        run_type_stack(frame, base);
+        if (item != NULL) {
+          item->field_cursor = t->variant.class_struct_union.field_list;
+          run_type_stack(frame, base);
+        }  /* if */
+        if (ecil_unsupported_reason != NULL) {
+          /* run_type_stack marked the record failed. */
+          ecil_gid_info(gid)->flags |= ECIL_GF_FAILED | ECIL_GF_ABI_OPAQUE;
+          ecil_unsupported_reason = NULL;
+        }  /* if */
       }  /* if */
-      if (ecil_unsupported_reason != NULL) {
-        /* run_type_stack marked the record failed. */
-        info->flags |= ECIL_GF_FAILED | ECIL_GF_ABI_OPAQUE;
-        ecil_unsupported_reason = NULL;
-      }  /* if */
-    }  /* if */
-  }  /* for */
-  num_pending_records = kept;
-  ecil_unsupported_reason = caller_reason;
+    }  /* for */
+    num_pending_records = kept;
+    ecil_restore_reason(&caller_reason);
+  }  /* if */
 }  /* ecil_complete_pending_records */
 
 
@@ -1163,94 +1266,179 @@ ignore_routine_in_back_end, which is FALSE without IL lowering).
 }  /* ecil_routine_is_filtered */
 
 
-static const char *const library_names[] = {
-  "abort", "abs", "acos", "acosf", "acosh", "acoshf", "acoshl", "acosl",
-  "aligned_alloc", "asin", "asinf", "asinh", "asinhf", "asinhl", "asinl",
-  "atan", "atan2", "atan2f", "atan2l", "atanf", "atanh", "atanhf",
-  "atanhl", "atanl", "atoi", "atol", "atoll", "bcmp", "bcopy", "bzero",
-  "calloc", "cbrt", "cbrtf", "cbrtl", "ceil", "ceilf", "ceill",
-  "copysign", "copysignf", "copysignl", "cos", "cosf", "cosh", "coshf",
-  "coshl", "cosl", "erf", "erfc", "erfcf", "erfcl", "erff", "erfl",
-  "exit", "_exit", "_Exit", "exp", "exp10", "exp10f", "exp10l", "exp2",
-  "exp2f", "exp2l", "expf", "expl", "expm1", "expm1f", "expm1l", "fabs",
-  "fabsf", "fabsl", "fdim", "fdimf", "fdiml", "ffs", "ffsl", "ffsll",
-  "floor", "floorf", "floorl", "fma", "fmaf", "fmal", "fmax", "fmaxf",
-  "fmaxl", "fmin", "fminf", "fminl", "fmod", "fmodf", "fmodl", "fprintf",
-  "fputc", "fputs", "free", "frexp", "frexpf", "frexpl", "fscanf",
-  "fwrite", "hypot", "hypotf", "hypotl", "ilogb", "ilogbf", "ilogbl",
-  "imaxabs", "index", "isalnum", "isalpha", "isascii", "isblank",
-  "iscntrl", "isdigit", "isgraph", "islower", "isprint", "ispunct",
-  "isspace", "isupper", "isxdigit", "labs", "ldexp", "ldexpf", "ldexpl",
-  "lgamma", "lgammaf", "lgammal", "llabs", "llrint", "llrintf",
-  "llrintl", "llround", "llroundf", "llroundl", "log", "log10", "log10f",
-  "log10l", "log1p", "log1pf", "log1pl", "log2", "log2f", "log2l",
-  "logb", "logbf", "logbl", "logf", "logl", "lrint", "lrintf", "lrintl",
-  "lround", "lroundf", "lroundl", "malloc", "memchr", "memcmp", "memcpy",
-  "memmove", "mempcpy", "memset", "modf", "modff", "modfl", "nan",
-  "nanf", "nanl", "nearbyint", "nearbyintf", "nearbyintl", "nextafter",
-  "nextafterf", "nextafterl", "nexttoward", "nexttowardf", "nexttowardl",
-  "pow", "pow10", "pow10f", "pow10l", "powf", "powl", "printf",
-  "putchar", "puts", "realloc", "remainder", "remainderf", "remainderl",
-  "remquo", "remquof", "remquol", "rindex", "rint", "rintf", "rintl",
-  "round", "roundf", "roundl", "scalbln", "scalblnf", "scalblnl",
-  "scalbn", "scalbnf", "scalbnl", "scanf", "sin", "sinf", "sinh",
-  "sinhf", "sinhl", "sinl", "snprintf", "sprintf", "sqrt", "sqrtf",
-  "sqrtl", "sscanf", "stpcpy", "stpncpy", "strcasecmp", "strcat",
-  "strchr", "strcmp", "strcpy", "strcspn", "strdup", "strlen",
-  "strncasecmp", "strncat", "strncmp", "strncpy", "strndup", "strnlen",
-  "strpbrk", "strrchr", "strspn", "strstr", "tan", "tanf", "tanh",
-  "tanhf", "tanhl", "tanl", "tgamma", "tgammaf", "tgammal", "tolower",
-  "toupper", "trunc", "truncf", "truncl", "vfprintf", "vfscanf",
-  "vprintf", "vscanf", "vsnprintf", "vsprintf", "vsscanf", NULL
+/* The libc/libm functions that are also builtins are listed in
+   builtin_libc_names (builtin_libc.h, included above): a call to __builtin_X
+   of one of them is an ordinary CALL of X (design.md P2). */
+
+
+/* The builtins ECIL has records for, by name without the __builtin_ prefix,
+   with the id the call is translated by (an an_ecil_builtin value or an
+   ECIL_SPECIAL_* id).  The type-suffix variants are listed out. */
+typedef struct a_special_name {
+  const char    *name;
+  unsigned int  id;
+} a_special_name;
+
+#define SPECIAL_INT_FAMILY(base, id) \
+  { base, id }, { base "l", id }, { base "ll", id }, { base "imax", id }, \
+  { base "g", id }
+#define SPECIAL_FP_FAMILY(base, id) \
+  { base, id }, { base "f", id }, { base "l", id }
+
+static const a_special_name special_names[] = {
+  { "expect", (unsigned int)ebi_expect },
+  { "unreachable", (unsigned int)ebi_unreachable },
+  { "trap", (unsigned int)ebi_trap },
+  { "alloca", (unsigned int)ebi_alloca },
+  { "bswap16", (unsigned int)ebi_bswap },
+  { "bswap32", (unsigned int)ebi_bswap },
+  { "bswap64", (unsigned int)ebi_bswap },
+  SPECIAL_INT_FAMILY("clz", (unsigned int)ebi_clz),
+  SPECIAL_INT_FAMILY("ctz", (unsigned int)ebi_ctz),
+  SPECIAL_INT_FAMILY("popcount", (unsigned int)ebi_popcount),
+  SPECIAL_INT_FAMILY("parity", (unsigned int)ebi_parity),
+  SPECIAL_INT_FAMILY("ffs", (unsigned int)ebi_ffs),
+  SPECIAL_INT_FAMILY("clrsb", (unsigned int)ebi_clrsb),
+  /* These two override the "g" variants of the families above. */
+  { "clzg", ECIL_SPECIAL_CLZG },
+  { "ctzg", ECIL_SPECIAL_CTZG },
+  { "add_overflow", (unsigned int)ebi_add_overflow },
+  { "sub_overflow", (unsigned int)ebi_sub_overflow },
+  { "mul_overflow", (unsigned int)ebi_mul_overflow },
+  SPECIAL_FP_FAMILY("isnan", ECIL_SPECIAL_FP_ISNAN),
+  { "isinf_sign", ECIL_SPECIAL_FP_ISINF_SIGN },
+  SPECIAL_FP_FAMILY("isinf", ECIL_SPECIAL_FP_ISINF),
+  SPECIAL_FP_FAMILY("isfinite", ECIL_SPECIAL_FP_ISFINITE),
+  SPECIAL_FP_FAMILY("isnormal", ECIL_SPECIAL_FP_ISNORMAL),
+  SPECIAL_FP_FAMILY("issignaling", ECIL_SPECIAL_FP_ISSIGNALING),
+  SPECIAL_FP_FAMILY("signbit", ECIL_SPECIAL_FP_SIGNBIT),
+  { "fpclassify", ECIL_SPECIAL_FP_FPCLASSIFY },
+  { "isless", ECIL_SPECIAL_FP_ISLESS },
+  { "isgreater", ECIL_SPECIAL_FP_ISGREATER },
+  { "islessequal", ECIL_SPECIAL_FP_ISLESSEQUAL },
+  { "isgreaterequal", ECIL_SPECIAL_FP_ISGREATEREQUAL },
+  { "islessgreater", ECIL_SPECIAL_FP_ISLESSGREATER },
+  { "isunordered", ECIL_SPECIAL_FP_ISUNORDERED },
+  { "c23_va_start", ECIL_SPECIAL_C23_VA_START },
+  { "alloca_with_align", ECIL_SPECIAL_ALLOCA_ALIGN },
+  { "add_overflow_p", ECIL_SPECIAL_ADD_OVERFLOW_P },
+  { "sub_overflow_p", ECIL_SPECIAL_SUB_OVERFLOW_P },
+  { "mul_overflow_p", ECIL_SPECIAL_MUL_OVERFLOW_P },
+  { NULL, 0 }
 };
 
+/* An entry of the name table: what a name is, as a builtin and as a libc
+   function. */
+typedef struct a_name_entry {
+  const char    *name;            /* NULL: an empty slot. */
+  unsigned int  special_id;       /* 0 if none. */
+  a_boolean     library;
+} a_name_entry;
 
-static a_boolean in_library_list(const char *base)
+#define NAME_TABLE_SLOTS 2048u    /* A power of two, above twice the names
+                                     (the libc names and the specials). */
+
+STATIC_THREAD a_name_entry
+                *name_table;
+
+
+static uint32_t hash_name(const char *name)
 /*
-Return TRUE if base is the name of a listed libc/libm function.
+FNV-1a of a NUL-terminated name (indexes the name table only).
 */
 {
-  size_t    i;
-  a_boolean found = FALSE;
+  uint32_t  hash = 2166136261u;
 
-  for (i = 0; library_names[i] != NULL && !found; i++) {
-    found = strcmp(library_names[i], base) == 0;
+  for (; *name != '\0'; name++) {
+    hash ^= (unsigned char)*name;
+    hash *= 16777619u;
   }  /* for */
-  return found;
-}  /* in_library_list */
+  return hash;
+}  /* hash_name */
 
 
-a_boolean ecil_is_library_function(const char *name)
+static a_name_entry *name_entry_slot(a_name_entry *table, const char *name)
 /*
-Return TRUE if name is, as written, a listed libc/libm function (the front
-end declares some of them as builtin routines under their plain names).
+Return the slot of the name in the table: its entry, or the empty slot where
+it belongs.
 */
 {
-  return in_library_list(name);
-}  /* ecil_is_library_function */
+  uint32_t  slot = hash_name(name) & (NAME_TABLE_SLOTS - 1);
+
+  while (table[slot].name != NULL && strcmp(table[slot].name, name) != 0) {
+    slot = (slot + 1) & (NAME_TABLE_SLOTS - 1);
+  }  /* while */
+  return &table[slot];
+}  /* name_entry_slot */
 
 
-const char *ecil_library_builtin_name(const char *name)
+static void free_name_table(void)
 /*
-Return the library function behind a __builtin_X name (X, a pointer into
-name) when X is an ordinary C library function that the code generator can
-simply call; NULL for other builtins.  (Design.md P2: a call to such a
-builtin is an ordinary CALL of the library function.)  The rule is by name:
-the front end's builtin tables do not say which builtins have a libc
-counterpart, so the libc/libm names (C99 plus the common POSIX/GNU string and
-ctype functions) are listed here.  Builtins that ECIL has BUILTIN records for
-(ffs, alloca, bswap, ...) are tested before this list, in ecil_code.c.
+Release the name table.
 */
 {
+  free(name_table);
+  name_table = NULL;
+}  /* free_name_table */
 
-  const char  *result = NULL;
-  const char  *base = name + 10;
 
-  if (strncmp(name, "__builtin_", 10) == 0 && in_library_list(base)) {
-    result = base;
+static a_boolean build_name_table(void)
+/*
+Build the name table on first use; return FALSE if memory ran out.
+*/
+{
+  if (name_table == NULL) {
+    a_name_entry  *table = (a_name_entry *)calloc(NAME_TABLE_SLOTS,
+                                                  sizeof(a_name_entry));
+    size_t        i;
+
+    if (table != NULL) {
+      for (i = 0; builtin_libc_names[i] != NULL; i++) {
+        a_name_entry  *e = name_entry_slot(table, builtin_libc_names[i]);
+
+        e->name = builtin_libc_names[i];
+        e->library = TRUE;
+      }  /* for */
+      for (i = 0; special_names[i].name != NULL; i++) {
+        a_name_entry  *e = name_entry_slot(table, special_names[i].name);
+
+        e->name = special_names[i].name;
+        e->special_id = special_names[i].id;
+      }  /* for */
+      name_table = table;
+    }  /* if */
   }  /* if */
-  return result;
-}  /* ecil_library_builtin_name */
+  return name_table != NULL;
+}  /* build_name_table */
+
+
+void ecil_classify_function_name(const char *name, an_ecil_name_class *cls)
+/*
+Classify a routine name with one hashed lookup.  For __builtin_X, special_id
+is the id of the builtin ECIL has a record for (else 0) and library_name is
+X when X is a libc function; is_library_function says that the name as
+written is a libc function.
+*/
+{
+  cls->special_id = 0;
+  cls->library_name = NULL;
+  cls->is_library_function = FALSE;
+  if (build_name_table()) {
+    if (strncmp(name, "__builtin_", 10) == 0) {
+      const char          *base = name + 10;
+      const a_name_entry  *e = name_entry_slot(name_table, base);
+
+      if (e->name != NULL) {
+        cls->special_id = e->special_id;
+        if (e->library) cls->library_name = base;
+      }  /* if */
+    } else {
+      const a_name_entry  *e = name_entry_slot(name_table, name);
+
+      cls->is_library_function = e->name != NULL && e->library;
+    }  /* if */
+  }  /* if */
+}  /* ecil_classify_function_name */
 
 
 /* The facts a DECL_FUNC carries. */
@@ -1274,8 +1462,11 @@ Return the sid of the symbol name of a routine (its asm name if it has one).
     name = rout->gnu_extra_info->asm_name;
   }  /* if */
 #endif /* GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED */
-  if (name != NULL && ecil_library_builtin_name(name) != NULL) {
-    name = ecil_library_builtin_name(name);
+  if (name != NULL && strncmp(name, "__builtin_", 10) == 0) {
+    an_ecil_name_class  cls;
+
+    ecil_classify_function_name(name, &cls);
+    if (cls.library_name != NULL) name = cls.library_name;
   }  /* if */
   return name == NULL ? 0 : ecil_intern_cstring(frame, name);
 }  /* routine_name_sid */
@@ -1300,6 +1491,21 @@ bind one symbol name), or 0 if none or if it is of another kind.
   if (gid != 0 && ecil_gid_info(gid)->kind != kind) gid = 0;
   return gid;
 }  /* symbol_binding_lookup */
+
+
+static void symbol_binding_unregister(uint32_t name_sid, uint32_t gid)
+/*
+Record that the symbol name is no longer bound to the G-id (the entity was
+renamed): a later entity with that symbol name gets a G-id of its own.  Does
+nothing if the name is bound to another G-id.
+*/
+{
+  uint32_t  words[2];
+
+  words[0] = SYMBOL_BINDING_TAG;
+  words[1] = name_sid;
+  if (ecil_word_lookup(words, 2) == gid) ecil_word_unregister(words, 2);
+}  /* symbol_binding_unregister */
 
 
 static void symbol_binding_register(uint32_t name_sid, uint32_t gid)
@@ -1377,13 +1583,9 @@ Compute the DECL_FUNC facts for a routine as they are now.
   check_routine_attributes(rout);
   state->type = ecil_func_type_id(frame, rout->type,
                                   defining && !rout_type_supp(t)->prototyped);
-  state->linkage = (unsigned int)elk_external;
-  if (rout->storage_class == (a_storage_class)sc_static ||
-      rout->source_corresp.name_linkage == (a_name_linkage_kind)nlk_internal) {
-    state->linkage = (unsigned int)elk_internal;
-  } else if (rout->is_weak) {
-    state->linkage = (unsigned int)elk_weak;
-  }  /* if */
+  state->linkage = ecil_linkage_for(rout->storage_class,
+                                    rout->source_corresp.name_linkage,
+                                    rout->is_weak);
   state->flags = 0;
   if (defining && !unsupported) state->flags |= ECIL_DECL_FUNC_DEFINED_HERE;
   if (rout->is_inline) state->flags |= ECIL_DECL_FUNC_INLINE;
@@ -1430,6 +1632,18 @@ one emitted (spec 8.2: a re-issue updates the entity).
     }  /* if */
     ecil_rec_end(frame);
     ecil_frame_leave_decl(frame, saved);
+    if (info->decl_emitted && state->name != 0 &&
+        state->name != info->decl_name &&
+        state->linkage != (unsigned int)elk_internal) {
+      /* The entity was renamed (an asm label declared after a first use):
+         the new name belongs to it from now on and the old one is free
+         (spec 7, effective name). */
+      if (info->decl_name != 0 &&
+          info->decl_linkage != (unsigned int)elk_internal) {
+        symbol_binding_unregister(info->decl_name, gid);
+      }  /* if */
+      symbol_binding_register(state->name, gid);
+    }  /* if */
     info->decl_type = state->type;
     info->decl_linkage = state->linkage;
     info->decl_flags = state->flags;
@@ -1569,7 +1783,11 @@ The G-id already bound to this variable's symbol name, or 0.
 uint32_t ecil_variable_id(an_ecil_frame *frame, a_variable_ptr var)
 /*
 Return the G-id of a file-scope or static variable, introducing it with
-DECL_VAR (as a declaration) at its first reference.
+DECL_VAR (as a declaration) at its first reference.  A static local with no
+declaration statement (__func__, a compound literal) that is first reached
+here is introduced as a definition and queued: its initializer follows when
+the queue is drained (ecil_drain_variable_definitions), so that building one
+constant never builds another.
 */
 {
   uint32_t  gid = ecil_gid_of(var);
@@ -1577,10 +1795,7 @@ DECL_VAR (as a declaration) at its first reference.
   if (gid == 0 && var->source_corresp.is_local_to_function &&
       var->storage_class == (a_storage_class)sc_static &&
       ecil_unsupported_reason == NULL) {
-    /* A static local with no declaration statement (__func__) that is
-       first reached through an address constant: define it now. */
-    ecil_define_variable(frame, var, NULL);
-    gid = ecil_gid_of(var);
+    gid = ecil_queue_variable_definition(frame, var);
   } else if (gid == 0 && ecil_unsupported_reason == NULL) {
     uint32_t  type;
 
@@ -1594,22 +1809,15 @@ DECL_VAR (as a declaration) at its first reference.
     } else if (type != 0) {
       gid = ecil_new_gid(egk_var);
       if (gid != 0) {
-        unsigned int      linkage = (unsigned int)elk_external;
+        unsigned int      linkage = ecil_linkage_for(var->storage_class,
+                                       var->source_corresp.name_linkage,
+                                       var->is_weak);
         unsigned int      flags = 0;
         uint32_t          name_sid = 0;
         const char        *name = ecil_entity_name(&var->source_corresp);
-        an_ecil_gid_info  *info = ecil_gid_info(gid);
-        an_ecil_buffer    *saved;
 
-        info->entity = var;
+        ecil_gid_info(gid)->entity = var;
         ecil_set_gid(var, gid);
-        if (var->storage_class == (a_storage_class)sc_static ||
-            var->source_corresp.name_linkage ==
-                                         (a_name_linkage_kind)nlk_internal) {
-          linkage = (unsigned int)elk_internal;
-        } else if (var->is_weak) {
-          linkage = (unsigned int)elk_weak;
-        }  /* if */
         if (is_const_qualified_type(var->type)) flags |= ECIL_DECL_VAR_CONST;
         if (is_effective_thread_local(var)) flags |= ECIL_DECL_VAR_TLS;
 #if GNU_EXTENSIONS_ALLOWED || REDEFINE_EXTNAME_PRAGMA_ENABLED
@@ -1622,26 +1830,8 @@ DECL_VAR (as a declaration) at its first reference.
           ecil_mark_symbol_name(name_sid);
           symbol_binding_register(name_sid, gid);
         }  /* if */
-        saved = ecil_frame_enter_decl(frame);
-        ecil_rec_begin(frame, eop_decl_var);
-        ecil_arg_uint(frame, gid);
-        ecil_arg_uint(frame, type);
-        ecil_arg_uint(frame, linkage);
-        ecil_arg_uint(frame, flags);
-        ecil_arg_uint(frame, (uint64_t)ecil_variable_alignment(var));
-        if (name_sid != 0) {
-          ecil_arg_uint(frame, name_sid);
-        } else {
-          ecil_arg_nil(frame);
-        }  /* if */
-        ecil_rec_end(frame);
-        ecil_frame_leave_decl(frame, saved);
-        info->decl_type = type;
-        info->decl_linkage = linkage;
-        info->decl_flags = flags;
-        info->decl_name = name_sid;
-        info->decl_align = (uint32_t)ecil_variable_alignment(var);
-        info->decl_emitted = TRUE;
+        ecil_emit_decl_var(frame, gid, type, linkage, flags,
+                           (uint32_t)ecil_variable_alignment(var), name_sid);
       }  /* if */
     }  /* if */
   }  /* if */

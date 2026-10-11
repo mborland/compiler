@@ -31,6 +31,7 @@ are valid only during the callback that receives them.
 #include <utility>
 #include <vector>
 
+#include "ecil_ids.h"
 #include "edg_cir/ecil_format.h"
 
 namespace ecil {
@@ -69,6 +70,7 @@ struct an_operand {
   const uint8_t  *data;    /* bin bytes; fbits/u128/i128 bytes; array body. */
   uint32_t        length;  /* bin length; fbits byte count; array body size. */
   uint32_t        count;   /* array element count. */
+  bool            all_uint;  /* array: every element passed operand_u64. */
 };  /* an_operand */
 
 struct a_cursor {
@@ -98,6 +100,12 @@ an_array_reader array_elements(const an_operand &array);
 
 bool next_array_element(an_array_reader &reader, an_operand &element);
 /* Decode the next element; return false at the end. */
+
+bool next_uint_element(an_array_reader &reader, uint64_t &value);
+/*
+Fast path for an array that passed all_uint: the next element as an unsigned
+value (the acceptance rules of operand_u64).  False at the end.
+*/
 
 bool operand_u64(const an_operand &operand, uint64_t &value);
 /* Return true and the value if operand is an integer in [0, 2^64). */
@@ -134,7 +142,9 @@ enum an_opcode_section : uint8_t {
   eos_decl     = 4,  /* Declaration section records. */
   eos_meta     = 8,  /* Allowed in the sections of their own list. */
   eos_body     = 16, /* Function body records (inside FUNC_BEGIN..END). */
-  eos_const    = 32  /* C_* records: declaration sections and bodies. */
+  eos_const    = 32, /* C_* records: declaration sections and bodies. */
+  eos_stmt     = 64  /* With eos_body: a statement record (the rest of the
+                        body records are expression records). */
 };  /* an_opcode_section */
 
 struct an_opcode_info {
@@ -196,73 +206,161 @@ bool supp_pairs(const a_record &record, std::vector<std::pair<uint64_t,
                 an_operand>> &pairs);
 /* Decode the supp payload into pairs (for tools).  False if malformed. */
 
-/* Reference checking. */
+/* Brackets and scope regions. */
 
-struct a_frame_info;
+enum a_bracket_kind : uint8_t {
+  bk_block, bk_if, bk_while, bk_do, bk_for, bk_switch, bk_tern, bk_land,
+  bk_lor, bk_agg_init, bk_const_agg
+};  /* a_bracket_kind */
+
+const char *bracket_name(uint8_t kind);
+/* A readable name for a bracket kind. */
+
+/*
+Scope regions (spec 8.3): the regions a LOCAL or MATERIALIZE_TEMP can belong
+to.  The table in ecil_brackets.cpp says which records open and close which
+region; a region close ends the lifetime of its locals (and, in C++, is where
+their destruction happens).
+*/
+enum a_region_kind : uint8_t {
+  rk_none = 0,
+  rk_function,
+  rk_block,        /* BLOCK_BEGIN .. BLOCK_END */
+  rk_for_init,     /* FOR_BEGIN .. FOR_END */
+  rk_if_arm,       /* IF_BEGIN .. IF_ELSE, IF_ELSE .. IF_END */
+  rk_loop_body,    /* WHILE_BODY .. WHILE_END, DO_BEGIN .. DO_COND,
+                      FOR_BODY .. FOR_END */
+  rk_switch_body   /* SWITCH_BEGIN .. SWITCH_END */
+};  /* a_region_kind */
+
+enum a_bracket_action : uint8_t {
+  eba_none = 0,
+  eba_open,      /* The record opens a bracket. */
+  eba_advance,   /* The record moves the innermost bracket to its next
+                    phase. */
+  eba_close      /* The record closes the innermost bracket. */
+};  /* a_bracket_action */
+
+/* What a record did to the bracket and scope-region stacks, handed to the
+   record handler with the record (all zero for a record that did nothing). */
+struct a_scope_event {
+  uint8_t   bracket_action;   /* a_bracket_action. */
+  uint8_t   bracket_kind;     /* a_bracket_kind of the affected bracket. */
+  uint8_t   opened;           /* Scope regions the record opened (0..1). */
+  uint8_t   closed;           /* Scope regions it closed (0..2), innermost
+                                 first in closed_kind. */
+  uint8_t   closed_kind[2];   /* a_region_kind. */
+  uint32_t  bracket_depth;    /* Open brackets after the record (function
+                                 bodies are not brackets). */
+
+  a_scope_event()
+    : bracket_action(eba_none), bracket_kind(0), opened(0), closed(0),
+      bracket_depth(0)
+    { closed_kind[0] = closed_kind[1] = rk_none; }
+};  /* a_scope_event */
+
+/*
+The one bracket matcher of the library: BEGIN/ELSE/END nesting, FUNC bodies
+and the scope regions, on heap stacks.  The validator and (through
+a_scope_event) the emitter share its result.  The effects on the id tables
+(locals of a closed region die, a function's L-ids are dropped) are applied
+by commit(), after the record handler ran, so a handler still sees the
+closing scope's payloads.
+*/
+class a_bracket_tracker {
+public:
+  a_bracket_tracker();
+
+  void begin_frame();
+  bool check(const a_record &record, uint16_t stream_minor,
+             std::string &problem, a_scope_event &event);
+  /* Apply the record's bracket rules.  False with a message in problem. */
+  void note_local(size_t lid_index);
+  /* A value L-id (at this index of the L-id table) belongs to the innermost
+     open scope region. */
+  void commit(a_id_tables &ids, bool kill_locals);
+  /* After the handler: mark the locals of the regions the record closed as
+     dead (when kill_locals) and drop a finished function's L-ids. */
+
+  size_t function_depth() const
+    { return function_bases_.size(); }
+  size_t bracket_depth() const
+    { return brackets_.size(); }
+  const char *innermost_name() const
+    { return brackets_.empty() ? "" : bracket_name(brackets_.back().kind); }
+
+private:
+  struct a_bracket {
+    uint8_t kind;
+    uint8_t phase;
+    uint8_t has_else;
+    uint8_t case_ok;   /* A case label may sit here (a SWITCH body or BLOCKs
+                          nested directly in it). */
+  };  /* a_bracket */
+  struct a_region {
+    uint8_t kind;
+    size_t  first;     /* Index into scope_locals_ of its first local. */
+  };  /* a_region */
+
+  bool apply_regions(uint8_t opcode, std::string &problem,
+                     a_scope_event &event);
+
+  std::vector<a_bracket>   brackets_;
+  std::vector<size_t>      function_bases_;  /* Bracket depth at each
+                                                FUNC_BEGIN. */
+  std::vector<a_region>    regions_;
+  std::vector<size_t>      scope_locals_;
+  uint32_t                 switch_depth_;
+  size_t                   kill_from_;       /* Lowest region start closed by
+                                                the last record. */
+  bool                     ended_function_;
+};  /* a_bracket_tracker */
+
+/* Reference checking. */
 
 /*
 Checks that every id a record refers to was introduced earlier: string ids
 (STR), G-ids (TY_*, DECL_*), and L-ids within the current function (PARAM,
 LOCAL, MATERIALIZE_TEMP, LABEL; a GOTO may precede its LABEL).  Also that
-FIELD/EXTRACT/AGG_SEL/C_SEL name complete records with an index in range,
-and that two G-ids do not bind one external symbol name (spec section 7).
-It runs inside a_stream_reader after the section and bracket checks.
+FIELD/EXTRACT/AGG_SEL/C_SEL name complete records with an index in range, the
+declaration rules (kinds, effective names and one G-id per external symbol,
+one body per function, CALL names a function) and the scope rule of the
+locals.  The facts live in the shared id tables.  It runs inside
+a_stream_reader after the section and bracket checks.
 */
 class a_ref_checker {
 public:
-  a_ref_checker();
+  a_ref_checker(a_id_tables &ids, a_bracket_tracker &tracker);
 
   void begin_frame();
   bool check(const a_record &record, std::string &problem);
   /* False with a message in problem when the record breaks a rule. */
+  bool end_frame(std::string &problem);
+  /* The frame is complete: no record body may still await its fields. */
 
 private:
-  enum a_kind : uint8_t {
-    k_void, k_bool, k_int, k_float, k_ptr, k_array, k_func_type, k_record,
-    k_opaque, k_func, k_var
-  };  /* a_kind */
-
-  struct a_ent {
-    a_kind   kind;
-    bool     complete;   /* Record with a body. */
-    uint64_t nfields;    /* Record: number of REC_FIELDs. */
-    uint64_t element;    /* Array: element gid. */
-    bool     has_count;
-    uint64_t count;
-    bool     is_union;
-  };  /* a_ent */
-
-  enum a_lkind : uint8_t { l_value, l_label };
-
-  const a_ent *find(uint64_t g) const;
   bool need_sid(const an_operand &op, bool optional, const char *what,
                 std::string &problem);
   bool need_type(const an_operand &op, bool optional, std::string &problem);
   bool need_complete(const an_operand &op, std::string &problem,
-                     const a_ent *&out);
+                     const a_gid_entry *&out);
   bool need_object(const an_operand &op, const char *what,
                    std::string &problem);
-  bool introduce(const an_operand &op, a_ent entity, std::string &problem);
-  bool declare(const a_record &r, a_kind kind, std::string &problem);
-  bool bind_name(uint64_t g, const an_operand &sid, uint64_t linkage,
-                 std::string &problem);
-  bool introduce_local(const an_operand &op, a_lkind kind,
+  a_gid_entry *introduce(const an_operand &op, a_gid_kind kind,
+                         std::string &problem);
+  bool declare(const a_record &r, a_gid_kind kind, std::string &problem);
+  bool apply_name(uint64_t g, a_gid_entry &entry, uint64_t sid,
+                  uint64_t linkage, std::string &problem);
+  bool introduce_local(const an_operand &op, a_lid_state state,
                        std::string &problem);
   bool check_selector(uint64_t index, uint64_t repeat, bool is_const,
                       std::string &problem);
 
-  std::unordered_map<uint64_t, std::string>  strings_;
-  std::unordered_map<uint64_t, a_ent>        ents_;
-  std::unordered_map<std::string, uint64_t>  symbol_owner_;
-  uint64_t                                   fields_pending_;
-  struct a_function_state {
-    std::unordered_map<uint64_t, a_lkind>    lids;
-    std::unordered_set<uint64_t>             goto_targets;
-  };  /* a_function_state */
-  std::vector<a_function_state>              functions_;
-  std::vector<uint64_t>                      agg_targets_;
-  std::vector<uint64_t>                      const_targets_;
-  const char                                *opname_;
+  a_id_tables             &ids_;
+  a_bracket_tracker       &tracker_;
+  uint64_t                 fields_pending_;
+  std::vector<uint32_t>    agg_targets_;
+  std::vector<uint32_t>    const_targets_;
 };  /* a_ref_checker */
 
 /* Stream reading. */
@@ -288,6 +386,11 @@ struct a_record_context {
   bool                in_body;   /* After the first FUNC_BEGIN of a region. */
   uint32_t            function_depth;
   uint64_t            offset;    /* Stream offset of the record. */
+  a_scope_event       scope;     /* Bracket and scope-region effects. */
+
+  a_record_context()
+    : frame(nullptr), in_body(false), function_depth(0), offset(0)
+    {}
 };  /* a_record_context */
 
 /*
@@ -342,6 +445,10 @@ public:
     { return frame_count_; }
   const a_preamble &preamble() const
     { return preamble_; }
+  a_id_tables &ids()
+  /* The id tables the validator fills (strings, G-ids, L-ids).  They are
+     populated only while the reader validates (options.check). */
+    { return ids_; }
   uint32_t end_frame_count() const
     { return end_n_frames_; }
   uint32_t end_status() const
@@ -354,12 +461,6 @@ private:
     state_done
   };  /* a_state */
 
-  struct a_bracket {
-    uint8_t kind;
-    uint8_t phase;
-    uint8_t has_else;
-  };  /* a_bracket */
-
   size_t unit_size(const uint8_t *view, size_t view_size, bool &ok);
   bool process_unit(const uint8_t *data);
   bool process_preamble(const uint8_t *data);
@@ -367,7 +468,7 @@ private:
   bool process_records(const a_frame_info &frame);
   bool check_section(const a_record &record, const a_frame_info &frame,
                      bool &in_body);
-  bool check_brackets(const a_record &record, const a_frame_info &frame);
+  bool check_brackets(const a_record &record, a_scope_event &event);
   bool check_refs(const a_record &record);
   bool fail(an_error_kind kind, const std::string &message, uint64_t offset);
 
@@ -383,13 +484,10 @@ private:
   int64_t            frame_count_;
   uint32_t           end_n_frames_;
   uint32_t           end_status_;
-  uint32_t           switch_depth_;
   std::vector<uint8_t>
                      pending_;     /* Partial preamble, header or frame. */
-  std::vector<a_bracket>
-                     brackets_;
-  std::vector<size_t>
-                     function_bases_;  /* Bracket depth at each FUNC_BEGIN. */
+  a_id_tables        ids_;
+  a_bracket_tracker  tracker_;
   a_ref_checker      refs_;
 };  /* a_stream_reader */
 

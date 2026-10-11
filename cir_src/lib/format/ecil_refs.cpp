@@ -8,8 +8,10 @@ SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 /*
 ecil_refs.cpp -- reference checking of the ECIL stream validator: every
 string id, G-id and L-id a record uses must have been introduced earlier,
-selectors must name complete records with an index in range, and one
-external symbol name must not be bound by two G-ids.
+selectors must name complete records with an index in range, declarations
+follow the kind, effective-name and one-body rules, one external symbol name
+is owned by one G-id, and a local is not used after its scope region closed.
+All facts live in the shared id tables (ecil_ids.h).
 */
 
 #include <cstdio>
@@ -44,10 +46,18 @@ True if a symbol with this linkage is visible to other translation units.
   return linkage != elk_internal && linkage != elk_private;
 }  /* is_external_linkage */
 
+bool is_declaration(const a_gid_entry *e)
+/*
+True for a function or variable.
+*/
+{
+  return e != nullptr && (e->kind == gk_func || e->kind == gk_var);
+}  /* is_declaration */
+
 }  /* anonymous namespace */
 
-a_ref_checker::a_ref_checker()
-  : fields_pending_(0), opname_("")
+a_ref_checker::a_ref_checker(a_id_tables &ids, a_bracket_tracker &tracker)
+  : ids_(ids), tracker_(tracker), fields_pending_(0)
 {
 }  /* a_ref_checker::a_ref_checker */
 
@@ -60,16 +70,6 @@ Per-frame state: the initializer target stacks.
   const_targets_.clear();
 }  /* a_ref_checker::begin_frame */
 
-const a_ref_checker::a_ent *a_ref_checker::find(uint64_t g) const
-/*
-The entity introduced for G-id g, or nullptr.
-*/
-{
-  auto it = ents_.find(g);
-
-  return it == ents_.end() ? nullptr : &it->second;
-}  /* a_ref_checker::find */
-
 bool a_ref_checker::need_sid(const an_operand &op, bool optional,
                              const char *what, std::string &problem)
 /*
@@ -80,7 +80,7 @@ A string id operand: it must have been introduced by STR.
   bool ok = true;
 
   if (operand_id(op, v)) {
-    if (strings_.find(v) == strings_.end()) {
+    if (!ids_.has_string(v)) {
       problem = std::string(what) + " names string id " + number(v) +
                 " that was not introduced by an earlier STR";
       ok = false;
@@ -102,12 +102,12 @@ A type operand: an introduced type G-id (not a function or variable).
   bool ok = true;
 
   if (operand_id(op, v)) {
-    const a_ent *e = find(v);
+    const a_gid_entry *e = ids_.find_gid(v);
     if (e == nullptr) {
       problem = "unknown type: G-id " + number(v) +
                 " was not introduced earlier in the stream";
       ok = false;
-    } else if (e->kind == k_func || e->kind == k_var) {
+    } else if (is_declaration(e)) {
       problem = "G-id " + number(v) + " is a declaration, not a type";
       ok = false;
     }
@@ -119,7 +119,7 @@ A type operand: an introduced type G-id (not a function or variable).
 }  /* a_ref_checker::need_type */
 
 bool a_ref_checker::need_complete(const an_operand &op, std::string &problem,
-                                  const a_ent *&out)
+                                  const a_gid_entry *&out)
 /*
 A type operand that must be a complete record, or an array (for AGG_INIT and
 C_AGG targets).
@@ -130,8 +130,8 @@ C_AGG targets).
 
   out = nullptr;
   if (ok && operand_id(op, v)) {
-    out = find(v);
-    if (out->kind == k_record && !out->complete) {
+    out = ids_.find_gid(v);
+    if (out->kind == gk_record && !(out->flags & gf_complete)) {
       problem = "incomplete record: G-id " + number(v) +
                 " has no TY_RECORD_BODY yet";
       ok = false;
@@ -151,10 +151,11 @@ an array of records) must have its body by then.
   uint64_t v = 0;
 
   if (ok && operand_id(op, v)) {
-    const a_ent *e = find(v);
-    while (e != nullptr && e->kind == k_array)
-      e = find(e->element);
-    if (e != nullptr && e->kind == k_record && !e->complete) {
+    const a_gid_entry *e = ids_.find_gid(v);
+    while (e != nullptr && e->kind == gk_array)
+      e = ids_.find_gid(e->element);
+    if (e != nullptr && e->kind == gk_record &&
+        !(e->flags & gf_complete)) {
       problem = std::string("incomplete record: ") + what + " uses G-id " +
                 number(v) + " before its TY_RECORD_BODY";
       ok = false;
@@ -163,53 +164,72 @@ an array of records) must have its body by then.
   return ok;
 }  /* a_ref_checker::need_object */
 
-bool a_ref_checker::introduce(const an_operand &op, a_ent entity,
-                              std::string &problem)
+a_gid_entry *a_ref_checker::introduce(const an_operand &op, a_gid_kind kind,
+                                      std::string &problem)
 /*
 A G-id introduced as a type: it must be new.
 */
 {
   uint64_t v = 0;
-  bool ok = operand_id(op, v);
+  a_gid_entry *result = nullptr;
 
-  if (!ok) {
+  if (!operand_id(op, v))
     problem = "G-id 0 cannot be introduced";
-  } else if (ents_.find(v) != ents_.end()) {
-    problem = "G-id " + number(v) + " is introduced twice";
-    ok = false;
-  } else {
-    ents_[v] = entity;
-  }
-  return ok;
+  else
+    result = ids_.add_gid(v, kind, problem);
+  return result;
 }  /* a_ref_checker::introduce */
 
-bool a_ref_checker::bind_name(uint64_t g, const an_operand &sid,
-                              uint64_t linkage, std::string &problem)
+bool a_ref_checker::apply_name(uint64_t g, a_gid_entry &entry, uint64_t sid,
+                               uint64_t linkage, std::string &problem)
 /*
-One G-id per symbol: two G-ids must not bind one external symbol name.
+Apply a DECL_* or NAME_BIND to the declaration's effective name and linkage
+(spec section 7).  A nil name (sid 0) keeps the effective name, another name
+renames the entity.  The external symbol name is owned by one G-id: the old
+name is released when the entity is renamed or becomes internal, and the new
+one must be free.
 */
 {
-  uint64_t v = 0;
-  bool ok = true;
+  bool ok = !(sid != 0 && ids_.string(sid).empty());
+  bool owned = (entry.flags & gf_owns_name) != 0;
+  std::string_view old_text = (entry.flags & gf_named)
+                                  ? ids_.string(entry.name_sid)
+                                  : std::string_view();
+  uint32_t new_sid = sid != 0 ? static_cast<uint32_t>(sid) : entry.name_sid;
+  bool named = sid != 0 || (entry.flags & gf_named) != 0;
+  std::string_view new_text = named ? ids_.string(new_sid)
+                                    : std::string_view();
+  bool wants = is_external_linkage(linkage) && named;
 
-  if (operand_id(sid, v) && is_external_linkage(linkage)) {
-    auto s = strings_.find(v);
-    if (s != strings_.end() && !s->second.empty()) {
-      auto it = symbol_owner_.find(s->second);
-      if (it == symbol_owner_.end())
-        symbol_owner_[s->second] = g;
-      else if (it->second != g) {
-        problem = "one G-id per symbol: '" + s->second +
-                  "' is bound by G-ids " + number(it->second) + " and " +
+  if (!ok) {
+    problem = "empty symbol name: the name sid of G-id " + number(g) +
+              " is the empty string (use nil for no name)";
+  } else {
+    if (owned && !(wants && new_text == old_text)) {
+      ids_.release_symbol(old_text, static_cast<uint32_t>(g));
+      entry.flags &= static_cast<uint8_t>(~gf_owns_name);
+      owned = false;
+    }
+    entry.linkage = static_cast<uint8_t>(linkage);
+    entry.name_sid = named ? new_sid : 0;
+    if (named)
+      entry.flags |= gf_named;
+    if (wants && !owned) {
+      uint32_t other = 0;
+      if (ids_.bind_symbol(new_text, static_cast<uint32_t>(g), other)) {
+        entry.flags |= gf_owns_name;
+      } else {
+        problem = "one G-id per symbol: '" + std::string(new_text) +
+                  "' is bound by G-ids " + number(other) + " and " +
                   number(g);
         ok = false;
       }
     }
   }
   return ok;
-}  /* a_ref_checker::bind_name */
+}  /* a_ref_checker::apply_name */
 
-bool a_ref_checker::declare(const a_record &r, a_kind kind,
+bool a_ref_checker::declare(const a_record &r, a_gid_kind kind,
                             std::string &problem)
 /*
 DECL_FUNC / DECL_VAR (g, t, linkage, flags, [align,] sid): introduce the
@@ -219,17 +239,19 @@ entity or re-issue it (the same kind only).
   uint64_t g = 0;
   uint64_t t = 0;
   uint64_t linkage = 0;
+  uint64_t name = 0;
   bool ok = operand_id(r.ops[0], g);
-  const a_ent *e;
-  const an_operand &name = r.ops[r.count - 1];
+  const a_gid_entry *te;
+  a_gid_entry *e;
+  const an_operand &name_op = r.ops[r.count - 1];
 
   if (!ok) {
     problem = "G-id 0 cannot be declared";
   } else {
     ok = need_type(r.ops[1], false, problem) &&
-         need_sid(name, true, "the name", problem);
+         need_sid(name_op, true, "the name", problem);
   }
-  if (ok && kind == k_var) {
+  if (ok && kind == gk_var) {
     uint64_t flags = 0;
     operand_u64(r.ops[3], flags);
     if (flags & ECIL_DECL_VAR_DEFINITION)
@@ -237,55 +259,66 @@ entity or re-issue it (the same kind only).
   }
   if (ok) {
     operand_id(r.ops[1], t);
-    e = find(t);
-    if (kind == k_func && e->kind != k_func_type) {
+    te = ids_.find_gid(t);
+    if (kind == gk_func && te->kind != gk_func_type) {
       problem = "DECL_FUNC type G-id " + number(t) +
                 " is not a function type";
+      ok = false;
+    } else if (kind == gk_var &&
+               (te->kind == gk_func_type || te->kind == gk_void)) {
+      problem = "DECL_VAR type G-id " + number(t) +
+                " is not an object type (function or void)";
       ok = false;
     }
   }
   if (ok) {
-    e = find(g);
+    e = ids_.find_gid(g);
     if (e != nullptr && e->kind != kind) {
       problem = "one G-id per symbol: G-id " + number(g) +
                 " was introduced as something else and cannot be re-declared "
-                "as a " + (kind == k_func ? "function" : "variable");
+                "as a " + (kind == gk_func ? "function" : "variable");
       ok = false;
     } else if (e == nullptr) {
-      a_ent entity = {kind, false, 0, 0, false, 0, false};
-      ents_[g] = entity;
+      e = ids_.add_gid(g, kind, problem);
+      ok = e != nullptr;
     }
   }
   if (ok) {
     operand_u64(r.ops[2], linkage);
-    ok = bind_name(g, name, linkage, problem);
+    operand_id(name_op, name);
+    e->element = static_cast<uint32_t>(t);
+    ok = apply_name(g, *e, name, linkage, problem);
   }
   return ok;
 }  /* a_ref_checker::declare */
 
-bool a_ref_checker::introduce_local(const an_operand &op, a_lkind kind,
+bool a_ref_checker::introduce_local(const an_operand &op, a_lid_state state,
                                     std::string &problem)
 /*
 PARAM / LOCAL / MATERIALIZE_TEMP / LABEL: a new L-id of the current function.
+A value belongs to the innermost open scope region.
 */
 {
   uint64_t v = 0;
   bool ok = true;
 
-  if (functions_.empty()) {
+  if (!ids_.in_function()) {
     problem = "local id introduced outside a function";
     ok = false;
   } else if (!operand_id(op, v)) {
     problem = "L-id 0 cannot be introduced";
     ok = false;
   } else {
-    auto &lids = functions_.back().lids;
-    auto it = lids.find(v);
-    if (it != lids.end()) {
+    a_lid_entry *entry = ids_.touch_lid(v, problem);
+    if (entry == nullptr) {
+      ok = false;
+    } else if (entry->state != ls_unseen) {
       problem = "L-id " + number(v) + " is introduced twice in the function";
       ok = false;
     } else {
-      lids[v] = kind;
+      entry->state = state;
+      if (state == ls_value)
+        tracker_.note_local(ids_.lid_index(entry));
     }
   }
   return ok;
@@ -297,26 +330,28 @@ bool a_ref_checker::check_selector(uint64_t index, uint64_t repeat,
 AGG_SEL / C_SEL / C_REPEAT: the index (and run) is within the current target.
 */
 {
-  std::vector<uint64_t> &stack = is_const ? const_targets_ : agg_targets_;
+  std::vector<uint32_t> &stack = is_const ? const_targets_ : agg_targets_;
   bool ok = !stack.empty();
 
   if (!ok) {
     problem = std::string("selector outside ") +
               (is_const ? "C_AGG_BEGIN" : "AGG_INIT_BEGIN");
   } else {
-    const a_ent *t = find(stack.back());
-    if (t->kind == k_record) {
-      if (index >= t->nfields || repeat != 1) {
+    const a_gid_entry *t = ids_.find_gid(stack.back());
+    if (t->kind == gk_record) {
+      if (index >= t->extent || repeat != 1) {
         problem = "field index " + number(index) + " is out of range for "
                   "record G-id " + number(stack.back()) + " with " +
-                  number(t->nfields) + " fields";
+                  number(t->extent) + " fields";
         ok = false;
       }
-    } else if (t->kind == k_array) {
-      if (t->has_count && index + repeat > t->count) {
+    } else if (t->kind == gk_array) {
+      /* index + repeat > count, without the overflow. */
+      if ((t->flags & gf_has_count) &&
+          (index > t->extent || repeat > t->extent - index)) {
         problem = "element index " + number(index) + " (+" + number(repeat) +
                   ") is out of range for array G-id " +
-                  number(stack.back()) + " of " + number(t->count);
+                  number(stack.back()) + " of " + number(t->extent);
         ok = false;
       }
     } else {
@@ -327,6 +362,21 @@ AGG_SEL / C_SEL / C_REPEAT: the index (and run) is within the current target.
   return ok;
 }  /* a_ref_checker::check_selector */
 
+bool a_ref_checker::end_frame(std::string &problem)
+/*
+At the end of a frame no TY_RECORD_BODY may still await REC_FIELD records.
+*/
+{
+  bool ok = fields_pending_ == 0;
+
+  if (!ok) {
+    problem = "a TY_RECORD_BODY is missing REC_FIELD records at the end of "
+              "its frame";
+    fields_pending_ = 0;
+  }
+  return ok;
+}  /* a_ref_checker::end_frame */
+
 bool a_ref_checker::check(const a_record &r, std::string &problem)
 /*
 Apply the reference rules of one record.
@@ -335,9 +385,9 @@ Apply the reference rules of one record.
   bool ok = true;
   uint64_t v = 0;
   uint64_t w = 0;
-  const a_ent *e = nullptr;
+  const a_gid_entry *e = nullptr;
+  a_gid_entry *ne = nullptr;
 
-  opname_ = r.info->name;
   if (fields_pending_ != 0 && r.opcode != eop_rec_field &&
       r.opcode != eop_loc && r.opcode != eop_ext) {
     problem = "a TY_RECORD_BODY is missing REC_FIELD records";
@@ -345,21 +395,15 @@ Apply the reference rules of one record.
   }
   if (ok) switch (r.opcode) {
   case eop_str: {
-    std::string text;
-    if (operand_u64(r.ops[0], v) && r.ops[1].kind == an_operand_kind::bin &&
-        r.ops[1].data != nullptr)
-      text.assign(reinterpret_cast<const char *>(r.ops[1].data),
-                  r.ops[1].length);
-    if (!operand_id(r.ops[0], v)) {
-      problem = "string id 0 cannot be introduced";
-      ok = false;
-    } else if (strings_.find(v) != strings_.end() && strings_[v] != text) {
-      problem = "string id " + number(v) + " is introduced twice with "
-                "different contents";
-      ok = false;
-    } else {
-      strings_[v] = text;
+    const uint8_t *data = nullptr;
+    size_t length = 0;
+
+    operand_u64(r.ops[0], w);
+    if (r.ops[1].kind == an_operand_kind::bin && r.ops[1].data != nullptr) {
+      data = r.ops[1].data;
+      length = r.ops[1].length;
     }
+    ok = ids_.add_string(w, data, length, problem);
     break;
   }
   case eop_loc:
@@ -379,95 +423,110 @@ Apply the reference rules of one record.
     break;
   case eop_name_bind: {
     uint64_t linkage = 0;
-    ok = operand_id(r.ops[0], v) && find(v) != nullptr &&
-         (find(v)->kind == k_func || find(v)->kind == k_var);
-    if (!ok)
+    ok = operand_id(r.ops[0], v) && is_declaration(ids_.find_gid(v));
+    if (!ok) {
       problem = "unknown declaration: NAME_BIND names a G-id that was not "
                 "declared";
-    else
+    } else {
       ok = need_sid(r.ops[1], false, "the name", problem);
+    }
     if (ok) {
       operand_u64(r.ops[2], linkage);
-      ok = bind_name(v, r.ops[1], linkage, problem);
+      operand_id(r.ops[1], w);
+      ok = apply_name(v, *ids_.find_gid(v), w, linkage, problem);
     }
     break;
   }
   case eop_retract:
-    ok = operand_id(r.ops[0], v) && find(v) != nullptr;
+    ok = operand_id(r.ops[0], v) && ids_.find_gid(v) != nullptr;
     if (!ok)
       problem = "unknown declaration: RETRACT names a G-id that was not "
                 "introduced";
     break;
-  case eop_ty_void: {
-    a_ent t = {k_void, false, 0, 0, false, 0, false};
-    ok = introduce(r.ops[0], t, problem);
+  case eop_ty_void:
+    ok = introduce(r.ops[0], gk_void, problem) != nullptr;
     break;
-  }
   case eop_ty_bool:
+  case eop_ty_float:
+    ok = introduce(r.ops[0], r.opcode == eop_ty_bool ? gk_bool : gk_float,
+                   problem) != nullptr;
+    break;
   case eop_ty_int:
-  case eop_ty_float: {
-    a_ent t = {r.opcode == eop_ty_bool ? k_bool
-               : r.opcode == eop_ty_int ? k_int : k_float,
-               false, 0, 0, false, 0, false};
-    ok = introduce(r.ops[0], t, problem);
+    ne = introduce(r.ops[0], gk_int, problem);
+    ok = ne != nullptr;
+    if (ok)
+      operand_u64(r.ops[1], ne->extent);
     break;
-  }
-  case eop_ty_opaque: {
-    a_ent t = {k_opaque, false, 0, 0, false, 0, false};
-    ok = introduce(r.ops[0], t, problem);
+  case eop_ty_opaque:
+    ok = introduce(r.ops[0], gk_opaque, problem) != nullptr;
     break;
-  }
-  case eop_ty_ptr: {
-    a_ent t = {k_ptr, false, 0, 0, false, 0, false};
+  case eop_ty_ptr:
     ok = need_type(r.ops[1], false, problem) &&
-         introduce(r.ops[0], t, problem);
+         introduce(r.ops[0], gk_ptr, problem) != nullptr;
     break;
-  }
-  case eop_ty_array: {
-    a_ent t = {k_array, false, 0, 0, false, 0, false};
+  case eop_ty_array:
     ok = need_type(r.ops[1], false, problem);
     if (ok) {
-      operand_u64(r.ops[1], t.element);
-      t.has_count = operand_u64(r.ops[2], t.count);
-      ok = introduce(r.ops[0], t, problem);
+      ne = introduce(r.ops[0], gk_array, problem);
+      ok = ne != nullptr;
+      if (ok) {
+        operand_u64(r.ops[1], w);
+        ne->element = static_cast<uint32_t>(w);
+        if (operand_u64(r.ops[2], ne->extent))
+          ne->flags |= gf_has_count;
+      }
     }
     break;
-  }
   case eop_ty_func: {
-    a_ent t = {k_func_type, false, 0, 0, false, 0, false};
     an_array_reader reader = array_elements(r.ops[3]);
-    an_operand element;
+    uint64_t element = 0;
 
     ok = need_type(r.ops[1], false, problem);
-    while (ok && next_array_element(reader, element))
-      ok = need_type(element, false, problem);
+    while (ok && next_uint_element(reader, element)) {
+      const a_gid_entry *pe = ids_.find_gid(element);
+      if (element == 0) {
+        problem = "missing type G-id";
+        ok = false;
+      } else if (pe == nullptr) {
+        problem = "unknown type: G-id " + number(element) +
+                  " was not introduced earlier in the stream";
+        ok = false;
+      } else if (is_declaration(pe)) {
+        problem = "G-id " + number(element) + " is a declaration, not a "
+                  "type";
+        ok = false;
+      }
+    }
     if (ok)
-      ok = introduce(r.ops[0], t, problem);
+      ok = introduce(r.ops[0], gk_func_type, problem) != nullptr;
     break;
   }
   case eop_ty_record_decl: {
-    a_ent t = {k_record, false, 0, 0, false, 0, false};
     uint64_t kind = 0;
     operand_u64(r.ops[1], kind);
-    t.is_union = kind == erk_union;
-    ok = need_sid(r.ops[2], true, "the tag name", problem) &&
-         introduce(r.ops[0], t, problem);
+    ok = need_sid(r.ops[2], true, "the tag name", problem);
+    if (ok) {
+      ne = introduce(r.ops[0], gk_record, problem);
+      ok = ne != nullptr;
+      if (ok && kind == erk_union)
+        ne->flags |= gf_union;
+    }
     break;
   }
   case eop_ty_record_body: {
-    ok = operand_id(r.ops[0], v) && find(v) != nullptr &&
-         find(v)->kind == k_record;
+    a_gid_entry *rec = nullptr;
+    ok = operand_id(r.ops[0], v) &&
+         (rec = ids_.find_gid(v)) != nullptr && rec->kind == gk_record;
     if (!ok) {
       problem = "unknown type: TY_RECORD_BODY names a G-id that is not a "
                 "TY_RECORD_DECL";
-    } else if (find(v)->complete) {
+    } else if (rec->flags & gf_complete) {
       problem = "TY_RECORD_BODY completes G-id " + number(v) + " twice";
       ok = false;
     } else {
-      a_ent &rec = ents_[v];
       operand_u64(r.ops[5], w);
-      rec.complete = true;
-      rec.nfields = w;
+      rec->flags |= gf_complete;
+      rec->extent = w;
       fields_pending_ = w;
     }
     break;
@@ -482,20 +541,21 @@ Apply the reference rules of one record.
            need_sid(r.ops[4], true, "the field name", problem);
       if (ok) {
         operand_u64(r.ops[0], v);
-        e = find(v);
-        if (r.ops[3].kind != an_operand_kind::nil && e->kind != k_int &&
-            e->kind != k_bool) {
+        e = ids_.find_gid(v);
+        if (r.ops[3].kind != an_operand_kind::nil && e->kind != gk_int &&
+            e->kind != gk_bool) {
           problem = "bit-field member of non-integer type G-id " + number(v);
           ok = false;
-        } else if (e->kind == k_array) {
-          const a_ent *el = find(e->element);
-          if (el != nullptr && el->kind == k_record && !el->complete &&
-              e->has_count && e->count != 0) {
+        } else if (e->kind == gk_array) {
+          const a_gid_entry *el = ids_.find_gid(e->element);
+          if (el != nullptr && el->kind == gk_record &&
+              !(el->flags & gf_complete) && (e->flags & gf_has_count) &&
+              e->extent != 0) {
             problem = "incomplete record: array member of G-id " +
                       number(e->element) + " has no body yet";
             ok = false;
           }
-        } else if (e->kind == k_record && !e->complete) {
+        } else if (e->kind == gk_record && !(e->flags & gf_complete)) {
           problem = "incomplete record: member of G-id " + number(v) +
                     " has no body yet";
           ok = false;
@@ -505,87 +565,107 @@ Apply the reference rules of one record.
     break;
   }
   case eop_decl_func:
-    ok = declare(r, k_func, problem);
+    ok = declare(r, gk_func, problem);
     break;
   case eop_decl_var:
-    ok = declare(r, k_var, problem);
+    ok = declare(r, gk_var, problem);
     break;
   case eop_var_init:
-    ok = operand_id(r.ops[0], v) && find(v) != nullptr &&
-         find(v)->kind == k_var;
-    if (!ok)
+    ok = operand_id(r.ops[0], v) && (ne = ids_.find_gid(v)) != nullptr &&
+         ne->kind == gk_var;
+    if (!ok) {
       problem = "unknown declaration: VAR_INIT names a G-id that is not a "
                 "declared variable";
+    } else {
+      /* The variable's type must be complete by now. */
+      const a_gid_entry *t = ids_.find_gid(ne->element);
+      while (t != nullptr && t->kind == gk_array)
+        t = ids_.find_gid(t->element);
+      if (t != nullptr && t->kind == gk_record && !(t->flags & gf_complete)) {
+        problem = "incomplete record: VAR_INIT of G-id " + number(v) +
+                  " whose type has no TY_RECORD_BODY";
+        ok = false;
+      }
+    }
     break;
-  case eop_func_begin: {
-    ok = operand_id(r.ops[0], v) && find(v) != nullptr &&
-         find(v)->kind == k_func;
-    if (!ok)
+  case eop_func_begin:
+    ok = operand_id(r.ops[0], v) && (ne = ids_.find_gid(v)) != nullptr &&
+         ne->kind == gk_func;
+    if (!ok) {
       problem = "unknown declaration: FUNC_BEGIN names a G-id that is not a "
                 "declared function";
-    else
-      functions_.emplace_back();
+    } else if (ne->flags & gf_defined) {
+      problem = "function G-id " + number(v) + " is defined twice";
+      ok = false;
+    } else {
+      ne->flags |= gf_defined;
+      ids_.begin_function();
+    }
     break;
-  }
   case eop_func_end:
-    if (functions_.empty()) {
+    if (!ids_.in_function()) {
       problem = "FUNC_END without FUNC_BEGIN";
       ok = false;
     } else {
-      for (uint64_t target : functions_.back().goto_targets) {
-        auto it = functions_.back().lids.find(target);
-        if (it == functions_.back().lids.end() || it->second != l_label) {
-          problem = "label L-id " + number(target) +
+      size_t first = ids_.function_lid_begin();
+      size_t count = ids_.lid_table_size();
+      for (size_t k = first + 1; k < count; ++k) {
+        const a_lid_entry &entry = ids_.lid_at_index(k);
+        if ((entry.flags & lf_goto_target) && entry.state != ls_label) {
+          problem = "label L-id " + number(k - first) +
                     " is the target of a GOTO but never defined by LABEL";
           ok = false;
           break;
         }
       }
-      functions_.pop_back();
     }
     break;
   case eop_param:
     ok = need_object(r.ops[1], "PARAM", problem) &&
          need_object(r.ops[2], "PARAM", problem) &&
          need_sid(r.ops[3], true, "the parameter name", problem) &&
-         introduce_local(r.ops[0], l_value, problem);
+         introduce_local(r.ops[0], ls_value, problem);
     break;
   case eop_local:
     ok = need_object(r.ops[1], "LOCAL", problem) &&
          need_sid(r.ops[2], true, "the local name", problem) &&
-         introduce_local(r.ops[0], l_value, problem);
+         introduce_local(r.ops[0], ls_value, problem);
     break;
   case eop_materialize_temp:
     ok = need_object(r.ops[1], "MATERIALIZE_TEMP", problem) &&
-         introduce_local(r.ops[0], l_value, problem);
+         introduce_local(r.ops[0], ls_value, problem);
     break;
   case eop_label:
     ok = need_sid(r.ops[1], true, "the label name", problem) &&
-         introduce_local(r.ops[0], l_label, problem);
+         introduce_local(r.ops[0], ls_label, problem);
     break;
   case eop_goto_stmt:
-    if (functions_.empty() || !operand_id(r.ops[0], v)) {
+    if (!ids_.in_function() || !operand_id(r.ops[0], v)) {
       problem = "GOTO outside a function or without a label";
       ok = false;
     } else {
-      auto &fs = functions_.back();
-      auto it = fs.lids.find(v);
-      if (it != fs.lids.end() && it->second != l_label) {
+      a_lid_entry *entry = ids_.touch_lid(v, problem);
+      if (entry == nullptr) {
+        ok = false;
+      } else if (entry->state == ls_value || entry->state == ls_dead) {
         problem = "GOTO target L-id " + number(v) + " is not a label";
         ok = false;
       } else {
-        fs.goto_targets.insert(v);
+        entry->flags |= lf_goto_target;
       }
     }
     break;
   case eop_lref:
-    if (functions_.empty() || !operand_id(r.ops[0], v)) {
+    if (!ids_.in_function() || !operand_id(r.ops[0], v)) {
       problem = "LREF outside a function";
       ok = false;
     } else {
-      auto &lids = functions_.back().lids;
-      auto it = lids.find(v);
-      if (it == lids.end() || it->second != l_value) {
+      a_lid_entry *entry = ids_.find_lid(v);
+      if (entry != nullptr && entry->state == ls_dead) {
+        problem = "local id out of scope: L-id " + number(v) +
+                  " was declared in a scope region that has closed";
+        ok = false;
+      } else if (entry == nullptr || entry->state != ls_value) {
         problem = "unknown local id: L-id " + number(v) +
                   " was not introduced by PARAM, LOCAL or MATERIALIZE_TEMP "
                   "in this function";
@@ -594,36 +674,35 @@ Apply the reference rules of one record.
     }
     break;
   case eop_gref:
-    ok = operand_id(r.ops[0], v) && find(v) != nullptr &&
-         (find(v)->kind == k_func || find(v)->kind == k_var);
+    ok = operand_id(r.ops[0], v) && is_declaration(ids_.find_gid(v));
     if (!ok)
       problem = "unknown declaration: GREF names a G-id that was not declared";
     break;
   case eop_field:
   case eop_extract:
     ok = need_complete(r.ops[0], problem, e);
-    if (ok && e->kind != k_record) {
+    if (ok && e->kind != gk_record) {
       problem = "selector on a type that is not a record";
       ok = false;
     }
     if (ok) {
       operand_u64(r.ops[1], w);
-      if (w >= e->nfields) {
+      if (w >= e->extent) {
         problem = "field index " + number(w) + " is out of range for a "
-                  "record with " + number(e->nfields) + " fields";
+                  "record with " + number(e->extent) + " fields";
         ok = false;
       }
     }
     break;
   case eop_agg_init_begin:
     ok = need_complete(r.ops[0], problem, e);
-    if (ok && e->kind != k_record && e->kind != k_array) {
+    if (ok && e->kind != gk_record && e->kind != gk_array) {
       problem = "AGG_INIT_BEGIN on a type that is neither record nor array";
       ok = false;
     }
     if (ok) {
       operand_u64(r.ops[0], v);
-      agg_targets_.push_back(v);
+      agg_targets_.push_back(static_cast<uint32_t>(v));
     }
     break;
   case eop_agg_sel:
@@ -640,13 +719,13 @@ Apply the reference rules of one record.
     break;
   case eop_c_agg_begin:
     ok = need_complete(r.ops[0], problem, e);
-    if (ok && e->kind != k_record && e->kind != k_array) {
+    if (ok && e->kind != gk_record && e->kind != gk_array) {
       problem = "C_AGG_BEGIN on a type that is neither record nor array";
       ok = false;
     }
     if (ok) {
       operand_u64(r.ops[0], v);
-      const_targets_.push_back(v);
+      const_targets_.push_back(static_cast<uint32_t>(v));
     }
     break;
   case eop_c_sel:
@@ -670,7 +749,7 @@ Apply the reference rules of one record.
     break;
   case eop_const_int:
     ok = need_type(r.ops[0], false, problem);
-    if (ok && operand_u64(r.ops[0], v) && find(v)->kind == k_ptr) {
+    if (ok && operand_u64(r.ops[0], v) && ids_.find_gid(v)->kind == gk_ptr) {
       problem = "CONST_INT of pointer type G-id " + number(v) +
                 " (use CONST_PTR or CONST_NULL)";
       ok = false;
@@ -690,8 +769,7 @@ Apply the reference rules of one record.
   case eop_c_addr:
     ok = need_type(r.ops[0], false, problem);
     if (ok) {
-      ok = operand_id(r.ops[1], v) && find(v) != nullptr &&
-           (find(v)->kind == k_func || find(v)->kind == k_var);
+      ok = operand_id(r.ops[1], v) && is_declaration(ids_.find_gid(v));
       if (!ok)
         problem = "unknown declaration: C_ADDR names a G-id that was not "
                   "declared";
@@ -699,7 +777,7 @@ Apply the reference rules of one record.
     break;
   case eop_addr_offset:
     ok = need_type(r.ops[0], false, problem);
-    if (ok && operand_u64(r.ops[0], v) && find(v)->kind != k_ptr) {
+    if (ok && operand_u64(r.ops[0], v) && ids_.find_gid(v)->kind != gk_ptr) {
       problem = "ADDR_OFFSET result type G-id " + number(v) +
                 " is not a pointer type";
       ok = false;
@@ -716,12 +794,17 @@ Apply the reference rules of one record.
     ok = need_type(r.ops[2], true, problem);
     break;
   case eop_call:
-    ok = operand_id(r.ops[0], v) && find(v) != nullptr &&
-         (find(v)->kind == k_func || find(v)->kind == k_var);
-    if (!ok)
-      problem = "unknown declaration: CALL names a G-id that was not declared";
-    else
+    ok = operand_id(r.ops[0], v) && is_declaration(ids_.find_gid(v));
+    if (!ok) {
+      problem = "unknown declaration: CALL names a G-id that was not "
+                "declared";
+    } else if (ids_.find_gid(v)->kind != gk_func) {
+      problem = "CALL names variable G-id " + number(v) +
+                " (use CALL_INDIRECT through a pointer)";
+      ok = false;
+    } else {
       ok = need_type(r.ops[1], false, problem);
+    }
     break;
   case eop_call_indirect:
     ok = need_type(r.ops[0], false, problem);

@@ -234,14 +234,6 @@ def _load_cpp_back_end_configs(loaded_configs: Dict[str, TestRunConfig],
       flakey_tests_dir
     )
 
-# Opt-in test execution limits for the CIR configs (see edgtest.exec): kill a
-# timed-out test's processes, and give a compiled program 60 seconds to run.
-# The other configs do not set them, so their behavior is unchanged.
-_CIR_TEST_ENV = {
-  'EDG_TEST_KILL_ON_CANCEL': '1',
-  'EDG_TEST_EXEC_TIMEOUT': '60'
-}
-
 def _load_cir_back_end_configs(loaded_configs: Dict[str, TestRunConfig],
                                test_home: Path,
                                config_dict: Any) -> None:
@@ -272,8 +264,7 @@ def _load_cir_back_end_configs(loaded_configs: Dict[str, TestRunConfig],
         },
         {
           'CPFE': str(edgutil.RequiredToolPath('cpfe-cir-2p')),
-          'EDG_CONFIG': run_config_name,
-          **_CIR_TEST_ENV
+          'EDG_CONFIG': run_config_name
         },
         expectations_dir,
         flakey_tests_dir,
@@ -287,8 +278,7 @@ def _load_cir_back_end_configs(loaded_configs: Dict[str, TestRunConfig],
         'CPFE': bin_env_paths
       },
       {
-        'EDG_CONFIG': run_config_name,
-        **_CIR_TEST_ENV
+        'EDG_CONFIG': run_config_name
       },
       expectations_dir,
       flakey_tests_dir,

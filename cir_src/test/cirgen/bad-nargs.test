@@ -1,0 +1,21 @@
+; A count in a record must not drive an allocation: CALL and BUILTIN with
+; absurd argument counts are format errors (checked against the value stack
+; before anything is allocated), not out-of-memory crashes.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: CALL needs 4000000000 argument values but the value stack holds 0
+
+frame DECLS
+  STR 10 "f"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 21 0 1 10
+frame REGION
+  FUNC_BEGIN 40 0
+  CALL 40 21 4000000000 0
+  DROP
+  FUNC_END 0
+frame END
+  END auto 0

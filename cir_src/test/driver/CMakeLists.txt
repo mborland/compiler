@@ -18,6 +18,14 @@ add_test(NAME capi_tests
 set_tests_properties(capi_tests PROPERTIES ENVIRONMENT
   "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp")
 
+# Every bad_* format fixture must be rejected by edg-cir as FORMAT or VERSION.
+add_test(NAME bad_fixtures_edg_cir
+  COMMAND "${CMAKE_COMMAND}"
+    -DECIL_ASM=$<TARGET_FILE:ecil-asm> -DEDG_CIR=$<TARGET_FILE:edg-cir>
+    -DFIXTURES=${CMAKE_CURRENT_SOURCE_DIR}/../format/fixtures
+    -DWORK=${CMAKE_CURRENT_BINARY_DIR}
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/bad_fixtures_edg_cir.cmake")
+
 # A consumer built only from the exported package, to prove the package (an
 # ASan-built library cannot be loaded by a non-ASan executable, so the asan
 # preset skips it).

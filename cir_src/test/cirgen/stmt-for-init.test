@@ -1,0 +1,146 @@
+; ECIL 0.7 for-init shape: FOR_BEGIN opens a scope that lasts until FOR_END
+; and the init LOCALs follow it directly (no BLOCK wrapper); the variables are
+; used in the condition, the step and the body.
+; RUN: cat %S/Inputs/header07.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK: cir.func {{.*}}@sum
+; CHECK: cir.scope
+; CHECK: cir.for
+; CHECK: cir.func {{.*}}@nested
+; CHECK: cir.scope
+; CHECK: cir.for
+; CHECK: cir.scope
+; CHECK: cir.for
+
+frame DECLS
+  STR 10 "sum"
+  STR 11 "nested"
+  STR 12 "main"
+  TY_FUNC 22 1 0 [1]
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 22 0 1 10
+  DECL_FUNC 41 22 0 1 11
+  DECL_FUNC 42 21 0 9 12
+frame REGION
+; int sum(int n) { int s = 0; for (int i = 0, k = 100; i < n; i++) s += k;
+;                  return s; }
+  FUNC_BEGIN 40 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 1 nil 4 0
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  FOR_BEGIN
+  LOCAL 3 1 nil 4 0
+  LREF 3
+  CONST_INT 1 0
+  STORE 0 0
+  LOCAL 4 1 nil 4 0
+  LREF 4
+  CONST_INT 1 100
+  STORE 0 0
+  FOR_COND true
+  LREF 3
+  LOAD 0
+  LREF 1
+  LOAD 0
+  CMP 0
+  FOR_STEP true
+  LREF 3
+  INC_DEC 2 1
+  DROP
+  FOR_BODY
+  LREF 2
+  DUP
+  LOAD 0
+  LREF 4
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  FOR_END
+  LREF 2
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+; int nested(int n) { int s = 0;
+;   for (int i = 0; i < n; i++) for (int j = 0; j < n; j++) s += i; return s; }
+  FUNC_BEGIN 41 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 1 nil 4 0
+  LREF 2
+  CONST_INT 1 0
+  STORE 0 0
+  FOR_BEGIN
+  LOCAL 3 1 nil 4 0
+  LREF 3
+  CONST_INT 1 0
+  STORE 0 0
+  FOR_COND true
+  LREF 3
+  LOAD 0
+  LREF 1
+  LOAD 0
+  CMP 0
+  FOR_STEP true
+  LREF 3
+  INC_DEC 2 1
+  DROP
+  FOR_BODY
+  FOR_BEGIN
+  LOCAL 4 1 nil 4 0
+  LREF 4
+  CONST_INT 1 0
+  STORE 0 0
+  FOR_COND true
+  LREF 4
+  LOAD 0
+  LREF 1
+  LOAD 0
+  CMP 0
+  FOR_STEP true
+  LREF 4
+  INC_DEC 2 1
+  DROP
+  FOR_BODY
+  LREF 2
+  DUP
+  LOAD 0
+  LREF 3
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  FOR_END
+  FOR_END
+  LREF 2
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+; sum(4) == 400
+  CONST_INT 1 4
+  CALL 40 22 1 0
+  CONST_INT 1 400
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+; nested(3) == 0+0+0 + 1+1+1 + 2+2+2 == 9
+  CONST_INT 1 3
+  CALL 41 22 1 0
+  CONST_INT 1 9
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 1
+frame END
+  END auto 0

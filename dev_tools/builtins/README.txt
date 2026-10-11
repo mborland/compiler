@@ -45,3 +45,11 @@ Notes:
 - We've stopped scraping builtins from minor releases of the newest GCC/Clang
   versions (there doesn't appear to be any difference and it just causes the
   tool to run longer).
+
+The generate-libc-builtins.py script is separate from that process.  It reads
+the same builtins_*.txt files and writes $EDG_BASE/src/builtin_libc.h, the
+list of C library functions (libc and libm) for which a call of __builtin_X can
+be translated to a call of X; the CIR back end uses it.  It is run as
+   ./generate-libc-builtins.py -o ../../src/builtin_libc.h
+and its rule and the names it excludes are described in the script.  It does
+not touch builtin_defs.h or builtin_kinds.h.

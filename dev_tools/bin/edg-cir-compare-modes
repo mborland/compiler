@@ -21,6 +21,12 @@ Run inside the cir-env image from the repository root:
       @tests/.edgy/filters/cir-c-smoke.txt
   ... @tests/.edgy/filters/cir-c-corpus.txt --types rp,lp -j 12
 
+With --save-asm <dir> the in-process assembly of every test case is also
+written to <dir>/<test path, '/' as '__'>.<case number>.s, and the exit status
+of every case to <dir>/manifest.json; with --in-process-only the two-process
+run is skipped, so the command only produces that directory (the commit-vs-
+commit baseline of edg-cir-gate-evidence's asm-diff step).
+
 A different exit status (other than the front end's error limit: 4 in-process,
 2 in two-process mode) or different assembly is a failure (`DIFF`, exit status
 1).  Differences only in the diagnostics (text, order, count) or in the
@@ -31,6 +37,7 @@ report the library's diagnostics from different programs.
 import argparse
 import concurrent.futures
 import difflib
+import json
 import os
 import re
 import shutil
@@ -143,17 +150,39 @@ def compile_once(source: Path, options: List[str], env: Dict[str, str],
   return rc, output, produced.read_bytes() if produced else None
 
 
+def asm_name(test: Path, tests_dir: Path, case_number: int) -> str:
+  '''The name of a test case's saved assembly (see --save-asm).'''
+  rel = test.relative_to(tests_dir).as_posix().replace('/', '__')
+  return f"{rel}.{case_number}.s"
+
+
 def compare_one(test: Path, tests_dir: Path, env_in: Dict[str, str],
-                env_2p: Dict[str, str], keep: Optional[Path]
+                env_2p: Dict[str, str], keep: Optional[Path],
+                save_asm: Optional[Path] = None,
+                in_process_only: bool = False,
+                manifest: Optional[Dict[str, dict]] = None
                 ) -> Optional[Tuple[str, str]]:
-  '''Return None if the modes agree, else ("FAIL"|"INFO", message).'''
+  '''Return None if the modes agree, else ("FAIL"|"INFO", message).
+
+  With save_asm, the in-process assembly is saved and manifest gets the exit
+  status of each case; with in_process_only, only that is done.
+  '''
   description = runtest.load_description(test, top_dir = tests_dir /
                                          test.relative_to(tests_dir).parts[0])
-  for mode, base_options, case_options in description.traverse_cases():
+  for case_number, (mode, base_options, case_options) in enumerate(
+      description.traverse_cases()):
     options = [*STANDARD_OPTIONS, *base_options, *case_options]
     work = Path(tempfile.mkdtemp(prefix = 'cmpmodes.'))
     try:
       rc_a, out_a, asm_a = compile_once(test, options, env_in, work / 'a')
+      if save_asm is not None:
+        name = asm_name(test, tests_dir, case_number)
+        if asm_a is not None:
+          (save_asm / name).write_bytes(asm_a)
+        if manifest is not None:
+          manifest[name] = {'rc': rc_a, 'asm': asm_a is not None}
+      if in_process_only:
+        continue
       rc_b, out_b, asm_b = compile_once(test, options, env_2p, work / 'b')
     finally:
       if keep is None:
@@ -187,6 +216,11 @@ def main() -> None:
   parser.add_argument('-j', dest = 'jobs', type = int,
                       default = os.cpu_count() or 1)
   parser.add_argument('--keep', default = None)
+  parser.add_argument('--save-asm', default = None,
+                      help = 'directory for the in-process assembly of every '
+                             'test case (and manifest.json)')
+  parser.add_argument('--in-process-only', action = 'store_true',
+                      help = 'skip the two-process run (needs --save-asm)')
   args = parser.parse_args()
 
   root = Path(args.root).resolve()
@@ -217,13 +251,20 @@ def main() -> None:
         selected.append(test)
     tests = selected
   keep = Path(args.keep) if args.keep else None
+  save_asm = Path(args.save_asm).resolve() if args.save_asm else None
+  if args.in_process_only and save_asm is None:
+    parser.error('--in-process-only needs --save-asm')
+  if save_asm is not None:
+    save_asm.mkdir(parents = True, exist_ok = True)
+  manifest: Dict[str, dict] = {}
   print(f"comparing {len(tests)} tests with {args.jobs} jobs", flush = True)
 
   failures = []
   infos = []
   with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
     futures = {
-      pool.submit(compare_one, t, tests_dir, env_in, env_2p, keep): t
+      pool.submit(compare_one, t, tests_dir, env_in, env_2p, keep,
+                  save_asm, args.in_process_only, manifest): t
       for t in tests
     }
     for future in concurrent.futures.as_completed(futures):
@@ -232,6 +273,12 @@ def main() -> None:
         (failures if problem[0] == 'FAIL' else infos).append(
           (futures[future], problem[1])
         )
+  if save_asm is not None:
+    (save_asm / 'manifest.json').write_text(
+      json.dumps(manifest, indent = 1, sort_keys = True) + '\n'
+    )
+    print(f"saved {sum(1 for m in manifest.values() if m['asm'])} assembly "
+          f"files of {len(manifest)} cases in {save_asm}")
   for test, message in sorted(failures):
     print(f"DIFF {test.relative_to(tests_dir)}: {message}")
   for test, message in sorted(infos):

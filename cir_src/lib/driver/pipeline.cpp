@@ -20,6 +20,7 @@ after the worker has joined.
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -67,6 +68,27 @@ message and unwind to the worker's CrashRecoveryContext.
     context->HandleExit(1);
 }  /* fatal_error_handler */
 
+class a_stage_timer {
+/*
+Adds the elapsed time of its scope to one of the session's stage counters
+when statistics are requested (no clock is read otherwise).
+*/
+public:
+  a_stage_timer(an_edg_cir_session &owner, uint64_t a_session_stats::*field)
+    : owner_(owner), field_(field),
+      start_(owner.stats_on ? stats_now_ns() : 0)
+    {}
+  ~a_stage_timer()
+    {
+      if (owner_.stats_on)
+        owner_.stats.*field_ += stats_now_ns() - start_;
+    }
+private:
+  an_edg_cir_session       &owner_;
+  uint64_t a_session_stats::*field_;
+  uint64_t                  start_;
+};  /* a_stage_timer */
+
 void llvm_diagnostic(const llvm::DiagnosticInfo *info, void *user_data)
 /*
 Queue an LLVM diagnostic raised during lowering or code generation.
@@ -113,6 +135,9 @@ session.status on failure.
   std::unique_ptr<llvm::Module> lowered;
   bool go = true;
 
+  std::unique_ptr<a_stage_timer> lower_timer(
+      new a_stage_timer(session, &a_session_stats::lower_ns));
+
   llvm_context.setDiagnosticHandlerCallBack(llvm_diagnostic, &session);
   lowered = cir::direct::lowerDirectlyFromCIRToLLVMIR(module, llvm_context,
                                                       /*enableOpenMP=*/false);
@@ -157,7 +182,9 @@ session.status on failure.
     mpm.run(*lowered, mam);
     go = session.status == EDG_CIR_OK;
   }
+  lower_timer.reset();
   if (go) {
+    a_stage_timer codegen_timer(session, &a_session_stats::codegen_ns);
     switch (session.output_kind) {
     case EDG_CIR_OUTPUT_LLVM_IR:
       lowered->print(out, nullptr);
@@ -243,23 +270,30 @@ body): verify, textual CIR, CIR-to-CIR passes, then lower_and_emit.
   }
 #endif
 
-  if (session.emitter && !session.emitter->finish())
-    go = false;
+  if (session.emitter) {
+    a_stage_timer timer(session, &a_session_stats::finish_ns);
+    if (!session.emitter->finish())
+      go = false;
+  }
   /* Debug aid: EDG_CIR_NO_VERIFY=1 lets an invalid module be printed. */
-  if (go && std::getenv("EDG_CIR_NO_VERIFY") == nullptr &&
-      mlir::failed(mlir::verify(module))) {
-    session.fail(EDG_CIR_ERROR_VERIFY, edc_pipeline,
-                 "the MLIR verifier rejected the module");
-    go = false;
+  if (go && std::getenv("EDG_CIR_NO_VERIFY") == nullptr) {
+    a_stage_timer timer(session, &a_session_stats::verify_ns);
+    if (mlir::failed(mlir::verify(module))) {
+      session.fail(EDG_CIR_ERROR_VERIFY, edc_pipeline,
+                   "the MLIR verifier rejected the module");
+      go = false;
+    }
   }
   if (go && session.output_kind == EDG_CIR_OUTPUT_NONE)
     go = false;
   if (go && session.output_kind == EDG_CIR_OUTPUT_CIR) {
+    a_stage_timer timer(session, &a_session_stats::codegen_ns);
     module->print(out);
     out.flush();
     go = false;
   }
   if (go && !(session.flags & EDG_CIR_FLAG_DISABLE_CIR_PASSES)) {
+    a_stage_timer timer(session, &a_session_stats::passes_ns);
     bool verify_each = (session.flags & EDG_CIR_FLAG_VERIFY_EACH) != 0;
     if (mlir::failed(cir::runCIRToCIRPasses(
             module, cm.context, verify_each, /*enableIdiomRecognizer=*/false,
@@ -272,6 +306,7 @@ body): verify, textual CIR, CIR-to-CIR passes, then lower_and_emit.
     }
   }
   if (go && session.output_kind == EDG_CIR_OUTPUT_CIR_LOWERED) {
+    a_stage_timer timer(session, &a_session_stats::codegen_ns);
     module->print(out);
     out.flush();
     go = false;
@@ -282,22 +317,65 @@ body): verify, textual CIR, CIR-to-CIR passes, then lower_and_emit.
 
 }  /* anonymous namespace */
 
+namespace {
+
+std::mutex &guard_mutex()
+/*
+The one mutex of every guarded section (crash recovery and the fatal error
+handler are process-global).
+*/
+{
+  static std::mutex guard;
+  return guard;
+}  /* guard_mutex */
+
+unsigned crash_recovery_holders = 0;  /* Protected by guard_mutex(). */
+
+}  /* anonymous namespace */
+
+void hold_crash_recovery()
+/*
+Keep LLVM crash recovery enabled until the matching release_crash_recovery.
+A session holds it from its first consumed frame to finish, so the signal
+handlers are installed once per session and not once per frame.
+*/
+{
+  std::lock_guard<std::mutex> lock(guard_mutex());
+
+  if (crash_recovery_holders++ == 0)
+    llvm::CrashRecoveryContext::Enable();
+}  /* hold_crash_recovery */
+
+void release_crash_recovery()
+/*
+Drop one hold; the last one restores the previous signal handlers.
+*/
+{
+  std::lock_guard<std::mutex> lock(guard_mutex());
+
+  if (crash_recovery_holders != 0 && --crash_recovery_holders == 0)
+    llvm::CrashRecoveryContext::Disable();
+}  /* release_crash_recovery */
+
 bool run_guarded(const std::function<void()> &body, unsigned stack_mb,
                  std::string &message)
 /*
 Run body under LLVM crash recovery and a fatal-error handler.  Both are
 process-global, so one mutex serializes every guarded section of every
-session (one active session per process).  stack_mb != 0 runs body on a
-fresh thread with that stack.  Returns false (and the reason in message) when
-body crashed or hit a fatal error.
+session (one active session per process).  Crash recovery stays enabled while
+a session holds it (hold_crash_recovery); otherwise it is enabled for this
+call only.  stack_mb != 0 runs body on a fresh thread with that stack.
+Returns false (and the reason in message) when body crashed or hit a fatal
+error.
 */
 {
-  static std::mutex guard;
-  std::lock_guard<std::mutex> lock(guard);
+  std::lock_guard<std::mutex> lock(guard_mutex());
   a_fatal_state fatal;
   bool completed;
+  bool temporary = crash_recovery_holders == 0;
 
-  llvm::CrashRecoveryContext::Enable();
+  if (temporary)
+    llvm::CrashRecoveryContext::Enable();
   llvm::install_fatal_error_handler(fatal_error_handler, &fatal);
   {
     llvm::CrashRecoveryContext context;
@@ -306,7 +384,8 @@ body crashed or hit a fatal error.
         : context.RunSafely(body);
   }
   llvm::remove_fatal_error_handler();
-  llvm::CrashRecoveryContext::Disable();
+  if (temporary)
+    llvm::CrashRecoveryContext::Disable();
   message = fatal.message;
   return completed;
 }  /* run_guarded */

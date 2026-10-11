@@ -1,52 +1,4 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc Test_name.c
-"Test_name.c", line 327: warning: CIR back end: the body of "test_builtin_drem" uses the builtin function __builtin_drem, which the CIR back end does not support; the function is dropped
-  FPTEST2            (drem)
-  ^
-
-"Test_name.c", line 327: warning: CIR back end: the body of "test_builtin_dremf" uses the builtin function __builtin_dremf, which the CIR back end does not support; the function is dropped
-  FPTEST2            (drem)
-  ^
-
-"Test_name.c", line 327: warning: CIR back end: the body of "test_builtin_dreml" uses the builtin function __builtin_dreml, which the CIR back end does not support; the function is dropped
-  FPTEST2            (drem)
-  ^
-
-"Test_name.c", line 345: warning: CIR back end: the body of "test_builtin_j0" uses the builtin function __builtin_j0, which the CIR back end does not support; the function is dropped
-  FPTEST1            (j0)
-  ^
-
-"Test_name.c", line 345: warning: CIR back end: the body of "test_builtin_j0f" uses the builtin function __builtin_j0f, which the CIR back end does not support; the function is dropped
-  FPTEST1            (j0)
-  ^
-
-"Test_name.c", line 345: warning: CIR back end: the body of "test_builtin_j0l" uses the builtin function __builtin_j0l, which the CIR back end does not support; the function is dropped
-  FPTEST1            (j0)
-  ^
-
-"Test_name.c", line 346: warning: CIR back end: the body of "test_builtin_j1" uses the builtin function __builtin_j1, which the CIR back end does not support; the function is dropped
-  FPTEST1            (j1)
-  ^
-
-"Test_name.c", line 346: warning: CIR back end: the body of "test_builtin_j1f" uses the builtin function __builtin_j1f, which the CIR back end does not support; the function is dropped
-  FPTEST1            (j1)
-  ^
-
-"Test_name.c", line 346: warning: CIR back end: the body of "test_builtin_j1l" uses the builtin function __builtin_j1l, which the CIR back end does not support; the function is dropped
-  FPTEST1            (j1)
-  ^
-
-"Test_name.c", line 347: warning: CIR back end: the body of "test_builtin_jn" uses the builtin function __builtin_jn, which the CIR back end does not support; the function is dropped
-  FPTEST2ARG1        (jn, int)
-  ^
-
-"Test_name.c", line 347: warning: CIR back end: the body of "test_builtin_jnf" uses the builtin function __builtin_jnf, which the CIR back end does not support; the function is dropped
-  FPTEST2ARG1        (jn, int)
-  ^
-
-"Test_name.c", line 347: warning: CIR back end: the body of "test_builtin_jnl" uses the builtin function __builtin_jnl, which the CIR back end does not support; the function is dropped
-  FPTEST2ARG1        (jn, int)
-  ^
-
 "Test_name.c", line 349: warning: CIR back end: the body of "test_builtin_llceil" uses the builtin function __builtin_llceil, which the CIR back end does not support; the function is dropped
   BUILTIN_FPTEST1    (llceil)
   ^
@@ -107,64 +59,16 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   BUILTIN_FPTEST1ARG (nans, char *)
   ^
 
-"Test_name.c", line 372: warning: CIR back end: the body of "test_builtin_scalb" uses the builtin function __builtin_scalb, which the CIR back end does not support; the function is dropped
-  FPTEST2            (scalb)
+"Test_name.c", line 368: warning: CIR back end: the body of "test_builtin_pow10" uses the builtin function __builtin_pow10, which the CIR back end does not support; the function is dropped
+  FPTEST1            (pow10)
   ^
 
-"Test_name.c", line 372: warning: CIR back end: the body of "test_builtin_scalbf" uses the builtin function __builtin_scalbf, which the CIR back end does not support; the function is dropped
-  FPTEST2            (scalb)
+"Test_name.c", line 368: warning: CIR back end: the body of "test_builtin_pow10f" uses the builtin function __builtin_pow10f, which the CIR back end does not support; the function is dropped
+  FPTEST1            (pow10)
   ^
 
-"Test_name.c", line 372: warning: CIR back end: the body of "test_builtin_scalbl" uses the builtin function __builtin_scalbl, which the CIR back end does not support; the function is dropped
-  FPTEST2            (scalb)
-  ^
-
-"Test_name.c", line 375: warning: CIR back end: the body of "test_builtin_significand" uses the builtin function __builtin_significand, which the CIR back end does not support; the function is dropped
-  FPTEST1            (significand)
-  ^
-
-"Test_name.c", line 375: warning: CIR back end: the body of "test_builtin_significandf" uses the builtin function __builtin_significandf, which the CIR back end does not support; the function is dropped
-  FPTEST1            (significand)
-  ^
-
-"Test_name.c", line 375: warning: CIR back end: the body of "test_builtin_significandl" uses the builtin function __builtin_significandl, which the CIR back end does not support; the function is dropped
-  FPTEST1            (significand)
-  ^
-
-"Test_name.c", line 383: warning: CIR back end: the body of "test_builtin_y0" uses the builtin function __builtin_y0, which the CIR back end does not support; the function is dropped
-  FPTEST1            (y0)
-  ^
-
-"Test_name.c", line 383: warning: CIR back end: the body of "test_builtin_y0f" uses the builtin function __builtin_y0f, which the CIR back end does not support; the function is dropped
-  FPTEST1            (y0)
-  ^
-
-"Test_name.c", line 383: warning: CIR back end: the body of "test_builtin_y0l" uses the builtin function __builtin_y0l, which the CIR back end does not support; the function is dropped
-  FPTEST1            (y0)
-  ^
-
-"Test_name.c", line 384: warning: CIR back end: the body of "test_builtin_y1" uses the builtin function __builtin_y1, which the CIR back end does not support; the function is dropped
-  FPTEST1            (y1)
-  ^
-
-"Test_name.c", line 384: warning: CIR back end: the body of "test_builtin_y1f" uses the builtin function __builtin_y1f, which the CIR back end does not support; the function is dropped
-  FPTEST1            (y1)
-  ^
-
-"Test_name.c", line 384: warning: CIR back end: the body of "test_builtin_y1l" uses the builtin function __builtin_y1l, which the CIR back end does not support; the function is dropped
-  FPTEST1            (y1)
-  ^
-
-"Test_name.c", line 385: warning: CIR back end: the body of "test_builtin_yn" uses the builtin function __builtin_yn, which the CIR back end does not support; the function is dropped
-  FPTEST2ARG1        (yn, int)
-  ^
-
-"Test_name.c", line 385: warning: CIR back end: the body of "test_builtin_ynf" uses the builtin function __builtin_ynf, which the CIR back end does not support; the function is dropped
-  FPTEST2ARG1        (yn, int)
-  ^
-
-"Test_name.c", line 385: warning: CIR back end: the body of "test_builtin_ynl" uses the builtin function __builtin_ynl, which the CIR back end does not support; the function is dropped
-  FPTEST2ARG1        (yn, int)
+"Test_name.c", line 368: warning: CIR back end: the body of "test_builtin_pow10l" uses the builtin function __builtin_pow10l, which the CIR back end does not support; the function is dropped
+  FPTEST1            (pow10)
   ^
 
 "Test_name.c", line 389: warning: CIR back end: the body of "test_builtin_cacos" uses a complex type (complex types are not supported), which the CIR back end does not support; the function is dropped
@@ -671,30 +575,6 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   CPTEST1 (ctanh)
   ^
 
-Error: CIR back end: the definition of 'test_builtin_drem' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_dremf' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_dreml' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_j0' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_j0f' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_j0l' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_j1' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_j1f' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_j1l' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_jn' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_jnf' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_jnl' was dropped: it uses a construct the CIR back end cannot express
-
 Error: CIR back end: the definition of 'test_builtin_llceil' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test_builtin_llceilf' was dropped: it uses a construct the CIR back end cannot express
@@ -725,35 +605,11 @@ Error: CIR back end: the definition of 'test_builtin_nansf' was dropped: it uses
 
 Error: CIR back end: the definition of 'test_builtin_nansl' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test_builtin_scalb' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_pow10' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test_builtin_scalbf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_pow10f' was dropped: it uses a construct the CIR back end cannot express
 
-Error: CIR back end: the definition of 'test_builtin_scalbl' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_significand' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_significandf' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_significandl' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_y0' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_y0f' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_y0l' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_y1' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_y1f' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_y1l' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_yn' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_ynf' was dropped: it uses a construct the CIR back end cannot express
-
-Error: CIR back end: the definition of 'test_builtin_ynl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_pow10l' was dropped: it uses a construct the CIR back end cannot express
 
 Error: CIR back end: the definition of 'test_builtin_cacos' was dropped: it uses a construct the CIR back end cannot express
 
@@ -1007,4 +863,4 @@ Error: CIR back end: the definition of 'test_ctanhf' was dropped: it uses a cons
 
 Error: CIR back end: the definition of 'test_ctanhl' was dropped: it uses a construct the CIR back end cannot express
 
-168 errors detected in the compilation of "Test_name.c".
+144 errors detected in the compilation of "Test_name.c".

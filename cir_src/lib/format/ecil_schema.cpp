@@ -90,9 +90,9 @@ const a_spec_row spec_rows[] = {
   {eop_ty_record_body, ST, {s_id, s_uint, s_uint, s_uint, s_flags(0xF),
                             s_uint}},
   {eop_rec_field, ST, {s_id, s_uint, s_uintn, s_uintn, s_idn,
-                       s_flags(0x3F)}},
+                       s_flags(0x7F)}},
   {eop_ty_opaque, ST, {s_id, s_uint, s_uint}},
-  {eop_decl_func, SD, {s_id, s_id, s_enum(0, elk_common), s_flags(0x7F),
+  {eop_decl_func, SD, {s_id, s_id, s_enum(0, elk_common), s_flags(0xFF),
                        s_idn}},
   {eop_decl_var, SD, {s_id, s_id, s_enum(0, elk_common), s_flags(0x1FF),
                       s_uint, s_idn}},
@@ -136,7 +136,7 @@ const a_spec_row spec_rows[] = {
   {eop_agg_sel, SB, {s_uint}},
   {eop_agg_init_end, SB, {}},
   {eop_cleanup_begin, SS | V1, {s_enum(ecl_normal, ecl_exit), s_idn,
-                                s_flags(0)}},
+                                s_flags(1)}},
   {eop_cleanup_body, SS | V1, {}},
   {eop_cleanup_end, SS | V1, {}},
   {eop_fullexpr_begin, SS | V1, {}},
@@ -189,7 +189,7 @@ const a_spec_row spec_rows[] = {
   {eop_array_dtor_end, SB | V1, {}},
   {eop_new_array_size, SB | V1, {s_id, s_uint}},
   {eop_new_array_cookie, SB | V1, {s_id, s_uint}},
-  {eop_delete, SB | V1, {s_id, s_idn, s_id, s_flags(7)}},
+  {eop_delete, SB | V1, {s_id, s_idn, s_id, s_flags(0xF)}},
   {eop_zero_bytes, SB | V1, {s_uint}},
   {eop_cmp3way, SB | V1, {s_id, s_int, s_int, s_int, s_intn}},
   {eop_cast, SB, {s_enum(0, eck_array_to_ptrdecay), s_id}},
@@ -198,8 +198,8 @@ const a_spec_row spec_rows[] = {
   {eop_va_end, SB, {}},
   {eop_va_copy, SB, {}},
   {eop_builtin, SB, {s_enum(ebi_expect, ebi_signbit), s_uint, s_idn}},
-  {eop_call, SB, {s_id, s_id, s_uint, s_flags(7)}},
-  {eop_call_indirect, SB, {s_id, s_uint, s_flags(7)}},
+  {eop_call, SB, {s_id, s_id, s_uint, s_flags(0x3F)}},
+  {eop_call_indirect, SB, {s_id, s_uint, s_flags(0xF)}},
   {eop_tern_begin, SB, {s_idn}},
   {eop_tern_else, SB, {}},
   {eop_tern_end, SB, {}},
@@ -217,7 +217,45 @@ const a_spec_row spec_rows[] = {
   {eop_c_agg_begin, SC, {s_id}},
   {eop_c_sel, SC, {s_uint}},
   {eop_c_repeat, SC, {s_uint, s_uint}},
-  {eop_c_agg_end, SC, {}}
+  {eop_c_agg_end, SC, {}},
+  {eop_ty_vptr, ST, {s_id}},
+  {eop_class_info, SD, {s_id, s_uint, s_uint, s_uintn, s_uint}},
+  {eop_class_bases, SD, {s_id, s_arr}},
+  {eop_class_vfuncs, SD, {s_id, s_arr}},
+  {eop_class_overrides, SD, {s_id, s_arr}},
+  {eop_ty_data_member, ST, {s_id, s_id, s_id}},
+  {eop_ty_method, ST, {s_id, s_id, s_id}},
+  {eop_class_mangle, SD, {s_id, s_id}},
+  {eop_structor_deleting, SD, {s_id, s_id, s_id, s_flags(3)}},
+  {eop_decl_abi_data, SD, {s_id, s_enum(eadk_vtable, eadk_typeinfo), s_id,
+                           s_enum(0, elk_common), s_flags(7), s_idn}},
+  {eop_typeinfo_def, SD, {s_id, s_enum(etik_fundamental, etik_enum),
+                          s_flags(0x7F), s_idn, s_idn}},
+  {eop_vptr_init, SS, {}},
+  {eop_func_eh_spec, SS, {s_enum(eesk_noexcept, eesk_dynamic), s_arr}},
+  {eop_vbase_cast, SB, {s_id, s_id, s_flags(3)}},
+  {eop_vtt_addr, SB, {s_enum(evak_self, evak_vbase), s_uintn}},
+  {eop_dynamic_cast, SB, {s_id, s_idn, s_id, s_flags(1)}},
+  {eop_typeid, SB, {s_idn, s_id, s_flags(1)}},
+  {eop_pm_field, SB, {s_id}},
+  {eop_pm_call, SB, {s_id, s_uint, s_flags(0xF)}},
+  {eop_pm_cast, SB, {s_enum(epck_to_derived, epck_to_base), s_id, s_id,
+                     s_uint}},
+  {eop_const_data_member, SB, {s_id, s_uintn}},
+  {eop_const_method, SB, {s_id, s_idn, s_uint, s_flags(1)}},
+  {eop_array_partial_dtor, SB, {s_id}},
+  {eop_init_zero_base, SB, {}},
+  {eop_try_begin, SS, {s_flags(1)}},
+  {eop_catch_begin, SS, {s_idn}},
+  {eop_catch_param, SS, {s_id, s_enum(ecat_reference,
+                                      ecat_reference_to_record_pointer),
+                         s_idn}},
+  {eop_try_end, SS, {}},
+  {eop_throw_begin, SB, {s_id}},
+  {eop_throw_end, SB, {s_id, s_idn}},
+  {eop_rethrow, SB, {}},
+  {eop_c_data_member, SC, {s_id, s_uintn}},
+  {eop_c_method, SC, {s_id, s_idn, s_uint, s_flags(1)}}
 };
 
 #undef SM
@@ -251,6 +289,7 @@ spec_rows, then cross-check the two.
     info[i].value = 0;
     info[i].arity = 0;
     info[i].section = 0;
+    info[i].min_minor = 0;
     present[i] = false;
     has_row[i] = false;
     for (int j = 0; j < ECIL_MAX_ARITY; ++j) {
@@ -273,6 +312,22 @@ spec_rows, then cross-check the two.
                                   static_cast<unsigned char>(names[i][k])));
       info[i].name = names[i].c_str();
     }
+  }
+  /* The records of ECIL 1.2 (CLEANUP_END existed but was rejected). */
+  static const uint8_t minor2[] = {
+    eop_ty_vptr, eop_class_info, eop_class_bases, eop_class_vfuncs,
+    eop_class_overrides, eop_ty_data_member, eop_ty_method, eop_class_mangle,
+    eop_structor_deleting, eop_decl_abi_data, eop_typeinfo_def,
+    eop_cleanup_end, eop_vptr_init, eop_func_eh_spec, eop_vbase_cast,
+    eop_vtt_addr, eop_dynamic_cast, eop_typeid, eop_pm_field, eop_pm_call,
+    eop_pm_cast, eop_const_data_member, eop_const_method,
+    eop_array_partial_dtor, eop_init_zero_base, eop_try_begin, eop_catch_begin, eop_catch_param,
+    eop_try_end, eop_throw_begin, eop_throw_end, eop_rethrow,
+    eop_c_data_member, eop_c_method
+  };
+  for (uint8_t op : minor2) {
+    if (present[op])
+      info[op].min_minor = 2;
   }
   for (const a_spec_row &row : spec_rows) {
     if (!present[row.opcode]) {

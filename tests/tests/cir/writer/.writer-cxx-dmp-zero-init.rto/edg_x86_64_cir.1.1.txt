@@ -39,7 +39,7 @@ Warning: CIR back end: the initializer of "gm" uses the zero-initialization of a
 
 Warning: CIR back end: the initializer of "gp" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-ecil 1.1 features=0x0000000a
+ecil 1.2 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""

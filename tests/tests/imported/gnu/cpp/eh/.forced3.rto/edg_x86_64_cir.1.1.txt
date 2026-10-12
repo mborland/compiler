@@ -1,0 +1,40 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++14 --c++11 Test_name.c
+"./eh/forced3.C", line 56: warning: function "std::set_unexpected" was declared deprecated
+    std::set_unexpected (handle_unexpected);
+         ^
+"/mds/gnu/build/gcc-15-20250112/include/c++/15.0.0/exception", line 93: note: because of a "deprecated" attribute
+    __attribute__ ((__deprecated__))
+                    ^
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt9type_infoC1EPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt9type_infoC2EPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt8bad_castC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt8bad_castC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+

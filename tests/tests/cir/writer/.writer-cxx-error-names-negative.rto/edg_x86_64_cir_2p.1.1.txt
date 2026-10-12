@@ -4,7 +4,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=140000 Test_name.c
                          ^
 
 1 error detected in the compilation of "Test_name.c".
-ecil 1.1 features=0x0000000a
+ecil 1.2 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""

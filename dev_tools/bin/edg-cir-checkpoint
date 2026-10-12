@@ -42,8 +42,8 @@ The default steps are:
   cpp-writer-stress crash-sweep ctest
 
 that is the C smoke and corpus (statuses against the recorded expectations),
-the C assembly against the M3 baseline (--asm-baseline, default
-~/edg-cir-config/m3-base-asm: every difference is listed with its class and
+the C assembly against the M3.1 baseline (--asm-baseline, default
+~/edg-cir-config/m31-base-asm: every difference is listed with its class and
 cause; --asm-normalize-cfi ignores the frame description directives), the ASan
 debug front end with ECIL_GID_STRESS over the writer tests, the C++ smoke list
 in both configs (a crash fails; with --smoke-all-pass every test must pass),
@@ -53,7 +53,8 @@ have are gated, against the allowlist tests/.edgy/filters/
 cir-excused-crashes.txt), and the four cir_src presets from clean build
 directories.  About 25 minutes.  Day, stress, rss, perf, modes, cpp-corpus,
 cpp-modes and cpp-asm-diff (the C++ assembly against --cpp-asm-baseline,
-default ~/edg-cir-config/m3-base-cpp-asm) are left for the gates; name them
+default ~/edg-cir-config/m31-base-cpp-asm, made with the corpus filter
+that includes eh/ and rtti/) are left for the gates; name them
 with --steps (they exist in the gate tool).
 
 Exit status: 0 if every step passed, 1 otherwise (2 for a setup problem).
@@ -187,15 +188,15 @@ def main() -> None:
   parser.add_argument('--no-sync', action = 'store_true',
                       help = 'do not rsync (the tree is up to date)')
   parser.add_argument('--asm-baseline', default = '~/edg-cir-config/'
-                      'm3-base-asm')
+                      'm31-base-asm')
   parser.add_argument('--cpp-asm-baseline', default = '~/edg-cir-config/'
-                      'm3-base-cpp-asm')
+                      'm31-base-cpp-asm')
   parser.add_argument('--asm-normalize-cfi', action = 'store_true',
                       help = 'asm-diff steps ignore .cfi_* directives')
   parser.add_argument('--identity-baseline',
                       default = '~/edg-cir-config/identity-m0c')
   parser.add_argument('--perf-baseline',
-                      default = '~/edg-cir-config/m3-base-perf.json')
+                      default = '~/edg-cir-config/m31-base-perf.json')
   parser.add_argument('--smoke-all-pass', action = 'store_true',
                       help = 'cpp-smoke fails unless every test passes')
   parser.add_argument('--jobs', type = int, default = 12)

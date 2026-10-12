@@ -232,6 +232,14 @@ Process one record.
     operand_uint(record.ops[2], n);
     h.lang_flags = static_cast<uint32_t>(n);
     h.have_lang = true;
+    /* The reader accepts exceptions = 1 (ECIL 1.2); the code generator
+       does not support them yet (M4 slice S4). */
+    if (h.language == elang_cxx && (h.lang_flags & ECIL_LANG_EXCEPTIONS)) {
+      s.fail(EDG_CIR_ERROR_UNSUPPORTED, edc_unsupported,
+             "HDR_LANG exceptions = 1 is not supported yet (ECIL 1.2 "
+             "exceptions arrive with M4 slice S4)");
+      result = false;
+    }
     break;
   }
   case eop_hdr_producer:

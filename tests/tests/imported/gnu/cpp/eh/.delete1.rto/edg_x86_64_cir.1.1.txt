@@ -1,0 +1,51 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++17 --c++11 Test_name.c
+"Test_name.c", line 23: warning: CIR back end: the body of "~Foo" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+    {throw 1;}
+             ^
+
+"Test_name.c", line 37: warning: CIR back end: the body of "~Baz" uses a virtual function, which the CIR back end does not support; the function is dropped
+    {throw 1;}
+             ^
+
+"Test_name.c", line 48: warning: CIR back end: the body of "non_virt" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 54: warning: CIR back end: the body of "Baz" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    Baz *p = ::new Baz;
+                   ^
+          detected during implicit generation of "Baz::Baz()" at line 54
+
+"Test_name.c", line 58: warning: CIR back end: the body of "virt_glob" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 68: warning: CIR back end: the body of "virt_del" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 78: warning: CIR back end: the body of "ary" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN3FooD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
+
+Warning: CIR back end: the unused definition of '_ZN3FooD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
+
+Warning: CIR back end: the unused definition of '_ZN3BazD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
+
+Warning: CIR back end: the unused definition of '_ZN3BazD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
+
+Warning: CIR back end: the unused definition of '_ZN3BazC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZN3BazC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Error: CIR back end: the definition of '_Z8non_virtv' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+
+Error: CIR back end: the definition of '_Z9virt_globv' was dropped: it uses a construct the CIR back end cannot express: a constant of a class with virtual functions or virtual bases (and it is referenced)
+
+Error: CIR back end: the definition of '_Z8virt_delv' was dropped: it uses a construct the CIR back end cannot express: a constant of a class with virtual functions or virtual bases (and it is referenced)
+
+Error: CIR back end: the definition of '_Z3aryv' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+
+4 errors detected in the compilation of "Test_name.c".

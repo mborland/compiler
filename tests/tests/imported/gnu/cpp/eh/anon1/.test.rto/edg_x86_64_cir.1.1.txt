@@ -1,0 +1,47 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics anon1a.cc Test_name.c
+anon1a.cc:
+"anon1a.cc", line 7: warning: CIR back end: the body of "f" uses a virtual function, which the CIR back end does not support; the function is dropped
+    void A::f() { }
+                  ^
+
+"anon1a.cc", line 10: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+  void g() { throw A(); }
+                   ^
+          detected during implicit generation of "<unnamed>::A::A() noexcept" at line 10
+
+"anon1a.cc", line 10: warning: CIR back end: the body of "g" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  void g() { throw A(); }
+                        ^
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11A1fEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Error: CIR back end: the definition of '_Z1gv' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
+
+1 error detected in the compilation of "anon1a.cc".
+Test_name.c:
+"Test_name.c", line 16: warning: CIR back end: the body of "f" uses a virtual function, which the CIR back end does not support; the function is dropped
+    void A::f() { }
+                  ^
+
+"Test_name.c", line 26: warning: CIR back end: the body of "A" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+      } catch (A) { __builtin_abort(); }
+               ^
+          detected during implicit generation of "<unnamed>::A::A(const <unnamed>::A &) noexcept" at line 26
+
+"Test_name.c", line 28: warning: CIR back end: the body of "main" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11A1fEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC1ERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZN12_GLOBAL__N_11AC2ERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
+
+1 error detected in the compilation of "Test_name.c".

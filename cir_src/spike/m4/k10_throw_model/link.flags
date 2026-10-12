@@ -1,0 +1,1 @@
+-Wl,--wrap=__cxa_allocate_exception -Wl,--wrap=__cxa_free_exception -Wl,--wrap=__cxa_guard_abort

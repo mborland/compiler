@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Link programs made of translation units from two compilers and run them.
+
+Status: skeleton for M4 (not wired into the gate).  For every case (a
+directory) it builds the program four ways and checks that all of them behave
+alike:
+
+  all-ref     a.cpp and b.cpp with the reference compiler (g++): the baseline
+  ref+ours    a.cpp with the reference compiler, b.cpp with cpfe-cir
+  ours+ref    a.cpp with cpfe-cir, b.cpp with the reference compiler
+  (all-ours   both with cpfe-cir: with --all-ours)
+
+The objects are linked with g++, the program is run (--timeout seconds), and
+its exit status and standard output are compared with the all-ref run (and
+with expected.out / expected.rc if the case has them).  A case that is a
+problem of the back end shows up as a result other than PASS:
+
+  PASS        same output and exit status (the only result that means the
+              direction works)
+  DIFF        the program ran but behaved differently
+  OURS-FAIL   cpfe-cir could not compile its file (diagnosed constructs)
+  LINK        the objects did not link (an ABI symbol one side lacks)
+  RUN         crash or timeout (a signal, status 124)
+  REF-FAIL    the baseline itself does not build or run: a bad case
+  SKIP        with --skip-unsupported: cpfe-cir refused its file with a "CIR
+              back end: ... cannot express" (or "not supported yet")
+              diagnostic; the direction was not run, so it is neither PASS
+              nor a failure.  Any other compile failure stays OURS-FAIL
+
+A case directory has a.cpp and b.cpp (and any header they include), and may
+have:
+
+  flags         extra compiler flags, one line (e.g. -std=c++14)
+  expected.out  the expected standard output (default: the all-ref run's)
+  expected.rc   the expected exit status (default: the all-ref run's)
+  xfail         the directions (e.g. "ref+ours ours+ref") that fail today (an
+                M4 case lists the directions that cannot work yet); they are
+                reported XFAIL (expected failure) and, if they pass, XPASS
+                (listed; remove the line)
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-cir and build/cir:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-mixed-tu
+  ... dev_tools/cir-mixed-tu-cases/nv-class-ctor-dtor     # one case
+  ... --list                                              # the cases
+  ... --self-test             # a trivial case, the host compiler on both sides
+
+The cases are in dev_tools/cir-mixed-tu-cases (--cases DIR for others).
+Exit status: 0 if every result is PASS, XFAIL, XPASS or SKIP, 1 otherwise, 2
+for a setup problem.  A direction that did not run never reports PASS.
+'''
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+DEFAULT_CASES = Path(__file__).resolve().parent.parent / 'cir-mixed-tu-cases'
+DIRECTIONS = ('ref+ours', 'ours+ref')
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  '''Parse the `export NAME="value"` lines of a CMake environment.sh.'''
+  exports: Dict[str, str] = {}
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  return exports
+
+
+class Toolchain:
+  '''How to compile a file with the reference compiler and with ours.'''
+  def __init__(self, ref: str, link: str, std: str, root: Path,
+               fe_build: str, ours_cxx: str = '') -> None:
+    self.ref = ref
+    self.link = link
+    self.std = std
+    self.root = root
+    self.fe_build = fe_build
+    self.ours_cxx = ours_cxx
+    self.env = dict(os.environ)
+    if not ours_cxx:
+      exports = load_exports(root / fe_build / 'environment.sh')
+      self.env.update(exports)
+      self.env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+      self.env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+      self.env['CPFE'] = exports.get('CPFE_CIR', '')
+      # The system headers, as a test with //use_system_includes gets them.
+      self.env['EDG_USE_SYSTEM_HEADERS'] = '1'
+
+  def compile(self, who: str, source: Path, work: Path, flags: List[str]
+              ) -> Tuple[bool, str, Path]:
+    '''Compile one file to an object file: (ok, output, object).'''
+    obj = work / f"{who}-{source.stem}.o"
+    if who == 'ref' or self.ours_cxx:
+      compiler = self.ref if who == 'ref' else self.ours_cxx
+      command = [compiler, f"-std={self.std}", '-c', *flags, str(source),
+                 '-o', str(obj)]
+      proc = run(command, work, self.env)
+      return proc[0] == 0, proc[1], obj
+    # cpfe-cir through eccp, like the edg_x86_64_cir test configuration:
+    # `-c -tused`, no -o (eccp would make an instantiation file with it).
+    scratch = work / f"eccp-{source.stem}"
+    scratch.mkdir(exist_ok = True)
+    for file in source.parent.iterdir():
+      if file.is_file():
+        shutil.copy2(file, scratch / file.name)
+    command = [str(self.root / 'util/eccp.sh'), '-c', '-tused',
+               f"--{self.std}", *flags, source.name]
+    code, output = run(command, scratch, self.env)
+    produced = scratch / f"{source.stem}.o"
+    if code == 0 and produced.exists():
+      shutil.move(str(produced), obj)
+      return True, output, obj
+    return False, output, obj
+
+
+def run(command: List[str], cwd: Path, env: Optional[Dict[str, str]] = None,
+        timeout: int = 300) -> Tuple[int, str]:
+  '''Run a command: (exit status, output); status 124 on a timeout.'''
+  try:
+    proc = subprocess.run(command, cwd = cwd, env = env, text = True,
+                          stdout = subprocess.PIPE, stderr = subprocess.STDOUT,
+                          timeout = timeout)
+    return proc.returncode, proc.stdout
+  except subprocess.TimeoutExpired:
+    return 124, 'timeout'
+
+
+class Case:
+  '''A case directory.'''
+  def __init__(self, path: Path) -> None:
+    self.path = path
+    self.name = path.name
+
+  def read(self, name: str) -> Optional[str]:
+    file = self.path / name
+    return file.read_text() if file.exists() else None
+
+  @property
+  def flags(self) -> List[str]:
+    return (self.read('flags') or '').split()
+
+  @property
+  def xfail(self) -> List[str]:
+    return (self.read('xfail') or '').split()
+
+
+def find_cases(root: Path) -> List[Case]:
+  return [Case(p) for p in sorted(root.iterdir())
+          if (p / 'a.cpp').exists() and (p / 'b.cpp').exists()]
+
+
+def build_and_run(toolchain: Toolchain, case: Case, work: Path, who: str,
+                  timeout: int) -> Tuple[str, int, str]:
+  '''Build a.cpp with who[0] and b.cpp with who[1], link and run.
+
+  Returns (stage, exit status, text): stage is "ok", or "ours" (compile
+  failed), "ref", "link"; for "ok" the status and stdout of the program.
+  '''
+  parts = {'all-ref': ('ref', 'ref'), 'ref+ours': ('ref', 'ours'),
+           'ours+ref': ('ours', 'ref'), 'all-ours': ('ours', 'ours')}[who]
+  objects = []
+  for side, name in zip(parts, ('a.cpp', 'b.cpp')):
+    ok, output, obj = toolchain.compile(side, case.path / name, work,
+                                        case.flags)
+    if not ok:
+      return ('ours' if side == 'ours' else 'ref'), 1, output[-1500:]
+    objects.append(str(obj))
+  exe = work / f"{who.replace('+', '-')}.exe"
+  code, output = run([toolchain.link, *objects, '-o', str(exe)], work,
+                     toolchain.env)
+  if code != 0:
+    return 'link', code, output[-1500:]
+  code, output = run([str(exe)], work, toolchain.env, timeout)
+  return 'ok', code, output
+
+
+def run_case(toolchain: Toolchain, case: Case, directions: List[str],
+             timeout: int, skip_unsupported: bool = False
+             ) -> List[Tuple[str, str, str]]:
+  '''The results of a case: (direction, result, detail) rows.'''
+  rows: List[Tuple[str, str, str]] = []
+  with tempfile.TemporaryDirectory(prefix = 'edg-cir-mixed.') as tmp:
+    work = Path(tmp)
+    stage, code, text = build_and_run(toolchain, case, work, 'all-ref',
+                                      timeout)
+    if stage != 'ok':
+      return [('all-ref', 'REF-FAIL', f"{stage}: {text[-300:]}")]
+    expected_out = case.read('expected.out')
+    expected_rc = case.read('expected.rc')
+    want_out = text if expected_out is None else expected_out
+    want_rc = code if expected_rc is None else int(expected_rc.strip())
+    if (text, code) != (want_out, want_rc):
+      return [('all-ref', 'REF-FAIL', 'the baseline differs from '
+               'expected.out or expected.rc')]
+    for direction in directions:
+      stage, code, text = build_and_run(toolchain, case, work, direction,
+                                        timeout)
+      if stage == 'ours':
+        result, detail = 'OURS-FAIL', first_error(text)
+        if skip_unsupported and is_unsupported(text):
+          result = 'SKIP'
+      elif stage == 'ref':
+        result, detail = 'REF-FAIL', first_error(text)
+      elif stage == 'link':
+        result, detail = 'LINK', first_error(text)
+      elif code in (124,) or code < 0 or code >= 128:
+        result, detail = 'RUN', f"status {code}: {text[-200:]!r}"
+      elif (text, code) == (want_out, want_rc):
+        result, detail = 'PASS', ''
+      else:
+        same = 'equal' if text == want_out else 'differs'
+        result, detail = 'DIFF', (f"status {code} (want {want_rc}); output "
+                                  f"{same}")
+      if direction in case.xfail and result != 'SKIP':
+        result = {'PASS': 'XPASS'}.get(result, 'XFAIL')
+      rows.append((direction, result, detail))
+  return rows
+
+
+# What the writer prints for a construct that the back end cannot express yet
+# (the same test as in edg-cir-symbols).
+_UNSUPPORTED = re.compile(r'CIR back end:.*(cannot express|not supported yet)',
+                          re.S)
+
+
+def is_unsupported(output: str) -> bool:
+  '''Does the compiler output say that the CIR back end does not support a
+  construct yet?'''
+  return bool(_UNSUPPORTED.search(output))
+
+
+def first_error(text: str) -> str:
+  '''The first line that says what went wrong in a compiler's or linker's
+  output.'''
+  for line in text.splitlines():
+    if re.search(r'error|undefined reference|multiple definition|cannot',
+                 line, re.I):
+      return line.strip()[:200]
+  lines = [l.strip() for l in text.splitlines() if l.strip()]
+  return lines[-1][:200] if lines else ''
+
+
+class SelfTest(unittest.TestCase):
+  '''The flow on a trivial case, with the host compiler on both sides.'''
+  def setUp(self) -> None:
+    self.compiler = shutil.which('c++') or shutil.which('g++')
+    if not self.compiler:
+      self.skipTest('no C++ compiler')
+    self.tmp = tempfile.TemporaryDirectory()
+    self.addCleanup(self.tmp.cleanup)
+    self.root = Path(self.tmp.name)
+
+  def make_case(self, name: str, a: str, b: str, **files: str) -> Case:
+    directory = self.root / name
+    directory.mkdir()
+    (directory / 'a.cpp').write_text(a)
+    (directory / 'b.cpp').write_text(b)
+    (directory / 'common.h').write_text('int twice(int);\n')
+    for file, text in files.items():
+      (directory / file.replace('_', '.')).write_text(text)
+    return Case(directory)
+
+  def toolchain(self) -> Toolchain:
+    return Toolchain(self.compiler, self.compiler, 'c++17', self.root, '',
+                     ours_cxx = self.compiler)
+
+  def test_pass(self) -> None:
+    case = self.make_case(
+      'ok', '#include "common.h"\nint twice(int x) { return 2 * x; }\n',
+      '#include "common.h"\n#include <cstdio>\n'
+      'int main() { std::printf("%d\\n", twice(21)); return 3; }\n')
+    rows = run_case(self.toolchain(), case, list(DIRECTIONS), 30)
+    self.assertEqual([(d, r) for d, r, _ in rows],
+                     [('ref+ours', 'PASS'), ('ours+ref', 'PASS')])
+
+  def test_failures_are_classified(self) -> None:
+    # An undefined function: the baseline does not link.
+    case = self.make_case(
+      'bad', '#include "common.h"\n', '#include "common.h"\n'
+      'int main() { return twice(1); }\n')
+    rows = run_case(self.toolchain(), case, list(DIRECTIONS), 30)
+    self.assertEqual(rows[0][:2], ('all-ref', 'REF-FAIL'))
+    # expected.out that the programs do not print: the baseline is wrong.
+    case = self.make_case(
+      'exp', '#include "common.h"\nint twice(int x) { return 2 * x; }\n',
+      '#include "common.h"\nint main() { return 0; }\n',
+      expected_out = 'nope\n')
+    rows = run_case(self.toolchain(), case, list(DIRECTIONS), 30)
+    self.assertEqual(rows[0][:2], ('all-ref', 'REF-FAIL'))
+
+  def test_xfail_and_diff(self) -> None:
+    # A program that behaves differently when a.cpp is compiled with -DX
+    # cannot be made from the host compiler alone; check xfail instead.
+    case = self.make_case(
+      'x', '#include "common.h"\nint twice(int x) { return 2 * x; }\n',
+      '#include "common.h"\nint main() { return twice(0); }\n',
+      xfail = 'ref+ours')
+    rows = run_case(self.toolchain(), case, list(DIRECTIONS), 30)
+    self.assertEqual([(d, r) for d, r, _ in rows],
+                     [('ref+ours', 'XPASS'), ('ours+ref', 'PASS')])
+
+  def test_unsupported_is_never_pass(self) -> None:
+    # An "ours" compiler that refuses the file as cpfe-cir does for a
+    # construct it cannot express yet.
+    refuse = self.root / 'refuse'
+    refuse.write_text('#!/bin/sh\necho "Error: CIR back end: the definition '
+                      'of \'f\' was dropped: it uses a construct the CIR '
+                      'back end cannot express: x" >&2\nexit 2\n')
+    refuse.chmod(0o755)
+    toolchain = Toolchain(self.compiler, self.compiler, 'c++17', self.root,
+                          '', ours_cxx = str(refuse))
+    case = self.make_case(
+      'u', '#include "common.h"\nint twice(int x) { return 2 * x; }\n',
+      '#include "common.h"\nint main() { return twice(0); }\n')
+    rows = run_case(toolchain, case, list(DIRECTIONS), 30)
+    self.assertEqual([r for _, r, _ in rows], ['OURS-FAIL', 'OURS-FAIL'])
+    rows = run_case(toolchain, case, list(DIRECTIONS), 30, True)
+    self.assertEqual([r for _, r, _ in rows], ['SKIP', 'SKIP'])
+    # A plain compiler error is not a SKIP.
+    (self.root / 'refuse').write_text('#!/bin/sh\necho "error: x" >&2\n'
+                                      'exit 1\n')
+    rows = run_case(toolchain, case, list(DIRECTIONS), 30, True)
+    self.assertEqual([r for _, r, _ in rows], ['OURS-FAIL', 'OURS-FAIL'])
+    # A back end error that is not "cannot express" (a verifier error) is not
+    # a SKIP either.
+    (self.root / 'refuse').write_text('#!/bin/sh\necho "Error: CIR back end: '
+                                      'the module failed to verify" >&2\n'
+                                      'exit 2\n')
+    rows = run_case(toolchain, case, list(DIRECTIONS), 30, True)
+    self.assertEqual([r for _, r, _ in rows], ['OURS-FAIL', 'OURS-FAIL'])
+    # The expected failure of an M4 case.
+    (case.path / 'xfail').write_text('ref+ours ours+ref')
+    rows = run_case(toolchain, case, list(DIRECTIONS), 30)
+    self.assertEqual([r for _, r, _ in rows], ['XFAIL', 'XFAIL'])
+
+  def test_find_cases(self) -> None:
+    self.make_case('c1', '', '')
+    (self.root / 'not-a-case').mkdir()
+    self.assertEqual([c.name for c in find_cases(self.root)], ['c1'])
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2]
+  )
+  parser.add_argument('cases', nargs = '*',
+                      help = 'case directories or names (default: all)')
+  parser.add_argument('--cases-dir', default = str(DEFAULT_CASES))
+  parser.add_argument('--list', action = 'store_true')
+  parser.add_argument('--ref', default = 'g++',
+                      help = 'the reference C++ compiler (default g++)')
+  parser.add_argument('--link', default = 'g++',
+                      help = 'the linker driver (default g++)')
+  parser.add_argument('--std', default = 'c++17')
+  parser.add_argument('--all-ours', action = 'store_true',
+                      help = 'also build both files with cpfe-cir')
+  parser.add_argument('--skip-unsupported', action = 'store_true',
+                      help = 'report SKIP for a file that cpfe-cir refuses '
+                             'as a construct the back end cannot express '
+                             'yet')
+  parser.add_argument('--timeout', type = int, default = 60)
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir')
+  parser.add_argument('--self-test', action = 'store_true')
+  args = parser.parse_args()
+
+  if args.self_test:
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SelfTest)
+    result = unittest.TextTestRunner(verbosity = 1).run(suite)
+    sys.exit(0 if result.wasSuccessful() else 1)
+
+  cases_dir = Path(args.cases_dir)
+  selected: List[Case] = []
+  if args.cases:
+    for item in args.cases:
+      path = (Path(item).resolve() if Path(item).is_dir()
+              else cases_dir / item)
+      if not (path / 'a.cpp').exists():
+        print(f"edg-cir-mixed-tu: {item} is not a case", file = sys.stderr)
+        sys.exit(2)
+      selected.append(Case(path))
+  else:
+    selected = find_cases(cases_dir)
+  if args.list:
+    print('\n'.join(c.name for c in selected))
+    return
+  root = Path(args.root).resolve()
+  if not (root / args.fe_build / 'environment.sh').exists():
+    print(f"edg-cir-mixed-tu: {args.fe_build}/environment.sh is missing "
+          f"(build cpfe-cir; run from the repository root)", file = sys.stderr)
+    sys.exit(2)
+  toolchain = Toolchain(args.ref, args.link, args.std, root, args.fe_build)
+  directions = [*DIRECTIONS, *(['all-ours'] if args.all_ours else [])]
+  bad = 0
+  print(f"{'case':<32}{'direction':<12}{'result':<11}detail")
+  for case in selected:
+    for direction, result, detail in run_case(toolchain, case, directions,
+                                              args.timeout,
+                                              args.skip_unsupported):
+      print(f"{case.name:<32}{direction:<12}{result:<11}{detail}",
+            flush = True)
+      if result not in ('PASS', 'XFAIL', 'XPASS', 'SKIP'):
+        bad += 1
+  print(f"{len(selected)} case(s), {bad} not passing")
+  sys.exit(1 if bad else 0)
+
+
+if __name__ == '__main__':
+  main()

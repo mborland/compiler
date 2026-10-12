@@ -1,0 +1,26 @@
+; expect: format a dynamic class has either its own TY_VPTR field or a primary_idx, never both
+ecil 1.2 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame REGION
+  TY_INT 1 32 true 4 4
+  TY_VPTR 3
+  STR 2 "1V"
+  STR 3 "1Y"
+  TY_RECORD_DECL 10 0 nil
+  TY_RECORD_BODY 10 8 8 8 0 1
+  REC_FIELD 3 0 nil nil nil 1
+  CLASS_MANGLE 10 2
+  CLASS_INFO 10 8 8 nil 1
+  CLASS_BASES 10 []
+  TY_RECORD_DECL 20 0 nil
+  TY_RECORD_BODY 20 16 16 8 0 2
+  REC_FIELD 3 0 nil nil nil 1
+  REC_FIELD 10 0 nil nil nil 16
+  CLASS_MANGLE 20 3
+  CLASS_INFO 20 16 8 1 1
+  CLASS_BASES 20 [1, 1]
+frame END
+  END 2 0

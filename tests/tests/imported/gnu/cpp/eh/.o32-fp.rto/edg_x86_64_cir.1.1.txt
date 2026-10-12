@@ -1,0 +1,58 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 11: warning: CIR back end: the body of "bar" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 16: error: unknown register name "f20"
+    register double f20 __asm__ ("f20") = 0.0;
+                                 ^
+
+"Test_name.c", line 17: error: unknown register name "f22"
+    register double f22 __asm__ ("f22") = 0.0;
+                                 ^
+
+"Test_name.c", line 18: error: unknown register name "f24"
+    register double f24 __asm__ ("f24") = 0.0;
+                                 ^
+
+"Test_name.c", line 19: error: unknown register name "f26"
+    register double f26 __asm__ ("f26") = 0.0;
+                                 ^
+
+"Test_name.c", line 20: error: unknown register name "f28"
+    register double f28 __asm__ ("f28") = 0.0;
+                                 ^
+
+"Test_name.c", line 21: error: unknown register name "f30"
+    register double f30 __asm__ ("f30") = 0.0;
+                                 ^
+
+"Test_name.c", line 20: warning: variable "f28" was declared but never referenced
+    register double f28 __asm__ ("f28") = 0.0;
+                    ^
+
+"Test_name.c", line 29: error: unknown register name "f20"
+    register double f20 __asm__ ("f20") = 12.0;
+                                 ^
+
+"Test_name.c", line 30: error: unknown register name "f22"
+    register double f22 __asm__ ("f22") = 13.0;
+                                 ^
+
+"Test_name.c", line 31: error: unknown register name "f24"
+    register double f24 __asm__ ("f24") = 14.0;
+                                 ^
+
+"Test_name.c", line 32: error: unknown register name "f26"
+    register double f26 __asm__ ("f26") = 15.0;
+                                 ^
+
+"Test_name.c", line 33: error: unknown register name "f28"
+    register double f28 __asm__ ("f28") = 16.0;
+                                 ^
+
+"Test_name.c", line 34: error: unknown register name "f30"
+    register double f30 __asm__ ("f30") = 17.0;
+                                 ^
+
+12 errors detected in the compilation of "Test_name.c".

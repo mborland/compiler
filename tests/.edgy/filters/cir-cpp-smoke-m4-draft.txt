@@ -1,0 +1,105 @@
+# Filter list for edgy ("edgy @tests/.edgy/filters/<this file>"): one path
+# prefix per line, relative to the tests directory; "!" excludes.  Blank lines
+# and lines starting with "#" are ignored.
+#
+# DRAFT of the M4 additions to cir-cpp-smoke (use with "--types rp,lp"; the
+# two link tests, abi/vthunk1 and abi/pure-virtual1, are lp): 40 small C++ run
+# tests for virtual functions and vtables, RTTI, exceptions and pointers to
+# members.  Not in use yet: the CIR back end diagnoses all of these as
+# unsupported at M3 (they are the M4 progress metric), so the list is NOT
+# merged into cir-cpp-smoke.txt, cir-cpp-corpus.txt or the expectations until
+# M4a starts.  Chosen so that:
+#   - every case passes in the edg_x86_64 reference (no recorded failure or
+#     skip in tests/expectations/edg_x86_64);
+#   - the file is at most 220 lines, has no preprocessor line markers (no
+#     expanded library header), and has one case of type rp or lp;
+#   - it exercises one M4 feature (the comment before each entry), including
+#     the Itanium details that the ABI checks need: vbase offsets, primary
+#     bases, thunks, key functions, C1/C2/D0/D1/D2 variants.
+# Several tests also run in the "all-ours" and mixed-TU harnesses
+# (edg-cir-mixed-tu) once the library emits vtables.
+#
+# Virtual functions, vtables, virtual bases, thunks, covariant returns
+# virtual operator= defined out of line after the class (key function: the vtable is emitted with it)
+imported/gnu/cpp/inherit/virtual5.sft.cpp
+# diamond with a virtual base: calls through A, B, C with overriding and using-declarations
+imported/gnu/cpp/inherit/virtual9.sft.cpp
+# virtual conversion operator called through a base pointer
+imported/gnu/cpp/inherit/virtual14.sft.cpp
+# pure virtual function in a virtual base, final overrider in a diamond (S4 with S3 and SX)
+imported/gnu/cpp/inherit/virtual15a.sft.cpp
+# primary base and virtual base placement of an empty class (offsetof the A subobject)
+imported/gnu/cpp/abi/vbase12.sft.cpp
+# a nearly empty virtual base that must not be the primary base
+imported/gnu/cpp/abi/vbase13.sft.cpp
+# virtual call from the constructor of a class with a virtual base (vptr during construction)
+imported/gnu/cpp/abi/vcall1.sft.cpp
+# layout with two virtual bases (long double alignment): member offsets through vbase offsets
+imported/gnu/cpp/abi/layout2.sft.cpp
+# this-adjusting thunks for overriders in a class with two polymorphic bases
+imported/gnu/cpp/inherit/thunk10.sft.cpp
+# covariant return type with a this-adjustment (multiple inheritance, getThis)
+imported/gnu/cpp/inherit/covariant1.sft.cpp
+# covariant pointer returns through virtual bases, pure virtual clone()
+imported/gnu/cpp/abi/covariant4.sft.cpp
+# covariant reference return with a virtual base
+imported/gnu/cpp/inherit/covariant18.sft.cpp
+# virtual thunks to the virtual destructor and destroy() in a diamond of virtual bases (link test)
+imported/gnu/cpp/abi/vthunk1.sft.cpp
+# pure virtual function in a vtable (__cxa_pure_virtual slot), concrete derived class (link test)
+imported/gnu/cpp/abi/pure-virtual1.sft.cpp
+# destructors of a class with a virtual base: D1/D2 variants, destruction order
+edg/rma/dtor03.sft.cpp
+# virtual base with a virtual destructor, constructors with arguments (C1/C2 variants, vbase init)
+edg/ccs/gnats23341b.sft.cpp
+# polymorphic class with an inheriting constructor, new at namespace scope (vptr store in the ctor)
+edg/ccs/inhctor/gnats17687j.sft.cpp
+# non-static member initializers that read a virtual base (vbase offset in the constructor)
+imported/gnu/cpp/cpp0x/nsdmi-virtual1.sft.cpp
+# RTTI: dynamic_cast
+# dynamic_cast inside a nested class template member, to a derived class
+imported/gnu/cpp/rtti/dyncast2.sft.cpp
+# dynamic_cast to an ambiguous base of a diamond (null result), plain downcast
+imported/gnu/cpp/rtti/dyncast4.sft.cpp
+# dynamic_cast with virtual bases and an out-of-line virtual destructor (key function, typeinfo)
+imported/gnu/cpp/rtti/dyncast7.sft.cpp
+# typeid of array types: typeinfo identity (no library header)
+edg/daveed/g26766a.sft.cpp
+# dynamic_cast downcast of a polymorphic struct with a member of the base type
+imported/gnu/cpp/tree-ssa/pr21407.sft.cpp
+# Exceptions: throw, try/catch, cleanups, function-try-blocks, unwinding
+# throw while evaluating a default argument, catch by type
+imported/gnu/cpp/eh/defarg1.sft.cpp
+# throw and catch(...) in a loop, break out of the handler
+imported/gnu/cpp/eh/loop2.sft.cpp
+# function-try-block on a constructor, a throw inside its handler
+imported/gnu/cpp/eh/ctor-fntry1.sft.cpp
+# base class destructor runs while unwinding out of a derived destructor
+imported/gnu/cpp/eh/dtor1.sft.cpp
+# exception from a constructor of a class with virtual bases: partial destruction
+imported/gnu/cpp/eh/ctor2.sft.cpp
+# delegating constructor that throws, class with a virtual base and virtual destructor
+imported/gnu/cpp/eh/delegating1.sft.cpp
+# exception in the constructor of a class with a virtual base (synthesized constructor)
+imported/gnu/cpp/eh/synth2.sft.cpp
+# placement operator delete with extra arguments runs when the constructor throws (new-expression cleanup)
+edg/rma/eh41.sft.cpp
+# exception from an array element constructor: the constructed elements are destroyed
+cwg/cwg2257.sft.cpp
+# throwing destructor (noexcept(false)) of a temporary bound to a reference to an array
+imported/gnu/cpp/eh/ref-temp2.sft.cpp
+# copy constructor of a lambda closure that throws
+imported/gnu/cpp/cpp0x/lambda/lambda-eh.sft.cpp
+# Pointers to members
+# pointers to data members: copies, comparisons, static and const objects
+imported/gnu/cpp/expr/ptrmem9.sft.cpp
+# constant-initialized pointers to data members (offsets 0 and 4, null)
+imported/gnu/cpp/init/pm3.sft.cpp
+# constant pointer to a member function of a class template instance
+imported/gnu/cpp/template/ptrmem16.sft.cpp
+# call through a pointer to a member function, noexcept of the call expression
+cwg/cwg1351a.sft.cpp
+# pointer to a data member of a member in a class with two bases (base offset adjustment)
+imported/gnu/cpp/expr/ptrmem11.sft.cpp
+# conversion between pointer-to-member types: null member pointers compare equal
+imported/gnu/cpp/other/ptrmem3.sft.cpp

@@ -66,6 +66,50 @@ reported as not supported yet.
   return result;
 }  /* v1_implemented */
 
+const char *unsupported_12_flag(const ecil::a_record &r)
+/*
+The ECIL 1.2 flag or kind of an older record that the code generator does
+not implement yet (NOTHROW is a no-op while exceptions are off, so it is
+accepted): its name, or nullptr.
+*/
+{
+  const char *result = nullptr;
+  uint64_t v = 0;
+
+  switch (r.opcode) {
+  case eop_call:
+    if (ecil::operand_u64(r.ops[3], v) &&
+        (v & ECIL_CALL_VIRTUAL))
+      result = "the VIRTUAL flag";
+    else if (ecil::operand_u64(r.ops[3], v) && (v & ECIL_CALL_VTT))
+      result = "the VTT flag";
+    break;
+  case eop_delete:
+    if (ecil::operand_u64(r.ops[3], v) && (v & ECIL_DELETE_VIRTUAL))
+      result = "the VIRTUAL flag";
+    break;
+  case eop_rec_field:
+    if (ecil::operand_u64(r.ops[5], v) && (v & ECIL_FIELD_VIRTUAL_BASE))
+      result = "the VIRTUAL_BASE flag";
+    break;
+  case eop_cleanup_begin:
+    if (ecil::operand_u64(r.ops[2], v) && (v & ECIL_CLEANUP_DEACTIVATABLE))
+      result = "the DEACTIVATABLE flag";
+    break;
+  case eop_structor:
+    if (ecil::operand_u64(r.ops[2], v) && (v & ECIL_STRUCTOR_HAS_VBASES))
+      result = "the has_vbases flag";
+    break;
+  case eop_meminit_begin:
+    if (ecil::operand_u64(r.ops[0], v) && v == emk_vbase)
+      result = "kind vbase";
+    break;
+  default:
+    break;
+  }
+  return result;
+}  /* unsupported_12_flag */
+
 }  /* anonymous namespace */
 
 bool a_emitter::on_record(const ecil::a_record &r,
@@ -80,7 +124,13 @@ records and they are ignored here, up to the one that closes it.
 
   record_depth_ = context.scope.bracket_depth;
   if (drop_depth_ == 0) {
-    ok = dispatch_record(r, context);
+    const char *flag = unsupported_12_flag(r);
+
+    if (flag != nullptr)
+      ok = unsupported("ECIL 1.2 record " + std::string(r.info->name) +
+                       " with " + flag + " is not supported yet");
+    else
+      ok = dispatch_record(r, context);
   } else if (record_depth_ < drop_depth_) {
     drop_depth_ = 0;
     if (frames_.empty() || frames_.back().kind != a_frame_kind::dropped)
@@ -187,7 +237,10 @@ Process one decoded record outside any dropped construct.
   default:
     /* The class of every other record comes from the schema's section
        bits (ecil_schema.cpp), not from opcode ranges. */
-    if ((r.info->section & ecil::eos_v1) && !v1_implemented(r.opcode))
+    if (r.info->min_minor >= 2)
+      ok = unsupported("ECIL 1.2 record " + std::string(r.info->name) +
+                       " is not supported yet");
+    else if ((r.info->section & ecil::eos_v1) && !v1_implemented(r.opcode))
       ok = unsupported(std::string(r.info->name) + ": C++ records (ECIL v1) "
                        "are not supported yet");
     else if (r.info->section & ecil::eos_const)

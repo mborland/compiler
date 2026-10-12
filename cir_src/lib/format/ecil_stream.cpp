@@ -127,6 +127,15 @@ feature bits it needs are set.
                  op == eop_hdr_type_role;
   const char *problem = nullptr;
 
+  if (info.min_minor > preamble_.minor) {
+    char buffer[120];
+    std::snprintf(buffer, sizeof buffer, "record needs ECIL minor >= %u "
+                  "(the stream says %u.%u)", info.min_minor,
+                  static_cast<unsigned>(preamble_.major),
+                  static_cast<unsigned>(preamble_.minor));
+    return fail(an_error_kind::format, std::string(info.name) + ": " +
+                buffer, offset_);
+  }
   if (op == eop_loc && !(preamble_.features & ECIL_FEATURE_LOCATIONS))
     problem = "LOC record without the LOCATIONS feature bit";
   else if (op == eop_name_bind && !(preamble_.features &
@@ -234,20 +243,27 @@ Check that every id the record uses was introduced (see a_ref_checker).
   bool result = refs_.check(record, problem);
 
   if (result && record.opcode == eop_hdr_lang) {
-    /* A C++ stream with exceptions needs a later ECIL (M4); v1 is
-       exceptions-off. */
+    /* A C++ stream with exceptions needs ECIL 1.2. */
     uint64_t language = 0;
     uint64_t lang_flags = 0;
     operand_u64(record.ops[0], language);
     operand_u64(record.ops[2], lang_flags);
-    if (language == elang_cxx && (lang_flags & ECIL_LANG_EXCEPTIONS))
-      result = fail(an_error_kind::version,
-                    "HDR_LANG: C++ with exceptions needs a newer ECIL (v1 "
-                    "is exceptions-off)", offset_);
+    if (language == elang_cxx && (lang_flags & ECIL_LANG_EXCEPTIONS) &&
+        preamble_.minor < 2)
+      result = fail(an_error_kind::format,
+                    "HDR_LANG: C++ with exceptions needs ECIL minor >= 2 "
+                    "(the stream says 1." +
+                    std::to_string(static_cast<unsigned>(preamble_.minor)) +
+                    ")", offset_);
+    else
+      tracker_.set_lang_flags(static_cast<uint32_t>(lang_flags));
   } else if (!result) {
     result = fail(an_error_kind::format,
                   std::string(record.info->name) + ": " + problem, offset_);
   }
+  if (result && (record.opcode == eop_func_begin ||
+                 record.opcode == eop_param))
+    tracker_.set_function_info(refs_.function_info());
   return result;
 }  /* a_stream_reader::check_refs */
 

@@ -128,8 +128,10 @@ arrays are walked in a loop.
     e = ids_.find_gid(e->element);
   }
   if (e != nullptr) {
-    if (e->kind == gk_ptr)
+    if (e->kind == gk_ptr || e->kind == gk_vptr || e->kind == gk_data_member)
       size = ptr_bytes_;
+    else if (e->kind == gk_method)
+      size = 2 * static_cast<uint64_t>(ptr_bytes_);
     else if (e->kind == gk_bool || e->kind == gk_int || e->kind == gk_float ||
              e->kind == gk_opaque || e->kind == gk_record)
       size = e->size;
@@ -161,7 +163,15 @@ else at its size.  An EMPTY_FOR_ABI field takes no space (0).
          at its byte offset. */
       end = width == 0 ? offset : saturating_add(offset, saturating_add(
           saturating_add(bit_offset, width), 7) / 8);
-    } else if ((flags & (ECIL_FIELD_BASE | ECIL_FIELD_POTENTIALLY_OVERLAPPING))
+    } else if ((flags & (ECIL_FIELD_BASE | ECIL_FIELD_VIRTUAL_BASE)) &&
+               e->kind == gk_record) {
+      /* A base ends at its offset plus the non-virtual size of its class
+         (12.2: nvsize from CLASS_INFO, else its data size). */
+      const a_class_facts *f = ids_.class_facts(static_cast<uint32_t>(type_g));
+
+      end = saturating_add(offset, f != nullptr ? nvsize_estimate(*f)
+          : ids_.record_data_size(static_cast<uint32_t>(type_g), e->size));
+    } else if ((flags & ECIL_FIELD_POTENTIALLY_OVERLAPPING)
                && e->kind == gk_record) {
       end = saturating_add(offset, ids_.record_data_size(
           static_cast<uint32_t>(type_g), e->size));
@@ -172,10 +182,21 @@ else at its size.  An EMPTY_FOR_ABI field takes no space (0).
   return end;
 }  /* a_ref_checker::field_end */
 
+bool a_ref_checker::not_a_type(const a_gid_entry *e) const
+/*
+True for a G-id that is a declaration (function, variable, ABI data), not a
+type.
+*/
+{
+  return e != nullptr && (e->kind == gk_func || e->kind == gk_var ||
+                          e->kind == gk_abi_data);
+}  /* a_ref_checker::not_a_type */
+
 a_ref_checker::a_ref_checker(a_id_tables &ids, a_bracket_tracker &tracker)
   : ids_(ids), tracker_(tracker), fields_pending_(0), cur_record_(0),
     members_seen_(false), cur_size_(0), cur_data_size_(0), cur_end_(0),
-    cur_union_(false), ptr_bytes_(0)
+    cur_union_(false), ptr_bytes_(0), fn_class_(0), allow_vptr_(false),
+    vbase_seen_(false), vptr_fields_(0), layout_class_(0), layout_expect_(0)
 {
 }  /* a_ref_checker::a_ref_checker */
 
@@ -247,8 +268,12 @@ A type operand: an introduced type G-id (not a function or variable).
       problem = "unknown type: G-id " + number(v) +
                 " was not introduced earlier in the stream";
       ok = false;
-    } else if (is_declaration(e)) {
+    } else if (not_a_type(e)) {
       problem = "G-id " + number(v) + " is a declaration, not a type";
+      ok = false;
+    } else if (e->kind == gk_vptr && !allow_vptr_) {
+      problem = "G-id " + number(v) + " (TY_VPTR) is only the type of the "
+                "vptr field of a record";
       ok = false;
     }
   } else if (!optional) {
@@ -460,6 +485,13 @@ entity or re-issue it (the same kind only).
     operand_id(name_op, name);
     e->element = static_cast<uint32_t>(t);
     ok = check_comdat(dflags, linkage, kind, problem);
+    if (ok && kind == gk_func && (e->decl_flags & ECIL_DECL_FUNC_NOTHROW) &&
+        !(dflags & ECIL_DECL_FUNC_NOTHROW)) {
+      problem = "a re-issue of DECL_FUNC G-id " + number(g) + " clears "
+                "NOTHROW (a wrong NOTHROW silently skips cleanups, so it is "
+                "never cleared)";
+      ok = false;
+    }
     if (fresh && name == 0)
       e->decl_flags |= decl_flag_nil_introduced;
     e->decl_flags = static_cast<uint32_t>(dflags) |
@@ -471,7 +503,7 @@ entity or re-issue it (the same kind only).
 }  /* a_ref_checker::declare */
 
 bool a_ref_checker::introduce_local(const an_operand &op, a_lid_state state,
-                                    std::string &problem)
+                                    std::string &problem, uint32_t type)
 /*
 PARAM / LOCAL / MATERIALIZE_TEMP / LABEL: a new L-id of the current function.
 A value belongs to the innermost open scope region.
@@ -495,6 +527,7 @@ A value belongs to the innermost open scope region.
       ok = false;
     } else {
       entry->state = state;
+      entry->type = type;
       if (state == ls_value)
         tracker_.note_local(ids_.lid_index(entry));
     }
@@ -522,6 +555,22 @@ AGG_SEL / C_SEL / C_REPEAT: the index (and run) is within the current target.
                   "record G-id " + number(stack.back()) + " with " +
                   number(t->extent) + " fields";
         ok = false;
+      } else {
+        const a_class_facts *cf = ids_.class_facts(stack.back());
+
+        if (cf != nullptr && index < cf->fields.size()) {
+          const a_gid_entry *ft = ids_.find_gid(cf->fields[index].type);
+
+          if (cf->fields[index].flags & ECIL_FIELD_VIRTUAL_BASE) {
+            problem = "selector of a VIRTUAL_BASE field (a virtual base is "
+                      "not part of a constant or an initializer)";
+            ok = false;
+          } else if (is_const && ft != nullptr && ft->kind == gk_vptr) {
+            problem = "C_SEL of the vptr field (the library stores the "
+                      "vptrs of a constant)";
+            ok = false;
+          }
+        }
       }
     } else if (t->kind == gk_array) {
       /* index + repeat > count, without the overflow. */
@@ -602,11 +651,34 @@ one linkage, not in a group yet, whose names differ in exactly one character
     }
   }
   if (ok) {
+    /* The class: HAS_VBASES must equal "the class has VIRTUAL_BASE fields"
+       (12.3), and a class that has them is complete by now. */
+    uint32_t cls = 0;
+    const a_class_facts *f = nullptr;
+    bool has_vbases = (sflags & ECIL_STRUCTOR_HAS_VBASES) != 0;
+
+    if (class_of_function(c, cls))
+      f = ids_.class_facts(cls);
+    if (has_vbases && (f == nullptr || !f->complete)) {
+      problem = "STRUCTOR has_vbases: the class is not complete yet (send "
+                "its TY_RECORD_BODY first)";
+      ok = false;
+    } else if (f != nullptr && f->complete &&
+               f->vbases.empty() == has_vbases) {
+      problem = "STRUCTOR has_vbases does not match the VIRTUAL_BASE fields "
+                "of the class";
+      ok = false;
+    }
+  }
+  if (ok) {
+    uint8_t common = static_cast<uint8_t>(
+        ((sflags & ECIL_STRUCTOR_HAS_VBASES) ? sr_vbases : 0) |
+        ((sflags & ECIL_STRUCTOR_DTOR) ? sr_dtor : 0));
+
     c->flags |= gf_in_group;
     b->flags |= gf_in_group;
-    c->role = static_cast<uint8_t>(1 | ((sflags & ECIL_STRUCTOR_HAS_VBASES)
-                                        ? 4 : 0));
-    b->role = 2;
+    c->role = static_cast<uint8_t>(sr_complete | common);
+    b->role = static_cast<uint8_t>(sr_base | common);
   }
   return ok;
 }  /* a_ref_checker::check_structor */
@@ -778,6 +850,17 @@ ones are the bracket tracker's).
     }
     if (ok)
       ok = need_type(r.ops[2], false, problem);
+    if (ok && (r.ops[3].u & ECIL_DELETE_VIRTUAL)) {
+      uint32_t d0 = 0;
+      uint32_t del = 0;
+
+      if (!operand_id(r.ops[1], w) || !ids_.deleting_of(
+              static_cast<uint32_t>(w), d0, del) || del != v) {
+        problem = "DELETE VIRTUAL needs the virtual destructor of a "
+                  "STRUCTOR_DELETING, and its g_delete as the function";
+        ok = false;
+      }
+    }
     break;
   }
   default:
@@ -797,6 +880,12 @@ At the end of a frame no TY_RECORD_BODY may still await REC_FIELD records.
     problem = "a TY_RECORD_BODY is missing REC_FIELD records at the end of "
               "its frame";
     fields_pending_ = 0;
+  } else if (layout_expect_ != 0) {
+    problem = "the layout facts of class G-id " + number(layout_class_) +
+              " (CLASS_MANGLE, CLASS_INFO, CLASS_BASES) are missing at the "
+              "end of its frame";
+    layout_expect_ = 0;
+    ok = false;
   }
   return ok;
 }  /* a_ref_checker::end_frame */
@@ -865,6 +954,30 @@ Apply the reference rules of one record.
       r.opcode != eop_loc && r.opcode != eop_ext) {
     problem = "a TY_RECORD_BODY is missing REC_FIELD records";
     ok = false;
+  }
+  /* The layout facts of a dynamic class (an own vptr, a virtual base or a
+     dynamic base) follow its body directly (12.2): CLASS_MANGLE, CLASS_INFO, CLASS_BASES, with only
+     strings, locations and extensions in between. */
+  if (ok && layout_expect_ != 0 && r.opcode != eop_str &&
+      r.opcode != eop_loc && r.opcode != eop_ext) {
+    uint64_t named = 0;
+    bool mine = (r.opcode == eop_class_mangle ||
+                 r.opcode == eop_class_info ||
+                 r.opcode == eop_class_bases) &&
+                operand_id(r.ops[0], named) && named == layout_class_;
+
+    if (mine && r.opcode == eop_class_mangle && layout_expect_ == 1) {
+      layout_expect_ = 2;
+    } else if (mine && r.opcode == eop_class_info && layout_expect_ <= 2) {
+      layout_expect_ = 3;
+    } else if (mine && r.opcode == eop_class_bases && layout_expect_ == 3) {
+      layout_expect_ = 0;
+    } else {
+      problem = "the layout facts (CLASS_MANGLE, CLASS_INFO, CLASS_BASES) of "
+                "class G-id " + number(layout_class_) + ", which is "
+                "dynamic, follow its TY_RECORD_BODY directly";
+      ok = false;
+    }
   }
   if (ok && r.supp != nullptr)
     ok = check_supp(r, problem);
@@ -981,8 +1094,15 @@ Apply the reference rules of one record.
       operand_u64(r.ops[1], ne->size);
     break;
   case eop_ty_ptr:
-    ok = need_type(r.ops[1], false, problem) &&
-         introduce(r.ops[0], gk_ptr, problem) != nullptr;
+    ok = need_type(r.ops[1], false, problem);
+    if (ok) {
+      ne = introduce(r.ops[0], gk_ptr, problem);
+      ok = ne != nullptr;
+      if (ok) {
+        operand_u64(r.ops[1], w);
+        ne->element = static_cast<uint32_t>(w);
+      }
+    }
     break;
   case eop_ty_array:
     ok = need_type(r.ops[1], false, problem);
@@ -1011,7 +1131,7 @@ Apply the reference rules of one record.
         problem = "unknown type: G-id " + number(element) +
                   " was not introduced earlier in the stream";
         ok = false;
-      } else if (is_declaration(pe)) {
+      } else if (not_a_type(pe) || pe->kind == gk_vptr) {
         problem = "G-id " + number(element) + " is a declaration, not a "
                   "type";
         ok = false;
@@ -1021,8 +1141,21 @@ Apply the reference rules of one record.
       ne = introduce(r.ops[0], gk_func_type, problem);
       ok = ne != nullptr;
       if (ok) {
+        an_array_reader again = array_elements(r.ops[3]);
+        uint64_t first = 0;
+        uint64_t count = 0;
+
         operand_u64(r.ops[1], w);
         ne->element = static_cast<uint32_t>(w);
+        /* The parameter count and the first parameter (the validator of the
+           member functions of 1.2 reads them). */
+        while (next_uint_element(again, element)) {
+          if (count == 0)
+            first = element;
+          ++count;
+        }
+        ne->extent = count;
+        ne->size = first;
       }
     }
     break;
@@ -1073,6 +1206,23 @@ Apply the reference rules of one record.
         cur_end_ = 0;
         cur_union_ = (rec->flags & gf_union) != 0;
         members_seen_ = false;
+        vbase_seen_ = false;
+        vptr_fields_ = 0;
+        {
+          a_class_facts &facts = ids_.add_class_facts(
+                                     static_cast<uint32_t>(v));
+          uint64_t align = 0;
+
+          operand_u64(r.ops[3], align);
+          facts.size = size;
+          facts.data_size = data_size;
+          facts.align = align;
+          facts.nvsize = data_size;
+          facts.fields.reserve(static_cast<size_t>(std::min<uint64_t>(w,
+                                                                    4096)));
+        }
+        if (fields_pending_ == 0 && !finish_record_facts(problem))
+          ok = false;
       }
     }
     break;
@@ -1083,8 +1233,10 @@ Apply the reference rules of one record.
       ok = false;
     } else {
       --fields_pending_;
-      ok = need_type(r.ops[0], false, problem) &&
-           need_sid(r.ops[4], true, "the field name", problem);
+      allow_vptr_ = true;
+      ok = need_type(r.ops[0], false, problem);
+      allow_vptr_ = false;
+      ok = ok && need_sid(r.ops[4], true, "the field name", problem);
       if (ok) {
         operand_u64(r.ops[0], v);
         e = ids_.find_gid(v);
@@ -1108,13 +1260,67 @@ Apply the reference rules of one record.
         }
         if (ok) {
           uint64_t fflags = 0;
+          uint64_t foffset = 0;
+          uint64_t fend = 0;
+          size_t index = ids_.class_facts(cur_record_)->fields.size();
+
           operand_u64(r.ops[5], fflags);
-          cur_end_ = std::max(cur_end_, field_end(r, e, v));
-          if ((fflags & (ECIL_FIELD_BASE | ECIL_FIELD_POTENTIALLY_OVERLAPPING))
+          operand_u64(r.ops[1], foffset);
+          fend = field_end(r, e, v);
+          cur_end_ = std::max(cur_end_, fend);
+          {
+            a_class_facts *facts = ids_.class_facts(cur_record_);
+            a_class_field field = {static_cast<uint32_t>(v), foffset,
+                                   static_cast<uint8_t>(fflags)};
+
+            facts->fields.push_back(field);
+            if (!(fflags & ECIL_FIELD_VIRTUAL_BASE))
+              facts->non_vbase_end = std::max(facts->non_vbase_end, fend);
+          }
+          if (ok && (fflags & (ECIL_FIELD_BASE | ECIL_FIELD_VIRTUAL_BASE |
+                               ECIL_FIELD_POTENTIALLY_OVERLAPPING)) &&
+              e->kind == gk_record) {
+            const a_class_facts *bf = ids_.class_facts(
+                                          static_cast<uint32_t>(v));
+
+            if (bf != nullptr && bf->complete &&
+                bf->dynamic && !(bf->stage & cs_info)) {
+              problem = "a TY_RECORD_BODY with a base or overlapping member "
+                        "of class G-id " + number(v) + " (a dynamic class) "
+                        "needs its CLASS_INFO first";
+              ok = false;
+            }
+          }
+          if (!ok) {
+            /* The problem is set. */
+          } else if (e->kind == gk_vptr &&
+              (index != 0 || foffset != 0 ||
+               !(fflags & ECIL_FIELD_UNNAMED) ||
+               r.ops[3].kind != an_operand_kind::nil || ++vptr_fields_ > 1)) {
+            problem = "a TY_VPTR field is the unnamed field 0 at offset 0 "
+                      "(the class's own vptr), at most once";
+            ok = false;
+          } else if ((fflags & ECIL_FIELD_VIRTUAL_BASE) &&
+                     ((fflags & (ECIL_FIELD_BASE |
+                                 ECIL_FIELD_POTENTIALLY_OVERLAPPING)) ||
+                      e->kind != gk_record ||
+                      r.ops[3].kind != an_operand_kind::nil)) {
+            problem = "a VIRTUAL_BASE field is a record-typed field that is "
+                      "not BASE, POTENTIALLY_OVERLAPPING or a bit-field "
+                      "(G-id " + number(v) + ")";
+            ok = false;
+          } else if (!(fflags & ECIL_FIELD_VIRTUAL_BASE) && vbase_seen_) {
+            problem = "VIRTUAL_BASE fields come after the data members";
+            ok = false;
+          } else if ((fflags & (ECIL_FIELD_BASE |
+                                ECIL_FIELD_POTENTIALLY_OVERLAPPING))
               && e->kind != gk_record) {
             problem = "REC_FIELD BASE/POTENTIALLY_OVERLAPPING needs a record "
                       "type (G-id " + number(v) + ")";
             ok = false;
+          } else if (fflags & ECIL_FIELD_VIRTUAL_BASE) {
+            vbase_seen_ = true;
+            members_seen_ = true;
           } else if (fflags & ECIL_FIELD_BASE) {
             if (members_seen_ || r.ops[3].kind != an_operand_kind::nil) {
               problem = "a BASE field comes before the data members and is "
@@ -1124,7 +1330,7 @@ Apply the reference rules of one record.
               operand_u64(r.ops[1], w);
               ids_.add_base(cur_record_, static_cast<uint32_t>(v), w);
             }
-          } else if (e->kind != gk_opaque ||
+          } else if ((e->kind != gk_opaque && e->kind != gk_vptr) ||
                      r.ops[3].kind != an_operand_kind::nil ||
                      !(fflags & ECIL_FIELD_UNNAMED)) {
             /* The vptr (an unnamed opaque field) is laid out first, ahead of
@@ -1133,6 +1339,8 @@ Apply the reference rules of one record.
           }
         }
       }
+      if (ok && fields_pending_ == 0 && !finish_record_facts(problem))
+        ok = false;
       if (ok && fields_pending_ == 0 && !cur_union_ &&
           cur_data_size_ < cur_end_) {
         problem = "TY_RECORD_BODY: data_size " + number(cur_data_size_) +
@@ -1188,6 +1396,29 @@ Apply the reference rules of one record.
       ne->flags |= gf_defined;
       ids_.begin_function();
       fns_.push_back(state);
+      fn_info_ = a_function_info();
+      fn_class_ = 0;
+      if (ne->role & (sr_complete | sr_base)) {
+        fn_info_.structor = (ne->role & sr_dtor) ? 2 : 1;
+        fn_info_.complete = (ne->role & sr_complete) != 0;
+        fn_info_.has_vbases = (ne->role & sr_vbases) != 0;
+      }
+      fn_info_.nothrow_decl = (ne->decl_flags & ECIL_DECL_FUNC_NOTHROW) != 0;
+      /* The class of a structor: the has_vbases flag of its STRUCTOR must
+         agree with the class's VIRTUAL_BASE fields. */
+      if (fn_info_.structor != 0 && ft != nullptr && ft->extent != 0) {
+        const a_gid_entry *pt = ids_.find_gid(ft->size);
+        const a_class_facts *f = pt != nullptr && pt->kind == gk_ptr
+                                     ? ids_.class_facts(pt->element)
+                                     : nullptr;
+
+        if (f != nullptr && f->complete &&
+            f->vbases.empty() == fn_info_.has_vbases) {
+          problem = "STRUCTOR has_vbases does not match the VIRTUAL_BASE "
+                    "fields of the class (function G-id " + number(v) + ")";
+          ok = false;
+        }
+      }
     }
     break;
   case eop_func_end:
@@ -1216,7 +1447,9 @@ Apply the reference rules of one record.
     ok = need_object(r.ops[1], "PARAM", problem) &&
          need_object(r.ops[2], "PARAM", problem) &&
          need_sid(r.ops[3], true, "the parameter name", problem) &&
-         introduce_local(r.ops[0], ls_value, problem);
+         introduce_local(r.ops[0], ls_value, problem,
+                         operand_u64(r.ops[2], w) ? static_cast<uint32_t>(w)
+                                                  : 0);
     if (ok && (pflags & ECIL_PARAM_THIS)) {
       const a_gid_entry *pt = ids_.find_gid(
                                  operand_u64(r.ops[2], w) ? w : 0);
@@ -1224,6 +1457,13 @@ Apply the reference rules of one record.
           pt == nullptr || pt->kind != gk_ptr) {
         problem = "PARAM THIS must be the first parameter and a pointer";
         ok = false;
+      } else {
+        /* The class `this` points to, for the structor rules of 1.2. */
+        const a_class_facts *f = ids_.class_facts(pt->element);
+
+        fn_class_ = pt->element;
+        fn_info_.cls = pt->element;
+        fn_info_.dynamic = f != nullptr && f->dynamic;
       }
     }
     if (ok && !fns_.empty())
@@ -1235,7 +1475,9 @@ Apply the reference rules of one record.
     operand_u64(r.ops[4], lflags);
     ok = need_object(r.ops[1], "LOCAL", problem) &&
          need_sid(r.ops[2], true, "the local name", problem) &&
-         introduce_local(r.ops[0], ls_value, problem);
+         introduce_local(r.ops[0], ls_value, problem,
+                         operand_u64(r.ops[1], w) ? static_cast<uint32_t>(w)
+                                                  : 0);
     if (ok && (lflags & ECIL_LOCAL_RETURN_SLOT) && !returns_aggregate()) {
       problem = "LOCAL RETURN_SLOT in a function that does not return a "
                 "record or array";
@@ -1245,7 +1487,9 @@ Apply the reference rules of one record.
   }
   case eop_materialize_temp:
     ok = need_object(r.ops[1], "MATERIALIZE_TEMP", problem) &&
-         introduce_local(r.ops[0], ls_value, problem);
+         introduce_local(r.ops[0], ls_value, problem,
+                         operand_u64(r.ops[1], w) ? static_cast<uint32_t>(w)
+                                                  : 0);
     break;
   case eop_label:
     ok = need_sid(r.ops[1], true, "the label name", problem) &&
@@ -1303,6 +1547,16 @@ Apply the reference rules of one record.
         problem = "field index " + number(w) + " is out of range for a "
                   "record with " + number(e->extent) + " fields";
         ok = false;
+      } else {
+        operand_u64(r.ops[0], v);
+        const a_class_facts *cf = ids_.class_facts(static_cast<uint32_t>(v));
+
+        if (cf != nullptr && w < cf->fields.size() &&
+            (cf->fields[w].flags & ECIL_FIELD_VIRTUAL_BASE)) {
+          problem = std::string(r.info->name) + " of a VIRTUAL_BASE field "
+                    "(reach a virtual base with VBASE_CAST)";
+          ok = false;
+        }
       }
     }
     break;
@@ -1337,7 +1591,13 @@ Apply the reference rules of one record.
     }
     if (ok) {
       operand_u64(r.ops[0], v);
-      const_targets_.push_back(static_cast<uint32_t>(v));
+      const a_class_facts *cf = ids_.class_facts(static_cast<uint32_t>(v));
+
+      if (cf != nullptr && cf->complete && cf->dynamic)
+        ok = need_class_facts(v, false, "a constant of the class "
+                              "(C_AGG_BEGIN)", problem);
+      if (ok)
+        const_targets_.push_back(static_cast<uint32_t>(v));
     }
     break;
   case eop_c_sel:
@@ -1378,6 +1638,23 @@ Apply the reference rules of one record.
   case eop_c_string:
   case eop_c_ptr:
     ok = need_type(r.ops[0], false, problem);
+    if (ok && r.opcode == eop_c_zero && operand_u64(r.ops[0], v)) {
+      uint64_t rg = v;
+      const a_gid_entry *zt = ids_.find_gid(rg);
+      const a_class_facts *cf = nullptr;
+
+      while (zt != nullptr && zt->kind == gk_array) {
+        rg = zt->element;
+        zt = ids_.find_gid(rg);
+      }
+      if (zt != nullptr && zt->kind == gk_record)
+        cf = ids_.class_facts(static_cast<uint32_t>(rg));
+      if (cf != nullptr && cf->dynamic) {
+        problem = "C_ZERO of a dynamic class (a constant of a dynamic class "
+                  "lists its members)";
+        ok = false;
+      }
+    }
     break;
   case eop_c_int:
     ok = need_type(r.ops[0], false, problem) &&
@@ -1386,7 +1663,10 @@ Apply the reference rules of one record.
   case eop_c_addr:
     ok = need_type(r.ops[0], false, problem);
     if (ok) {
-      ok = operand_id(r.ops[1], v) && is_declaration(ids_.find_gid(v));
+      ok = operand_id(r.ops[1], v) &&
+           (is_declaration(ids_.find_gid(v)) ||
+            (ids_.find_gid(v) != nullptr &&
+             ids_.find_gid(v)->kind == gk_abi_data));
       if (!ok)
         problem = "unknown declaration: C_ADDR names a G-id that was not "
                   "declared";
@@ -1420,14 +1700,30 @@ Apply the reference rules of one record.
                 " (use CALL_INDIRECT through a pointer)";
       ok = false;
     } else {
-      ok = need_type(r.ops[1], false, problem);
+      ok = need_type(r.ops[1], false, problem) &&
+           check_call_flags(r, problem);
     }
     break;
   case eop_call_indirect:
     ok = need_type(r.ops[0], false, problem);
     break;
+  case eop_hdr_lang: {
+    uint64_t language = 0;
+    uint64_t lang_flags = 0;
+
+    operand_u64(r.ops[0], language);
+    operand_u64(r.ops[2], lang_flags);
+    ids_.set_lang(static_cast<uint32_t>(language),
+                  static_cast<uint32_t>(lang_flags));
+    break;
+  }
+  case eop_end:
+    ok = check_end(problem);
+    break;
   default:
-    if (r.info->section & eos_v1)
+    if (r.info->min_minor >= 2)
+      ok = check_m4(r, problem);
+    else if (r.info->section & eos_v1)
       ok = check_v1(r, problem);
     break;
   }

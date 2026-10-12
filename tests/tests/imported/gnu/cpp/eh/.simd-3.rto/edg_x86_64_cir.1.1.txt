@@ -1,0 +1,18 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"./eh/simd-3.C", line 51: warning: CIR back end: the body of "thrower" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"./eh/simd-3.C", line 66: warning: CIR back end: the body of "main" uses a vector type (vector types are not supported), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "vt" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
+
+Error: CIR back end: the definition of '_Z7throwerv' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
+
+Error: CIR back end: the definition of 'vt' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
+
+3 errors detected in the compilation of "Test_name.c".

@@ -56,6 +56,7 @@ target_include_directories(edg_cir_options INTERFACE
   "${CMAKE_BINARY_DIR}/config")
 
 add_subdirectory(lib/format)
+add_subdirectory(lib/abi)
 add_subdirectory(tools/ecil-dump)
 add_subdirectory(tools/ecil-asm)
 

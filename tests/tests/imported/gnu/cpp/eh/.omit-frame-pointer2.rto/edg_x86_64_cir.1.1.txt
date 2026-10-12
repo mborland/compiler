@@ -1,0 +1,14 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 16: warning: CIR back end: the body of "f2" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 30: warning: CIR back end: the body of "f1" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of '_Z2f2v' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
+
+Error: CIR back end: the definition of '_Z2f1v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+
+2 errors detected in the compilation of "Test_name.c".

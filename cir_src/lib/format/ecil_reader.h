@@ -158,6 +158,9 @@ struct an_opcode_info {
   uint8_t           value;
   uint8_t           arity;
   uint8_t           section;  /* an_opcode_section bits. */
+  uint8_t           min_minor;  /* The ECIL minor that introduced the
+                                   record (0 for 1.0 and 1.1 records, which
+                                   are not gated). */
   an_operand_spec   operands[ECIL_MAX_ARITY];
 };  /* an_opcode_info */
 
@@ -219,7 +222,9 @@ enum a_bracket_kind : uint8_t {
   bk_lor, bk_agg_init, bk_const_agg,
   bk_cleanup,      /* CLEANUP_BEGIN .. CLEANUP_BODY: the cleanup code */
   bk_fullexpr, bk_static_init, bk_meminit,
-  bk_array         /* ARRAY_CTOR/DTOR_BEGIN .. END (phase 0: ctor, 1: dtor) */
+  bk_array,        /* ARRAY_CTOR/DTOR_BEGIN .. END (phase 0: ctor, 1: dtor) */
+  bk_try           /* TRY_BEGIN .. TRY_END (phase 0: body, 1: a handler, 2: the
+                      catch-all handler) */
 };  /* a_bracket_kind */
 
 const char *bracket_name(uint8_t kind);
@@ -243,8 +248,30 @@ enum a_region_kind : uint8_t {
   rk_fullexpr,     /* FULLEXPR_BEGIN .. FULLEXPR_END */
   rk_static_init,  /* STATIC_INIT_BEGIN .. STATIC_INIT_END */
   rk_meminit,      /* MEMINIT_BEGIN .. MEMINIT_END */
-  rk_array_body    /* ARRAY_CTOR/DTOR_BEGIN .. END */
+  rk_array_body,   /* ARRAY_CTOR/DTOR_BEGIN .. END */
+  rk_try_body,     /* TRY_BEGIN .. first CATCH_BEGIN (1.2) */
+  rk_catch         /* CATCH_BEGIN .. next CATCH_BEGIN or TRY_END (1.2) */
 };  /* a_region_kind */
+
+/* What the bracket tracker must know about the function whose body is being
+   read (ECIL 1.2: the constructor and destructor rules).  The reference
+   checker fills it at FUNC_BEGIN and at the PARAM that is `this`. */
+struct a_function_info {
+  uint8_t   structor;    /* 0 an ordinary function, 1 a constructor, 2 a
+                            destructor. */
+  bool      complete;    /* The complete variant (C1/D1) of a pair. */
+  bool      has_vbases;  /* The pair has virtual bases. */
+  bool      dynamic;     /* The class of `this` has a vptr. */
+  bool      nothrow_decl;  /* DECL_FUNC has NOTHROW. */
+  uint32_t  cls;         /* G-id of the class of `this` (0 unknown). */
+
+  a_function_info()
+    : structor(0), complete(false), has_vbases(false), dynamic(false),
+      nothrow_decl(false), cls(0)
+    {}
+  bool synthesized_d1() const
+    { return structor == 2 && complete && has_vbases; }
+};  /* a_function_info */
 
 enum a_bracket_action : uint8_t {
   eba_none = 0,
@@ -313,6 +340,11 @@ public:
       if (!brackets_.empty() && brackets_.back().kind == bk_static_init)
         brackets_.back().flags |= abf_exit_only;
     }
+  void set_function_info(const a_function_info &info)
+  /* The reference checker's facts about the function being read. */
+    { fn_ = info; }
+  void set_lang_flags(uint32_t flags)
+    { lang_flags_ = flags; }
   void mark_static_init_partial()
   /* The STATIC_INIT just opened is PARTIAL (1.1): it stores the dynamic
      elements of a variable that has a VAR_INIT. */
@@ -329,7 +361,7 @@ private:
   struct a_bracket {
     uint8_t kind;
     uint8_t phase;
-    uint8_t has_else;
+    uint8_t has_else;  /* bk_try: the number of handlers (saturating). */
     uint8_t case_ok;   /* A case label may sit here (a SWITCH body or BLOCKs
                           nested directly in it). */
     uint8_t flags = 0; /* bk_static_init: abf_*. */
@@ -339,12 +371,36 @@ private:
          abf_own_ids = 2,     /* Opened outside a function: fresh L-id
                                  space. */
          abf_partial = 4,     /* PARTIAL (1.1). */
-         abf_content = 8 };   /* A PARTIAL group has seen code that is not
+         abf_content = 8,     /* A PARTIAL group has seen code that is not
                                  its exit cleanup. */
+         abf_function_try = 16 };  /* bk_try: a function-try-block. */
   struct a_region {
     uint8_t kind;
     size_t  first;     /* Index into scope_locals_ of its first local. */
+    uint32_t id;       /* Unique among the regions of the stream. */
   };  /* a_region */
+  /* A cleanup whose range is open (begun with CLEANUP_BEGIN, past its
+     CLEANUP_BODY). */
+  struct a_cleanup {
+    uint32_t region;        /* The a_region::id it ends with. */
+    bool     deactivatable;
+    bool     active;
+    uint32_t fullexpr;      /* Index+1 of the innermost FULLEXPR bracket. */
+    uint32_t arm;           /* Identity of the innermost conditional arm. */
+  };  /* a_cleanup */
+  struct a_throw {
+    size_t   brackets;      /* Bracket depth at THROW_BEGIN. */
+    size_t   cleanups;      /* Open cleanups at THROW_BEGIN. */
+  };  /* a_throw */
+  bool at_prologue_level() const;
+  /* At the level where MEMINIT and VPTR_INIT may stand: the function body,
+     or the body of its function-try-block. */
+  bool end_prologue(std::string &problem);
+  /* The constructor/destructor prologue ends: VPTR_INIT must have come. */
+  uint32_t arm_identity() const;
+  uint32_t fullexpr_identity() const;
+  /* Index+1 of the innermost FULLEXPR bracket of the current function (0:
+     none). */
   bool apply_regions(uint8_t opcode, std::string &problem,
                      a_scope_event &event);
   bool check_v1(const a_record &record, std::string &problem);
@@ -369,6 +425,24 @@ private:
   size_t                   kill_from_;       /* Lowest region start closed by
                                                 the last record. */
   bool                     ended_function_;
+  /* ECIL 1.2 state. */
+  a_function_info          fn_;
+  uint32_t                 lang_flags_;
+  bool                     eh_spec_seen_;
+  bool                     function_try_seen_;
+  bool                     vptr_seen_;
+  bool                     prologue_checked_;
+  uint8_t                  meminit_rank_;     /* The lowest MEMINIT kind rank
+                                                 still allowed (vbase 0,
+                                                 base 1, field 2). */
+  uint8_t                  meminit_group_rank_;  /* Rank of the last group
+                                                    (255: none). */
+  uint8_t                  catch_head_;       /* 0 none; 1 after CATCH_BEGIN;
+                                                 2 after its LOCAL. */
+  uint64_t                 catch_local_;
+  uint32_t                 next_region_id_;
+  std::vector<a_cleanup>   cleanups_;
+  std::vector<a_throw>     throws_;
 };  /* a_bracket_tracker */
 
 /* Reference checking. */
@@ -395,6 +469,9 @@ public:
   /* False with a message in problem when the record breaks a rule. */
   bool end_frame(std::string &problem);
   /* The frame is complete: no record body may still await its fields. */
+  const a_function_info &function_info() const
+  /* What the bracket tracker needs to know about the current function. */
+    { return fn_info_; }
 
 private:
   bool need_sid(const an_operand &op, bool optional, const char *what,
@@ -413,7 +490,7 @@ private:
   bool apply_name(uint64_t g, a_gid_entry &entry, uint64_t sid,
                   uint64_t linkage, std::string &problem);
   bool introduce_local(const an_operand &op, a_lid_state state,
-                       std::string &problem);
+                       std::string &problem, uint32_t type = 0);
   bool check_selector(uint64_t index, uint64_t repeat, bool is_const,
                       std::string &problem);
 
@@ -439,6 +516,37 @@ private:
                     std::string &problem) const;
   /* COMDAT, linkonce_odr and weak_odr describe definitions (spec 11.2). */
 
+  /* ECIL 1.2 (ecil_classes.cpp). */
+  bool check_m4(const a_record &record, std::string &problem);
+  /* The records of section 12 that need the id tables. */
+  bool check_end(std::string &problem);
+  /* At END: every TY_VPTR class has CLASS_INFO, every non-class typeinfo
+     has its TYPEINFO_DEF. */
+  bool finish_record_facts(std::string &problem);
+  /* The last REC_FIELD of the current record was read: derive the facts. */
+  bool not_a_type(const a_gid_entry *e) const;
+  bool need_class_facts(uint64_t g, bool need_mangle, const char *what,
+                        std::string &problem);
+  /* The facts of class g (CLASS_MANGLE, CLASS_INFO, CLASS_BASES,
+     CLASS_VFUNCS, CLASS_OVERRIDES, as far as its structure needs them) were
+     sent. */
+  bool class_of_function(const a_gid_entry *fn, uint32_t &cls) const;
+  /* The class a member function's `this` points to. */
+  uint64_t nvsize_estimate(const a_class_facts &f) const;
+  bool check_class_info(const a_record &record, std::string &problem);
+  bool check_class_bases(const a_record &record, std::string &problem);
+  bool check_class_vfuncs(const a_record &record, std::string &problem);
+  bool check_class_overrides(const a_record &record, std::string &problem);
+  bool check_abi_data(const a_record &record, std::string &problem);
+  bool check_typeinfo_def(const a_record &record, std::string &problem);
+  bool check_exception_record(const a_record &record, std::string &problem);
+  bool check_member_pointer_record(const a_record &record,
+                                   std::string &problem);
+  bool check_call_flags(const a_record &record, std::string &problem);
+  const a_gid_entry *typeinfo_entry(const an_operand &op, bool class_kind,
+                                    bool optional, std::string &problem);
+  /* An operand naming a DECL_ABI_DATA typeinfo (of a class if class_kind). */
+
   a_id_tables             &ids_;
   a_bracket_tracker       &tracker_;
   uint64_t                 fields_pending_;
@@ -449,6 +557,18 @@ private:
   uint64_t                 cur_end_;        /* End of its fields so far. */
   bool                     cur_union_;
   uint32_t                 ptr_bytes_;      /* HDR_TARGET ptr_bits / 8. */
+  a_function_info          fn_info_;
+  uint32_t                 fn_class_;       /* Class of the current `this`. */
+  bool                     allow_vptr_;     /* Reading a REC_FIELD type. */
+  bool                     vbase_seen_;     /* Current record: a virtual
+                                               base field was read. */
+  uint32_t                 vptr_fields_;    /* Current record: TY_VPTR fields
+                                               so far. */
+  uint32_t                 layout_class_;   /* A class whose layout facts must
+                                               follow its body directly. */
+  uint8_t                  layout_expect_;  /* 0 none; 1 CLASS_MANGLE (or
+                                               CLASS_INFO); 2 CLASS_INFO; 3
+                                               CLASS_BASES. */
   std::vector<a_fn_state>  fns_;
   std::vector<bool>        static_own_ids_;  /* Per open STATIC_INIT. */
   std::vector<uint32_t>    agg_targets_;

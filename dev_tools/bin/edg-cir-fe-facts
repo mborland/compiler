@@ -1,0 +1,1487 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Check the layout facts of the front end against clang's.
+
+The CIR back end gets its class layout from the front end (cpfe-cir has
+DO_IL_LOWERING=0): offsets, the primary base, virtual function numbers and the
+lists of overriding functions of the IL.  The M4 library builds Itanium vtables
+from these facts, so they must agree with clang's.  This tool reads them from
+the debug front end's `--il_display` and compares them with
+`clang -cc1 -fdump-vtable-layouts -fdump-record-layouts` (edg-cir-abi-diff's
+dump) and clang's LLVM IR.
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-cir (the debug cpfe-cir) and with the box's clang:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-fe-facts check F.cpp
+  ... facts F.cpp            # the FE facts of every polymorphic class
+  ... facts --il-file IL.txt # facts of a saved --il_display output
+  ... check F.cpp [G.cpp ..] # compare with clang; one table row per file
+  ... check --list FILES.txt # the files are listed in FILES.txt
+  ... --self-test            # no front end or clang needed
+
+Options of `facts` and `check`: --std (default c++17), --fe-opts "...", -v
+(print every agreement too).
+
+What is compared, per class that has virtual functions or a virtual base:
+
+  record   size, align, nvsize, nvalign (clang's sizeof, align, nvsize,
+           nvalign), the data size (computed as the writer does) for classes
+           that are not POD for layout, the primary base (and whether it is
+           virtual), the offset of every direct non-virtual and every virtual
+           base, the offset of the vptr and the class whose vptr it is.
+  slots    each virtual function the class declares: the front end's
+           number.virtual_function against clang's "VTable indices" entry.
+           The mapping (found empirically, see
+           cir_src/doc/research/m4_fe_facts.md) is the identity: the front
+           end numbers the slots of the primary vtable from 0 (the first
+           virtual function), clang indexes them from the address point; a
+           virtual destructor takes the number n of its complete variant and
+           n+1 of its deleting one, and the next function gets n+2.
+  overriders  for every vtable subobject (the class itself and each base with
+           its own vptr, at its offset) and every slot of it: the final
+           overrider clang puts there against the one the front end's lists
+           give (the overriding-virtual-function entries of the base class
+           entry; the function itself if none).
+  key      the key function (clang's rule: the first virtual function that
+           is not pure, not implicit and not inline at the class definition,
+           none if it is later defined inline) and whether clang emits the
+           vtable as a definition, a declaration or as linkonce_odr
+           accordingly (only for classes whose vtable is in clang's IR).
+
+Cases that exercise one rule each (numbering, non-primary overriders,
+repeated bases, covariant returns, key functions) are in
+dev_tools/cir-fe-facts-cases/.  `facts` prints, per class, what the writer will
+get from the front end.
+
+Exit status: 0 if there is no disagreement, 1 if there is one, 2 for a setup
+problem.
+'''
+
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+
+# ---------------------------------------------------------------------------
+# Part 1: the --il_display text.
+
+_HEADER = re.compile(
+  r'^(?P<scope>\S+-scope) (?P<kind>[\w-]+)@(?P<addr>[0-9a-z]+)$')
+_FIELD = re.compile(r'^(?P<key>[A-Za-z_][\w.]*):\s*(?P<value>.*)$')
+_NESTED = re.compile(r'^  (?P<key>[A-Za-z_][\w.]*):\s*(?P<value>.*)$')
+_POINTER = re.compile(
+  r'^(?P<scope>\S+-scope) (?P<kind>[\w-]+)@(?P<addr>[0-9a-z]+)'
+  r'(?:: (?P<label>.*))?$')
+
+
+class Entry:
+  '''One IL entry: its kind, address and fields (nested ones as "a.b").'''
+  def __init__(self, kind: str, addr: str) -> None:
+    self.kind = kind
+    self.addr = addr
+    self.fields: Dict[str, str] = {}
+
+  def get(self, key: str, default: str = '') -> str:
+    return self.fields.get(key, default)
+
+  def flag(self, key: str) -> bool:
+    return self.fields.get(key) == 'TRUE'
+
+  def number(self, key: str, default: int = 0) -> int:
+    value = self.fields.get(key, '')
+    return int(value) if re.fullmatch(r'-?\d+', value) else default
+
+
+def parse_il(text: str) -> Dict[str, Entry]:
+  '''The entries of an --il_display text by address.
+
+  Only the header lines of an entry start in column 0 with "<scope>-scope
+  <kind>@<address>"; its fields follow ("key: value", the value on the next
+  line if the key is long), then a blank line.  Text before the first entry
+  (diagnostics) is ignored.
+  '''
+  entries: Dict[str, Entry] = {}
+  current: Optional[Entry] = None
+  pending_key = ''
+  top_key = ''
+  for line in text.splitlines():
+    match = _HEADER.match(line)
+    if match:
+      current = Entry(match.group('kind'), match.group('addr'))
+      entries[current.addr] = current
+      pending_key = ''
+      top_key = ''
+      continue
+    if current is None:
+      continue
+    if not line.strip():
+      current = None
+      continue
+    if pending_key and line.startswith(' ' * 10):
+      current.fields[pending_key] = line.strip()
+      pending_key = ''
+      continue
+    nested = _NESTED.match(line)
+    if nested and top_key:
+      key = f"{top_key}.{nested.group('key')}"
+      if nested.group('value'):
+        current.fields[key] = nested.group('value').strip()
+      else:
+        pending_key = key
+      continue
+    field = _FIELD.match(line)
+    if field and not line.startswith(' '):
+      top_key = field.group('key')
+      value = field.group('value').strip()
+      if value:
+        current.fields[top_key] = value
+      else:
+        pending_key = top_key
+  return entries
+
+
+def pointer(value: str) -> Optional[Tuple[str, str, str]]:
+  '''(kind, address, label) of a pointer value; None for NULL or a value
+  that is not a pointer.'''
+  match = _POINTER.match(value)
+  if not match:
+    return None
+  return match.group('kind'), match.group('addr'), match.group('label') or ''
+
+
+# ---------------------------------------------------------------------------
+# Part 2: the facts of the classes.
+
+class FeFunction:
+  '''A virtual function declared in a class.'''
+  def __init__(self, entry: Entry, owner: str, name: str,
+               params: str) -> None:
+    self.entry = entry
+    self.owner = owner
+    self.name = name
+    self.params = params
+    self.number = entry.number('number.virtual_function', -1)
+    self.dtor = entry.get('special_kind') == 'sfk_destructor'
+    self.pure = entry.flag('pure_virtual')
+    self.implicit = entry.flag('compiler_generated')
+    self.inline_in_class = entry.flag('inline_in_class_definition')
+    self.inline = entry.flag('is_inline')
+    self.defined = entry.flag('defined')
+    self.deleted = entry.flag('is_deleted')
+    self.covariant = entry.flag('covariant_return_virtual_override')
+    self.override = entry.flag('overrides_base_member')
+
+  def key(self) -> str:
+    return f"{self.owner}::{self.name}({self.params})"
+
+
+class Overrider:
+  '''One entry of a base class entry's overriding-virtual-function list.'''
+  def __init__(self, over: FeFunction, primary: FeFunction,
+               holder: Optional[str], return_adjust: Optional[str]) -> None:
+    self.over = over
+    self.primary = primary
+    self.holder = holder            # base class of the overrider, None: D
+    self.return_adjust = return_adjust
+
+
+class FeBase:
+  def __init__(self, entry: Entry, name: str) -> None:
+    self.entry = entry
+    self.name = name
+    self.offset = entry.number('offset')
+    self.virtual = entry.flag('is_virtual')
+    self.direct = entry.flag('direct')
+    self.shares_vfi = entry.flag('shares_virtual_function_info')
+    self.empty = entry.flag('is_optimized_empty_base')
+    self.overriders: List[Overrider] = []
+    self.type_addr = ''
+
+
+class FeClass:
+  '''The facts of a class type.'''
+  def __init__(self, entry: Entry, name: str) -> None:
+    self.entry = entry
+    self.name = name
+    self.addr = entry.addr
+    self.size = entry.number('size')
+    self.align = entry.number('alignment')
+    self.kind = entry.get('kind')
+    self.dynamic = entry.flag(
+      'any_virtual_functions_including_in_base_classes')
+    self.own_virtual = entry.flag('any_virtual_functions')
+    self.nvsize = 0
+    self.nvalign = 0
+    self.highest = 0
+    self.vptr_offset = 0
+    self.vptr_base: Optional[str] = None
+    self.primary: Optional[str] = None
+    self.primary_entry: Optional[FeBase] = None
+    self.primary_virtual = False
+    self.bases: List[FeBase] = []
+    self.functions: List[FeFunction] = []
+    self.fields: List[Entry] = []
+    self.abstract = False
+    self.has_vbases = entry.flag('any_virtual_base_classes')
+
+
+class FeFacts:
+  '''All classes of an IL display.'''
+  def __init__(self, entries: Dict[str, Entry]) -> None:
+    self.entries = entries
+    self.labels: Dict[str, str] = {}
+    for entry in entries.values():
+      for value in entry.fields.values():
+        found = pointer(value)
+        if found is not None and found[0] == 'type' and found[2] and \
+            found[1] not in self.labels:
+          self.labels[found[1]] = found[2]
+    self.classes: Dict[str, FeClass] = {}
+    self.functions: Dict[str, FeFunction] = {}
+    self._build()
+
+  def label_name(self, value: str) -> str:
+    '''The identifier of a name pointer ('file-scope id-name@..: "f"').'''
+    found = pointer(value)
+    if found is None:
+      return ''
+    return found[2].strip('"')
+
+  def type_name(self, addr: str) -> str:
+    '''The name of a class type as a pointer to it prints it (qualified:
+    "N::A", "TT<int>"); the plain name if nothing points to it.'''
+    entry = self.entries.get(addr)
+    if entry is None:
+      return '?'
+    label = self.labels.get(addr)
+    if label:
+      return re.sub(r'\b(?:struct|class|union) ', '', label)
+    return self.label_name(entry.get('source_corresp.name')) or \
+      f"<unnamed {addr[-6:]}>"
+
+  def _function(self, addr: str) -> Optional[FeFunction]:
+    if addr in self.functions:
+      return self.functions[addr]
+    entry = self.entries.get(addr)
+    if entry is None or entry.kind != 'routine':
+      return None
+    ftype = pointer(entry.get('type'))
+    params = ''
+    owner = '?'
+    if ftype is not None:
+      label = ftype[2]
+      params = signature_params(label)
+      type_entry = self.entries.get(ftype[1])
+      if type_entry is not None:
+        this_class = pointer(type_entry.get('this_class'))
+        if this_class is not None:
+          owner = self.type_name(this_class[1])
+    function = FeFunction(entry, owner,
+                          self.label_name(entry.get('source_corresp.name')),
+                          params)
+    self.functions[addr] = function
+    return function
+
+  def _build(self) -> None:
+    for entry in list(self.entries.values()):
+      if entry.kind != 'type' or entry.get('kind') not in (
+          'tk_struct', 'tk_class', 'tk_union'):
+        continue
+      supplement = pointer(entry.get('extra_info'))
+      if supplement is None or supplement[1] not in self.entries:
+        continue
+      sup = self.entries[supplement[1]]
+      cls = FeClass(entry, self.type_name(entry.addr))
+      cls.nvsize = sup.number('size_without_virtual_base_classes')
+      cls.nvalign = sup.number('alignment_without_virtual_base_classes')
+      cls.highest = sup.number('highest_virtual_function_number')
+      if cls.highest >= 65535:
+        cls.highest = -1     # no virtual function (unsigned -1)
+      cls.vptr_offset = sup.number('virtual_function_info_offset')
+      vbase = pointer(sup.get('virtual_function_info_base_class'))
+      if vbase is not None:
+        cls.vptr_base = self.base_name(vbase[1])
+      primary = pointer(sup.get('primary_base_class'))
+      primary_addr = primary[1] if primary is not None else ''
+      if primary is not None:
+        cls.primary = self.base_name(primary[1])
+        cls.primary_virtual = self.entries[primary[1]].flag('is_virtual')
+      cls.abstract = entry.flag('abstract')
+      # Bases: the base_classes list is the full one (direct and indirect).
+      seen = set()
+      head = pointer(sup.get('base_classes'))
+      while head is not None and head[1] not in seen:
+        seen.add(head[1])
+        base_entry = self.entries.get(head[1])
+        if base_entry is None:
+          break
+        base_type = pointer(base_entry.get('type'))
+        base = FeBase(base_entry, self.type_name(base_type[1])
+                      if base_type else '?')
+        if base_type:
+          base.type_addr = base_type[1]
+        cls.bases.append(base)
+        if head[1] == primary_addr:
+          cls.primary_entry = base
+        head = pointer(base_entry.get('next'))
+      # Declared virtual functions: the routines of the class scope.
+      scope = pointer(sup.get('assoc_scope'))
+      routine = None
+      if scope is not None and scope[1] in self.entries:
+        routine = pointer(self.entries[scope[1]].get('routines'))
+      seen = set()
+      while routine is not None and routine[1] not in seen:
+        seen.add(routine[1])
+        function = self._function(routine[1])
+        if function is not None and function.entry.flag('is_virtual'):
+          cls.functions.append(function)
+        routine = pointer(self.entries[routine[1]].get('next')) \
+          if routine[1] in self.entries else None
+      # Fields (for the data size).
+      field = pointer(entry.get('field_list'))
+      seen = set()
+      while field is not None and field[1] not in seen and \
+          field[1] in self.entries:
+        seen.add(field[1])
+        cls.fields.append(self.entries[field[1]])
+        field = pointer(self.entries[field[1]].get('next'))
+      self.classes[entry.addr] = cls
+    # Overriding lists need all functions.
+    for cls in self.classes.values():
+      for base in cls.bases:
+        head = pointer(base.entry.get('variant.overriding_virtual_functions'))
+        seen = set()
+        while head is not None and head[1] not in seen and \
+            head[1] in self.entries:
+          seen.add(head[1])
+          item = self.entries[head[1]]
+          over = pointer(item.get('overriding_function'))
+          prim = pointer(item.get('primary_function'))
+          holder = pointer(item.get('base_class'))
+          radj = pointer(item.get('return_adjustment_base_class'))
+          if over and prim:
+            ofn, pfn = self._function(over[1]), self._function(prim[1])
+            if ofn and pfn:
+              base.overriders.append(Overrider(
+                ofn, pfn, self.base_name(holder[1]) if holder else None,
+                self.base_name(radj[1]) if radj else None))
+          head = pointer(item.get('next'))
+
+  def base_name(self, addr: str) -> str:
+    entry = self.entries.get(addr)
+    if entry is None:
+      return '?'
+    found = pointer(entry.get('type'))
+    return self.type_name(found[1]) if found else '?'
+
+  def by_name(self) -> Dict[str, List[FeClass]]:
+    result: Dict[str, List[FeClass]] = {}
+    for cls in self.classes.values():
+      result.setdefault(cls.name, []).append(cls)
+    return result
+
+
+def signature_params(label: str) -> str:
+  '''The parameter list and cv-qualifier of a function type label ("int
+  (int, char) const noexcept" -> "int,char;const"; the exception
+  specification is dropped).'''
+  depth = 0
+  start = -1
+  for index, char in enumerate(label):
+    if char == '(':
+      if depth == 0:
+        start = index
+      depth += 1
+    elif char == ')':
+      depth -= 1
+      if depth == 0 and start >= 0:
+        params = label[start + 1:index]
+        tail = label[index + 1:]
+        return normalize_params(params, tail)
+  return ''
+
+
+def split_top_level(text: str) -> List[str]:
+  '''The comma separated parts of a parameter list (not inside <>, () or []).'''
+  parts, depth, current = [], 0, ''
+  for char in text:
+    if char in '<([':
+      depth += 1
+    elif char in '>)]':
+      depth -= 1
+    if char == ',' and depth == 0:
+      parts.append(current)
+      current = ''
+    else:
+      current += char
+  if current.strip() or parts:
+    parts.append(current)
+  return parts
+
+
+def normalize_params(text: str, tail: str = '') -> str:
+  '''A parameter list in a form both sides print alike: no namespace
+  qualification, "struct "/"class " dropped, spaces collapsed, and the
+  function's cv-qualifiers after it.'''
+  text = re.sub(r'\s+', ' ', text.strip())
+  if text == 'void':
+    text = ''
+  text = re.sub(r'\b(?:struct|class|union|enum) ', '', text)
+  text = re.sub(r'\b(?:\w+::)+', '', text)
+  # Top-level cv-qualifiers of a by-value parameter are not part of the type.
+  parts = []
+  for part in split_top_level(text):
+    if '*' not in part and '&' not in part:
+      part = re.sub(r'^(?:(?:const|volatile) )+', '', part.strip())
+    parts.append(part.strip())
+  text = ', '.join(parts)
+  quals = ' '.join(w for w in re.split(r'\s+', tail.strip())
+                   if w in ('const', 'volatile', '&', '&&'))
+  return text.replace(', ', ',') + (f";{quals}" if quals else '')
+
+
+def key_function(cls: FeClass) -> Optional[FeFunction]:
+  '''The key function of a class, by clang's rule: the first virtual function
+  that is not pure, not implicit and not inline at the class definition
+  (declared inline, or with its body in the class); if that function is later
+  defined inline there is no key function at all (the vtable is emitted
+  everywhere).  The front end's routine entry merges a later `inline`, so it
+  cannot tell an inline-later function from one declared inline in the class
+  (see the research note): this function treats the front end's inline flag
+  as "inline at the class definition" for the choice, and reports a later
+  inline definition (flag set, no in-class mark) as "no key function".'''
+  if not cls.own_virtual:
+    return None
+  for function in cls.functions:
+    if function.pure or function.deleted or function.implicit:
+      continue
+    if function.inline_in_class:
+      continue
+    if function.inline:
+      # Either declared inline in the class (skip it) or defined inline
+      # later (no key function); the front end does not tell.  Use clang's
+      # outcome for the second case: stop here.
+      return None
+    return function
+  return None
+
+
+def is_data_size_exact(cls: FeClass) -> bool:
+  '''Whether the data size formula applies: a class that is certainly not POD
+  for layout (dynamic, or with a base class).'''
+  return cls.dynamic or bool(cls.bases)
+
+
+def data_size(cls: FeClass, facts: FeFacts) -> int:
+  '''The Itanium data size of a class, as ecil_data_size_of_type computes it
+  (the end of the last non-empty non-virtual subobject).'''
+  result = 0
+  if cls.own_virtual and cls.vptr_base is None:
+    result = cls.vptr_offset + 8
+  for base in cls.bases:
+    if base.direct and not base.virtual and not base.empty:
+      bcls = facts.classes.get(base.type_addr)
+      bsize = bcls_data_size(bcls, facts) if bcls else 0
+      end = base.offset + bsize
+      if bsize and end > result:
+        result = end
+  for field in cls.fields:
+    ftype = pointer(field.get('type'))
+    size = type_size(facts, ftype[1]) if ftype else 0
+    if field.flag('is_bit_field'):
+      size = (field.number('offset_bit_remainder') +
+              field.number('bit_size') + 7) // 8
+    elif field.flag('has_no_unique_address_attribute') and ftype and \
+        ftype[1] in facts.classes:
+      size = bcls_data_size(facts.classes[ftype[1]], facts)
+      if field.flag('is_optimized_empty_class'):
+        size = 0
+    end = field.number('offset') + size
+    if size and end > result:
+      result = end
+  return result
+
+
+def bcls_data_size(cls: Optional[FeClass], facts: FeFacts) -> int:
+  if cls is None:
+    return 0
+  return data_size(cls, facts) if is_data_size_exact(cls) else cls.size
+
+
+def type_size(facts: FeFacts, addr: str) -> int:
+  entry = facts.entries.get(addr)
+  return entry.number('size') if entry is not None else 0
+
+
+# ---------------------------------------------------------------------------
+# Part 3: clang's side.
+
+def load_tool(name: str):
+  '''Import dev_tools/bin/<name> (a file without .py) as a module.'''
+  path = str(Path(__file__).resolve().with_name(name))
+  loader = importlib.machinery.SourceFileLoader(name.replace('-', '_'), path)
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+class ClangRecord:
+  def __init__(self, name: str) -> None:
+    self.name = name
+    self.sizeof = self.dsize = self.align = self.nvsize = self.nvalign = -1
+    self.vptr_offset: Optional[int] = None
+    self.vptr_class = ''
+    self.primary = ''
+    self.primary_virtual = False
+    self.bases: List[Tuple[str, int, bool]] = []   # (name, offset, virtual)
+
+
+class ClangVtable:
+  def __init__(self, name: str) -> None:
+    self.name = name
+    # the entries: (index, text); address points: [(class, offset, index)]
+    self.entries: List[Tuple[int, str]] = []
+    self.points: List[Tuple[str, int, int]] = []
+    self.indices: Dict[str, List[int]] = {}
+
+
+_REC_LINE = re.compile(
+  r'^(?P<off>\d+)(?::\S+)? \|(?P<rest>.*)$')
+_SIZES = re.compile(
+  r'sizeof=(\d+), dsize=(\d+), align=(\d+),\s*(?:\|)?\s*nvsize=(\d+), '
+  r'nvalign=(\d+)')
+
+
+def short_name(name: str) -> str:
+  '''A class name of clang's dump, without "struct ".'''
+  return re.sub(r'\b(?:struct|class|union) ', '', name.strip())
+
+
+def parse_clang(canonical_text: str) -> Tuple[Dict[str, ClangRecord],
+                                              Dict[str, ClangVtable]]:
+  '''The records and vtables of edg-cir-abi-diff's canonical text.'''
+  records: Dict[str, ClangRecord] = {}
+  vtables: Dict[str, ClangVtable] = {}
+  blocks: List[Tuple[str, List[str]]] = []
+  for line in canonical_text.splitlines():
+    if line.startswith('## '):
+      blocks.append((line[3:], []))
+    elif blocks:
+      blocks[-1][1].append(line)
+  for header, lines in blocks:
+    kind, _, rest = header.partition(' ')
+    if kind == 'record':
+      name = short_name(rest)
+      record = ClangRecord(name)
+      text = '\n'.join(lines)
+      match = _SIZES.search(text.replace('\n', ' '))
+      if match:
+        (record.sizeof, record.dsize, record.align, record.nvsize,
+         record.nvalign) = (int(g) for g in match.groups())
+      for line in lines:
+        match = _REC_LINE.match(line)
+        if not match:
+          continue
+        offset = int(match.group('off'))
+        body = match.group('rest')
+        indent = len(body) - len(body.lstrip(' ')) - 1
+        text = body.strip()
+        if indent != 2:
+          continue
+        pm = re.match(r'\((\S+) vtable pointer\)$', text)
+        if pm:
+          record.vptr_offset = offset
+          record.vptr_class = pm.group(1)
+          continue
+        bm = re.match(r'(?:(?:struct|class|union) )?(.*)$', text)
+        if bm:
+          rest = bm.group(1)
+          flags = ''
+          while True:
+            fm = re.search(r' \((primary virtual base|primary base|virtual '
+                           r'base|base|empty)\)$', rest)
+            if not fm:
+              break
+            flags = fm.group(1) + ' ' + flags
+            rest = rest[:fm.start()]
+          if 'base' not in flags:
+            continue
+          virtual = 'virtual' in flags
+          bname = short_name(rest)
+          if 'primary' in flags:
+            # A virtual base flagged "primary" can be the primary base of a
+            # nested base class (not of this class): only a flagged base at
+            # offset 0 is this class's, the non-virtual one if there are two.
+            if offset == 0 and (not record.primary or (
+                record.primary_virtual and not virtual)):
+              record.primary = bname
+              record.primary_virtual = virtual
+          record.bases.append((bname, offset, virtual))
+      records[name] = record
+    elif kind == 'vtable':
+      name = short_name(rest.split(' (')[0].strip("'"))
+      table = ClangVtable(name)
+      current = -1
+      for line in lines:
+        match = re.match(r'^(\d+) \| (.*)$', line)
+        if match:
+          current = int(match.group(1))
+          table.entries.append((current, match.group(2)))
+          continue
+        pm = re.match(r'^\s+-- \((.+), (-?\d+)\) vtable address --$', line)
+        if pm:
+          table.points.append((short_name(pm.group(1)), int(pm.group(2)),
+                               current + 1))
+        elif line.strip().startswith('['):
+          table.entries.append((current, line.strip()))
+      vtables[name] = table
+    elif kind == 'vtable-indices':
+      name = short_name(rest.split(' (')[0].strip("'"))
+      table = vtables.setdefault(name, ClangVtable(name))
+      for line in lines:
+        match = re.match(r'^(\d+) \| (.*)$', line)
+        if match:
+          table.indices.setdefault(clang_function_key(match.group(2)),
+                                   []).append(int(match.group(1)))
+  return records, vtables
+
+
+_ARGS = r'(?:<(?:[^<>]|<[^<>]*>)*>)?'
+_IDENT = r'[A-Za-z_]\w*' + _ARGS
+_QUALIFIED = re.compile(
+  r'(?P<owner>(?:' + _IDENT + r'::)*' + _IDENT + r')::'
+  r'(?P<name>~?[A-Za-z_]\w*|operator\b.*)$')
+
+
+def clang_function_key(text: str) -> str:
+  '''"Class::name(params)" of a clang function description ("int A::f(int)
+  const", "A *A::g()", "A::~A() [complete] [pure]"); the variant tag of a
+  destructor is kept as a suffix "#complete" or "#deleting".'''
+  tag = ''
+  text = re.sub(r' \[pure\]$', '', text.strip())
+  match = re.search(r' \[(complete|deleting)\]$', text)
+  if match:
+    tag = match.group(1)
+    text = text[:match.start()]
+  text = re.sub(r'\bmethod: .*$', '', text).strip()
+  depth = 0
+  open_at = close_at = -1
+  for index in range(len(text) - 1, -1, -1):
+    char = text[index]
+    if char == ')':
+      if depth == 0:
+        close_at = index
+      depth += 1
+    elif char == '(':
+      depth -= 1
+      if depth == 0:
+        open_at = index
+        break
+  if open_at < 0:
+    return text
+  head = text[:open_at].rstrip()
+  params = normalize_params(text[open_at + 1:close_at], text[close_at + 1:])
+  match = _QUALIFIED.search(head)
+  if match is None:
+    return f"?::{head}({params})"
+  owner = re.sub(r'\b(?:struct|class|union) ', '', match.group('owner'))
+  return f"{owner}::{match.group('name')}({params})" + \
+    (f"#{tag}" if tag else '')
+
+
+# ---------------------------------------------------------------------------
+# Part 4: the comparison.
+
+class Result:
+  '''Counts and disagreements of one file.'''
+  def __init__(self, path: str) -> None:
+    self.path = path
+    self.classes = 0
+    self.checks = 0
+    self.agree = 0
+    self.problems: List[Tuple[str, str]] = []   # (class, text)
+    self.notes: List[str] = []
+    self.skipped: List[str] = []
+    self.kinds: Dict[str, List[int]] = {}      # kind -> [checks, agree]
+
+  def count(self, kind: str, agree: bool) -> None:
+    '''Count a check that is made by hand.'''
+    self.checks += 1
+    entry = self.kinds.setdefault(kind, [0, 0])
+    entry[0] += 1
+    if agree:
+      entry[1] += 1
+      self.agree += 1
+
+  def check(self, cls: str, what: str, fe: object, clang: object,
+            verbose: bool = False) -> None:
+    self.checks += 1
+    entry = self.kinds.setdefault(
+      'slot' if what.startswith('slot of') else
+      'overrider' if what.startswith('vtable (') else
+      'key function linkage' if what.startswith('vtable linkage') else what,
+      [0, 0])
+    entry[0] += 1
+    if fe == clang:
+      entry[1] += 1
+      self.agree += 1
+    else:
+      self.problems.append((cls, f"{what}: front end {fe}, clang {clang}"))
+
+
+def compare_file(path: str, facts: FeFacts,
+                 records: Dict[str, ClangRecord],
+                 vtables: Dict[str, ClangVtable],
+                 ir_linkage: Dict[str, str]) -> Result:
+  '''Compare the front end's facts of one file with clang's.'''
+  result = Result(path)
+  by_name = facts.by_name()
+  for name, group in sorted(by_name.items()):
+    cls = group[0]
+    if not (cls.dynamic or cls.has_vbases):
+      continue
+    if len(group) > 1:
+      result.skipped.append(f"{name}: {len(group)} classes of this name")
+      continue
+    record = records.get(name)
+    if record is None:
+      result.skipped.append(f"{name}: no layout in clang's dump")
+      continue
+    result.classes += 1
+    check_record(result, facts, cls, record)
+    table = vtables.get(name)
+    if table is not None:
+      check_slots(result, facts, cls, table)
+      check_overriders(result, facts, cls, table, by_name)
+    check_key(result, cls, ir_linkage)
+  return result
+
+
+def check_record(result: Result, facts: FeFacts, cls: FeClass,
+                 record: ClangRecord) -> None:
+  n = cls.name
+  result.check(n, 'size', cls.size, record.sizeof)
+  result.check(n, 'align', cls.align, record.align)
+  result.check(n, 'nvsize', cls.nvsize, record.nvsize)
+  result.check(n, 'nvalign', cls.nvalign, record.nvalign)
+  if is_data_size_exact(cls) and not any(b.virtual for b in cls.bases):
+    # (clang's dsize of a class with virtual bases is that of the complete
+    # object; the front end side is the non-virtual part: not comparable.)
+    result.check(n, 'dsize', data_size(cls, facts), record.dsize)
+  if any(b[0].startswith('(') for b in record.bases):
+    # A base without a name of its own ("(anonymous struct at ...)"): the
+    # front end names it by its typedef; not compared.
+    result.skipped.append(f"{n}: a base class is unnamed in clang's dump")
+    return
+  result.check(n, 'primary base', cls.primary or '-', record.primary or '-')
+  if cls.primary:
+    result.check(n, 'primary base is virtual', cls.primary_virtual,
+                 record.primary_virtual)
+  # The vptr: its offset if the class has its own; else the primary base.
+  if cls.own_virtual and cls.vptr_base is None and cls.primary is None:
+    result.check(n, 'vptr offset', cls.vptr_offset,
+                 record.vptr_offset if record.vptr_offset is not None
+                 else 'none')
+  elif cls.dynamic and record.vptr_offset is not None and cls.primary:
+    result.check(n, 'vptr in the primary base', None, record.vptr_offset)
+  # Base offsets: direct non-virtual bases and every virtual base.
+  expected = {(b[0], b[1], b[2]) for b in record.bases}
+  seen = set()
+  for base in cls.bases:
+    if base.virtual or base.direct:
+      if base.empty and not base.virtual and base.offset == 0:
+        pass
+      seen.add((base.name, base.offset, base.virtual))
+  # Compare as sets, ignoring empty-base placement differences reported
+  # separately.
+  only_fe = sorted(seen - expected)
+  only_clang = sorted(expected - seen)
+  result.count('bases', not only_fe and not only_clang)
+  if only_fe or only_clang:
+    result.problems.append((n, f"bases (name, offset, virtual): front end "
+                               f"only {only_fe}, clang only {only_clang}"))
+
+
+def entry_slots(cls: FeClass, entries: List[FeFunction]) -> None:
+  return None
+
+
+def check_slots(result: Result, facts: FeFacts, cls: FeClass,
+                table: ClangVtable) -> None:
+  '''Each virtual function declared in the class: its number against clang's
+  "VTable indices" (the complete destructor's index for a destructor).'''
+  for function in cls.functions:
+    if function.implicit and function.dtor and function.number < 0:
+      continue
+    key = f"{function.owner}::{function.name}({function.params})"
+    if function.dtor:
+      candidates = table.indices.get(key + '#complete', [])
+    else:
+      candidates = table.indices.get(key, [])
+    if not candidates:
+      # A function of this class that clang does not index (it overrides a
+      # function of a non-primary base only, or is covariant...): report.
+      result.count('slot', False)
+      result.problems.append((cls.name, f"slot of {key}: front end number "
+                              f"{function.number}, not in clang's VTable "
+                              f"indices"))
+      continue
+    result.check(cls.name, f"slot of {key}", function.number, candidates[0])
+
+
+def final_overrider_fe(cls: FeClass, offset: int, base_cls: FeClass,
+                       number: int, facts: FeFacts) -> Optional[str]:
+  '''The final overrider the front end's lists give for slot `number` of the
+  vtable group at `offset` of class `cls` that belongs to `base_cls` (the
+  class itself at offset 0, or a base class entry).
+
+  The function of the slot is the one numbered `number` in base_cls or
+  inherited from its primary base chain; it is declared in a class K (the
+  owner).  The lists of overriding functions are on the base class entry of
+  K at this offset: the entry's items whose primary function is the slot's
+  function replace it; the most derived overrider wins.  If K is `cls` itself
+  the function is its own.
+  '''
+  function = slot_function(base_cls, number, facts)
+  if function is None:
+    return None
+  if function.owner == cls.name and offset == 0:
+    return function.key()
+  entry = None
+  for base in cls.bases:
+    if base.name == function.owner and base.offset == offset:
+      entry = base
+      break
+  if entry is None:
+    # A function reached through a virtual primary base: the virtual base
+    # has one subobject in the class, wherever the base that leads to it
+    # puts its own copy.
+    virtuals = [b for b in cls.bases
+                if b.name == function.owner and b.virtual]
+    if len(virtuals) == 1:
+      entry = virtuals[0]
+  if entry is None:
+    return None
+  found = [item for item in entry.overriders
+           if item.primary.entry.addr == function.entry.addr]
+  if not found:
+    return function.key()
+  best = found[0]
+  for item in found[1:]:
+    # A later (more derived) overrider: its class derives from the best's.
+    if derives_from(facts, item.over.owner, best.over.owner):
+      best = item
+  return best.over.key()
+
+
+def derives_from(facts: FeFacts, derived: str, base: str) -> bool:
+  for cls in facts.classes.values():
+    if cls.name == derived:
+      return any(b.name == base for b in cls.bases)
+  return False
+
+
+def slot_function(cls: FeClass, number: int, facts: FeFacts
+                  ) -> Optional[FeFunction]:
+  '''The function that has virtual function number `number` in the class: one
+  it declares, or one inherited through its primary base chain.'''
+  for function in cls.functions:
+    if function.number == number or (function.dtor and
+                                     function.number + 1 == number):
+      return function
+  if cls.primary_entry is not None:
+    bcls = facts.classes.get(cls.primary_entry.type_addr)
+    if bcls is not None:
+      return slot_function(bcls, number, facts)
+  return None
+
+
+def check_overriders(result: Result, facts: FeFacts, cls: FeClass,
+                     table: ClangVtable,
+                     by_name: Dict[str, List[FeClass]]) -> None:
+  '''For each address point of clang's vtable of the class, the final
+  overrider of every slot against the front end's.'''
+  # Entries by index.
+  by_index: Dict[int, str] = {}
+  for index, text in table.entries:
+    if re.match(r'^\[', text):
+      continue
+    by_index.setdefault(index, text)
+  for point_class, offset, start in table.points:
+    group = by_name.get(point_class)
+    if not group or len(group) != 1:
+      continue
+    base_cls = group[0]
+    if not base_cls.dynamic:
+      continue
+    if point_class == cls.name and offset == 0:
+      base = None
+    else:
+      candidates = [b for b in cls.bases if b.name == point_class and
+                    b.offset == offset]
+      if not candidates:
+        result.count('overrider', False)
+        result.problems.append((cls.name, f"vtable address ({point_class}, "
+                                f"{offset}): no such base in the front end"))
+        continue
+      base = candidates[0]
+    # Slots 0 .. highest of the base class.
+    for number in range(0, base_cls.highest + 1):   # (none if highest < 0)
+      expected = by_index.get(start + number)
+      if expected is None:
+        continue
+      fe = final_overrider_fe(cls, offset, base_cls, number, facts)
+      clang_key = clang_function_key(expected)
+      slot_fn = slot_function(base_cls, number, facts)
+      tag = ''
+      if slot_fn is not None and slot_fn.dtor:
+        tag = '#complete' if (slot_fn.number == number) else '#deleting'
+      fe_full = (fe + tag) if fe else None
+      if fe is None:
+        result.count('overrider', False)
+        result.problems.append((cls.name, f"vtable ({point_class}, {offset}) "
+                                f"slot {number}: no function in the front "
+                                f"end, clang has {clang_key}"))
+        continue
+      result.check(cls.name,
+                   f"vtable ({point_class}, {offset}) slot {number}",
+                   fe_full, clang_key)
+
+
+def check_key(result: Result, cls: FeClass,
+              ir_linkage: Dict[str, str]) -> None:
+  '''The key function and clang's linkage of the vtable.'''
+  if not cls.own_virtual:
+    return
+  key = key_function(cls)
+  linkage = ir_linkage.get(cls.name)
+  if linkage is None:
+    result.notes.append(f"{cls.name}: key function "
+                        f"{key.key() if key else 'none'} (no vtable in the "
+                        f"IR: not emitted)")
+    return
+  if key is None:
+    expected = 'linkonce_odr'
+  elif key.defined:
+    expected = 'external-definition'
+  else:
+    expected = 'external-declaration'
+  actual = 'linkonce_odr' if linkage == 'linkonce_odr' else (
+    'external-declaration' if linkage == 'external-decl' else
+    'external-definition' if linkage in ('external', 'weak_odr') else linkage)
+  if linkage == 'available_externally':
+    actual = 'available_externally'
+  result.check(cls.name,
+               f"vtable linkage (key function "
+               f"{key.key() if key else 'none'})", expected, actual)
+
+
+def ir_vtable_linkage(ir: str) -> Dict[str, str]:
+  '''The linkage of the vtables in clang's IR, by class name: "external" for
+  a definition, "external-decl" for a declaration, else the linkage word.'''
+  result: Dict[str, str] = {}
+  for line in ir.splitlines():
+    match = re.match(r'^@(_ZTV\w+) = (.*)$', line)
+    if not match:
+      continue
+    name = demangle_simple(match.group(1)[4:])
+    if name is None:
+      continue
+    rest = match.group(2)
+    words = rest.split()
+    linkage = 'external'
+    for word in words:
+      if word in ('linkonce_odr', 'weak_odr', 'available_externally',
+                  'internal', 'private', 'weak', 'linkonce'):
+        linkage = word
+        break
+      if word in ('constant', 'global'):
+        break
+    if words and words[0] == 'external':
+      linkage = 'external-decl'
+    result[name] = linkage
+  return result
+
+
+def demangle_simple(text: str) -> Optional[str]:
+  '''The last component of a plain or nested source name ("1A", "N2ns1AE");
+  None for anything with template arguments or substitutions.'''
+  if text.startswith('N') and text.endswith('E'):
+    text = text[1:-1]
+  names = []
+  position = 0
+  while position < len(text):
+    match = re.match(r'(\d+)', text[position:])
+    if not match:
+      return None
+    length = int(match.group(1))
+    start = position + len(match.group(1))
+    names.append(text[start:start + length])
+    position = start + length
+  return names[-1] if names else None
+
+
+# ---------------------------------------------------------------------------
+# Part 5: running things.
+
+class Runner:
+  '''Runs the front end and clang.'''
+  def __init__(self, root: Path, std: str, fe_build: str, fe_opts: List[str],
+               clang: str, triple: str = 'x86_64-linux-gnu') -> None:
+    self.root = root
+    self.std = std
+    self.fe_build = fe_build
+    self.fe_opts = fe_opts
+    self.triple = triple
+    self.abi = load_tool('edg-cir-abi-diff')
+    self.clang = self.abi.clang_binary(clang)
+
+  def fe_il(self, source: Path, work: Path) -> str:
+    '''The --il_display output of cpfe-cir for a file.'''
+    env = dict(os.environ)
+    exports = load_exports(self.root / self.fe_build / 'environment.sh')
+    env.update(exports)
+    env['EDG_BASE'] = str(self.root / 'bases/docker/cir-env/gcc')
+    env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+    env['CPFE'] = exports['CPFE_CIR']
+    env['EDG_USE_SYSTEM_HEADERS'] = '1'
+    local = work / source.name
+    shutil.copy2(source, local)
+    for extra in source.parent.glob('*.h'):
+      shutil.copy2(extra, work / extra.name)
+    proc = subprocess.run(
+      [str(self.root / 'util/eccp.sh'), '-S', '-tused', f"--{self.std}",
+       '--il_display', *self.fe_opts, local.name], cwd = work, env = env,
+      stdout = subprocess.PIPE, stderr = subprocess.STDOUT, text = True,
+      timeout = 600)
+    return proc.stdout
+
+  def clang_dump(self, source: Path) -> Tuple[int, str]:
+    return self.abi.run_clang_dump(source, self.clang, self.triple, self.std,
+                                   [])
+
+  def clang_ir(self, source: Path) -> str:
+    command = [self.clang, '-cc1', '-triple', self.triple,
+               f"-std={self.std}", '-fcxx-exceptions', '-fexceptions',
+               *self.abi.include_options(self.clang), '-emit-llvm', '-o', '-',
+               str(source)]
+    proc = subprocess.run(command, stdout = subprocess.PIPE,
+                          stderr = subprocess.DEVNULL, text = True)
+    return proc.stdout
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  exports: Dict[str, str] = {}
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  return exports
+
+
+def check_one(runner: Runner, source: Path) -> Tuple[Result, str]:
+  '''Compare one file; returns (result, a message for a setup failure).'''
+  with tempfile.TemporaryDirectory(prefix = 'edg-cir-fe-facts.') as tmp:
+    work = Path(tmp)
+    il = runner.fe_il(source, work)
+    entries = parse_il(il)
+    if not entries:
+      return Result(str(source)), 'the front end printed no IL'
+    facts = FeFacts(entries)
+    code, dump = runner.clang_dump(source)
+    if code != 0:
+      return Result(str(source)), f"clang failed ({code})"
+    records, vtables = parse_clang(runner.abi.canonical(dump))
+    linkage = ir_vtable_linkage(runner.clang_ir(source))
+  return compare_file(str(source), facts, records, vtables, linkage), ''
+
+
+def print_facts(facts: FeFacts) -> None:
+  '''The facts of every dynamic class as text.'''
+  for cls in sorted(facts.classes.values(), key = lambda c: c.entry.addr):
+    if not (cls.dynamic or cls.has_vbases):
+      continue
+    print(f"class {cls.name}: size {cls.size} align {cls.align} nvsize "
+          f"{cls.nvsize} nvalign {cls.nvalign}"
+          + (f" dsize {data_size(cls, facts)}"
+             if is_data_size_exact(cls) else ''))
+    print(f"  vptr offset {cls.vptr_offset}"
+          f"{' in base ' + cls.vptr_base if cls.vptr_base else ' (own)'}; "
+          f"primary base {cls.primary or '-'}"
+          f"{' (virtual)' if cls.primary_virtual else ''}; highest virtual "
+          f"function number {cls.highest}; own virtual functions "
+          f"{cls.own_virtual}")
+    for base in cls.bases:
+      print(f"  base {base.name} offset {base.offset}"
+            f"{' virtual' if base.virtual else ''}"
+            f"{' direct' if base.direct else ''}"
+            f"{' shares-vptr' if base.shares_vfi else ''}"
+            f"{' empty' if base.empty else ''}")
+      for item in base.overriders:
+        print(f"    {item.primary.key()} -> {item.over.key()}"
+              f"{' (in base ' + item.holder + ')' if item.holder else ''}"
+              + (f" return adjustment to {item.return_adjust}"
+                 if item.return_adjust else ''))
+    for function in cls.functions:
+      flags = [f for f, on in (('pure', function.pure),
+                               ('implicit', function.implicit),
+                               ('inline-in-class', function.inline_in_class),
+                               ('inline', function.inline),
+                               ('defined', function.defined),
+                               ('covariant', function.covariant),
+                               ('overrides', function.override)) if on]
+      print(f"  virtual {function.key()} number {function.number}"
+            f"{' dtor' if function.dtor else ''} {' '.join(flags)}")
+    key = key_function(cls)
+    print(f"  key function: {key.key() if key else 'none'}")
+
+
+# A hand-made --il_display text for the self-test: struct A { virtual int
+# f(); virtual ~A(); }; struct B : A { int f(); };
+SAMPLE_IL = '''warning: something
+file-scope type@a1
+source_corresp:
+  name:                  file-scope id-name@n1: "A"
+kind:                    tk_struct
+size:                    8
+alignment:               8
+extra_info:              file-scope class-type-supplement@s1
+any_virtual_functions:   TRUE
+any_virtual_functions_including_in_base_classes:
+                         TRUE
+
+file-scope class-type-supplement@s1
+base_classes:            NULL
+primary_base_class:      NULL
+size_without_virtual_base_classes:
+                         8
+alignment_without_virtual_base_classes:
+                         8
+highest_virtual_function_number:
+                         2
+virtual_function_info_offset:
+                         0
+assoc_scope:             file-scope scope@sc1
+
+file-scope scope@sc1
+routines:                file-scope routine@r1: f
+
+file-scope routine@r1
+source_corresp:
+  name:                  file-scope id-name@n2: "f"
+next:                    file-scope routine@r2: ~A
+type:                    file-scope type@t1: int ()
+is_virtual:              TRUE
+defined:                 TRUE
+number.virtual_function: 0
+
+file-scope type@t1
+kind:                    tk_routine
+this_class:              file-scope type@a1: A
+
+file-scope routine@r2
+source_corresp:
+  name:                  file-scope id-name@n3: "~A"
+next:                    NULL
+type:                    file-scope type@t2: void () noexcept
+special_kind:            sfk_destructor
+is_virtual:              TRUE
+compiler_generated:      TRUE
+number.virtual_function: 1
+
+file-scope type@t2
+kind:                    tk_routine
+this_class:              file-scope type@a1: A
+
+file-scope type@b1
+source_corresp:
+  name:                  file-scope id-name@n4: "B"
+kind:                    tk_struct
+size:                    8
+alignment:               8
+extra_info:              file-scope class-type-supplement@s2
+any_virtual_functions:   TRUE
+any_virtual_functions_including_in_base_classes:
+                         TRUE
+
+file-scope class-type-supplement@s2
+base_classes:            file-scope base-class@bc1: A (in B)
+primary_base_class:      file-scope base-class@bc1: A (in B)
+size_without_virtual_base_classes:
+                         8
+alignment_without_virtual_base_classes:
+                         8
+highest_virtual_function_number:
+                         2
+virtual_function_info_offset:
+                         0
+virtual_function_info_base_class:
+                         file-scope base-class@bc1: A (in B)
+assoc_scope:             file-scope scope@sc2
+
+file-scope scope@sc2
+routines:                file-scope routine@r3: f
+
+file-scope routine@r3
+source_corresp:
+  name:                  file-scope id-name@n2: "f"
+next:                    NULL
+type:                    file-scope type@t3: int ()
+is_virtual:              TRUE
+defined:                 TRUE
+number.virtual_function: 0
+
+file-scope type@t3
+kind:                    tk_routine
+this_class:              file-scope type@b1: B
+
+file-scope base-class@bc1
+next:                    NULL
+type:                    file-scope type@a1: A
+direct:                  TRUE
+is_virtual:              FALSE
+shares_virtual_function_info:
+                         TRUE
+offset:                  0
+variant.overriding_virtual_functions:
+                         file-scope overriding-virtual-function@o1
+
+file-scope overriding-virtual-function@o1
+next:                    NULL
+overriding_function:     file-scope routine@r3: f
+primary_function:        file-scope routine@r1: f
+base_class:              NULL
+'''
+
+SAMPLE_CLANG = '''## record struct A
+0 | struct A
+0 |   (A vtable pointer)
+  | [sizeof=8, dsize=8, align=8,
+  |  nvsize=8, nvalign=8]
+## record struct B
+0 | struct B
+0 |   struct A (primary base)
+0 |     (A vtable pointer)
+  | [sizeof=8, dsize=8, align=8,
+  |  nvsize=8, nvalign=8]
+## vtable A (4 entries)
+0 | offset_to_top (0)
+1 | A RTTI
+    -- (A, 0) vtable address --
+2 | int A::f()
+3 | A::~A() [complete]
+4 | A::~A() [deleting]
+## vtable B (4 entries)
+0 | offset_to_top (0)
+1 | B RTTI
+    -- (A, 0) vtable address --
+    -- (B, 0) vtable address --
+2 | int B::f()
+3 | A::~A() [complete]
+4 | A::~A() [deleting]
+## vtable-indices A (3 entries)
+0 | int A::f()
+1 | A::~A() [complete]
+2 | A::~A() [deleting]
+## vtable-indices B (1 entries)
+0 | int B::f()
+'''
+
+
+class SelfTest(unittest.TestCase):
+  def test_parse_il(self) -> None:
+    entries = parse_il(SAMPLE_IL)
+    self.assertEqual(entries['a1'].get('size'), '8')
+    self.assertEqual(entries['n1'.replace('n1', 'a1')].get(
+      'source_corresp.name'), 'file-scope id-name@n1: "A"')
+    self.assertEqual(entries['s1'].get('highest_virtual_function_number'),
+                     '2')
+    self.assertTrue(entries['a1'].flag(
+      'any_virtual_functions_including_in_base_classes'))
+    self.assertEqual(pointer('file-scope routine@r1: f'),
+                     ('routine', 'r1', 'f'))
+    self.assertIsNone(pointer('NULL'))
+
+  def test_facts(self) -> None:
+    facts = FeFacts(parse_il(SAMPLE_IL))
+    by_name = facts.by_name()
+    a, b = by_name['A'][0], by_name['B'][0]
+    self.assertEqual([(f.name, f.number, f.dtor) for f in a.functions],
+                     [('f', 0, False), ('~A', 1, True)])
+    self.assertEqual(b.primary, 'A')
+    self.assertEqual(b.vptr_base, 'A')
+    self.assertEqual(len(b.bases[0].overriders), 1)
+    self.assertEqual(b.bases[0].overriders[0].over.key(), 'B::f()')
+    self.assertEqual(key_function(a).name, 'f')
+    self.assertIsNone(key_function(FeClass(Entry('type', 'x'), 'x')))
+
+  def test_key_function(self) -> None:
+    def make(*specs):
+      cls = FeClass(Entry('type', 'x'), 'K')
+      cls.own_virtual = True
+      for index, flags in enumerate(specs):
+        entry = Entry('routine', f"r{index}")
+        entry.fields['is_virtual'] = 'TRUE'
+        for flag in flags:
+          entry.fields[flag] = 'TRUE'
+        cls.functions.append(FeFunction(entry, 'K', f"f{index}", ''))
+      return cls
+    self.assertEqual(key_function(make([], [])).name, 'f0')
+    self.assertEqual(key_function(make(['pure_virtual'], [])).name, 'f1')
+    self.assertEqual(key_function(make(['inline_in_class_definition',
+                                        'is_inline'], [])).name, 'f1')
+    # Inline later (flag set, not in the class): no key function.
+    self.assertIsNone(key_function(make(['is_inline'], [])))
+    self.assertIsNone(key_function(make(['compiler_generated'])))
+
+  def test_function_keys(self) -> None:
+    self.assertEqual(clang_function_key('int A::f()'), 'A::f()')
+    self.assertEqual(clang_function_key('A::~A() [complete]'),
+                     'A::~A()#complete')
+    self.assertEqual(clang_function_key('void ns::A::g(int, char) const'),
+                     'ns::A::g(int,char;const)')
+    self.assertEqual(clang_function_key('N::B::~B() [complete] [pure]'),
+                     'N::B::~B()#complete')
+    self.assertEqual(clang_function_key('N::A &N::A::operator=(const A &)'),
+                     'N::A::operator=(const A &)')
+    self.assertEqual(clang_function_key('A *A::getThis()'), 'A::getThis()')
+    self.assertEqual(clang_function_key('d::operator int()'),
+                     'd::operator int()')
+    self.assertEqual(
+      clang_function_key('std::vector<int> N::T<int, char>::f()'),
+      'N::T<int, char>::f()')
+    self.assertEqual(signature_params('void (int, char) const noexcept'),
+                     'int,char;const')
+    self.assertEqual(signature_params('int ()'), '')
+    self.assertEqual(demangle_simple('1A'), 'A')
+    self.assertEqual(demangle_simple('N2ns1AE'), 'A')
+
+  def test_compare_agrees_and_finds(self) -> None:
+    facts = FeFacts(parse_il(SAMPLE_IL))
+    records, vtables = parse_clang(SAMPLE_CLANG)
+    result = compare_file('x', facts, records, vtables,
+                          {'A': 'external', 'B': 'external'})
+    self.assertEqual(result.problems, [])
+    self.assertEqual(result.classes, 2)
+    self.assertGreater(result.agree, 10)
+    # A wrong number is found.
+    bad = SAMPLE_IL.replace('number.virtual_function: 1',
+                            'number.virtual_function: 2')
+    result = compare_file('x', FeFacts(parse_il(bad)), records, vtables, {})
+    self.assertTrue(result.problems)
+    # A different final overrider is found.
+    other = SAMPLE_CLANG.replace('2 | int B::f()', '2 | int A::f()')
+    records, vtables = parse_clang(other)
+    result = compare_file('x', facts, records, vtables, {})
+    self.assertTrue(any('slot 0' in text for _, text in result.problems))
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2]
+  )
+  parser.add_argument('command', nargs = '?', choices = ('facts', 'check'))
+  parser.add_argument('files', nargs = '*')
+  parser.add_argument('--list', default = '',
+                      help = 'a file that lists the files to check')
+  parser.add_argument('--il-file', default = '',
+                      help = 'facts: an --il_display output to read')
+  parser.add_argument('--std', default = 'c++17')
+  parser.add_argument('--fe-opts', default = '')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir')
+  parser.add_argument('--clang', default = '')
+  parser.add_argument('--root', default = '.')
+  parser.add_argument('--json', default = '',
+                      help = 'check: write the results as JSON')
+  parser.add_argument('-v', dest = 'verbose', action = 'store_true')
+  parser.add_argument('--self-test', action = 'store_true')
+  args = parser.parse_args()
+
+  if args.self_test:
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SelfTest)
+    result = unittest.TextTestRunner(verbosity = 1).run(suite)
+    sys.exit(0 if result.wasSuccessful() else 1)
+  if not args.command:
+    parser.error('a command or --self-test is required')
+  files = list(args.files)
+  if args.list:
+    files += [l.strip() for l in Path(args.list).read_text().splitlines()
+              if l.strip() and not l.startswith('#')]
+  if args.command == 'facts' and args.il_file:
+    print_facts(FeFacts(parse_il(Path(args.il_file).read_text())))
+    return
+  if not files:
+    parser.error('a C++ file is required')
+  runner = Runner(Path(args.root).resolve(), args.std, args.fe_build,
+                  args.fe_opts.split(), args.clang)
+  if args.command == 'facts':
+    for name in files:
+      with tempfile.TemporaryDirectory(prefix = 'edg-cir-fe-facts.') as tmp:
+        il = runner.fe_il(Path(name).resolve(), Path(tmp))
+      print_facts(FeFacts(parse_il(il)))
+    return
+  total = Result('total')
+  rows = []
+  failed_setup = 0
+  report: List[dict] = []
+  for name in files:
+    try:
+      result, message = check_one(runner, Path(name).resolve())
+    except (subprocess.TimeoutExpired, KeyError, OSError) as error:
+      result, message = Result(name), f"error: {error!r}"
+    if message:
+      failed_setup += 1
+      rows.append((name, '-', '-', '-', message))
+      report.append({'file': name, 'setup': message})
+      continue
+    rows.append((name, str(result.classes), str(result.checks),
+                 str(len(result.problems)),
+                 '; '.join(result.skipped[:2])))
+    total.classes += result.classes
+    total.checks += result.checks
+    total.agree += result.agree
+    total.problems += [(f"{name}:{c}", t) for c, t in result.problems]
+    report.append({'file': name, 'classes': result.classes,
+                   'checks': result.checks, 'agree': result.agree,
+                   'kinds': result.kinds,
+                   'problems': result.problems, 'notes': result.notes,
+                   'skipped': result.skipped})
+    for cls, text in result.problems:
+      print(f"DISAGREE {name} {cls}: {text}", flush = True)
+    if args.verbose:
+      for note in result.notes:
+        print(f"note {name}: {note}")
+  print(f"{'file':<48}{'classes':>8}{'checks':>8}{'disagree':>9}  notes")
+  for name, classes, checks, bad, note in rows:
+    print(f"{name[-47:]:<48}{classes:>8}{checks:>8}{bad:>9}  {note}")
+  print(f"{len(files)} files ({failed_setup} not checked), {total.classes} "
+        f"classes, {total.checks} checks, {total.agree} agreements, "
+        f"{len(total.problems)} disagreements")
+  if args.json:
+    Path(args.json).write_text(json.dumps(report, indent = 1))
+  sys.exit(1 if total.problems else (2 if failed_setup == len(files) else 0))
+
+
+if __name__ == '__main__':
+  main()

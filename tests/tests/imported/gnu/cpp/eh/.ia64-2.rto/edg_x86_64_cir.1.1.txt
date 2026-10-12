@@ -1,0 +1,52 @@
+eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 16: warning: CIR back end: the body of "~B" uses a virtual function, which the CIR back end does not support; the function is dropped
+  B::~B () {}
+            ^
+
+"Test_name.c", line 18: warning: CIR back end: the body of "virt" uses a virtual function, which the CIR back end does not support; the function is dropped
+  struct D { void *d1; C *d2; virtual void virt (void) {} };
+                                                        ^
+
+"Test_name.c", line 29: warning: CIR back end: the body of "foo" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 34: warning: CIR back end: the body of "bar" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 39: warning: CIR back end: the body of "B" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    B b = *x.e2;
+          ^
+          detected during implicit generation of "B::B(const B &) noexcept" at line 39
+
+"Test_name.c", line 48: warning: CIR back end: the body of "D" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
+    D s;
+       ^
+          detected during implicit generation of "D::D() noexcept" at line 48
+
+"Test_name.c", line 60: warning: CIR back end: the body of "main" uses the statement "try statement", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the unused definition of '_ZN1D4virtEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
+
+Warning: CIR back end: the unused definition of '_ZN1DC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Warning: CIR back end: the unused definition of '_ZN1DC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+
+Error: CIR back end: the definition of '_ZN1BD1Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual function (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1BD2Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual function (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1C3fooERsR1B' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1F3barEPvR1B' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1BC1ERKS_' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1BC2ERKS_' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
+
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
+
+7 errors detected in the compilation of "Test_name.c".

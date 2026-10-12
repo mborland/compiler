@@ -4,12 +4,12 @@ Test_name.c:
   }
   ^
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (->*)"
 
 1 error detected in the compilation of "Test_name.c".
 ptrmem6a.C:
 Warning: CIR back end: the initializer of "m" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'm' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'm' was dropped: it uses a construct the CIR back end cannot express: the constant "pointer-to-member constant"
 
 1 error detected in the compilation of "ptrmem6a.C".

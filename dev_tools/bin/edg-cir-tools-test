@@ -1,0 +1,747 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Unit tests of the edg-cir-* tools (no box, no Docker needed).
+
+  python3 dev_tools/bin/edg-cir-tools-test [-v]
+
+They cover the excused-crash heuristic (edg-cir-summary's crash_excuse, used
+by edg-cir-gate-evidence), the C++ feature buckets of edg-cir-summary, the
+.cfi_* normalization and the classes of the assembly comparison
+(edg-cir-gate-evidence), the generated C++ template TU of edg-cir-rss and the
+pruning and disk headroom helpers of edg-cir-checkpoint.
+'''
+
+import importlib.machinery
+import importlib.util
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+from pathlib import Path
+from typing import List
+
+BIN = Path(__file__).resolve().parent
+
+
+def load_tool(name: str):
+  '''Import dev_tools/bin/<name> (a file without .py) as a module.'''
+  loader = importlib.machinery.SourceFileLoader(
+    name.replace('-', '_'), str(BIN / name))
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+summary = load_tool('edg-cir-summary')
+gate = load_tool('edg-cir-gate-evidence')
+rss = load_tool('edg-cir-rss')
+checkpoint = load_tool('edg-cir-checkpoint')
+
+# The compile output of the M3 gate's one excused crash
+# (imported/gnu/cpp/DRs/dr2867-2.sft.cpp, --c++11): the front end aborts in
+# shared code (il.c), in the reference as well as with the CIR back end.
+DR2867_2 = '''"Test_name.c", line 69: warning: structured bindings are a C++17 feature
+    const auto &[x, y, z, w] = foo (B {}, B {});
+                ^
+
+"Test_name.c", line 69: internal error: assertion failed: \
+pop_object_lifetime_full: useful lifetime is unbound (il.c, \
+line <suppressed> in pop_object_lifetime_full)
+
+    const auto &[x, y, z, w] = foo (B {}, B {});
+                ^
+
+1 catastrophic error detected in the compilation of "Test_name.c".
+Compilation aborted.
+Aborted
+eccp: front end returned an exit status of 134
+'''
+ASSERT = ('"Test_name.c", line 69: internal error: assertion failed: '
+          'pop_object_lifetime_full: useful lifetime is unbound (il.c, '
+          'line <suppressed> in pop_object_lifetime_full)')
+
+
+def result_of(output: str, ref_output: str, **fields) -> dict:
+  '''A TestResult as a dict, for a crash with the given compile outputs.'''
+  line, frames = summary.crash_details(output)
+  ref_line, ref_frames = summary.crash_details(ref_output)
+  result = {
+    'path': 'a/b.sft.cpp', 'test_type': 'fp', 'variant': '-DTEST_NUMBER=1',
+    'bucket': 'FE_CRASH', 'status': 'ABORT(COMPILE)',
+    'ref_status': 'ABORT(COMPILE)', 'message': line,
+    'crash_line': line, 'frames': frames, 'ref_crash_line': ref_line,
+    'ref_frames': ref_frames,
+    'ref_output_same': bool(ref_output) and summary.output_digest(
+      output) == summary.output_digest(ref_output)
+  }
+  result.update(fields)
+  return result
+
+
+class CrashExcuseTest(unittest.TestCase):
+  def test_dr2867_2_is_excused(self) -> None:
+    result = result_of(DR2867_2, DR2867_2)
+    self.assertEqual(result['crash_line'], ASSERT)
+    excused, reason = summary.crash_excuse(result)
+    self.assertTrue(excused, reason)
+    # The gate's split uses the same rule.
+    crashes, excused_list = gate.split_crashes([result])
+    self.assertEqual((crashes, excused_list), ([], [result]))
+
+  def test_shared_fe_code_with_another_assertion(self) -> None:
+    # The writer drives the shared copy_expr_tree into an assertion that the
+    # reference does not hit (same class of crash, other text): not excused.
+    ours = DR2867_2.replace(
+      'pop_object_lifetime_full: useful lifetime is unbound (il.c, '
+      'line <suppressed> in pop_object_lifetime_full)',
+      'copy_expr_tree: node has no copy (il.c, line <suppressed> in '
+      'copy_expr_tree)')
+    result = result_of(ours, DR2867_2)
+    self.assertFalse(summary.crash_excuse(result)[0])
+
+  def test_same_assertion_at_another_line(self) -> None:
+    # With real line numbers (outside the test configuration) the file:line
+    # decides: the same text at another line of il.c is another assertion.
+    reference = DR2867_2.replace('line <suppressed>', 'line 4100')
+    ours = DR2867_2.replace('line <suppressed>', 'line 4210')
+    self.assertFalse(summary.crash_excuse(result_of(ours, reference))[0])
+    self.assertTrue(summary.crash_excuse(result_of(reference, reference))[0])
+
+  def test_same_assertion_at_another_source_position(self) -> None:
+    ours = DR2867_2.replace('line 69: internal error',
+                            'line 70: internal error')
+    self.assertFalse(summary.crash_excuse(result_of(ours, DR2867_2))[0])
+
+  def test_reference_does_not_crash(self) -> None:
+    result = result_of(DR2867_2, DR2867_2, ref_status='')
+    self.assertFalse(summary.crash_excuse(result)[0])
+    result = result_of(DR2867_2, DR2867_2, ref_status='FAIL')
+    self.assertFalse(summary.crash_excuse(result)[0])
+
+  def test_other_crash_class(self) -> None:
+    result = result_of(DR2867_2, DR2867_2, ref_status='CATASTROPHE(COMPILE)')
+    self.assertFalse(summary.crash_excuse(result)[0])
+
+  def test_library_crash_is_never_excused(self) -> None:
+    result = result_of(DR2867_2, DR2867_2, bucket = 'LIB_CRASH')
+    self.assertFalse(summary.crash_excuse(result)[0])
+    self.assertEqual(gate.split_crashes([result]), ([result], []))
+
+  def test_writer_file_in_the_message(self) -> None:
+    ours = DR2867_2.replace('il.c, line <suppressed> in '
+                            'pop_object_lifetime_full',
+                            'ecil_code.c, line <suppressed> in ecil_expr')
+    self.assertFalse(summary.crash_excuse(result_of(ours, DR2867_2))[0])
+
+  def test_capital_internal_error_is_the_crash_line(self) -> None:
+    text = ('ECIL: the name of a function changed\n'
+            'Internal error: assertion failed: an ECIL function name changed '
+            '(ecil_type.c, line <suppressed> in ecil_resolve_late_names)\n'
+            '\n1 catastrophic error detected in the compilation of "t.c".\n')
+    line, _ = summary.crash_details(text)
+    self.assertIn('ecil_resolve_late_names', line)
+    result = result_of(text, text)
+    self.assertFalse(summary.crash_excuse(result)[0])
+
+  def test_signal_without_a_message(self) -> None:
+    # No assertion to compare, no backtrace: the writer might have caused it.
+    plain = 'Segmentation fault\neccp: front end returned an exit status of '\
+            '139\n'
+    result = result_of(plain, plain)
+    self.assertFalse(summary.crash_excuse(result)[0])
+
+  def test_backtrace_decides(self) -> None:
+    clean = DR2867_2 + (
+      '==1==ERROR: AddressSanitizer: ABRT on unknown address\n'
+      '    #0 0x7f1 in raise (/lib/libc.so.6+0x1)\n'
+      '    #1 0x4a2 in assertion_failed /edg/src/util.c:12\n'
+      '    #2 0x4b3 in pop_object_lifetime_full /edg/src/il.c:3000\n')
+    with_writer = clean + (
+      '    #3 0x4c4 in ecil_expr /edg/src/ecil_code.c:1234\n')
+    self.assertTrue(summary.crash_excuse(result_of(clean, DR2867_2))[0])
+    # A writer frame on the stack: not excused even if the text equals the
+    # reference's.
+    self.assertFalse(summary.crash_excuse(
+      result_of(with_writer, DR2867_2))[0])
+    # A clean stack does not excuse another assertion when the reference's
+    # crash is an assertion.
+    other = clean.replace('pop_object_lifetime_full: useful lifetime is '
+                          'unbound', 'something else')
+    self.assertFalse(summary.crash_excuse(result_of(other, DR2867_2))[0])
+    self.assertEqual(len(summary.crash_details(with_writer)[1]), 4)
+
+  def test_backtrace_without_assertion_in_the_reference(self) -> None:
+    # The reference crashes by a signal (no assertion line): the stack
+    # decides.
+    signal = 'Segmentation fault\n'
+    ours = signal + ('    #0 0x7f1 in memcpy (/lib/libc.so.6+0x1)\n'
+                     '    #1 0x4b3 in copy_expr_tree /edg/src/il.c:99\n')
+    self.assertTrue(summary.crash_excuse(result_of(ours, signal))[0])
+
+  def test_every_frame_is_checked(self) -> None:
+    # No cut at 60 frames, and the second and third stacks of a sanitizer
+    # report count too.
+    stack = ''.join(f"    #{i} 0x{i:x} in fe_function_{i} /edg/src/fe.c:{i}\n"
+                    for i in range(80))
+    late = stack + '    #80 0x50 in ecil_emit /edg/src/ecil_write.c:5\n'
+    output = DR2867_2 + late
+    self.assertEqual(len(summary.crash_details(output)[1]), 81)
+    self.assertFalse(summary.crash_excuse(result_of(output, DR2867_2))[0])
+    three = DR2867_2 + (
+      stack + '\nfreed by thread T0 here:\n' + stack +
+      '\npreviously allocated by thread T0 here:\n' + late)
+    self.assertFalse(summary.crash_excuse(result_of(three, DR2867_2))[0])
+    # The same stacks without the writer frame are clean.
+    self.assertTrue(summary.crash_excuse(
+      result_of(DR2867_2 + stack + stack, DR2867_2))[0])
+
+  def test_unsymbolized_frames_are_no_backtrace(self) -> None:
+    bare = DR2867_2 + (
+      '    #0 0x7f1 (/lib/libc.so.6+0x1)\n'
+      '    #1 0x4b3 (/edg/build/gcc-cir/bin/cpfe-cir+0x4b3)\n'
+      './build/cpfe-cir(+0x1234) [0x1234]\n')
+    self.assertEqual(summary.crash_details(bare)[1].__len__(), 3)
+    self.assertFalse(any(summary.frame_symbolized(f)
+                         for f in summary.crash_details(bare)[1]))
+    # No symbolized frame: the identity of the assertion decides.
+    self.assertTrue(summary.crash_excuse(result_of(bare, DR2867_2))[0])
+    other = bare.replace('pop_object_lifetime_full: useful lifetime is '
+                         'unbound', 'something else')
+    self.assertFalse(summary.crash_excuse(result_of(other, DR2867_2))[0])
+    # A signal with only bare frames: not excused (no evidence).
+    signal = 'Segmentation fault\n    #0 0x7f1 (/lib/libc.so.6+0x1)\n'
+    self.assertFalse(summary.crash_excuse(result_of(signal, signal))[0])
+    self.assertTrue(summary.frame_symbolized(
+      '    #2 0x4b3 in f /edg/src/il.c:3000'))
+    self.assertTrue(summary.frame_symbolized('./cpfe(f+0x12) [0x4]'))
+
+  def test_library_frames_are_cir_code(self) -> None:
+    base = DR2867_2 + ('==1==ERROR: AddressSanitizer: ABRT\n'
+                       '    #0 0x7f1 in raise (/lib/libc.so.6+0x1)\n'
+                       '    #1 0x4b3 in pop_object_lifetime_full '
+                       '/edg/src/il.c:3000\n')
+    self.assertTrue(summary.crash_excuse(result_of(base, DR2867_2))[0])
+    for frame in ('edg_cir::compat::emit_call(mlir::Value) /edg/x.cpp:5',
+                  'edg_cir::CIRGen::emitExpr /edg/cir_src/lib/cirgen/e.cpp:9',
+                  'ecil::Reader::next /edg/cir_src/lib/format/r.cpp:1',
+                  'edg_abi::classify /edg/cir_src/lib/abi.cpp:2',
+                  'mlir::Operation::erase() /llvm/mlir/lib/IR/Operation.cpp:1',
+                  'cir::CallOp::verify /llvm/clang/lib/CIR/Dialect/IR.cpp:2',
+                  'llvm::report_fatal_error /llvm/lib/Support/E.cpp:3'):
+      text = base + f"    #2 0x4c4 in {frame}\n"
+      self.assertFalse(summary.crash_excuse(result_of(text, DR2867_2))[0],
+                       frame)
+    # An unsymbolized frame of the library's shared object.
+    bare = DR2867_2 + ('    #0 0x7f1 (/edg/build/cir/lib/libedg_cir.so.0+'
+                       '0x4b3)\n')
+    self.assertFalse(summary.crash_excuse(result_of(bare, DR2867_2))[0])
+    # Namespaces that only look alike are not library code.
+    ok = base + '    #2 0x4c4 in circle::area /edg/src/geom.c:1\n'
+    self.assertTrue(summary.crash_excuse(result_of(ok, DR2867_2))[0])
+
+  def test_glibc_backtrace_frame(self) -> None:
+    text = 'Aborted\n./build/cpfe-cir(cir_be_finish+0x42) [0x4d2]\n'
+    self.assertEqual(summary.crash_details(text)[1],
+                     ['./build/cpfe-cir(cir_be_finish+0x42) [0x4d2]'])
+    result = result_of(DR2867_2 + text, DR2867_2)
+    self.assertFalse(summary.crash_excuse(result)[0])
+
+  def test_reference_recording_by_case(self) -> None:
+    # reference_output picks the recording of the case's options.
+    with tempfile.TemporaryDirectory() as tmp:
+      tests = Path(tmp)
+      rto = tests / 'imported' / 'gnu' / 'cpp' / '.dr.rto'
+      rto.mkdir(parents = True)
+      (rto / 'default.1.1.txt').write_text(
+        'eccp -DTEST_NUMBER=1 -tused --c++11 Test_name.c\nfirst case\n')
+      (rto / 'default.2.1.txt').write_text(
+        'eccp -DTEST_NUMBER=1 -tused --c++14 Test_name.c\nsecond case\n')
+      (rto / 'edg_x86_64.2.1.txt').write_text(
+        'eccp -DTEST_NUMBER=1 -tused --c++14 Test_name.c\nown second\n')
+      path = 'imported/gnu/cpp/dr.sft.cpp'
+      self.assertEqual(summary.reference_output(
+        tests, path, '-DTEST_NUMBER=1 --c++11'), 'first case')
+      self.assertEqual(summary.reference_output(
+        tests, path, '-DTEST_NUMBER=1 --c++14'), 'own second')
+      self.assertEqual(summary.reference_output(
+        tests, path, '-DTEST_NUMBER=1 --c++99'), '')
+
+
+class FeatureBucketTest(unittest.TestCase):
+  def feature(self, message: str) -> str:
+    return summary.cxx_feature(summary.TestResult(
+      'a.cpp', 'FAIL', 'UNSUPPORTED', message))
+
+  def test_member_pointer_operators(self) -> None:
+    for kind in ('pointer-to-data-member selection (.*)',
+                 'pointer-to-data-member selection (->*)',
+                 'pointer to member function selection (.*)',
+                 'pointer to member function selection (->*)',
+                 'call through a pointer to member (.*)',
+                 'call through a pointer to member (->*)',
+                 'pm base class cast', 'pm derived class cast',
+                 'pointer-to-member constant'):
+      message = (f'warning: CIR back end: the body of "<id>" uses the '
+                 f'expression kind "{kind}", which the CIR back end does '
+                 f'not support')
+      self.assertEqual(self.feature(message), 'member pointers', kind)
+
+  def test_m4_families(self) -> None:
+    body = 'warning: CIR back end: the body of "<id>" uses %s, which the ' \
+           'CIR back end does not support'
+    cases = {
+      'a virtual function': 'vtables/virtual: virtual functions and calls',
+      'a virtual call': 'vtables/virtual: virtual functions and calls',
+      'a constructor or destructor of a class with virtual functions or '
+      'virtual bases': 'vtables/virtual: constructors and destructors of '
+                       'polymorphic classes',
+      'a virtual base class': 'vtables/virtual: virtual bases',
+      'the delete of an object with a virtual destructor':
+        'vtables/virtual: virtual functions and calls',
+      'the expression kind "throw expression"': 'exceptions: throw',
+      'the statement "try statement"': 'exceptions: try/catch/function-try',
+      'the expression kind "typeid expression"': 'rtti: typeid',
+      'the expression kind "dynamic_cast"': 'rtti: dynamic_cast',
+      'the expression kind "dynamic_cast to a reference"':
+        'rtti: dynamic_cast',
+    }
+    for what, feature in cases.items():
+      self.assertEqual(self.feature(body % what), feature, what)
+    for message, feature in (
+        ('undefined reference to `<mangled:vtable>\'',
+         'vtables/virtual: vtable, VTT and thunk symbols'),
+        ('undefined reference to `<mangled:vtt>\'',
+         'vtables/virtual: vtable, VTT and thunk symbols'),
+        ('undefined reference to `<mangled:typeinfo>\'', 'rtti: typeinfo'),
+        ('undefined reference to `__cxa_begin_catch\'',
+         'exceptions: try/catch/function-try')):
+      self.assertEqual(self.feature(message), feature, message)
+
+  def test_unrelated_messages_stay(self) -> None:
+    self.assertEqual(self.feature('error: invalid type conversion'), 'other')
+    self.assertEqual(
+      self.feature('uses a vector type, which the CIR back end does not '
+                   'support'), 'other')
+
+
+class CrashSweepTest(unittest.TestCase):
+  def result(self, **fields) -> dict:
+    base = {'path': 'imported/gnu/cpp/cpp2a/lambda-uneval17.sft.cpp',
+            'test_type': 'fp', 'variant': '-DTEST_NUMBER=1 --c++20',
+            'status': 'ABORT(COMPILE)', 'bucket': 'FE_CRASH', 'message': '',
+            'ref_status': '', 'crash_line': '', 'frames': [],
+            'ref_crash_line': '', 'ref_frames': []}
+    base.update(fields)
+    return base
+
+  def test_report(self) -> None:
+    lower = ('"Test_name.c", line 7: internal error: assertion failed at: '
+             '"lower_name.c", line <suppressed> in '
+             'type_is_lambda_in_default_argument')
+    # The reference passes: a CIR-specific crash, with a reproducer.
+    cir = self.result(crash_line = lower, message = lower)
+    # The reference aborts at the same place: excused.
+    same = self.result(path = 'a/same.sft.cpp', ref_status = 'ABORT(COMPILE)',
+                       crash_line = lower, ref_crash_line = lower,
+                       message = lower)
+    lib = self.result(path = 'a/lib.sft.cpp', bucket = 'LIB_CRASH',
+                      status = 'ABORT(COMPILE)', ref_status = 'ABORT(COMPILE)',
+                      message = 'CIR back end: internal error in the pass')
+    killed = self.result(path = 'a/kill.sft.cpp', bucket = 'TIMEOUT',
+                         status = 'TIMEOUT')
+    both = self.result(path = 'a/both.sft.cpp', bucket = 'TIMEOUT',
+                       status = 'TIMEOUT', ref_status = 'TIMEOUT')
+    ok = self.result(path = 'a/ok.sft.cpp', bucket = 'PASS',
+                     status = 'PASS')
+    fatal_error = self.result(
+      path = 'a/fatal.sft.cpp', status = 'CATASTROPHE(COMPILE)',
+      crash_line = '1 catastrophic error detected in the compilation of '
+                   '"Test_name.c".', message = 'CATASTROPHE')
+    cir_lib_fatal = self.result(
+      path = 'a/libfatal.sft.cpp', bucket = 'LIB_CRASH',
+      status = 'CATASTROPHE(COMPILE)', message = 'CATASTROPHE after: '
+      'warning: CIR back end: the body of "f" uses a vector type',
+      crash_line = '1 catastrophic error detected in this compilation.')
+    segv = self.result(path = 'a/segv.sft.cpp', status = 'ABORT(COMPILE)',
+                       crash_line = 'Segmentation fault',
+                       ref_status = 'ABORT(COMPILE)')
+    problems, excused, fatal, counts = gate.sweep_report(
+      [cir, same, lib, killed, both, ok, fatal_error, cir_lib_fatal, segv],
+      'c++', 'edg_x86_64_cir', ['a/x.sft.cpp'])
+    self.assertEqual(counts, {'cases': 9, 'excused': 1, 'fatal': 2,
+                              'problems': 5})
+    self.assertEqual(len(fatal), 2)
+    self.assertIn('a/segv.sft.cpp', '\n'.join(problems))
+    self.assertNotIn('a/fatal.sft.cpp', '\n'.join(problems))
+    text = '\n'.join(problems)
+    self.assertIn('lambda-uneval17', text)
+    self.assertIn('reproduce: edg-docker-test --non-interactive --posture '
+                  'cir --only-configs edg_x86_64_cir -T 180 imported/gnu/'
+                  'cpp/cpp2a/lambda-uneval17.sft.cpp', text)
+    self.assertIn('a/lib.sft.cpp', text)
+    self.assertIn('a/kill.sft.cpp', text)
+    self.assertNotIn('a/both.sft.cpp', text)
+    self.assertIn('a/x.sft.cpp: cancelled by edgy', text)
+    self.assertEqual(len(excused), 1)
+
+  def test_in_the_default_steps(self) -> None:
+    self.assertIn('crash-sweep', gate.STEPS)
+    self.assertNotIn('crash-sweep', gate.LONG_STEPS)
+    self.assertIn('crash-sweep', checkpoint.DEFAULT_STEPS)
+
+  def test_equal_output_excuses_a_crash_with_an_identity(self) -> None:
+    limit = 'Internal error: CPU time limit exceeded.\nAborted\n'
+    result = result_of(limit, limit)
+    excused, reason = summary.crash_excuse(result)
+    self.assertTrue(excused)
+    self.assertIn('output equals its recording', reason)
+    # An assertion with its file and line, and a symbolized frame, count.
+    assertion = DR2867_2.replace('line <suppressed>', 'line 12')
+    self.assertTrue(summary.crash_excuse(result_of(assertion, assertion))[0])
+    # The reference must crash too, and the crash must not be the writer's.
+    self.assertFalse(summary.crash_excuse(dict(result, ref_status = ''))[0])
+    self.assertFalse(summary.crash_excuse(dict(
+      result, crash_line = 'internal error: assertion failed at: '
+      '"ecil_write.c", line 5 in ecil_x'))[0])
+    problems, excused_lines, _, counts = gate.sweep_report(
+      [result], 'c', 'edg_x86_64_cir', [])
+    self.assertEqual((counts['excused'], counts['problems']), (1, 0))
+    self.assertIn('output equals its recording', excused_lines[0])
+
+  def test_equal_output_never_excuses_a_bare_signal(self) -> None:
+    for text in ('Segmentation fault\neccp: front end returned an exit '
+                 'status of 139\n', 'Aborted\n', ''):
+      result = result_of(text, text)
+      self.assertEqual(result['ref_output_same'], bool(text))
+      self.assertFalse(summary.crash_excuse(result)[0], text)
+      self.assertFalse(summary.crash_excuse(dict(
+        result, ref_output_same = True))[0], text)
+    # Only the output text that proves the same crash counts: equal output
+    # with a bare signal and unsymbolized frames is still no identity.
+    bare = 'Segmentation fault\n    #0 0x7f1 (/lib/libc.so.6+0x1)\n'
+    self.assertFalse(summary.crash_excuse(result_of(bare, bare))[0])
+
+  def test_allowlist(self) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+      path = Path(tmp) / 'allow.txt'
+      path.write_text(
+        '# c\n'
+        'a/one.sft.cpp | assertion=assertion failed at: "lower_name.c", '
+        'line <suppressed> in mangled_entity_reference | same FE bug\n'
+        'a/two.sft.cpp | variant=-DTEST_NUMBER=2 --c++14 | signal=SIGSEGV '
+        '| reviewed\n')
+      allow = gate.read_crash_allowlist(path)
+      self.assertEqual(allow[('a/one.sft.cpp', '')][2], 'same FE bug')
+      self.assertIn('mangled_entity_reference',
+                    allow[('a/one.sft.cpp', '')][0])
+      self.assertEqual(allow[('a/two.sft.cpp', '-DTEST_NUMBER=2 --c++14')],
+                       ('', 'SIGSEGV', 'reviewed'))
+      for bad in ('a/*.sft.cpp | pattern\n', 'a/x.sft.cpp |\n',
+                  'a/x.sft.cpp\n', 'a/x[1].sft.cpp | pattern\n',
+                  'a/x.sft.cpp | variant=v? | r\n',
+                  'a/x.sft.cpp | nonsense | r\n',
+                  'a/x.sft.cpp | r\n',
+                  'a/x.sft.cpp | variant=-D1 | r\n',
+                  'a/x.sft.cpp | signal=SIGNOPE | r\n',
+                  'a/x.sft.cpp | signal=SIGSEGV | assertion=a | r\n'):
+        path.write_text(bad)
+        with self.assertRaises(ValueError):
+          gate.read_crash_allowlist(path)
+      path.write_text('a/one.sft.cpp | assertion=in mangled_entity_reference'
+                      ' | reviewed\n'
+                      'a/two.sft.cpp | variant=-DTEST_NUMBER=2 | '
+                      'assertion=in mangled_entity_reference | reviewed\n')
+      allow = gate.read_crash_allowlist(path)
+    lower = ('"Test_name.c", line 19: internal error: assertion failed at: '
+             '"lower_name.c", line <suppressed> in mangled_entity_reference')
+    other = ('"Test_name.c", line 19: internal error: assertion failed at: '
+             '"il.c", line <suppressed> in copy_expr_tree')
+    one = self.result(path = 'a/one.sft.cpp', crash_line = lower,
+                      ref_status = 'ABORT(COMPILE)',
+                      ref_crash_line = 'At end of source: ' + lower[28:])
+    one_other = self.result(path = 'a/one.sft.cpp', crash_line = other,
+                            ref_status = 'ABORT(COMPILE)')
+    two_ok = self.result(path = 'a/two.sft.cpp', variant = '-DTEST_NUMBER=2',
+                         crash_line = lower, ref_status = 'ABORT(COMPILE)')
+    two_other = self.result(path = 'a/two.sft.cpp',
+                            variant = '-DTEST_NUMBER=3', crash_line = lower,
+                            ref_status = 'ABORT(COMPILE)')
+    problems, excused, _, counts = gate.sweep_report(
+      [one, two_ok, two_other, one_other], 'c++', 'edg_x86_64_cir', [],
+      allow)
+    # one (pinned assertion matches) and two_ok are excused; two_other has
+    # another variant; one_other is the allowlisted test with another crash.
+    self.assertEqual((counts['excused'], counts['problems']), (2, 2))
+    text = '\n'.join(problems)
+    self.assertIn('TEST_NUMBER=3', text)
+    self.assertIn('allowlisted for the assertion', text)
+    self.assertTrue(all('allowlisted: reviewed' in e for e in excused))
+    self.assertEqual(gate.sweep_report([one, two_ok], 'c++',
+                                       'edg_x86_64_cir', [])[3]['problems'], 2)
+
+  def test_checked_in_allowlist_pins_every_assertion(self) -> None:
+    path = Path(__file__).resolve().parents[2] / 'tests/.edgy/filters/' \
+      'cir-excused-crashes.txt'
+    allow = gate.read_crash_allowlist(path)
+    self.assertGreaterEqual(len(allow), 3)
+    for key, (assertion, signal_name, reason) in allow.items():
+      self.assertTrue(assertion or signal_name, f"{key} is not pinned")
+      self.assertTrue(reason)
+
+  def test_signal_pinned_entry(self) -> None:
+    segv = ('Segmentation fault\neccp: front end returned an exit status of '
+            '139\n')
+    allow = {('a/sig.sft.cpp', ''): ('', 'SIGSEGV', 'bare signal, output '
+                                     'equal')}
+    def run(result):
+      return gate.sweep_report([result], 'c', 'edg_x86_64_cir', [],
+                               allow)[3]
+    ok = result_of(segv, segv, path = 'a/sig.sft.cpp', signal = 'SIGSEGV')
+    self.assertEqual(summary.crash_signal(segv), 'SIGSEGV')
+    self.assertEqual(summary.crash_signal('x\neccp: front end returned an '
+                                          'exit status of 134\n'), 'SIGABRT')
+    self.assertEqual(summary.crash_signal('internal error\n'), '')
+    self.assertEqual((run(ok)['excused'], run(ok)['problems']), (1, 0))
+    # Another signal, differing output, a reference that does not crash,
+    # another test: problems.
+    other = result_of(segv, segv, path = 'a/sig.sft.cpp', signal = 'SIGABRT')
+    self.assertEqual(run(other)['problems'], 1)
+    differs = result_of(segv, 'Segmentation fault\nmore output\n',
+                        path = 'a/sig.sft.cpp', signal = 'SIGSEGV')
+    self.assertFalse(differs['ref_output_same'])
+    self.assertEqual(run(differs)['problems'], 1)
+    no_ref = result_of(segv, segv, path = 'a/sig.sft.cpp',
+                       signal = 'SIGSEGV', ref_status = '')
+    self.assertEqual(run(no_ref)['problems'], 1)
+    unlisted = result_of(segv, segv, path = 'a/x.sft.cpp', signal = 'SIGSEGV')
+    self.assertEqual(run(unlisted)['problems'], 1)
+
+  def test_identity_from_the_compared_text(self) -> None:
+    # The first "internal error" is in a CIR back end paragraph; the front
+    # end's own crash text decides.
+    text = ('Warning: CIR back end: the body of "f" hit an internal error in '
+            'the pass.\n\nSegmentation fault\n')
+    line, _ = summary.crash_details(text)
+    self.assertEqual(line, 'Segmentation fault')
+    ref = 'Segmentation fault\n'
+    result = result_of(text, ref)
+    self.assertTrue(result['ref_output_same'])
+    self.assertFalse(summary.crash_excuse(result)[0])
+    # With a real internal error line in the compared text, it is excused.
+    both = ('Warning: CIR back end: the body of "f" dropped.\n\n'
+            'Internal error: CPU time limit exceeded.\nAborted\n')
+    self.assertTrue(summary.crash_excuse(result_of(
+      both, 'Internal error: CPU time limit exceeded.\nAborted\n'))[0])
+
+
+
+class AsmDiffTest(unittest.TestCase):
+  PLAIN = '''\t.text
+\t.globl\tf
+\t.type\tf,@function
+f:
+\tpushq\t%rbp
+\tmovl\t$1, %eax
+\tpopq\t%rbp
+\tretq
+.Lfunc_end0:
+\t.size\tf, .Lfunc_end0-f
+'''
+  UNWIND = '''\t.text
+\t.globl\tf
+\t.type\tf,@function
+f:
+\t.cfi_startproc
+\tpushq\t%rbp
+\t.cfi_def_cfa_offset 16
+\t.cfi_offset %rbp, -16
+\tmovl\t$1, %eax
+\tpopq\t%rbp
+\t.cfi_def_cfa %rsp, 8
+\tretq
+.Lfunc_end0:
+\t.size\tf, .Lfunc_end0-f
+\t.cfi_endproc
+'''
+
+  def directories(self, old: str, new: str) -> tuple:
+    root = Path(tempfile.mkdtemp(prefix = 'cirtools.'))
+    self.addCleanup(shutil.rmtree, root, ignore_errors = True)
+    for name, text in (('old', old), ('new', new)):
+      directory = root / name
+      directory.mkdir()
+      (directory / 't.c.0.s').write_text(text)
+      (directory / 'manifest.json').write_text(json.dumps(
+        {'t.c.0.s': {'asm': True, 'rc': 0}}))
+    return root / 'old', root / 'new', root
+
+  def test_strip_cfi(self) -> None:
+    self.assertEqual(gate.strip_cfi(self.UNWIND), self.PLAIN)
+    self.assertEqual(gate.strip_cfi(self.PLAIN), self.PLAIN)
+
+  def test_only_frame_description_directives_are_stripped(self) -> None:
+    kept = ('\t.cfi_personality 155, DW.ref.__gxx_personality_v0\n'
+            '\t.cfi_lsda 27, .Lexception0\n'
+            '\t.cfi_escape 0x2e, 0x10\n'
+            '\t.cfi_signal_frame\n'
+            '\t.cfi_sections .eh_frame\n')
+    stripped = ''.join(f"\t.cfi_{d}\n" for d in (
+      'startproc', 'endproc', 'def_cfa %rsp, 8', 'def_cfa_offset 16',
+      'def_cfa_register %rbp', 'adjust_cfa_offset 8', 'offset %rbp, -16',
+      'rel_offset %rbx, 8', 'register %rax, %rbx', 'restore %rbp',
+      'remember_state', 'restore_state', 'undefined %rip',
+      'same_value %rbx', 'window_save'))
+    text = '\tpushq\t%rbp\n' + stripped + kept + '\tretq\n'
+    self.assertEqual(gate.strip_cfi(text), '\tpushq\t%rbp\n' + kept +
+                     '\tretq\n')
+    # A difference in a personality routine stays visible.
+    old, new, root = self.directories(
+      self.PLAIN.replace('\tmovl', kept + '\tmovl'),
+      self.PLAIN.replace('\tmovl', kept.replace('155', '156') + '\tmovl'))
+    groups, _ = gate.compare_asm_dirs(old, new, root, True)
+    self.assertEqual(groups['cfi'], [])
+    self.assertEqual(len(groups['other']) + len(groups['symbols']), 1)
+
+  def test_off_by_default(self) -> None:
+    old, new, root = self.directories(self.PLAIN, self.UNWIND)
+    groups, _ = gate.compare_asm_dirs(old, new, root)
+    self.assertEqual(groups['identical'], [])
+    self.assertEqual(len(groups['other']), 1)
+
+  def test_normalized(self) -> None:
+    old, new, root = self.directories(self.PLAIN, self.UNWIND)
+    groups, details = gate.compare_asm_dirs(old, new, root, True)
+    self.assertEqual(groups['cfi'], ['t.c.0.s'])
+    self.assertEqual(groups['other'], [])
+    self.assertEqual([d for d in details if not d.startswith(('ALLOCA',
+                                                              '    '))], [])
+
+  def test_normalized_keeps_real_differences(self) -> None:
+    changed = self.UNWIND.replace('$1', '$2')
+    old, new, root = self.directories(self.PLAIN, changed)
+    groups, _ = gate.compare_asm_dirs(old, new, root, True)
+    self.assertEqual(groups['cfi'], [])
+    self.assertEqual(len(groups['other']), 1)
+
+  def test_identical(self) -> None:
+    old, new, root = self.directories(self.UNWIND, self.UNWIND)
+    groups, _ = gate.compare_asm_dirs(old, new, root, True)
+    self.assertEqual(groups['identical'], ['t.c.0.s'])
+
+
+class RssGeneratorTest(unittest.TestCase):
+  def test_template_tu_compiles_and_runs(self) -> None:
+    compiler = shutil.which('c++') or shutil.which('g++')
+    with tempfile.TemporaryDirectory() as tmp:
+      source = Path(tmp) / 't.cpp'
+      rss.generate_cxx_templates(3, source)
+      text = source.read_text()
+      for feature in ('template <class U, int M> struct Inner',
+                      'constexpr int cfib', '[this, u](auto a)',
+                      'int dummy[] = { 0, (r += (long)ts, 0)... };',
+                      '(0L + ... + (long)ts)', 'static_assert',
+                      '[k = x + 1]', 'sizeof...(Ts)', 'int... Ns'):
+        self.assertIn(feature, text)
+      # More units, more of the same.
+      bigger = Path(tmp) / 'b.cpp'
+      rss.generate_cxx_templates(6, bigger)
+      self.assertGreater(len(bigger.read_text()), 1.8 * len(text))
+      if compiler is None:
+        self.skipTest('no C++ compiler on this host')
+      binary = Path(tmp) / 't'
+      proc = subprocess.run([compiler, '-std=c++17', '-Wall', '-Werror',
+                             '-o', str(binary), str(source)],
+                            stdout = subprocess.PIPE,
+                            stderr = subprocess.STDOUT, text = True)
+      self.assertEqual(proc.returncode, 0, proc.stdout)
+      run = subprocess.run([str(binary)], stdout = subprocess.PIPE,
+                           text = True)
+      self.assertEqual(run.returncode, 0)
+      self.assertRegex(run.stdout, r'^\d+\n$')
+
+
+class CheckpointTest(unittest.TestCase):
+  def test_headroom(self) -> None:
+    self.assertEqual(checkpoint.headroom_gb('Avail\n 126G\n'), 126)
+    self.assertEqual(checkpoint.headroom_gb('Avail\n  39G\n'), 39)
+    self.assertEqual(checkpoint.headroom_gb(''), -1)
+    self.assertEqual(checkpoint.headroom_gb('ssh: error\n'), -1)
+
+  def make_tree(self, tree: Path) -> None:
+    '''Entries old1..old5 (old1 has a KEEP file), fresh1 and fresh2 (now) in
+    every directory that can be pruned, and the evidence directories.'''
+    directories = [*checkpoint.PRUNE_DIRS, *checkpoint.EVIDENCE_DIRS]
+    for directory in directories:
+      names = [f"old{n}" for n in range(1, 6)] + ['fresh1', 'fresh2']
+      for name in names:
+        entry = tree / directory / name
+        entry.mkdir(parents = True, exist_ok = True)
+        (entry / 'f').write_text('x')
+        if name.startswith('old'):
+          stamp = 1_700_000_000 + int(name[3:])
+          os.utime(entry, (stamp, stamp))
+    for name in [f"old{n}" for n in range(1, 6)] + ['fresh1', 'fresh2']:
+      entry = tree / '.tmp' / f"checkpoint-{name}"
+      entry.mkdir(parents = True, exist_ok = True)
+      if name.startswith('old'):
+        stamp = 1_700_000_000 + int(name[3:])
+        os.utime(entry, (stamp, stamp))
+    for directory in (*checkpoint.PRUNE_DIRS, *checkpoint.EVIDENCE_DIRS):
+      (tree / directory / 'old1' / 'KEEP').write_text('')
+      os.utime(tree / directory / 'old1', (1_700_000_001, 1_700_000_001))
+    (tree / '.tmp' / 'checkpoint-old1' / 'KEEP').write_text('')
+
+  def names(self, tree: Path, directory: str, pattern: str = '*') -> List[str]:
+    return sorted(p.name for p in (tree / directory).glob(pattern))
+
+  def test_prune_command(self) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+      tree = Path(tmp)
+      self.make_tree(tree)
+      # A process that uses old3: its name is on a command line.
+      user = subprocess.Popen(['bash', '-c', 'sleep 20; : old3 checkpoint-old3'])
+      self.addCleanup(user.kill)
+      proc = subprocess.run(
+        ['bash', '-c', checkpoint.prune_command(1)], cwd = tree,
+        stdout = subprocess.PIPE, text = True)
+      self.assertEqual(proc.returncode, 0)
+      # keep=1: the newest (fresh) survive by age; old1 has KEEP; old3 is in
+      # use; old2, old4 and old5 are pruned.
+      for directory in checkpoint.PRUNE_DIRS:
+        self.assertEqual(self.names(tree, directory),
+                         ['fresh1', 'fresh2', 'old1', 'old3'], directory)
+      self.assertEqual(self.names(tree, '.tmp', 'checkpoint-*'),
+                       ['checkpoint-fresh1', 'checkpoint-fresh2',
+                        'checkpoint-old1', 'checkpoint-old3'])
+      # The evidence directories are not touched without the option.
+      for directory in checkpoint.EVIDENCE_DIRS:
+        self.assertEqual(len(self.names(tree, directory)), 7, directory)
+      self.assertIn('kept (KEEP marker)', proc.stdout)
+      self.assertIn('kept (in use)', proc.stdout)
+      self.assertEqual(proc.stdout.count('pruned'), 3 + 3)
+      # With the option they are pruned like the runs.
+      proc = subprocess.run(
+        ['bash', '-c', checkpoint.prune_command(1, evidence = True)],
+        cwd = tree, stdout = subprocess.PIPE, text = True)
+      for directory in checkpoint.EVIDENCE_DIRS:
+        self.assertEqual(self.names(tree, directory),
+                         ['fresh1', 'fresh2', 'old1', 'old3'], directory)
+
+  def test_protected_trees(self) -> None:
+    self.assertIn('m3-final', checkpoint.PROTECTED_TREES)
+
+  def test_default_tree_is_not_stale(self) -> None:
+    self.assertEqual(checkpoint.DEFAULT_TREE, 'm31-int')
+
+
+if __name__ == '__main__':
+  unittest.main()

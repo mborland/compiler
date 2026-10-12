@@ -108,48 +108,48 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1AS0_iiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1AS0_iiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1A1BiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1A1BiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DjjEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DjjEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DiiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DiiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1D1A1BEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1D1A1BEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DddEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1C1DddEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1E1FiiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1E1FiiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1E1FiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1E1FiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1G1HdVKdEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1G1HdVKdEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1G1HddEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1G1HddEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1H1IVKdKdEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1H1IVKdKdEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1H1IdKdEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1H1IdKdEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1J1BiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1J1BiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1J1LiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1J1LiKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1BS0_KiS1_EbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1BS0_KiS1_EbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1L1BKiS2_EbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1L1BKiS2_EbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1US0_iiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1US0_iiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1VS0_FvvES1_EbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1VS0_FvvES1_EbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1WS0_iiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1WS0_iiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1ZS0_iKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt23is_corresponding_memberI1ZS0_iKiEbMT_T1_MT0_T2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the constant "pointer-to-member constant"
 
 1 error detected in the compilation of "Test_name.c".

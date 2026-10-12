@@ -8,8 +8,8 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   ^
           detected during instantiation of "void f(T) [with T=B A::*]" at line 40
 
-Warning: CIR back end: the unused definition of '_Z1fIM1A1BEvT_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z1fIM1A1BEvT_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the operator "pointer-to-data-member selection (.*)"
 
 1 error detected in the compilation of "Test_name.c".

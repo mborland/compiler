@@ -13,10 +13,10 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
       ^
           detected during instantiation of "void WorldObject<Derived>::forward(memfunT, arg1T, arg2T) [with Derived=Container, memfunT=void (Container::*)(void (Item::*)(int), int), arg1T=void (Item::*)(int), arg2T=int]" at line 74
 
-Warning: CIR back end: the unused definition of '_ZN9Container7itemfunIM4ItemFviEiEEvT_i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN9Container7itemfunIM4ItemFviEiEEvT_i' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZN11WorldObjectI9ContainerE7forwardIMS0_FvM4ItemFviEiES5_iEEvT_T0_T1_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN11WorldObjectI9ContainerE7forwardIMS0_FvM4ItemFviEiES5_iEEvT_T0_T1_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the constant "pointer-to-member constant"
 
 1 error detected in the compilation of "Test_name.c".

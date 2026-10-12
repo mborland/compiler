@@ -3,5 +3,5 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
     virtual int f() { return 1; }
                                 ^
 
-Warning: CIR back end: the unused definition of '_ZN1C1fEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1C1fEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 

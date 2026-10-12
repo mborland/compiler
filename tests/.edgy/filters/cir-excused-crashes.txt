@@ -1,0 +1,31 @@
+# Reviewed allowlist of front end crashes that the crash-sweep step of
+# edg-cir-gate-evidence excuses although the reference's output does not
+# prove them the reference's own.  One line per test, no patterns:
+#
+#   <test path> | [variant=<options> |] assertion=<text> | <reason>
+#   <test path> | [variant=<options> |] signal=<SIGSEGV|SIGABRT|...> | <reason>
+#
+# <test path> is the path as in the status logs with the suite first
+# (imported/gnu/cpp/..., edg/..., cwg/...); variant= is the options of the
+# case as in the logs (without it, every case of the test); assertion= is a
+# literal text that the crash line must contain, so that a test on the list
+# with another crash is NOT excused; signal= pins a bare signal crash (no
+# identity): the front end must die of that signal and the compile output
+# must still equal the reference's recording (minus the CIR back end's
+# notes).  One of the two is required.  The reason says
+# who reviewed it and why the crash is not the writer's.  An entry is added
+# only after the writer confirmed that the crash is the same pre-existing
+# front end bug (for example one triggered earlier by the per-function
+# hand-off), and it is removed when the bug is fixed.  The step lists the
+# entries whose test was not run.
+#
+# gnats-26823-disp (it uses --no_il_lower, which cpfe-cir does not have: a
+# "Command-line error", a fatal error and no crash) is not listed here: the
+# crash sweep does not gate fatal errors.
+imported/gnu/cpp/cpp1y/lambda-ice3.sft.cpp | assertion=assertion failed at: "lower_name.c", line <suppressed> in mangled_entity_reference | same pre-existing FE assertion as the reference (lower_name.c, mangled_entity_reference); the reference reports it "At end of source", CIR at the per-function hand-off (cir-writer root cause, 2026-10-12)
+imported/gnu/cpp/cpp1y/lambda-ice3a.sft.cpp | assertion=assertion failed at: "lower_name.c", line <suppressed> in mangled_entity_reference | same pre-existing FE assertion as the reference (lower_name.c, mangled_entity_reference); the reference reports it "At end of source", CIR at the per-function hand-off (cir-writer root cause, 2026-10-12)
+imported/gnu/cpp/cpp1y/var-templ66.sft.cpp | assertion=assertion failed at: "templates.c", line <suppressed> in check_variable_template_declaration | same pre-existing FE assertion as the reference (templates.c, check_variable_template_declaration); CIR prints it without a source position, the reference with line 9 (cir-writer root cause, 2026-10-12)
+imported/gnu/c/20020425-1.sft.c | signal=SIGSEGV | cir-config 2026-10-12, gdb on the box: stack exhaustion in the front end, about 10470 nested statement/if_statement/dependent_statement frames on the 8 MB stack (top frames: __interceptor_memset <- alloc_stop_token_stack_entry lexical.c:19079 <- push_lexical_state_stack <- macro_invocation macro.c:5946); the reference dies of the same overflow (top: __interceptor_memcpy <- scan_expr_full expr.c:46511); no ecil/cir_be frame; output equal; writer-confirmed 2026-10-12 (gdb: stack exhaustion at an equal depth in the reference, about 31,430 frames, no writer or library frame)
+imported/gnu/c/switch-5.sft.c | signal=SIGSEGV | cir-config 2026-10-12, ASan on the box: pre-existing front end bug, stack-use-after-return READ in add_statement_at_stmt_pos statements.c:1838 <- empty_statement <- add_goto_to_continue_label <- continue_statement; the reference debug build reports the identical ASan error and frames; no ecil/cir_be frame; output equal; writer-confirmed 2026-10-12 (same ASan stack-use-after-return in both, front end only, before the writer)
+imported/gnu/cpp/ext/mv26.sft.cpp | signal=SIGSEGV | cir-config 2026-10-12, gdb on the box: SIGSEGV in find_member_function_template templates.c:22747 <- decl_member_function <- class_member_declaration <- scan_class_definition <- f_instantiate_template_class (top 14 frames identical in CIR debug, CIR release and the reference); crash precedes any writer call; output equal; writer-confirmed 2026-10-12 (gdb: same fault in find_member_function_template, 23 frames in both, before any writer call)
+imported/gnu/cpp/parse/stack1.sft.cpp | signal=SIGSEGV | cir-config 2026-10-12, gdb on the box: stack exhaustion in the front end, about 10470 nested statement/if_statement/dependent_statement frames on the 8 MB stack (top: __interceptor_memset <- alloc_stop_token_stack_entry lexical.c:19079, same in the reference); no ecil/cir_be frame; output equal; writer-confirmed 2026-10-12 (gdb: stack exhaustion at an equal depth in the reference, about 31,430 frames, no writer or library frame)

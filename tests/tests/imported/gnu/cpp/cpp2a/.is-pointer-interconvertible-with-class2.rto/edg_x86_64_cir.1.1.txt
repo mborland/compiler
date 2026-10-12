@@ -108,48 +108,48 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1BiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1BiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1BdEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1BdEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1FiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1FiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1GiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1GiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1IiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1IiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1JiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1JiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1LiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1LiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1M1DEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1M1DEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1M1EEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1M1EEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1MiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1MiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1UiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1UiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1UdEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1UdEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1UxEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1UxEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1ViEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1ViEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1VlEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1VlEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XsEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XsEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XlEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XlEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XxEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1XxEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1YFvvEEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1YFvvEEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1ZiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt38is_pointer_interconvertible_with_classI1ZiEbMT_T0_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the constant "pointer-to-member constant"
 
 1 error detected in the compilation of "Test_name.c".

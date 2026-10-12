@@ -23,17 +23,17 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   ^
           detected during instantiation of "int getFuncId(Member Class::*) [with Member=void (int), Class=MyStruct]" at line 109
 
-Warning: CIR back end: the unused definition of '_Z21get_array_of_variantsIJM8MyStructFviEMS0_FicsbEEEDaDpT_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z21get_array_of_variantsIJM8MyStructFviEMS0_FicsbEEEDaDpT_' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC1ES2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC1ES2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC2ES2_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC2ES2_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC1ES4_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC1ES4_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC2ES4_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN7variantIM8MyStructFviEMS0_FicsbEEC2ES4_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_Z20get_member_functionsI8MyStructEDav' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z20get_member_functionsI8MyStructEDav' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_Z9getFuncIdIFviE8MyStructEiMT0_T_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9getFuncIdIFviE8MyStructEiMT0_T_' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 

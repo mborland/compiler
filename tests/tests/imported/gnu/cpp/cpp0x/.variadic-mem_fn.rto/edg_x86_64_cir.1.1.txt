@@ -47,26 +47,26 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
     ^
           detected during instantiation of "R Mem_fn<R, Class, Args...>::operator()(Class *, Args...) [with R=int, Class=X, Args=<int, int>]" at line 47
 
-Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEclERS0_i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEclERS0_i' was dropped and erased: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (.*)"
 
-Warning: CIR back end: the unused definition of '_Z6mem_fnIi1XJiEE6Mem_fnIT_T0_JDpT1_EEMS3_FS2_S5_E' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z6mem_fnIi1XJiEE6Mem_fnIT_T0_JDpT1_EEMS3_FS2_S5_E' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEC1EMS0_FiiE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEC1EMS0_FiiE' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEC2EMS0_FiiE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEC2EMS0_FiiE' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEclEPS0_i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiEEclEPS0_i' was dropped and erased: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (->*)"
 
-Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEC1EMS0_FiiiE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEC1EMS0_FiiiE' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEC2EMS0_FiiiE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEC2EMS0_FiiiE' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_Z6mem_fnIi1XJiiEE6Mem_fnIT_T0_JDpT1_EEMS3_FS2_S5_E' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z6mem_fnIi1XJiiEE6Mem_fnIT_T0_JDpT1_EEMS3_FS2_S5_E' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEclERS0_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEclERS0_ii' was dropped and erased: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (.*)"
 
-Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEclEPS0_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6Mem_fnIi1XJiiEEclEPS0_ii' was dropped and erased: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (->*)"
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the constant kind "pointer-to-member constant"
 
 1 error detected in the compilation of "Test_name.c".

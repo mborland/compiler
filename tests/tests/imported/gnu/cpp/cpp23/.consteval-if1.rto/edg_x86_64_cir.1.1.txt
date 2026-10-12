@@ -53,12 +53,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   ^
           detected during instantiation of "int qux(T) [with T=long long]" at line 103
 
-Warning: CIR back end: the unused definition of '_ZSt21is_constant_evaluatedv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt21is_constant_evaluatedv' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "if consteval"
 
-Error: CIR back end: the definition of '_Z3bazi' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3bazi' was dropped: it uses a construct the CIR back end cannot express: the statement "if consteval" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z3quxIiEiT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3quxIiEiT_' was dropped: it uses a construct the CIR back end cannot express: the statement "if consteval" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z3quxIxEiT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3quxIxEiT_' was dropped: it uses a construct the CIR back end cannot express: the statement "if consteval" (and it is referenced)
 
 3 errors detected in the compilation of "Test_name.c".

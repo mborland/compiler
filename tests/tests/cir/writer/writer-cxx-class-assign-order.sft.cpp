@@ -29,8 +29,26 @@ int main() {
   return 0;
 }
 // A class that is not trivially copyable (a trivial copy assignment with a
-// destructor) cannot have its value kept in a temporary: diagnosed.
+// destructor): the right operand is bound to the parameter of the assignment
+// and read when the assignment is made, after the target is designated, so
+// what is kept is its address: the temporary of the right operand, which keeps
+// its cleanup at the end of the full expression.
 struct T { int v; ~T() { } };
 T tarr[2];
 T next_t(T **pp) { *pp = &tarr[1]; return T{ 5 }; }
 void ntv() { T *tp = &tarr[0]; *tp = next_t(&tp); }
+// The right operand is an object: its address is kept, and the value is read
+// from it after the target is designated (g++ and clang agree).
+T *getp();
+void ntv_object(T *q) { *getp() = *q; }
+// A member of this: the value is a parameter (gnu/cpp/opt/vrp3).
+struct R {
+  long long r1, r2;
+  R();
+  R(const R &r) { r1 = r.r1; r2 = r.r2; }
+};
+struct M {
+  M(R m);
+  R val;
+};
+M::M(R m) { val = m; }

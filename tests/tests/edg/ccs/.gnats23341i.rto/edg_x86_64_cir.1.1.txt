@@ -7,8 +7,8 @@ eccp -DTEST_NUMBER=1 -x Test_name.c
   }
   ^
 
-Error: CIR back end: the definition of '_Z1fv' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z1fv' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 2 errors detected in the compilation of "Test_name.c".

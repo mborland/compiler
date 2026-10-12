@@ -1,0 +1,33 @@
+; ECIL 1.1: the supp key unsupported_reason carries the writer's reason for a
+; dropped definition, and the finish-time diagnostics append it.  A function
+; and a variable without a reason keep the old text.
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: %edg-cir --keep-going --emit=cir %t.ecil 2>&1 | %FileCheck %s --check-prefix=KEEP
+; RUN: %ecil-dump %t.ecil | %FileCheck %s --check-prefix=DUMP
+
+; CHECK-DAG: error [1003]: the definition of 'ext_dropped' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"{{$}}
+; CHECK-DAG: error [1003]: the definition of 'var_dropped' was dropped: it uses a construct the CIR back end cannot express: the type "std::foo<1>" (caf{{.*}}) (and it is referenced){{$}}
+; CHECK-DAG: error [1003]: the definition of 'plain_dropped' was dropped: it uses a construct the CIR back end cannot express{{$}}
+; KEEP-DAG: warning [1003]: 'ext_dropped' is only declared: its definition uses a construct the CIR back end cannot express: the statement "try statement"
+; KEEP-DAG: warning [1003]: 'plain_dropped' is only declared: its definition uses a construct the CIR back end cannot express{{$}}
+; DUMP: DECL_FUNC 41 21 0 32 11 supp{13: bin8:"the statement \"try statement\""}
+
+frame DECLS supp
+  STR 11 "ext_dropped"
+  STR 12 "main"
+  STR 13 "var_dropped"
+  STR 14 "plain_dropped"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 41 21 0 32 11 supp{13: bin8:"the statement \"try statement\""}
+  DECL_FUNC 43 21 0 9 12
+  DECL_VAR 44 1 0 65 4 13 supp{13: bin8:"the type \"std::foo<1>\" (café)"}
+  DECL_FUNC 45 21 0 32 14
+frame REGION
+  FUNC_BEGIN 43 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

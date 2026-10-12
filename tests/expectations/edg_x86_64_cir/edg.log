@@ -1,6 +1,4 @@
 ccs/aggr-init/paren-single-arg-array.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
-ccs/gnats20538-lambda-3.sft.cpp:rp:-DTEST_NUMBER=1 --c++14:FAIL(COMPILE):
-ccs/gnats20538-lambda-3.sft.cpp:rp:-DTEST_NUMBER=2 --c++17:FAIL(COMPILE):
 ccs/gnats20914-p1009-variadic.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
 ccs/gnats20914-p1009.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
 ccs/gnats21591.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
@@ -138,7 +136,6 @@ rma/lifetime03.sft.cpp:rp:-DTEST_NUMBER=2:FAIL(COMPILE):
 rma/lifetime16.sft.cpp:rp:-DTEST_NUMBER=2:FAIL(COMPILE):
 rma/lifetime18.sft.cpp:rp:-DTEST_NUMBER=1 --strict:FAIL(COMPILE):
 rma/lifetime18.sft.cpp:rp:-DTEST_NUMBER=2:FAIL(COMPILE):
-rma/lifetime25.sft.cpp:rp:-DTEST_NUMBER=1 --cfront_3.0:FAIL(COMPILE):
 rma/list95.sft.cpp:cn:-DTEST_NUMBER=1 --strict:CATASTROPHE:
 rma/list95.sft.cpp:rp:-DTEST_NUMBER=2:CATASTROPHE(COMPILE):
 rma/ms_anonunion02.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:

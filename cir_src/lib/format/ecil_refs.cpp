@@ -14,6 +14,7 @@ is owned by one G-id, and a local is not used after its scope region closed.
 All facts live in the shared id tables (ecil_ids.h).
 */
 
+#include <algorithm>
 #include <cstdio>
 
 #include "ecil_reader.h"
@@ -54,11 +55,127 @@ True for a function or variable.
   return e != nullptr && (e->kind == gk_func || e->kind == gk_var);
 }  /* is_declaration */
 
+uint64_t saturating_add(uint64_t a, uint64_t b)
+/*
+a + b, or the maximum value on overflow.
+*/
+{
+  return a > UINT64_MAX - b ? UINT64_MAX : a + b;
+}  /* saturating_add */
+
+uint64_t saturating_mul(uint64_t a, uint64_t b)
+/*
+a * b, or the maximum value on overflow.
+*/
+{
+  return a != 0 && b > UINT64_MAX / a ? UINT64_MAX : a * b;
+}  /* saturating_mul */
+
+bool is_valid_utf8(const uint8_t *data, size_t length)
+/*
+True if the bytes are well-formed UTF-8: no overlong forms, surrogates or
+code points above U+10FFFF.
+*/
+{
+  bool ok = true;
+  size_t k = 0;
+
+  while (ok && k < length) {
+    uint8_t lead = data[k];
+    size_t extra = 0;
+    uint32_t code = lead;
+
+    if (lead >= 0xC2 && lead <= 0xDF)
+      extra = 1;
+    else if (lead >= 0xE0 && lead <= 0xEF)
+      extra = 2;
+    else if (lead >= 0xF0 && lead <= 0xF4)
+      extra = 3;
+    else if (lead >= 0x80)
+      ok = false;
+    if (extra != 0)
+      code = lead & (0x3Fu >> extra);
+    for (size_t j = 1; ok && j <= extra; ++j) {
+      if (k + j >= length || (data[k + j] & 0xC0) != 0x80)
+        ok = false;
+      else
+        code = (code << 6) | (data[k + j] & 0x3Fu);
+    }
+    if (ok && ((extra == 2 && code < 0x800) ||
+               (extra == 3 && code < 0x10000) ||
+               (code >= 0xD800 && code <= 0xDFFF) || code > 0x10FFFF))
+      ok = false;
+    k += extra + 1;
+  }
+  return ok;
+}  /* is_valid_utf8 */
+
 }  /* anonymous namespace */
+
+uint64_t a_ref_checker::type_size(const a_gid_entry *e) const
+/*
+The size in bytes of a field type: the size a TY_BOOL/INT/FLOAT/OPAQUE or
+TY_RECORD_BODY gave, the pointer size of HDR_TARGET, or an array's element
+size times its count (a flexible array has no count and no size).  Arrays of
+arrays are walked in a loop.
+*/
+{
+  uint64_t count = 1;
+  uint64_t size = 0;
+
+  while (e != nullptr && e->kind == gk_array) {
+    count = (e->flags & gf_has_count) ? saturating_mul(count, e->extent) : 0;
+    e = ids_.find_gid(e->element);
+  }
+  if (e != nullptr) {
+    if (e->kind == gk_ptr)
+      size = ptr_bytes_;
+    else if (e->kind == gk_bool || e->kind == gk_int || e->kind == gk_float ||
+             e->kind == gk_opaque || e->kind == gk_record)
+      size = e->size;
+  }
+  return saturating_mul(size, count);
+}  /* a_ref_checker::type_size */
+
+uint64_t a_ref_checker::field_end(const a_record &r, const a_gid_entry *e,
+                                  uint64_t type_g) const
+/*
+The end offset in bytes of a REC_FIELD: a bit-field ends at its last bit, a
+base subobject or potentially overlapping member at its data size, anything
+else at its size.  An EMPTY_FOR_ABI field takes no space (0).
+*/
+{
+  uint64_t offset = 0;
+  uint64_t bit_offset = 0;
+  uint64_t width = 0;
+  uint64_t flags = 0;
+  uint64_t end = 0;
+
+  operand_u64(r.ops[1], offset);
+  operand_u64(r.ops[5], flags);
+  if (!(flags & ECIL_FIELD_EMPTY_FOR_ABI)) {
+    if (r.ops[3].kind != an_operand_kind::nil &&
+        operand_u64(r.ops[3], width)) {
+      operand_u64(r.ops[2], bit_offset);
+      /* byte_off + ceil((bit_off + width) / 8); a zero-width bit-field ends
+         at its byte offset. */
+      end = width == 0 ? offset : saturating_add(offset, saturating_add(
+          saturating_add(bit_offset, width), 7) / 8);
+    } else if ((flags & (ECIL_FIELD_BASE | ECIL_FIELD_POTENTIALLY_OVERLAPPING))
+               && e->kind == gk_record) {
+      end = saturating_add(offset, ids_.record_data_size(
+          static_cast<uint32_t>(type_g), e->size));
+    } else {
+      end = saturating_add(offset, type_size(e));
+    }
+  }
+  return end;
+}  /* a_ref_checker::field_end */
 
 a_ref_checker::a_ref_checker(a_id_tables &ids, a_bracket_tracker &tracker)
   : ids_(ids), tracker_(tracker), fields_pending_(0), cur_record_(0),
-    members_seen_(false)
+    members_seen_(false), cur_size_(0), cur_data_size_(0), cur_end_(0),
+    cur_union_(false), ptr_bytes_(0)
 {
 }  /* a_ref_checker::a_ref_checker */
 
@@ -562,10 +679,18 @@ ones are the bracket tracker's).
       problem = "STATIC_INIT_BEGIN of a vague-linkage variable needs GUARDED "
                 "(G-id " + number(v) + ")";
       ok = false;
+    } else if ((r.ops[1].u & ECIL_STATIC_INIT_PARTIAL) &&
+               !(ne->role & vr_var_init)) {
+      problem = "STATIC_INIT_BEGIN PARTIAL of G-id " + number(v) +
+                ", which has no VAR_INIT";
+      ok = false;
     } else {
       bool own = tracker_.static_init_is_global();
-      /* With a VAR_INIT the group may hold only the exit cleanup. */
-      if (ne->role & vr_var_init)
+      /* With a VAR_INIT the group may hold only the exit cleanup, unless it
+         is PARTIAL: then it stores the dynamic elements. */
+      if (r.ops[1].u & ECIL_STATIC_INIT_PARTIAL)
+        tracker_.mark_static_init_partial();
+      else if (ne->role & vr_var_init)
         tracker_.mark_static_init_exit_only();
       ne->role |= vr_static_init;
       static_own_ids_.push_back(own);
@@ -612,6 +737,31 @@ ones are the bracket tracker's).
   case eop_new_array_cookie:
     ok = need_type(r.ops[0], false, problem);
     break;
+  case eop_cmp3way: {
+    const a_gid_entry *rt = nullptr;
+    ok = need_type(r.ops[0], false, problem);
+    if (ok && operand_id(r.ops[0], v))
+      rt = ids_.find_gid(v);
+    if (ok && (rt == nullptr || rt->kind != gk_int || rt->extent > 64)) {
+      problem = "CMP3WAY result type G-id " + number(v) +
+                " is not an integer type of at most 64 bits";
+      ok = false;
+    }
+    for (int k = 1; ok && k <= 4; ++k) {
+      int64_t value = 0;
+
+      if (r.ops[k].kind == an_operand_kind::nil)
+        continue;
+      if (!operand_i64(r.ops[k], value)) {
+        problem = "CMP3WAY result value " + number(k) + " does not fit 64 "
+                  "bits";
+        ok = false;
+      } else {
+        ok = check_int_value(r.ops[0], r.ops[k], "CMP3WAY result", problem);
+      }
+    }
+    break;
+  }
   case eop_delete: {
     const a_gid_entry *fn = nullptr;
     ok = operand_id(r.ops[0], v) && (fn = ids_.find_gid(v)) != nullptr &&
@@ -651,6 +801,55 @@ At the end of a frame no TY_RECORD_BODY may still await REC_FIELD records.
   return ok;
 }  /* a_ref_checker::end_frame */
 
+bool a_ref_checker::check_supp(const a_record &r, std::string &problem)
+/*
+The keys of a supp blob this reader understands.  unsupported_reason (1.1) is
+UTF-8 text of at most 255 bytes, at most once, on a DECL_FUNC or DECL_VAR that
+has UNSUPPORTED set.  Unknown keys are skipped.
+*/
+{
+  bool ok = true;
+  bool seen = false;
+  std::vector<std::pair<uint64_t, an_operand>> pairs;
+  uint64_t flags = 0;
+  bool unsupported_decl = false;
+
+  supp_pairs(r, pairs);
+  if (r.opcode == eop_decl_func || r.opcode == eop_decl_var) {
+    operand_u64(r.ops[3], flags);
+    unsupported_decl = (flags & (r.opcode == eop_decl_func
+                                     ? ECIL_DECL_FUNC_UNSUPPORTED
+                                     : ECIL_DECL_VAR_UNSUPPORTED)) != 0;
+  }
+  for (size_t k = 0; ok && k < pairs.size(); ++k) {
+    const an_operand &value = pairs[k].second;
+
+    if (pairs[k].first != esk_unsupported_reason)
+      continue;
+    if (!unsupported_decl) {
+      problem = "supp key unsupported_reason (13) is only valid on a "
+                "DECL_FUNC or DECL_VAR with UNSUPPORTED";
+      ok = false;
+    } else if (seen) {
+      problem = "supp key unsupported_reason (13) appears twice";
+      ok = false;
+    } else if (value.kind != an_operand_kind::bin) {
+      problem = "supp key unsupported_reason (13) is not a bin";
+      ok = false;
+    } else if (value.length > unsupported_reason_max) {
+      problem = "supp key unsupported_reason (13) is " +
+                number(value.length) + " bytes (at most " +
+                number(unsupported_reason_max) + ")";
+      ok = false;
+    } else if (!is_valid_utf8(value.data, value.length)) {
+      problem = "supp key unsupported_reason (13) is not valid UTF-8";
+      ok = false;
+    }
+    seen = true;
+  }
+  return ok;
+}  /* a_ref_checker::check_supp */
+
 bool a_ref_checker::check(const a_record &r, std::string &problem)
 /*
 Apply the reference rules of one record.
@@ -667,6 +866,8 @@ Apply the reference rules of one record.
     problem = "a TY_RECORD_BODY is missing REC_FIELD records";
     ok = false;
   }
+  if (ok && r.supp != nullptr)
+    ok = check_supp(r, problem);
   if (ok) switch (r.opcode) {
   case eop_str: {
     const uint8_t *data = nullptr;
@@ -687,6 +888,8 @@ Apply the reference rules of one record.
     ok = need_sid(r.ops[0], false, "the triple", problem) &&
          need_sid(r.ops[1], true, "the ABI", problem) &&
          need_sid(r.ops[2], true, "the data layout", problem);
+    if (ok && operand_u64(r.ops[3], w))
+      ptr_bytes_ = static_cast<uint32_t>(w / 8);
     break;
   case eop_hdr_producer:
     ok = need_sid(r.ops[0], false, "the producer", problem) &&
@@ -757,17 +960,25 @@ Apply the reference rules of one record.
     break;
   case eop_ty_bool:
   case eop_ty_float:
-    ok = introduce(r.ops[0], r.opcode == eop_ty_bool ? gk_bool : gk_float,
-                   problem) != nullptr;
+    ne = introduce(r.ops[0], r.opcode == eop_ty_bool ? gk_bool : gk_float,
+                   problem);
+    ok = ne != nullptr;
+    if (ok)
+      operand_u64(r.ops[r.opcode == eop_ty_bool ? 1 : 2], ne->size);
     break;
   case eop_ty_int:
     ne = introduce(r.ops[0], gk_int, problem);
     ok = ne != nullptr;
-    if (ok)
+    if (ok) {
       operand_u64(r.ops[1], ne->extent);
+      operand_u64(r.ops[3], ne->size);
+    }
     break;
   case eop_ty_opaque:
-    ok = introduce(r.ops[0], gk_opaque, problem) != nullptr;
+    ne = introduce(r.ops[0], gk_opaque, problem);
+    ok = ne != nullptr;
+    if (ok)
+      operand_u64(r.ops[1], ne->size);
     break;
   case eop_ty_ptr:
     ok = need_type(r.ops[1], false, problem) &&
@@ -839,12 +1050,30 @@ Apply the reference rules of one record.
       problem = "TY_RECORD_BODY completes G-id " + number(v) + " twice";
       ok = false;
     } else {
+      uint64_t size = 0;
+      uint64_t data_size = 0;
+
+      operand_u64(r.ops[1], size);
+      operand_u64(r.ops[2], data_size);
       operand_u64(r.ops[5], w);
-      rec->flags |= gf_complete;
-      rec->extent = w;
-      fields_pending_ = w;
-      cur_record_ = static_cast<uint32_t>(v);
-      members_seen_ = false;
+      if (data_size > size) {
+        problem = "TY_RECORD_BODY: data_size " + number(data_size) +
+                  " exceeds size " + number(size);
+        ok = false;
+      } else {
+        rec->flags |= gf_complete;
+        rec->extent = w;
+        rec->size = size;
+        if (data_size != size)
+          ids_.set_record_data_size(static_cast<uint32_t>(v), data_size);
+        fields_pending_ = w;
+        cur_record_ = static_cast<uint32_t>(v);
+        cur_size_ = size;
+        cur_data_size_ = data_size;
+        cur_end_ = 0;
+        cur_union_ = (rec->flags & gf_union) != 0;
+        members_seen_ = false;
+      }
     }
     break;
   }
@@ -880,6 +1109,7 @@ Apply the reference rules of one record.
         if (ok) {
           uint64_t fflags = 0;
           operand_u64(r.ops[5], fflags);
+          cur_end_ = std::max(cur_end_, field_end(r, e, v));
           if ((fflags & (ECIL_FIELD_BASE | ECIL_FIELD_POTENTIALLY_OVERLAPPING))
               && e->kind != gk_record) {
             problem = "REC_FIELD BASE/POTENTIALLY_OVERLAPPING needs a record "
@@ -902,6 +1132,14 @@ Apply the reference rules of one record.
             members_seen_ = true;
           }
         }
+      }
+      if (ok && fields_pending_ == 0 && !cur_union_ &&
+          cur_data_size_ < cur_end_) {
+        problem = "TY_RECORD_BODY: data_size " + number(cur_data_size_) +
+                  " of G-id " + number(cur_record_) + " is below the end "
+                  "of its last field that is not EMPTY_FOR_ABI (" +
+                  number(cur_end_) + ")";
+        ok = false;
       }
     }
     break;

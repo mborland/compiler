@@ -1,0 +1,15 @@
+; expect: format data_size 9 exceeds size 8
+ecil 1.1 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  TY_INT 4 8 true 1 1
+  TY_RECORD_DECL 21 0 nil
+  TY_RECORD_BODY 21 8 9 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 4 4 nil nil nil 0
+frame END
+  END 2 0

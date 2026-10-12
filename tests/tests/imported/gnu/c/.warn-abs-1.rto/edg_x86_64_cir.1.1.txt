@@ -15,12 +15,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: the definition of 'tst_notint' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'tst_notint' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'tst_notfloat' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'tst_notfloat' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'tst_notcomplex' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'tst_notcomplex' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'tst_cplx_size' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'tst_cplx_size' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
 4 errors detected in the compilation of "Test_name.c".

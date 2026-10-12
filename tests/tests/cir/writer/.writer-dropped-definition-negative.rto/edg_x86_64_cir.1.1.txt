@@ -3,6 +3,6 @@ fe_only -DTEST_NUMBER=1 --c11 Test_name.c
   int vla(int n) { int a[n]; a[0] = 1; return a[0]; }
                                                     ^
 
-Error: CIR back end: the definition of 'vla' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'vla' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
 1 error detected in the compilation of "Test_name.c".

@@ -13,6 +13,6 @@ Test_name.c:
   }
   ^
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_cpu_supports
 
 1 error detected in the compilation of "Test_name.c".

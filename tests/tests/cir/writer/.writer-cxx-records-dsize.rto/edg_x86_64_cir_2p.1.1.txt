@@ -4,7 +4,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=140000 Test_name.c
      ^
           detected during implicit generation of "M::M() noexcept" at line 26
 
-ecil 1.0 features=0x00000008
+ecil 1.1 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -224,7 +224,7 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 35 "M"
   TY_RECORD_DECL 38 0 35
   TY_PTR 39 38
@@ -244,8 +244,8 @@ frame REGION
   STRUCTOR 42 43 0
   DECL_FUNC 42 40 3 67 38
   DECL_FUNC 43 40 3 67 39
-  DECL_FUNC 42 40 0 34 38
-  DECL_FUNC 43 40 0 34 39
+  DECL_FUNC 42 40 0 34 38 supp{13: "the initializer of a member of an anonymous union or struct"}
+  DECL_FUNC 43 40 0 34 39 supp{13: "the initializer of a member of an anonymous union or struct"}
 frame GLOBALS
   STR 40 "u1"
   DECL_VAR 44 4 0 1 0 40

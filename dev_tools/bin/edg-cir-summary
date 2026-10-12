@@ -30,8 +30,11 @@ the output of its commands (the .rt.tar.gz files of the run):
   OTHER        none of the above (look at --list OTHER)
 
 The M2 gate needs the smoke list to be 100% PASS and FE_CRASH and LIB_CRASH to
-be 0 over the corpus; a crash that also fails in the reference configuration
-(--reference) is counted separately as pre-existing.
+be 0 over the corpus; a front end crash that is the reference configuration's
+(--reference) is counted separately as pre-existing.  It is the reference's
+only if the reference crashes the same way and either the backtrace has no
+writer frame (ecil_*, cir_be*) or, without a backtrace, the assertion (text,
+file, line, function and source position) is the reference's (crash_excuse).
 
 C++ tests (the M3 corpus, .cpp/.cc/... sources) are bucketed the same way, and
 a run that has any also prints:
@@ -58,8 +61,10 @@ directory in it (default: every config whose name contains "cir").
 '''
 
 import argparse
+import hashlib
 import json
 import re
+import signal
 import sys
 import tarfile
 
@@ -73,7 +78,7 @@ BUCKETS = (
 )
 
 _CRASH_REGEX = re.compile(
-  r'Assertion failed|assertion failed at|internal error|Segmentation fault|'
+  r'Assertion failed|assertion failed at|[Ii]nternal error|Segmentation fault|'
   r'core dumped|Aborted|AddressSanitizer|LeakSanitizer|SIGSEGV|SIGABRT|'
   r'terminate called|[Ss]tack overflow'
 )
@@ -126,19 +131,41 @@ _MANGLED_KINDS = (
 )
 
 # C++ features, for the "by feature" table: the first regex that matches the
-# normalized message decides.
+# normalized message decides.  The M4 features (exceptions, RTTI, virtual
+# functions and vtables, member pointers) come in families: the name
+# "family: kind" is a kind of the family, and the table rolls the families
+# up.  The writer's names for the member pointer operators ".*" and "->*"
+# (src/ecil_kind_names.h) are matched by their spelling.
 _FEATURE_REGEXES = (
-  ('exceptions', re.compile(
-    r'\bthrow\b|\btry\b|\bcatch\b|exception|landing ?pad|unwind|'
-    r'__cxa_(throw|begin_catch|end_catch|rethrow)|__gxx_personality',
+  ('exceptions: throw', re.compile(
+    r'\bthrow\b|__cxa_(throw|rethrow|allocate_exception)',
     re.IGNORECASE)),
-  ('vtables/virtual', re.compile(
-    r'virtual|vtable|vptr|<mangled:(vtable|vtt|thunk)>', re.IGNORECASE)),
-  ('rtti', re.compile(
-    r'typeid|dynamic_cast|typeinfo|\bRTTI\b|__dynamic_cast|'
-    r'<mangled:typeinfo(-name)?>', re.IGNORECASE)),
+  ('exceptions: try/catch/function-try', re.compile(
+    r'\btry\b|\bcatch\b|__cxa_(begin|end)_catch', re.IGNORECASE)),
+  ('exceptions: other', re.compile(
+    r'exception|landing ?pad|unwind|__gxx_personality|\bnoexcept\b',
+    re.IGNORECASE)),
+  ('rtti: typeid', re.compile(r'typeid', re.IGNORECASE)),
+  ('rtti: dynamic_cast', re.compile(
+    r'dynamic_cast|__dynamic_cast', re.IGNORECASE)),
+  ('rtti: typeinfo', re.compile(
+    r'typeinfo|\bRTTI\b|<mangled:typeinfo(-name)?>', re.IGNORECASE)),
+  ('vtables/virtual: constructors and destructors of polymorphic classes',
+   re.compile(
+     r'(constructor|destructor) of a class with virtual|polymorphic',
+     re.IGNORECASE)),
+  ('vtables/virtual: virtual bases', re.compile(
+    r'virtual base', re.IGNORECASE)),
+  ('vtables/virtual: virtual functions and calls', re.compile(
+    r'virtual (call|function|destructor|member)|delete of an object with a '
+    r'virtual', re.IGNORECASE)),
+  ('vtables/virtual: vtable, VTT and thunk symbols', re.compile(
+    r'vtable|vptr|\bvtt\b|<mangled:(vtable|vtt|thunk)>', re.IGNORECASE)),
+  ('vtables/virtual: other', re.compile(r'virtual', re.IGNORECASE)),
   ('member pointers', re.compile(
-    r'member pointer|pointer[- ]to[- ]member|ptrmem', re.IGNORECASE)),
+    r'member pointer|pointer[- ]to[- ](data[- ])?member|ptrmem|'
+    r'\(\.\*\)|\(->\*\)|\bpm (base|derived) class cast',
+    re.IGNORECASE)),
   ('coroutines', re.compile(r'coroutine|co_await|co_yield|co_return',
                             re.IGNORECASE)),
   ('static initialization', re.compile(
@@ -171,12 +198,28 @@ _FEATURE_REGEXES = (
 )
 
 
+# The feature families of the M4 milestone (see _FEATURE_REGEXES).
+M4_FAMILIES = ('vtables/virtual', 'rtti', 'exceptions', 'member pointers')
+
+
 class TestResult:
   def __init__(self, path: str, status: str, bucket: str,
                message: str, variant: str = '',
                test_type: str = '') -> None:
     self.ref_fail = False
     self.ref_status = ''
+    # For a front end crash: its first line and backtrace frames (see
+    # crash_details), and the reference's line and frames of the same case.
+    self.crash_line = ''
+    self.frames: List[str] = []
+    self.ref_crash_line = ''
+    self.ref_frames: List[str] = []
+    # A digest of the compile output without the CIR back end's notes, and
+    # whether it equals the reference's recording (information: the crash
+    # is then the reference's own, whatever it says).
+    self.output_key = ''
+    self.ref_output_same = False
+    self.signal = ''
     self.path = path
     self.status = status
     self.bucket = bucket
@@ -301,9 +344,14 @@ def load_config_results(config_dir: Path) -> List[TestResult]:
       compile_output = outputs.get(1, '')
       run_output = outputs.get(2, '')
       bucket, message = classify(status, compile_output, run_output)
-      results.append(TestResult(test_path, status, bucket, message,
-                                case['status'].get('variant', ''),
-                                case['status'].get('type', '')))
+      result = TestResult(test_path, status, bucket, message,
+                          case['status'].get('variant', ''),
+                          case['status'].get('type', ''))
+      if bucket in ('FE_CRASH', 'LIB_CRASH'):
+        result.crash_line, result.frames = crash_details(compile_output)
+        result.output_key = output_digest(compile_output)
+        result.signal = crash_signal(compile_output)
+      results.append(result)
   return results
 
 
@@ -313,14 +361,174 @@ def crash_class(status: str) -> str:
   return base if base in ('ABORT', 'CATASTROPHE') else ''
 
 
+# A crash or assertion in the CIR writer (ecil_*), the back end shim (cir_be*)
+# or the library (the namespaces edg_cir::, edg_cir::compat::, ecil::,
+# edg_abi::, and mlir::, cir::, llvm:: frames, and its shared objects) is never
+# pre-existing: the reference does not run that code.  (In edg_x86_64_cir the
+# library runs in the front end's process, so its crash is an FE_CRASH.)
+CIR_CODE_REGEX = re.compile(
+  r'\b(?:ecil_\w+|cir_be\w*)\b|'
+  r'\b(?:edg_cir|ecil|edg_abi|mlir|cir|llvm)::|'
+  r'libedg_cir|libMLIR|libLLVM|/cir_src/')
+_CRASH_LINE_REGEX = re.compile(_CRASH_REGEX.pattern +
+                               r'|catastrophic error')
+# A frame of a backtrace: a sanitizer or gdb frame ("#3 0x... in f file:1"),
+# or one of glibc's backtrace_symbols ("./cpfe(f+0x12) [0x...]").
+_FRAME_REGEX = re.compile(
+  r'^\s*#\d+\s+0x[0-9a-f]+|^\S+\([\w:.$@]*\+0x[0-9a-f]+\)')
+# A crash whose identity (what and where) can be compared: an assertion of
+# the front end with its file, line (or "<suppressed>", which the test
+# configuration prints) and function (in either of the two forms the front
+# end prints: "assertion failed: text (file, line N in f)" and "assertion
+# failed at: \"file\", line N in f"), or a catastrophic error.
+_INTERNAL_ERROR_REGEX = re.compile(r'[Ii]nternal error')
+_IDENTITY_REGEX = re.compile(
+  r'assertion failed: .*\([\w./-]+, line (\d+|<suppressed>) in \w+\)|'
+  r'assertion failed at: "[\w./-]+", line (\d+|<suppressed>) in \w+|'
+  r'catastrophic error: ')
+
+
+def output_digest(text: str) -> str:
+  '''A digest of a compile output with the paragraphs about the CIR back
+  end and edg-cir removed and the spaces collapsed.'''
+  normalized = re.sub(r'\s+', ' ', non_cir_text(text)).strip()
+  return hashlib.md5(normalized.encode('utf-8', 'replace')).hexdigest()
+
+
+def frame_symbolized(frame: str) -> bool:
+  '''Whether a backtrace frame names a function: a sanitizer or gdb frame
+  "#3 0x... in f file:1", or a glibc frame "./cpfe(f+0x12)".  "#3 0x...
+  (/path/cpfe+0x1234)" and "./cpfe(+0x1234)" are not symbolized.'''
+  if re.match(r'^\s*#\d+\s+0x[0-9a-f]+\s+in\s+\S', frame):
+    return True
+  return re.match(r'^\S+\([A-Za-z_][\w:.$@]*\+0x[0-9a-f]+\)', frame) \
+    is not None
+
+
+def crash_signal(output: str) -> str:
+  '''The signal that killed the front end ("SIGSEGV", "SIGABRT", ...; "" if
+  none): from eccp's "front end returned an exit status of N" (128 + the
+  signal), else from the shell's "Segmentation fault" or "Aborted".'''
+  match = re.search(r'front end returned an exit status of (\d+)', output)
+  if match and int(match.group(1)) > 128:
+    try:
+      return signal.Signals(int(match.group(1)) - 128).name
+    except ValueError:
+      return ''
+  if re.search(r'^Segmentation fault', output, re.M):
+    return 'SIGSEGV'
+  if re.search(r'^Aborted', output, re.M):
+    return 'SIGABRT'
+  return ''
+
+
+def non_cir_text(output: str) -> str:
+  '''The output without the paragraphs about the CIR back end and edg-cir:
+  the text that is compared with the reference's.'''
+  paragraphs = re.split(r'(\n\s*\n)', output)
+  return ''.join(p for p in paragraphs
+                 if 'CIR back end' not in p and 'edg-cir' not in p)
+
+
+def crash_details(compile_output: str) -> Tuple[str, List[str]]:
+  '''The first crash line of a compile output ("" if none, with the source
+  position it starts with) and all its backtrace frames (every stack of a
+  sanitizer report: there can be up to three).  The crash line is taken from
+  the text that is compared with the reference's, not from a paragraph about
+  the CIR back end (which can say "internal error" about a dropped
+  function).'''
+  line = _first_matching_line(non_cir_text(compile_output),
+                              _CRASH_LINE_REGEX) or ''
+  frames = [l.strip()[:500] for l in compile_output.splitlines()
+            if _FRAME_REGEX.match(l)]
+  return ' '.join(line.split())[:400], frames
+
+
+def reference_output(tests_dir: Path, test_path: str, variant: str) -> str:
+  '''The compile output the reference recorded for a case of a test.
+
+  The recording is a file of the test's .<name>.rto directory:
+  <config>.<case>.<command>.txt, the compile command being 1, with the
+  command line as its first line (the options of the case are on it).  The
+  edg_x86_64 recording is preferred to the default one; "" if none matches.
+  '''
+  path = tests_dir / test_path
+  rto = path.parent / f".{path.name.split('.')[0]}.rto"
+  wanted = set(variant.split())
+  for prefix in ('edg_x86_64', 'default'):
+    for file in sorted(rto.glob(f"{prefix}.*.1.txt")):
+      text = file.read_text(errors = 'replace')
+      lines = text.splitlines()
+      if lines and wanted <= set(lines[0].split()):
+        return '\n'.join(lines[1:])
+  return ''
+
+
+def crash_excuse(result: Dict[str, object]) -> Tuple[bool, str]:
+  '''Whether a front end crash is one the reference has too, and why.
+
+  `result` is a TestResult as a dict (the JSON of this tool).  The crash is
+  excused only if the reference crashes the same way (ABORT or
+  CATASTROPHE) and the message names no writer file (ecil_*, cir_be*), and
+  then:
+
+    - if a backtrace is available (at least one of its frames is
+      symbolized: a stack of bare addresses is no evidence), only when
+      none of its frames, in any stack, names ecil_ or cir_be code; and if
+      the reference's crash is an assertion, the crash must also be the
+      same assertion (a clean stack does not excuse another assertion);
+    - if the output of the compile equals the reference's recording once
+      the paragraphs about the CIR back end are removed (ref_output_same)
+      and the crash has an identity (an assertion with its file and line, an
+      "Internal error" line, or a symbolized frame): the same crash (checked
+      before the two rules below, after the writer-code checks).  A bare
+      signal ("Segmentation fault", "Aborted") is never excused this way;
+    - else, only when the assertion text, its file, line and function and
+      the source position it was reported at equal those of the
+      reference's crash.  A crash without such an identity (a signal,
+      no message) is not excused: the writer could have caused it.
+
+  An FE assertion in shared code (copy_expr_tree in il.c, say) that the
+  writer triggers with other IL than the reference has is not the
+  reference's crash: its text or its file:line differs, or the stack shows
+  the writer.  Returns (excused, reason).
+  '''
+  status, ref_status = str(result['status']), str(result.get('ref_status', ''))
+  line = str(result.get('crash_line', ''))
+  ref_line = str(result.get('ref_crash_line', ''))
+  frames = list(result.get('frames', []))
+  if result['bucket'] != 'FE_CRASH':
+    return False, 'not a front end crash'
+  if not crash_class(status) or crash_class(status) != crash_class(ref_status):
+    return False, 'the reference does not crash the same way'
+  if CIR_CODE_REGEX.search(str(result.get('message', '')) + ' ' + line):
+    return False, 'the message names writer code'
+  if any(CIR_CODE_REGEX.search(f) for f in frames):
+    return False, 'the backtrace has an ecil_ or cir_be frame'
+  if result.get('ref_output_same') and (
+      _IDENTITY_REGEX.search(line) or _INTERNAL_ERROR_REGEX.search(line) or
+      any(frame_symbolized(f) for f in frames)):
+    return True, ("the reference crashes the same way and the compile "
+                  "output equals its recording (without the CIR back end's "
+                  "notes)")
+  if any(frame_symbolized(f) for f in frames):
+    if _IDENTITY_REGEX.search(ref_line) and line != ref_line:
+      return False, (f"the backtrace has no writer frame, but the "
+                     f"assertion differs from the reference's "
+                     f"({ref_line[:100]})")
+    return True, 'the backtrace has no ecil_ or cir_be frame'
+  if not _IDENTITY_REGEX.search(line):
+    return False, 'no backtrace and no assertion to compare'
+  if line == ref_line:
+    return True, 'same assertion, file:line and source position as the ' \
+                 'reference'
+  return False, f"no backtrace; the assertion differs from the reference's " \
+                f"({ref_line[:100] or 'none recorded'})"
+
+
 def excused_crash(result: TestResult) -> bool:
-  '''A crash that the reference has too: a front end crash of the same class
-  (ABORT: a signal or assertion, CATASTROPHE) in the recorded status.  A
-  library crash is never excused (the reference does not run the library),
-  nor is one in the writer or the back end shim (ecil_*, cir_be*).'''
-  return (result.bucket == 'FE_CRASH' and bool(crash_class(result.status)) and
-          crash_class(result.status) == crash_class(result.ref_status) and
-          not re.search(r'\b(?:ecil_\w+|cir_be\w*)\b', result.message))
+  '''Whether a crash is the reference's (see crash_excuse).'''
+  return crash_excuse(vars(result))[0]
 
 
 def cxx_feature(result: TestResult) -> str:
@@ -361,6 +569,11 @@ def print_cxx_tables(results: List[TestResult], top: int) -> None:
       sub = features[feature]
       detail = ', '.join(f"{b} {sub[b]}" for b in BUCKETS if sub[b])
       print(f"    {feature:<26} {sum(sub.values()):>5}  [{detail}]")
+    families: Dict[str, int] = defaultdict(int)
+    for feature, sub in features.items():
+      families[feature.split(':')[0]] += sum(sub.values())
+    print('  M4 families (cases): ' + ', '.join(
+      f"{family} {families[family]}" for family in M4_FAMILIES))
 
 
 def print_summary(config: str, results: List[TestResult], top: int) -> None:
@@ -505,6 +718,9 @@ def main() -> None:
   reference: Dict[str, Dict[str, str]] = {}
   if args.reference and Path(args.reference).is_dir():
     reference = load_reference_failures(Path(args.reference))
+  # The reference's recordings of the tests: <test home>/tests, next to its
+  # expectations directory.
+  tests_dir = Path(args.reference).resolve().parent.parent / 'tests'
   all_results: Dict[str, List[TestResult]] = {}
   for config in configs:
     results = load_config_results(run_dir / config)
@@ -517,6 +733,11 @@ def main() -> None:
     for result in results:
       result.ref_fail = fails_in_reference(result, reference)
       result.ref_status = reference_status(result, reference)
+      if result.bucket == 'FE_CRASH' and result.ref_status:
+        recorded = reference_output(tests_dir, result.path, result.variant)
+        result.ref_crash_line, result.ref_frames = crash_details(recorded)
+        result.ref_output_same = bool(recorded) and \
+          output_digest(recorded) == result.output_key
     all_results[config] = results
     print_summary(config, results, args.top)
     if args.list_bucket:
@@ -551,4 +772,5 @@ def main() -> None:
       )
 
 
-main()
+if __name__ == '__main__':
+  main()

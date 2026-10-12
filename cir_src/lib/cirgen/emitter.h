@@ -136,6 +136,8 @@ struct a_entity {
   std::string_view           symbol;     /* The current MLIR symbol: unique
                                             among the ops, never changed
                                             before finish. */
+  std::string_view           reason;     /* The writer's reason for a
+                                            dropped definition (1.1). */
   std::string_view           want;       /* The effective name (spec 7),
                                             valid when named. */
   bool                       named = false;
@@ -351,7 +353,6 @@ private:
   /* True for a record with NONTRIVIAL_ABI. */
   mlir::Attribute constant_for_member(mlir::Attribute attr,
                                       mlir::Type member_type);
-  uint64_t consistent_data_size(const a_record_info &rec);
   uint64_t type_size(mlir::Type t);
   uint64_t type_align(mlir::Type t, bool natural = false);
   bool type_is_complete(mlir::Type t) const;
@@ -391,6 +392,7 @@ private:
   void convert_call_to_variadic(a_entity &e, cir::CallOp call);
   std::string_view claim_symbol(std::string_view want, uint64_t gid);
   std::string_view keep_string(std::string_view text);
+  std::string_view unsupported_reason(const ecil::a_record &r);
   void assign_final_names();
   void apply_substitution();
   void apply_function_attributes(a_entity &e, cir::FuncOp fn);
@@ -453,6 +455,7 @@ private:
   bool new_array_record(const ecil::a_record &r);
   bool delete_record(const ecil::a_record &r);
   bool zero_bytes(const ecil::a_record &r);
+  bool cmp3way(const ecil::a_record &r);
   bool check_class_arguments(const llvm::SmallVectorImpl<mlir::Value> &args);
   bool field_address(const a_value &base, uint64_t rec_gid, uint64_t index,
                      a_value &out);

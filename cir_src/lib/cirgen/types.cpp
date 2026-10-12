@@ -642,36 +642,6 @@ struct a_member {
 
 }  /* anonymous namespace */
 
-uint64_t a_emitter::consistent_data_size(const a_record_info &rec)
-/*
-The record's data size, raised to the end of its last non-overlapping member
-or base when the front end reported less.  The Itanium data size of a class
-ends after every data member (whole, tail padding included) and every base
-(its data size only); a smaller value cannot be right and would, among other
-things, make the record look packed.  (The front end's own data size of a class
-whose last member is itself a class with tail padding, "struct D2 : B { B x;
-};", falls 3 bytes short of the layout it uses for derived classes.)
-*/
-{
-  uint64_t end = rec.data_size;
-
-  for (const a_field &f : rec.fields) {
-    const a_type *ft = type_at(f.type);
-    uint64_t f_end;
-
-    if (f.omitted || (f.empty_for_abi && f.overlapping))
-      continue;
-    if (f.is_bitfield)
-      f_end = (field_bit_offset(f) + f.bit_width + 7) / 8;
-    else if (f.overlapping && ft->record != nullptr)
-      f_end = f.byte_offset + ft->record->data_size;
-    else
-      f_end = f.byte_offset + ft->size;
-    end = std::max(end, f_end);
-  }
-  return std::min(end, rec.size);
-}  /* a_emitter::consistent_data_size */
-
 bool a_emitter::complete_record_layout(uint64_t gid, a_type &t)
 /*
 All fields have arrived: lower the record and complete its CIR type.
@@ -681,8 +651,6 @@ All fields have arrived: lower the record and complete its CIR type.
   bool ok = true;
 
   (void)gid;
-  if (!rec.is_union && !c_language_)
-    rec.data_size = consistent_data_size(rec);
   rec.member_index.assign(rec.fields.size(), no_member);
   rec.bitfields.assign(rec.fields.size(), a_bitfield_info());
   rec.members.clear();

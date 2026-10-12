@@ -1,0 +1,175 @@
+; C++ (ECIL 1.1): CMP3WAY, the built-in <=>.  Strong ordering of signed and
+; unsigned integers and pointers, partial ordering of doubles (NaN gives the
+; unordered value), and an unsigned result type.  main returns the number of
+; the first failing check, 0 when all pass.
+; RUN: cat %S/Inputs/header11_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK-DAG: #cir.cmp3way_info<strong, lt = -1, eq = 0, gt = 1>
+; CHECK-DAG: #cir.cmp3way_info<partial, lt = -1, eq = 0, gt = 1, unordered = 2>
+; CHECK-LABEL: cir.func {{.*}}@main
+; CHECK: cir.cmp3way #cmpinfo_strong_ltn1eq0gt1 {{%[0-9a-z_]+}}, {{%[0-9a-z_]+}} : !s32i -> !s8i
+; CHECK: cir.cmp3way #cmpinfo_strong_ltn1eq0gt1 {{%[0-9a-z_]+}}, {{%[0-9a-z_]+}} : !u32i -> !s8i
+; CHECK: cir.cmp3way #cmpinfo_partial_ltn1eq0gt1un2 {{%[0-9a-z_]+}}, {{%[0-9a-z_]+}} : !cir.double -> !s8i
+; CHECK: cir.cmp3way #cmpinfo_strong_ltn1eq0gt1 {{%[0-9a-z_]+}}, {{%[0-9a-z_]+}} : !cir.ptr<!s32i> -> !s8i
+; CHECK: cir.cast integral {{.*}} : !s8i -> !u8i
+
+frame DECLS
+  STR 10 "main"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 100 21 0 9 10
+frame REGION
+  FUNC_BEGIN 100 0
+  CONST_INT 1 1
+  CONST_INT 1 2
+  CMP3WAY 4 -1 0 1 nil
+  CONST_INT 4 -1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 2
+  CONST_INT 1 2
+  CMP3WAY 4 -1 0 1 nil
+  CONST_INT 4 0
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 3
+  CONST_INT 1 2
+  CMP3WAY 4 -1 0 1 nil
+  CONST_INT 4 1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 -5
+  CONST_INT 1 3
+  CMP3WAY 4 -1 0 1 nil
+  CONST_INT 4 -1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  CONST_INT 8 1
+  CONST_INT 8 4294967295
+  CMP3WAY 4 -1 0 1 nil
+  CONST_INT 4 -1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 5
+  RETURN_STMT true
+  IF_END
+  CONST_INT 8 4294967295
+  CONST_INT 8 1
+  CMP3WAY 4 -1 0 1 nil
+  CONST_INT 4 1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 6
+  RETURN_STMT true
+  IF_END
+  CONST_FLOAT 10 f64:0x3ff0000000000000
+  CONST_FLOAT 10 f64:0x4000000000000000
+  CMP3WAY 4 -1 0 1 2
+  CONST_INT 4 -1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 7
+  RETURN_STMT true
+  IF_END
+  CONST_FLOAT 10 f64:0x4000000000000000
+  CONST_FLOAT 10 f64:0x4000000000000000
+  CMP3WAY 4 -1 0 1 2
+  CONST_INT 4 0
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 8
+  RETURN_STMT true
+  IF_END
+  CONST_FLOAT 10 f64:0x4008000000000000
+  CONST_FLOAT 10 f64:0x4000000000000000
+  CMP3WAY 4 -1 0 1 2
+  CONST_INT 4 1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 9
+  RETURN_STMT true
+  IF_END
+  CONST_FLOAT 10 f64:0x7ff8000000000000
+  CONST_FLOAT 10 f64:0x4000000000000000
+  CMP3WAY 4 -1 0 1 2
+  CONST_INT 4 2
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 10
+  RETURN_STMT true
+  IF_END
+  CONST_FLOAT 10 f64:0x4000000000000000
+  CONST_FLOAT 10 f64:0x7ff8000000000000
+  CMP3WAY 4 -1 0 1 2
+  CONST_INT 4 2
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 11
+  RETURN_STMT true
+  IF_END
+  CONST_NULL 14
+  CONST_PTR 14 16
+  CMP3WAY 4 -1 0 1 nil
+  CONST_INT 4 -1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 12
+  RETURN_STMT true
+  IF_END
+  CONST_PTR 14 16
+  CONST_PTR 14 16
+  CMP3WAY 4 -1 0 1 nil
+  CONST_INT 4 0
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 13
+  RETURN_STMT true
+  IF_END
+  CONST_PTR 14 32
+  CONST_PTR 14 16
+  CMP3WAY 4 -1 0 1 nil
+  CONST_INT 4 1
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 14
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 7
+  CONST_INT 1 7
+  CMP3WAY 5 255 0 1 nil
+  CONST_INT 5 0
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 15
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 1
+  CONST_INT 1 7
+  CMP3WAY 5 255 0 1 nil
+  CONST_INT 5 255
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 16
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

@@ -8,12 +8,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
              ^
           detected during implicit generation of "Derived::Derived() noexcept" at line 24
 
-Error: CIR back end: the definition of '_ZN7DerivedD1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN7DerivedD1Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual function (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN7DerivedD2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN7DerivedD2Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual function (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN7DerivedC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN7DerivedC1Ev' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN7DerivedC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN7DerivedC2Ev' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
 4 errors detected in the compilation of "Test_name.c".

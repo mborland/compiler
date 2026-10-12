@@ -1,0 +1,56 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++14 Test_name.c
+"Test_name.c", line 12: error: CIR back end: the body of "_ZN1TC1EPc" uses a function with the symbol name of a constructor or destructor, which the CIR back end does not support; the function is dropped
+  extern "C" void _ZN1TC1EPc(...) {}
+                                   ^
+
+1 error detected in the compilation of "Test_name.c".
+ecil 1.1 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201402 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FUNC 4 1 0 []
+  STR 5 "_Z5use_tv"
+  DECL_FUNC 5 4 0 0 5
+  DECL_FUNC 5 4 0 1 5
+  STR 6 "T"
+  TY_RECORD_DECL 6 0 6
+  STR 7 "v"
+  TY_RECORD_BODY 6 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 7 0
+  STR 8 "t"
+  TY_VOID 7
+  TY_PTR 8 6
+  TY_INT 9 8 true 1 1
+  TY_PTR 10 9
+  TY_FUNC 11 7 0 [8, 10]
+  STR 9 "_ZN1TC1EPc"
+  DECL_FUNC 12 11 0 0 9
+  STR 10 "_ZN1TC2EPc"
+  DECL_FUNC 13 11 0 0 10
+  STRUCTOR 12 13 0
+  FUNC_BEGIN 5 0
+  BLOCK_BEGIN
+  LOCAL 1 6 8 0 0
+  LREF 1
+  ADDR
+  CONST_NULL 10
+  CALL 12 11 2 0
+  LREF 1
+  FIELD 6 0
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame ABORT

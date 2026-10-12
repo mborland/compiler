@@ -123,36 +123,36 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: the definition of 'bar' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'bar' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
-Error: CIR back end: the definition of 'baz' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'baz' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_va_arg_pack (and it is referenced)
 
-Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f4' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f4' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f5' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f5' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f6' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f6' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f7' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f7' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f8' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f8' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f9' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f9' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f10' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f10' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f11' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f11' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f12' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f12' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f13' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f13' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of 'f14' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'f14' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
 16 errors detected in the compilation of "Test_name.c".

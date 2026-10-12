@@ -41,6 +41,7 @@ reported as not supported yet.
   case eop_base_cast:
   case eop_derived_cast:
   case eop_zero_bytes:
+  case eop_cmp3way:
   case eop_meminit_begin:
   case eop_meminit_end:
   case eop_cleanup_begin:
@@ -1231,9 +1232,16 @@ local_init with only a dtor region, as CIRGen emits it.
     e = entity_for(gid, false);
     if (e == nullptr) {
       ok = false;
+    } else if ((flags & ECIL_STATIC_INIT_PARTIAL) && !e->has_init) {
+      ok = internal("PARTIAL STATIC_INIT out of step with the validator");
     } else {
       cir::GlobalOp g = mlir::cast<cir::GlobalOp>(e->op);
-      bool exit_only = e->has_init;
+      /* A variable with a VAR_INIT has only its exit cleanup here, unless
+         PARTIAL (1.1): the constant elements stay the global's initial value
+         and the region stores the dynamic ones.  The pin's verifier even
+         requires an initial value next to a ctor region. */
+      bool partial = (flags & ECIL_STATIC_INIT_PARTIAL) != 0;
+      bool exit_only = e->has_init && !partial;
       bool global_init = !in_function_;
 
       e->dyn_init = true;

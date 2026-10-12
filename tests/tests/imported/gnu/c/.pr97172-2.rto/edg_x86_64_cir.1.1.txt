@@ -91,18 +91,18 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: the definition of 'gn' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'gn' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'gnp1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'gnp1' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'gnd2p1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'gnd2p1' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'gn_3' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'gn_3' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'gnp1_3' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'gnp1_3' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'gnd2p1_3' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'gnd2p1_3' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'gna3_1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'gna3_1' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
 7 errors detected in the compilation of "Test_name.c".

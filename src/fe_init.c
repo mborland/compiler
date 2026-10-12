@@ -2277,6 +2277,11 @@ when it is a secondary file.
      __int64. */
   keyword_init();
   init_predefined_macros(curr_date_time);
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* The target's operating system is read from the predefined macros before
+     the source can undefine them. */
+  if (!do_preprocessing_only) ecil_note_target_triple();
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   /* Create the file scope for this translation unit. */
   curr_translation_unit->primary_scope = new_file_scope(file_scope_number);
   /* Push an entry for the file scope onto the scope stack, saving the

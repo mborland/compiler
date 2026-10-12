@@ -11,12 +11,12 @@ Warning: CIR back end: the initializer of "v1" uses a vector type (vector types 
 
 Warning: CIR back end: the initializer of "v2" uses a vector type (vector types are not supported), which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Error: CIR back end: the definition of 'v1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'v1' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Error: CIR back end: the definition of 'v2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'v2' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
 4 errors detected in the compilation of "Test_name.c".

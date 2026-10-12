@@ -1,6 +1,28 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
+"Test_name.c", line 48: warning: CIR back end: the body of "main" uses an initializer of a flexible array member, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Warning: CIR back end: the initializer of "c" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "d" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "e" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "n" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
+
 Warning: CIR back end: the initializer of "o" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'o' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: an initializer of a flexible array member
 
-1 error detected in the compilation of "Test_name.c".
+Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express: an initializer of a flexible array member
+
+Error: CIR back end: the definition of 'd' was dropped: it uses a construct the CIR back end cannot express: an initializer of a flexible array member
+
+Error: CIR back end: the definition of 'e' was dropped: it uses a construct the CIR back end cannot express: an initializer of a flexible array member
+
+Error: CIR back end: the definition of 'n' was dropped: it uses a construct the CIR back end cannot express: an initializer of a flexible array member
+
+Error: CIR back end: the definition of 'o' was dropped: it uses a construct the CIR back end cannot express: an initializer of a flexible array member
+
+6 errors detected in the compilation of "Test_name.c".

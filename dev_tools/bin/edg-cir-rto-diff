@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Attribute every change of the recorded CIR expectations after a re-recording.
+
+Run it on the Mac, from the repository root, after `edg-cir-record` copied new
+recordings into the working tree (see the C6 plan in
+cir_src/doc/research/test_plumbing.md, and edg-cir-record).  It compares the
+working tree with a git revision (default HEAD) for
+
+  tests/expectations/edg_x86_64_cir*/*.log   the status lines
+  tests/tests/**/.<test>.rto/edg_x86_64_cir*.txt   the recorded output
+
+and puts every changed test in one class:
+
+  status        the status of a case changed (old -> new is listed; with
+                --expect FILE every one must be attributed there)
+  text-only     the recorded output changed only in the reason text of the
+                CIR back end's diagnostics (everything after "cannot express",
+                "does not support" or "not supported" in a "CIR back end"
+                message is ignored), status unchanged
+  content       the output changed in another way: reviewed by hand (the first
+                differing lines are shown)
+  added/deleted a per-config recording appeared or was deleted (edgy deletes
+                one that equals the `default` recording)
+
+Usage:
+
+  edg-cir-rto-diff                       # working tree against HEAD
+  edg-cir-rto-diff --rev 3592b2b3f7      # against another revision
+  edg-cir-rto-diff --expect expected.txt # attribute the status changes
+  edg-cir-rto-diff --list status         # list the tests of one class
+  edg-cir-rto-diff --ignore cir/writer/  # count (not review) a directory
+  edg-cir-rto-diff --self-test
+
+The expect file has one line per test: `<suite>/<path> <reason>` (the path as
+in the log, with the suite directory first); `#` starts a comment.  A status
+change of a test that is not listed is reported as UNATTRIBUTED and fails the
+run (exit status 1), as does a `content` change.  Exit status 2: setup problem.
+'''
+
+import argparse
+import re
+import subprocess
+import sys
+import unittest
+
+from collections import Counter, defaultdict
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+CONFIG_REGEX = re.compile(r'edg_x86_64_cir(?:_2p)?')
+# The reason text of a diagnostic of the CIR back end follows these words.
+_REASON_CUT = re.compile(
+  r'(cannot express|does not support|not supported)'
+  r'(?:[^\n]*(?:\n(?!\n)[^\n]*)*)')
+
+
+def normalize_recording(text: str) -> str:
+  '''The recorded output with the reason of the CIR back end's diagnostics
+  removed: in every paragraph that has "CIR back end", the text from the
+  first "cannot express", "does not support" or "not supported" to the end
+  of the paragraph is replaced by "<reason>".'''
+  paragraphs = re.split(r'(\n\s*\n)', text)
+  result = []
+  for paragraph in paragraphs:
+    if 'CIR back end' in paragraph:
+      paragraph = _REASON_CUT.sub(lambda m: m.group(1) + ' <reason>',
+                                  paragraph, count = 1)
+      paragraph = re.sub(r'\s+', ' ', paragraph)
+    result.append(paragraph)
+  return ''.join(result)
+
+
+def parse_log(text: str) -> Dict[Tuple[str, str, str], str]:
+  '''A status log: {(path, type, variant): status}.'''
+  entries = {}
+  for line in text.splitlines():
+    parts = line.split(':')
+    if len(parts) >= 4:
+      entries[(parts[0], parts[1], parts[2])] = parts[3]
+  return entries
+
+
+def git(*args: str, check: bool = True) -> str:
+  proc = subprocess.run(['git', *args], stdout = subprocess.PIPE,
+                        stderr = subprocess.PIPE, text = True,
+                        errors = 'replace')
+  if check and proc.returncode != 0:
+    raise RuntimeError(f"git {' '.join(args)}: {proc.stderr.strip()}")
+  return proc.stdout
+
+
+def git_show(rev: str, path: str) -> Optional[str]:
+  proc = subprocess.run(['git', 'show', f"{rev}:{path}"],
+                        stdout = subprocess.PIPE, stderr = subprocess.DEVNULL,
+                        text = True, errors = 'replace')
+  return proc.stdout if proc.returncode == 0 else None
+
+
+class Change:
+  def __init__(self, kind: str, name: str, detail: str = '') -> None:
+    self.kind = kind
+    self.name = name
+    self.detail = detail
+
+
+def status_changes(rev: str) -> Dict[str, List[Change]]:
+  '''The status changes per config, from the logs of tests/expectations.'''
+  result: Dict[str, List[Change]] = defaultdict(list)
+  paths = [p for p in git('ls-files', 'tests/expectations').splitlines()
+           if CONFIG_REGEX.search(p) and p.endswith('.log')]
+  for path in sorted(paths):
+    config = path.split('/')[2]
+    suite = Path(path).stem
+    old = parse_log(git_show(rev, path) or '')
+    new_file = Path(path)
+    new = parse_log(new_file.read_text(errors = 'replace')
+                    if new_file.exists() else '')
+    for key in sorted(set(old) | set(new)):
+      if old.get(key) != new.get(key):
+        name = f"{suite}/{key[0]} [{key[1]}] {key[2]}"
+        result[config].append(Change(
+          'status', name, f"{old.get(key, '(pass)')} -> "
+                          f"{new.get(key, '(pass)')}"))
+  return result
+
+
+def recording_changes(rev: str) -> Dict[str, List[Change]]:
+  '''The changes of the recorded outputs, per config.'''
+  result: Dict[str, List[Change]] = defaultdict(list)
+  names = set()
+  diff = git('diff', '--name-status', rev, '--', 'tests/tests')
+  for line in diff.splitlines():
+    status, _, path = line.partition('\t')
+    if '/.' in path and '.rto/' in path and CONFIG_REGEX.search(path):
+      names.add((status[0], path))
+  for path in git('ls-files', '--others', '--exclude-standard',
+                  'tests/tests').splitlines():
+    if '.rto/' in path and CONFIG_REGEX.search(path):
+      names.add(('A', path))
+  for status, path in sorted(names):
+    config = CONFIG_REGEX.search(path).group(0)
+    name = path.replace('tests/tests/', '').replace('/.', '/')
+    name = re.sub(r'\.rto/', ' ', name)
+    if status == 'A':
+      result[config].append(Change('added', name))
+    elif status == 'D':
+      result[config].append(Change('deleted', name))
+    else:
+      old = git_show(rev, path) or ''
+      new = Path(path).read_text(errors = 'replace')
+      if normalize_recording(old) == normalize_recording(new):
+        result[config].append(Change('text-only', name))
+      else:
+        diff = [l for l in new.splitlines() if l not in set(old.splitlines())]
+        result[config].append(Change('content', name, ' | '.join(
+          l.strip()[:80] for l in diff[:3])))
+  return result
+
+
+def read_expect(path: str) -> Dict[str, str]:
+  expect = {}
+  if path:
+    for line in Path(path).read_text().splitlines():
+      line = line.split('#')[0].strip()
+      if line:
+        name, _, reason = line.partition(' ')
+        expect[name] = reason.strip()
+  return expect
+
+
+class SelfTest(unittest.TestCase):
+  def test_normalize(self) -> None:
+    old = ('Warning: CIR back end: the body of "f" uses a thing, which the CIR '
+           'back\n          end cannot express; the function is dropped\n'
+           '\n  int f() {}\n')
+    new = ('Warning: CIR back end: the body of "f" uses a thing, which the CIR '
+           'back\n          end cannot express: the thing is a <foo> that '
+           'is\n          not handled yet; the function is dropped\n'
+           '\n  int f() {}\n')
+    other = old.replace('uses a thing', 'uses another thing')
+    self.assertEqual(normalize_recording(old), normalize_recording(new))
+    self.assertNotEqual(normalize_recording(old), normalize_recording(other))
+    self.assertNotEqual(normalize_recording('a\n'), normalize_recording('b\n'))
+
+  def test_parse_log(self) -> None:
+    log = 'a/b.cpp:rp:-DT=1:FAIL:\nc.cpp:rp:-DT=1 --c++11:PASS:\n'
+    self.assertEqual(parse_log(log), {('a/b.cpp', 'rp', '-DT=1'): 'FAIL',
+                                      ('c.cpp', 'rp', '-DT=1 --c++11'):
+                                      'PASS'})
+
+  def test_expect(self) -> None:
+    import tempfile
+    with tempfile.NamedTemporaryFile('w', suffix = '.txt') as handle:
+      handle.write('# c\nimported/gnu/cpp/opt/vrp3.sft.cpp W6  # why\n')
+      handle.flush()
+      self.assertEqual(read_expect(handle.name),
+                       {'imported/gnu/cpp/opt/vrp3.sft.cpp': 'W6'})
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2]
+  )
+  parser.add_argument('--rev', default = 'HEAD')
+  parser.add_argument('--expect', default = '',
+                      help = 'file that attributes the status changes')
+  parser.add_argument('--ignore', action = 'append', default = [],
+                      help = 'a test path prefix whose changes are only '
+                             'counted as "ignored" (the goldens that '
+                             'cir-writer owns: cir/writer/)')
+  parser.add_argument('--list', default = '',
+                      help = 'list the tests of this class: status, '
+                             'text-only, content, added, deleted')
+  parser.add_argument('--self-test', action = 'store_true')
+  args = parser.parse_args()
+  if args.self_test:
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SelfTest)
+    result = unittest.TextTestRunner(verbosity = 1).run(suite)
+    sys.exit(0 if result.wasSuccessful() else 1)
+  if not Path('src/cfe.c').exists():
+    print('run it from the repository root', file = sys.stderr)
+    sys.exit(2)
+  try:
+    statuses = status_changes(args.rev)
+    recordings = recording_changes(args.rev)
+  except RuntimeError as error:
+    print(f"edg-cir-rto-diff: {error}", file = sys.stderr)
+    sys.exit(2)
+  expect = read_expect(args.expect)
+  bad = 0
+  for config in sorted(set(statuses) | set(recordings)):
+    print(f"== {config}")
+    counts = Counter()
+    for change in statuses.get(config, []) + recordings.get(config, []):
+      if any(change.name.startswith(p) for p in args.ignore):
+        counts['ignored'] += 1
+        continue
+      counts[change.kind] += 1
+      listed = args.list == change.kind
+      if change.kind == 'status':
+        path = change.name.split(' ')[0]
+        reason = expect.get(path)
+        if reason is None and args.expect:
+          print(f"  UNATTRIBUTED status change: {change.name}: "
+                f"{change.detail}")
+          bad += 1
+        elif listed or reason is not None:
+          print(f"  status {change.name}: {change.detail}"
+                f"{' (' + reason + ')' if reason else ''}")
+      elif change.kind == 'content':
+        print(f"  CONTENT {change.name}: {change.detail}")
+        bad += 1
+      elif listed:
+        print(f"  {change.kind} {change.name}")
+    print('  ' + ', '.join(f"{k} {v}" for k, v in sorted(counts.items()))
+          if counts else '  no change')
+  sys.exit(1 if bad else 0)
+
+
+if __name__ == '__main__':
+  main()

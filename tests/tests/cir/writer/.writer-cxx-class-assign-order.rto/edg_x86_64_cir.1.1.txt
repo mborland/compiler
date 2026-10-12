@@ -1,9 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-"Test_name.c", line 36: warning: CIR back end: the body of "ntv" uses an assignment of a class that is not trivially copyable whose operands must be evaluated in the othe, which the CIR back end does not support; the function is dropped
-  void ntv() { T *tp = &tarr[0]; *tp = next_t(&tp); }
-                                                    ^
-
-ecil 1.0 features=0x00000008
+ecil 1.1 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -204,7 +200,7 @@ frame REGION
   C_AGG_BEGIN 24
   C_AGG_END
   INIT_CONST
-  LOCAL 5 11 nil 0 0
+  LOCAL 5 25 nil 0 0
   LREF 5
   LOCAL 6 11 nil 0 2
   LREF 6
@@ -218,7 +214,7 @@ frame REGION
   INIT_CONST
   AGG_INIT_END
   LREF 6
-  LOAD 0
+  ADDR
   STORE 2 0
   LREF 4
   ADDR
@@ -228,6 +224,8 @@ frame REGION
   PTR_STRIDE 0
   DEREF
   LREF 5
+  LOAD 0
+  DEREF
   LOAD 0
   STORE 0 0
   GREF 23
@@ -408,7 +406,174 @@ frame REGION
   DECL_FUNC 42 41 0 0 34
   DECL_FUNC 42 41 0 1 34
   STR 35 "tp"
-  DECL_FUNC 42 41 0 32 34
+  FUNC_BEGIN 42 0
+  BLOCK_BEGIN
+  LOCAL 1 32 35 0 0
+  LREF 1
+  C_ADDR 32 40 0
+  INIT_CONST
+  FULLEXPR_BEGIN
+  LOCAL 2 32 nil 0 0
+  LREF 2
+  LOCAL 3 31 nil 0 2
+  LREF 3
+  LREF 1
+  ADDR
+  CALL 38 37 1 0
+  STORE 2 0
+  CLEANUP_BEGIN 3 nil 0
+  LREF 3
+  ADDR
+  CALL 34 33 1 0
+  CLEANUP_BODY
+  LREF 3
+  ADDR
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  LREF 2
+  LOAD 0
+  DEREF
+  LOAD 0
+  STORE 0 0
+  FULLEXPR_END
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 36 "_Z10ntv_objectP1T"
+  DECL_FUNC 43 33 0 0 36
+  DECL_FUNC 43 33 0 1 36
+  TY_FUNC 44 32 0 []
+  STR 37 "_Z4getpv"
+  DECL_FUNC 45 44 0 0 37
+  FUNC_BEGIN 43 0
+  PARAM 1 32 32 25 0
+  BLOCK_BEGIN
+  LOCAL 2 32 nil 0 0
+  LREF 2
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  STORE 2 0
+  CALL 45 44 0 0
+  DEREF
+  LREF 2
+  LOAD 0
+  DEREF
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 38 "R"
+  TY_RECORD_DECL 46 0 38
+  TY_PTR 47 46
+  TY_FUNC 48 30 0 [47, 47]
+  STR 39 "r1"
+  STR 40 "r2"
+  TY_RECORD_BODY 46 16 16 8 4 2
+  REC_FIELD 3 0 nil nil 39 0
+  REC_FIELD 3 8 nil nil 40 0
+  STR 41 "_ZN1RC1ERKS_"
+  DECL_FUNC 49 48 0 2 41
+  STR 42 "_ZN1RC2ERKS_"
+  DECL_FUNC 50 48 0 2 42
+  STRUCTOR 49 50 0
+  DECL_FUNC 49 48 3 67 41
+  DECL_FUNC 50 48 3 67 42
+  STR 43 "r"
+  FUNC_BEGIN 50 0
+  PARAM 1 47 47 31 1
+  PARAM 2 47 47 43 0
+  BLOCK_BEGIN
+  LOCAL 3 3 nil 0 0
+  LREF 3
+  LREF 2
+  LOAD 0
+  DEREF
+  FIELD 46 0
+  LOAD 0
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 46 0
+  LREF 3
+  LOAD 0
+  STORE 0 0
+  LOCAL 4 3 nil 0 0
+  LREF 4
+  LREF 2
+  LOAD 0
+  DEREF
+  FIELD 46 1
+  LOAD 0
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 46 1
+  LREF 4
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 44 "M"
+  TY_RECORD_DECL 51 0 44
+  TY_PTR 52 51
+  TY_FUNC 53 30 0 [52, 46]
+  STR 45 "val"
+  TY_RECORD_BODY 51 16 16 8 4 1
+  REC_FIELD 46 0 nil nil 45 0
+  STR 46 "_ZN1MC1E1R"
+  DECL_FUNC 54 53 0 0 46
+  STR 47 "_ZN1MC2E1R"
+  DECL_FUNC 55 53 0 0 47
+  STRUCTOR 54 55 0
+  DECL_FUNC 54 53 0 1 46
+  DECL_FUNC 55 53 0 1 47
+  STR 48 "m"
+  TY_FUNC 56 30 0 [47]
+  STR 49 "_ZN1RC1Ev"
+  DECL_FUNC 57 56 0 0 49
+  STR 50 "_ZN1RC2Ev"
+  DECL_FUNC 58 56 0 0 50
+  STRUCTOR 57 58 0
+  FUNC_BEGIN 55 0
+  PARAM 1 52 52 31 1
+  PARAM 2 46 46 48 0
+  MEMINIT_BEGIN 2 0 1
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 51 0
+  ADDR
+  CALL 57 56 1 0
+  MEMINIT_END
+  BLOCK_BEGIN
+  LOCAL 3 47 nil 0 0
+  LREF 3
+  LREF 2
+  ADDR
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 51 0
+  LREF 3
+  LOAD 0
+  DEREF
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
 frame GLOBALS
   DECL_VAR 10 9 0 33 0 10
   DECL_VAR 40 39 0 1 0 33
@@ -422,4 +587,4 @@ frame GLOBALS
   STATIC_INIT_END
 frame NAMES
 frame END
-  END 10 0
+  END 13 0

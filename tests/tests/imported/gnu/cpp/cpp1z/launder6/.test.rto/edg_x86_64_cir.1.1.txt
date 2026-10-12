@@ -6,6 +6,6 @@ Test_name.c:
     ^
           detected during instantiation of "T *std::launder(T *) [with T=A]" at line 24
 
-Error: CIR back end: the definition of '_ZSt7launderI1AEPT_S2_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZSt7launderI1AEPT_S2_' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_launder (and it is referenced)
 
 1 error detected in the compilation of "Test_name.c".

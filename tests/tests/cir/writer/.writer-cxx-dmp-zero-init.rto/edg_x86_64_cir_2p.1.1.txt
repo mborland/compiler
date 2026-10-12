@@ -1,0 +1,203 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 25: warning: CIR back end: the body of "f1" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the function is dropped
+  int f1() { S s{}; return s.x; }
+                                ^
+
+"Test_name.c", line 26: warning: CIR back end: the body of "f2" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the function is dropped
+  int f2() { S s = {1}; return s.x; }
+                                    ^
+
+"Test_name.c", line 27: warning: CIR back end: the body of "f3" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the function is dropped
+  int f3() { S *p = new S(); int r = p->x; delete p; return r; }
+                                                               ^
+
+"Test_name.c", line 28: warning: CIR back end: the body of "f4" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the function is dropped
+  int f4() { S arr[2] = {}; return arr[0].x; }
+                                             ^
+
+"Test_name.c", line 29: warning: CIR back end: the body of "f5" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the function is dropped
+  int f5() { W w{}; return w.y; }
+                                ^
+
+"Test_name.c", line 30: warning: variable "s" is used before its value is set
+  int f6() { S s; return s.x; }
+                         ^
+
+"Test_name.c", line 32: warning: CIR back end: the body of "f8" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the function is dropped
+  int f8() { static S ls; return ls.x; }
+                                       ^
+
+Warning: CIR back end: the initializer of "g" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "g2" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gw" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gd" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gm" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
+
+Warning: CIR back end: the initializer of "gp" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
+
+ecil 1.1 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  TY_FUNC 4 1 0 []
+  STR 5 "_Z2f1v"
+  DECL_FUNC 5 4 0 0 5
+  DECL_FUNC 5 4 0 1 5
+  STR 6 "S"
+  TY_RECORD_DECL 6 0 6
+  TY_OPAQUE 7 8 8
+  STR 7 "x"
+  STR 8 "p"
+  TY_RECORD_BODY 6 16 16 8 0 2
+  REC_FIELD 1 0 nil nil 7 0
+  REC_FIELD 7 8 nil nil 8 0
+  STR 9 "s"
+  DECL_FUNC 5 4 0 32 5 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+frame REGION supp
+  STR 10 "_Z2f2v"
+  DECL_FUNC 8 4 0 0 10
+  DECL_FUNC 8 4 0 1 10
+  DECL_FUNC 8 4 0 32 10 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+frame REGION supp
+  STR 11 "_Z2f3v"
+  DECL_FUNC 9 4 0 0 11
+  DECL_FUNC 9 4 0 1 11
+  TY_PTR 10 6
+  TY_VOID 11
+  TY_PTR 12 11
+  TY_FUNC 13 12 0 [2]
+  STR 12 "_Znwm"
+  DECL_FUNC 14 13 0 0 12
+  DECL_FUNC 9 4 0 32 11 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+frame REGION supp
+  STR 13 "_Z2f4v"
+  DECL_FUNC 15 4 0 0 13
+  DECL_FUNC 15 4 0 1 13
+  TY_ARRAY 16 6 2 0
+  STR 14 "arr"
+  DECL_FUNC 15 4 0 32 13 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+frame REGION supp
+  STR 15 "_Z2f5v"
+  DECL_FUNC 17 4 0 0 15
+  DECL_FUNC 17 4 0 1 15
+  STR 16 "W"
+  TY_RECORD_DECL 18 0 16
+  STR 17 "y"
+  TY_RECORD_BODY 18 24 24 8 0 2
+  REC_FIELD 6 0 nil nil 9 0
+  REC_FIELD 1 16 nil nil 17 0
+  STR 18 "w"
+  DECL_FUNC 17 4 0 32 15 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+frame REGION
+  STR 19 "_Z2f6v"
+  DECL_FUNC 19 4 0 0 19
+  DECL_FUNC 19 4 0 1 19
+  FUNC_BEGIN 19 0
+  BLOCK_BEGIN
+  LOCAL 1 6 9 0 0
+  LREF 1
+  FIELD 6 0
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 20 "_Z2f7v"
+  DECL_FUNC 20 4 0 0 20
+  DECL_FUNC 20 4 0 1 20
+  STR 21 "F"
+  TY_RECORD_DECL 21 0 21
+  TY_OPAQUE 22 16 8
+  STR 22 "f"
+  STR 23 "k"
+  TY_RECORD_BODY 21 24 24 8 0 2
+  REC_FIELD 22 0 nil nil 22 0
+  REC_FIELD 1 16 nil nil 23 0
+  FUNC_BEGIN 20 0
+  BLOCK_BEGIN
+  LOCAL 1 21 22 0 0
+  LREF 1
+  C_AGG_BEGIN 21
+  C_AGG_END
+  INIT_CONST
+  LREF 1
+  FIELD 21 1
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 24 "_Z2f8v"
+  DECL_FUNC 23 4 0 0 24
+  DECL_FUNC 23 4 0 1 24
+  DECL_FUNC 23 4 0 32 24 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+frame REGION
+  STR 25 "_Z2f9v"
+  DECL_FUNC 24 4 0 0 25
+  DECL_FUNC 24 4 0 1 25
+  STR 26 "gf"
+  DECL_VAR 25 21 0 0 0 26
+  STR 27 "ex"
+  DECL_VAR 26 6 0 0 0 27
+  FUNC_BEGIN 24 0
+  BLOCK_BEGIN
+  GREF 25
+  FIELD 21 1
+  LOAD 0
+  GREF 26
+  FIELD 6 0
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS supp
+  STR 28 "g"
+  DECL_VAR 27 6 0 0 0 28
+  DECL_VAR 27 6 0 64 0 28 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+  STR 29 "g2"
+  DECL_VAR 28 6 0 0 0 29
+  DECL_VAR 28 6 0 64 0 29 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+  STR 30 "gw"
+  DECL_VAR 29 18 0 0 0 30
+  DECL_VAR 29 18 0 64 0 30 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+  STR 31 "D"
+  TY_RECORD_DECL 30 0 31
+  STR 32 "z"
+  TY_RECORD_BODY 30 24 20 8 0 2
+  REC_FIELD 6 0 nil nil nil 17
+  REC_FIELD 1 16 nil nil 32 0
+  STR 33 "gd"
+  DECL_VAR 31 30 0 0 0 33
+  DECL_VAR 31 30 0 64 0 33 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+  STR 34 "M"
+  TY_RECORD_DECL 32 0 34
+  TY_ARRAY 33 7 2 0
+  TY_RECORD_BODY 32 16 16 8 0 1
+  REC_FIELD 33 0 nil nil 14 0
+  STR 35 "gm"
+  DECL_VAR 34 32 0 0 0 35
+  DECL_VAR 34 32 0 64 0 35 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+  DECL_VAR 25 21 0 33 0 26
+  STR 36 "gp"
+  DECL_VAR 35 7 0 0 0 36
+  DECL_VAR 35 7 0 64 0 36 supp{13: "the zero-initialization of a pointer to a data member (its null value is -1)"}
+frame NAMES
+frame END
+  END 12 0

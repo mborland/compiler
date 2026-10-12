@@ -1,6 +1,6 @@
 # ECIL — EDG CIR IL stream format
 
-Status: **v1.0**, frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
+Status: **v1.1** (gate M3.1, session 3: section 11.12). **v1.0** was frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
 orchestrator.
 
 - **Normative source.** The definitions live in
@@ -148,8 +148,9 @@ one** value, so an unknown key can always be skipped:
 - the value is one tagged scalar or bin;
 - flag-like keys use `true`.
 
-The keys are `an_ecil_supp_key` in `ecil_format.h`. v0 writers emit none,
-and v0 readers skip them all (they are consumed from M5 onward).
+The keys are `an_ecil_supp_key` in `ecil_format.h`. Writers before 1.1
+emit none. From 1.1 the writer emits `unsupported_reason` (13); the other
+keys are consumed from M5 onward. Readers skip keys they do not use.
 
 | Key | Value |
 | --- | --- |
@@ -165,6 +166,18 @@ and v0 readers skip them all (they are consumed from M5 onward).
 | 10 `visibility` | uint |
 | 11 `used` | true |
 | 12 `explicit_align` | uint |
+| 13 `unsupported_reason` (1.1) | bin: UTF-8 text, at most 255 bytes |
+
+**`unsupported_reason`** (1.1) may follow a `DECL_FUNC` or `DECL_VAR` that
+has `UNSUPPORTED` set, and only such a record; it appears at most once per
+record. The value is valid UTF-8 and may be empty. It carries the writer's reason for dropping the
+definition, for example `the statement "try statement"`. The consumer
+appends it to the error it reports when the drop is an error (8.11), so the
+reason survives even when the front end suppresses its own warning (a
+declaration in a system header). A frame that carries a supp blob sets
+`HAS_SUPP`. A 1.1 writer sets the `SUPP` feature bit on every stream,
+because the preamble is written before any frame: the bit means "frames
+may carry supp blobs", not that one does.
 
 ## 7. Identifiers
 
@@ -614,6 +627,10 @@ scalar is diagnosed.
   - an unknown flag bit;
   - an unknown enumerated-operand value, also reported as "needs ECIL
     minor ≥ N".
+- **Validation tightenings.** A minor may add a validation rule that no
+  correct writer of any earlier minor could violate (a stream that breaks it
+  was already malformed), for example the 1.1 `data_size` consistency check
+  (11.3). Such rules apply to streams of every minor.
 - **v0.x streams were pre-release.** Writer and reader in one tree always
   matched. **1.0** (M3) is the first stable version: later additions are
   1.x minors under the rules above, for example exceptions (M4). A change of
@@ -751,7 +768,15 @@ Background is in `research/m3_ecil_v1_design.md` (§8 has the spike verdicts),
 - **Non-static member functions.** `TY_FUNC` lists the `T*` object
   parameter first. `PARAM(l, T*, T*, "this", THIS)` comes first.
 - **`TY_RECORD_BODY`:**
-  - `data_size` is the Itanium dsize; it equals `size` for C.
+  - `data_size` is the Itanium dsize; it equals `size` for C. From 1.1 an
+    inconsistent `data_size` is a format error: below the end of the last
+    field that is not `EMPTY_FOR_ABI`, or above `size`. A `BASE` or
+    `POTENTIALLY_OVERLAPPING` field ends at the end of its data size. A
+    bit-field ends at the first byte after its last bit
+    (`byte_off + ceil((bit_off + bit_width) / 8)`), so a zero-width bit-field
+    ends at its byte offset (Itanium and clang: `struct S { S(); char c;
+    int : 0; }` has dsize 4). Unions are exempt from the lower
+    bound. The check applies to streams of every minor.
   - `NONTRIVIAL_ABI`: the record is passed and returned indirectly. That
     holds if it is not bitwise copyable, if it has a deleted or non-trivial
     destructor, or if all its copy and move constructors are deleted
@@ -982,9 +1007,10 @@ diagnosed "unsupported".
     so the registration happens exactly once.
 
   This applies at namespace and class scope as well as to local statics.
-  It is the one case where `STATIC_INIT` is allowed for a `g` that has a
-  `VAR_INIT`. The consumer emits a dtor-only `cir.global` region, or a
-  `cir.local_init` with an empty ctor region.
+  It is one of the two cases where `STATIC_INIT` is allowed for a `g` that
+  has a `VAR_INIT`; the other is `PARTIAL` (1.1, section 11.12). The
+  consumer emits a dtor-only `cir.global` region, or a `cir.local_init` with
+  an empty ctor region.
 
 ### 11.8 Arrays, new and delete
 
@@ -1063,3 +1089,35 @@ corrections:
 - `empty_for_abi`.
 
 They are checked into `cir_src/test/cirgen` as lit tests during M3b.
+
+### 11.12 ECIL 1.1 additions (gate M3.1)
+
+- **`CMP3WAY(t_result, lt, eq, gt, unordered|nil)`** (0x9D): the built-in
+  `<=>`.
+  - It pops two prvalues of the same arithmetic, enumeration or pointer
+    type, already converted by the writer, and pushes a prvalue of the
+    integer type `t_result` (at most 64 bits). `lt`, `eq`, `gt` and
+    `unordered` are integer constants representable in `t_result`'s width
+    (for an unsigned `t_result`, as its bit pattern).
+  - The value is `lt`, `eq` or `gt` by the usual comparison. `unordered` is
+    present if and only if the operands are floating (partial ordering); an
+    unordered pair gives `unordered`. Floating operands without `unordered`,
+    or `unordered` with non-floating operands, are errors.
+  - The values are the comparison category's constants as the standard
+    library defines them; the writer reads them from the category type. The
+    writer stores the result into the category object (a record with one
+    integer field) itself.
+  - Consumer: `cir.cmp3way` with `#cir.cmp3way_info<strong|partial, …>`.
+- **`STATIC_INIT_BEGIN` flag `PARTIAL` (0x04)**: partial static
+  initialization, as g++ does it ([basic.start.static] allows it). `g` has a
+  `VAR_INIT` that holds the constant elements of its initializer, with
+  `C_ZERO` (or zero) for the elements that are initialized dynamically. The
+  `STATIC_INIT` stores only those dynamic elements, with no zero-fill and no
+  re-store of the constant ones. This is the second case, after the exit-only
+  case of 11.7, where a `STATIC_INIT` is allowed for a `g` with a `VAR_INIT`.
+  The consumer keeps the constant initial value and adds the dynamic
+  initialization (a `cir.global` ctor region, or the `cir.local_init` region of
+  a guarded variable). Example: `int ar[2] = { 42, i };` keeps `ar[0] == 42`
+  before any dynamic initialization runs (`cpp0x/constexpr-static4`).
+- **`unsupported_reason`** supp key (13): section 6.
+- **`data_size`** consistency is checked (11.3).

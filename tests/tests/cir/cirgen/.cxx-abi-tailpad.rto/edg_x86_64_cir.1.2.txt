@@ -1,0 +1,2 @@
+./a.out
+tailpad: OK (0 mismatches)

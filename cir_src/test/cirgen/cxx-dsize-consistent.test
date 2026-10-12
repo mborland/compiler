@@ -1,9 +1,9 @@
-; C++ (ECIL v1): a data size that stops short of the end of the last member.
-; The front end reports data size 13 for D2 below although a member of class
-; type B (size 8) ends at 16; a data member keeps its tail padding, so the
-; Itanium data size of D2 is 16.  The library raises the value to the end of
-; the last member: D2 is not packed, needs no ".base" record, and a class
-; derived from it places its own member at 16.
+; C++ (ECIL v1): a data size at the end of the last member.
+; A data member keeps its tail padding, so the Itanium data size of D2 (a
+; member of class type B, size 8, at 8) is 16: D2 is not packed, needs no
+; ".base" record, and a class derived from it places its own member at 16.
+; (From ECIL 1.1 a smaller data size is a format error, see the fixture
+; bad_ref_dsize_below_member.)
 ;   struct B { int a; char c; };           // size 8, a POD: data size 8
 ;   struct D2 : B { B inner; };            // size 16
 ;   struct E3 : D2 { char x; };            // size 20, x at 16
@@ -27,7 +27,7 @@ frame DECLS
   REC_FIELD 1 0 nil nil nil 0
   REC_FIELD 4 4 nil nil nil 0
   TY_RECORD_DECL 22 0 12
-  TY_RECORD_BODY 22 16 13 4 0 2
+  TY_RECORD_BODY 22 16 16 4 0 2
   REC_FIELD 21 0 nil nil nil 48
   REC_FIELD 21 8 nil nil nil 0
   TY_RECORD_DECL 23 0 13

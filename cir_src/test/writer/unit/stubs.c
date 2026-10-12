@@ -62,6 +62,7 @@ a_type_ptr skip_array_types(a_type_ptr t) { (void)t; abort(); }
 a_targ_size_t f_size_of_type(a_type_ptr t) { (void)t; abort(); }
 a_boolean gcc_mode;
 a_boolean use_nonstandard_for_init_scope;
+a_boolean cfront_2_1_mode;
 a_boolean is_reference_type(a_type_ptr t) { (void)t; abort(); }
 a_boolean is_union_type(a_type_ptr t) { (void)t; abort(); }
 a_type_ptr f_implicit_this_param_type_of(a_type_ptr t) { (void)t; abort(); }
@@ -97,3 +98,15 @@ an_expr_node_ptr rvalue_expr_for_lvalue(an_expr_node_ptr n) {
 an_expr_node_ptr add_address_of_to_node(an_expr_node_ptr n) {
   (void)n; abort(); }
 a_type_ptr type_pointed_to(a_type_ptr t) { (void)t; abort(); }
+/* The built-in <=> (not used by the C cases). */
+a_constant_ptr strong_ordering_equal, strong_ordering_less,
+               strong_ordering_greater, weak_ordering_equivalent,
+               weak_ordering_less, weak_ordering_greater,
+               partial_ordering_equivalent, partial_ordering_less,
+               partial_ordering_greater, partial_ordering_unordered;
+a_type_ptr strong_ordering_type(void) { abort(); }
+a_type_ptr weak_ordering_type(void) { abort(); }
+a_type_ptr partial_ordering_type(void) { abort(); }
+void initialize_ordering_constants(void) { abort(); }
+a_boolean f_identical_types(a_type_ptr a, a_type_ptr b, unsigned int f) {
+  (void)a; (void)b; (void)f; abort(); }

@@ -1,0 +1,233 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 18: warning: CIR back end: the body of "cond" uses an assignment of a class whose right operand is evaluated before a target with side effects, which the CIR back end does not support; the function is dropped
+  void cond(bool c) { *getp() = c ? g_a : g_b; }
+                                               ^
+
+"Test_name.c", line 20: warning: CIR back end: the body of "comma" uses an assignment of a class whose right operand is evaluated before a target with side effects, which the CIR back end does not support; the function is dropped
+  void comma() { *getp2() = (g_a.b++, obj); }
+                                            ^
+
+"Test_name.c", line 22: warning: CIR back end: the body of "nested_result" uses an assignment of a class whose right operand is evaluated before a target with side effects, which the CIR back end does not support; the function is dropped
+  void nested_result() { *getp3() = (t1 = t2); }
+                                               ^
+
+"Test_name.c", line 24: warning: CIR back end: the body of "nested_subscript" uses a class assignment nested in the right operand of another, which the CIR back end does not support; the function is dropped
+  void nested_subscript() { *getp3() = arr[(*getp2() = obj, 0)]; }
+                                                                 ^
+
+ecil 1.1 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  STR 5 "T"
+  TY_RECORD_DECL 4 0 5
+  TY_PTR 5 4
+  TY_FUNC 6 5 0 []
+  STR 6 "a"
+  STR 7 "b"
+  TY_RECORD_BODY 4 8 8 4 0 2
+  REC_FIELD 1 0 nil nil 6 0
+  REC_FIELD 1 4 nil nil 7 0
+  STR 8 "_Z4getpv"
+  DECL_FUNC 7 6 0 0 8
+  DECL_FUNC 7 6 0 1 8
+  STR 9 "g_a"
+  DECL_VAR 8 4 0 0 0 9
+  STR 10 "g_b"
+  DECL_VAR 9 4 0 0 0 10
+  TY_ARRAY 10 4 4 0
+  STR 11 "store"
+  DECL_VAR 11 10 0 0 0 11
+  FUNC_BEGIN 7 0
+  BLOCK_BEGIN
+  LOCAL 1 1 nil 0 0
+  LREF 1
+  CONST_INT 1 10
+  STORE 2 0
+  GREF 8
+  FIELD 4 0
+  DUP
+  LOAD 0
+  LREF 1
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  LOCAL 2 1 nil 0 0
+  LREF 2
+  CONST_INT 1 10
+  STORE 2 0
+  GREF 9
+  FIELD 4 0
+  DUP
+  LOAD 0
+  LREF 2
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  GREF 11
+  ADDR
+  CAST 12 5
+  CONST_INT 1 1
+  PTR_STRIDE 0
+  DEREF
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_VOID 12
+  TY_BOOL 13 1 1
+  TY_FUNC 14 12 0 [13]
+  STR 12 "_Z4condb"
+  DECL_FUNC 15 14 0 0 12
+  DECL_FUNC 15 14 0 1 12
+  STR 13 "c"
+  DECL_FUNC 15 14 0 32 12 supp{13: "an assignment of a class whose right operand is evaluated before a target with side effects"}
+frame REGION
+  STR 14 "_Z5getp2v"
+  DECL_FUNC 16 6 0 0 14
+  DECL_FUNC 16 6 0 1 14
+  STR 15 "obj"
+  DECL_VAR 17 4 0 0 0 15
+  FUNC_BEGIN 16 0
+  BLOCK_BEGIN
+  GREF 17
+  FIELD 4 0
+  CONST_INT 1 77
+  STORE 0 0
+  GREF 11
+  ADDR
+  CAST 12 5
+  CONST_INT 1 2
+  PTR_STRIDE 0
+  DEREF
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_FUNC 18 12 0 []
+  STR 16 "_Z5commav"
+  DECL_FUNC 19 18 0 0 16
+  DECL_FUNC 19 18 0 1 16
+  DECL_FUNC 19 18 0 32 16 supp{13: "an assignment of a class whose right operand is evaluated before a target with side effects"}
+frame REGION
+  STR 17 "_Z5getp3v"
+  DECL_FUNC 20 6 0 0 17
+  DECL_FUNC 20 6 0 1 17
+  STR 18 "t1"
+  DECL_VAR 21 4 0 0 0 18
+  STR 19 "t2"
+  DECL_VAR 22 4 0 0 0 19
+  FUNC_BEGIN 20 0
+  BLOCK_BEGIN
+  GREF 21
+  FIELD 4 0
+  CONST_INT 1 50
+  STORE 0 0
+  GREF 22
+  FIELD 4 0
+  CONST_INT 1 60
+  STORE 0 0
+  GREF 11
+  ADDR
+  CAST 12 5
+  CONST_INT 1 3
+  PTR_STRIDE 0
+  DEREF
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 20 "_Z13nested_resultv"
+  DECL_FUNC 23 18 0 0 20
+  DECL_FUNC 23 18 0 1 20
+  DECL_FUNC 23 18 0 32 20 supp{13: "an assignment of a class whose right operand is evaluated before a target with side effects"}
+frame REGION supp
+  STR 21 "_Z16nested_subscriptv"
+  DECL_FUNC 24 18 0 0 21
+  DECL_FUNC 24 18 0 1 21
+  TY_ARRAY 25 4 2 0
+  STR 22 "arr"
+  DECL_VAR 26 25 0 0 0 22
+  DECL_FUNC 24 18 0 32 21 supp{13: "a class assignment nested in the right operand of another"}
+frame REGION
+  STR 23 "_Z24after_a_dropped_functionv"
+  DECL_FUNC 27 18 0 0 23
+  DECL_FUNC 27 18 0 1 23
+  FUNC_BEGIN 27 0
+  BLOCK_BEGIN
+  LOCAL 1 5 nil 0 0
+  LREF 1
+  GREF 17
+  ADDR
+  STORE 2 0
+  CALL 16 6 0 0
+  DEREF
+  LREF 1
+  LOAD 0
+  DEREF
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 11 10 0 33 0 11
+  DECL_VAR 8 4 0 1 0 9
+  C_AGG_BEGIN 4
+  C_SEL 0
+  C_INT 1 1
+  C_SEL 1
+  C_INT 1 2
+  C_AGG_END
+  VAR_INIT 8
+  DECL_VAR 9 4 0 1 0 10
+  C_AGG_BEGIN 4
+  C_SEL 0
+  C_INT 1 3
+  C_SEL 1
+  C_INT 1 4
+  C_AGG_END
+  VAR_INIT 9
+  DECL_VAR 17 4 0 1 0 15
+  C_AGG_BEGIN 4
+  C_SEL 0
+  C_INT 1 5
+  C_SEL 1
+  C_INT 1 6
+  C_AGG_END
+  VAR_INIT 17
+  DECL_VAR 21 4 0 1 0 18
+  C_AGG_BEGIN 4
+  C_SEL 0
+  C_INT 1 20
+  C_SEL 1
+  C_INT 1 21
+  C_AGG_END
+  VAR_INIT 21
+  DECL_VAR 22 4 0 1 0 19
+  C_AGG_BEGIN 4
+  C_SEL 0
+  C_INT 1 30
+  C_SEL 1
+  C_INT 1 31
+  C_AGG_END
+  VAR_INIT 22
+  DECL_VAR 26 25 0 33 0 22
+frame NAMES
+frame END
+  END 11 0

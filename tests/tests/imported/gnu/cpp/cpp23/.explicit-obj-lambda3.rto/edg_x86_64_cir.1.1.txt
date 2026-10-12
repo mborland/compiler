@@ -7,12 +7,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
     Tree(Node& node) : _discriminator(stored::node), _node(&node) {}
                                                                    ^
 
-Error: CIR back end: the definition of '_ZN4TreeC1E4Leaf' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN4TreeC1E4Leaf' was dropped: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN4TreeC2E4Leaf' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN4TreeC2E4Leaf' was dropped: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN4TreeC1ER4Node' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN4TreeC1ER4Node' was dropped: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN4TreeC2ER4Node' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN4TreeC2ER4Node' was dropped: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct (and it is referenced)
 
 4 errors detected in the compilation of "Test_name.c".

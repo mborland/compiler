@@ -1,0 +1,38 @@
+; Good: data sizes at or above the end of the last non-EMPTY_FOR_ABI field
+; (a base counts by its own data size, a potentially overlapping member
+; too, an empty base takes no space, a union is exempt, an array counts all
+; of its elements).
+ecil 1.1 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  TY_INT 4 8 true 1 1
+  TY_ARRAY 5 4 4 0
+  TY_RECORD_DECL 21 0 nil
+  TY_RECORD_BODY 21 8 5 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 4 4 nil nil nil 0
+  TY_RECORD_DECL 22 0 nil
+  TY_RECORD_BODY 22 8 6 4 0 2
+  REC_FIELD 21 0 nil nil nil 16
+  REC_FIELD 4 5 nil nil nil 0
+  TY_RECORD_DECL 23 0 nil
+  TY_RECORD_BODY 23 1 0 1 0 0
+  TY_RECORD_DECL 24 0 nil
+  TY_RECORD_BODY 24 8 8 4 0 3
+  REC_FIELD 23 0 nil nil nil 18
+  REC_FIELD 5 0 nil nil nil 0
+  REC_FIELD 1 4 nil nil nil 0
+  TY_RECORD_DECL 25 0 nil
+  TY_RECORD_BODY 25 16 13 4 0 2
+  REC_FIELD 21 0 nil nil nil 16
+  REC_FIELD 21 8 nil nil nil 32
+  TY_RECORD_DECL 26 1 nil
+  TY_RECORD_BODY 26 8 0 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 1 0 nil nil nil 0
+frame END
+  END 2 0

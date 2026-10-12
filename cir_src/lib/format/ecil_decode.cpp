@@ -705,6 +705,13 @@ Check operand kinds, flag masks and enumerator ranges against the schema.
           op.kind != an_operand_kind::i128)
         problem = "must be an integer";
       break;
+    case an_operand_class::integer_or_nil:
+      if (!is_nil && op.kind != an_operand_kind::uint &&
+          op.kind != an_operand_kind::sint &&
+          op.kind != an_operand_kind::u128 &&
+          op.kind != an_operand_kind::i128)
+        problem = "must be an integer or nil";
+      break;
     case an_operand_class::boolean:
       if (!(op.kind == an_operand_kind::boolean ||
             (is_uint && v <= 1)))

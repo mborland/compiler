@@ -84,6 +84,9 @@ struct a_gid_entry {
   uint32_t  element;   /* Array: element G-id.  Declaration: its type.
                           Function type: the return type. */
   uint64_t  extent;    /* Record: field count.  Array: count.  Int: bits. */
+  uint64_t  size;      /* Bool, int, float, opaque and record: the size in
+                          bytes the stream gave (arrays and pointers are
+                          derived by the layout check). */
   uint32_t  name_sid;  /* Declaration: the effective name's sid (0: none). */
   uint32_t  decl_flags;  /* Declaration: the latest DECL_* flags. */
   void     *payload;   /* Owner data (the emitter's objects); null in
@@ -189,6 +192,15 @@ public:
   size_t lid_index(const a_lid_entry *entry) const
     { return static_cast<size_t>(entry - lids_.data()); }
 
+  /* The Itanium data size of a record that differs from its size. */
+  void set_record_data_size(uint32_t record, uint64_t data_size)
+    { data_sizes_[record] = data_size; }
+  uint64_t record_data_size(uint32_t record, uint64_t size) const
+    {
+      auto it = data_sizes_.find(record);
+      return it == data_sizes_.end() ? size : it->second;
+    }
+
   /* Base subobjects (REC_FIELD with BASE) of the records, for the casts. */
   void add_base(uint32_t record, uint32_t base, uint64_t offset);
   bool has_base(uint32_t record, uint32_t base, uint64_t offset) const;
@@ -229,6 +241,7 @@ private:
   };  /* a_base_rec */
   std::unordered_map<uint32_t, std::vector<a_base_rec>>
                                          bases_;
+  std::unordered_map<uint32_t, uint64_t> data_sizes_;
   uint64_t                               gids_introduced_;
   uint64_t                               sids_introduced_;
 };  /* a_id_tables */

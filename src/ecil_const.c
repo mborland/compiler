@@ -497,6 +497,7 @@ Start walking the entries of an aggregate (see ecil_write.h).
   level->entry_pos = 0;
   level->entry_sources = NULL;
   level->entry_num_sources = 0;
+  level->skip_constants = FALSE;
   level->entry_count = 1;
   level->entry_is_char = FALSE;
   for (s = 0; s < num_sources - 1 &&
@@ -969,8 +970,13 @@ char[5]).
         }
         break;
       case ck_dynamic_init:
-        ok = FALSE;
-        ecil_note_unsupported("a non-constant initializer element");
+        if (ecil_skip_dynamic_elements) {
+          /* Static storage is zero before its dynamic initialization. */
+          ecil_rec1(frame, eop_c_zero, t);
+        } else {
+          ok = FALSE;
+          ecil_note_unsupported("a non-constant initializer element");
+        }  /* if */
         break;
       default:
         { char        reason[120];
@@ -1125,6 +1131,11 @@ aggregate is initialized by agg, or by the n merged constants in sources.
     /* E.g. a vector or complex initializer: the type is opaque. */
     ecil_note_unsupported_type(t, "an aggregate initializer of an opaque "
                                   "type");
+    ok = FALSE;
+  }  /* if */
+  if (ok && ecil_note_zero_init_of_dmp(t)) {
+    /* The parts that the constant does not list are zero (the null member
+       pointer is -1). */
     ok = FALSE;
   }  /* if */
   if (ok && !C_mode() && is_immediate_class_type(agg->type) &&
@@ -1489,9 +1500,14 @@ caller to handle by dropping the function.
 
   if (has_init && initializes_flexible_array(init->constant)) {
     ecil_note_unsupported("an initializer of a flexible array member");
-  } else if (has_init && ecil_emit_constant_typed(frame, init->constant,
-                                                  type)) {
-    ecil_rec1(frame, eop_var_init, gid);
+  } else if (has_init) {
+    a_boolean  built;
+
+    ecil_skip_dynamic_elements = (ecil_gid_info(gid)->flags &
+                                             ECIL_GF_PARTIAL_INIT) != 0;
+    built = ecil_emit_constant_typed(frame, init->constant, type);
+    ecil_skip_dynamic_elements = FALSE;
+    if (built) ecil_rec1(frame, eop_var_init, gid);
   }  /* if */
   ecil_frame_leave_decl(frame, saved);
   if (ecil_unsupported_reason != NULL &&
@@ -1499,6 +1515,7 @@ caller to handle by dropping the function.
     /* The G-id table may have moved while the initializer was built. */
     const an_ecil_gid_info  *info = ecil_gid_info(gid);
 
+    ecil_remember_drop_reason(gid, ecil_unsupported_reason);
     ecil_emit_dropped_decl_var(frame, gid, type, info->decl_linkage,
                                info->decl_flags,
                                (uint32_t)ecil_variable_alignment(var),
@@ -1506,6 +1523,35 @@ caller to handle by dropping the function.
     ecil_gid_info(gid)->flags &= ~ECIL_GF_DEFINED;
   }  /* if */
 }  /* finish_variable_definition */
+
+
+a_boolean ecil_skip_dynamic_elements = FALSE;
+
+static a_boolean aggregate_is_partly_constant(a_constant_ptr agg)
+/*
+Return TRUE if an aggregate initializer that has dynamic elements also has an
+element that is a plain constant: the constant elements are the static
+initialization (VAR_INIT) and the others a STATIC_INIT with the PARTIAL flag
+(C++11 [basic.start.init]p2, as g++ does; spec 11.7).  A function-local
+static is split too (its STATIC_INIT is guarded), unless its function may
+exist in several translation units (inline, a template instance: the
+variable is COMDAT and every copy must initialize it the same way; clang
+sends zero data and the full guarded initialization, and so does the
+writer); thread_local variables and variables with vague linkage (inline
+variables, template statics: COMDAT and guarded) are not split.
+*/
+{
+  a_constant_ptr  e;
+  a_boolean       found = FALSE;
+
+  for (e = agg->variant.aggregate.first_constant; e != NULL && !found;
+       e = e->next) {
+    found = e->kind == (a_constant_repr_kind)ck_integer ||
+            e->kind == (a_constant_repr_kind)ck_float ||
+            e->kind == (a_constant_repr_kind)ck_address;
+  }  /* for */
+  return found;
+}  /* aggregate_is_partly_constant */
 
 
 STATIC_THREAD an_initializer
@@ -1535,6 +1581,7 @@ finish_variable_definition.
   a_boolean           dynamic_init = FALSE;
 
   a_boolean           needs_static_init = FALSE;
+  a_boolean           partial_init = FALSE;
 
   ecil_check_variable_attributes(var);
   if (!C_mode() && ecil_class_has_nontrivial_dtor(
@@ -1567,6 +1614,28 @@ finish_variable_definition.
       constant_scratch.constant = init->dynamic->variant.constant.ptr;
       init = &constant_scratch;
       has_init = TRUE;
+    } else if (init_kind == (an_init_kind)initk_dynamic && !C_mode() &&
+               init->dynamic != NULL &&
+               init->dynamic->kind ==
+                              (a_dynamic_init_kind)dik_nonconstant_aggregate &&
+               !is_effective_thread_local(var) &&
+               (var->source_corresp.is_local_to_function ?
+                  !ecil_local_static_may_have_multiple_copies(var) :
+                  (!var->is_inline &&
+                   !ecil_variable_may_have_multiple_copies(var))) &&
+               init->dynamic->variant.constant.ptr != NULL &&
+               init->dynamic->variant.constant.ptr->kind ==
+                              (a_constant_repr_kind)ck_aggregate &&
+               aggregate_is_partly_constant(
+                                 init->dynamic->variant.constant.ptr)) {
+      /* A partly constant aggregate: the constant elements are the static
+         initialization (VAR_INIT), the others are built by a STATIC_INIT. */
+      constant_scratch.constant = init->dynamic->variant.constant.ptr;
+      init = &constant_scratch;
+      has_init = TRUE;
+      needs_static_init = TRUE;
+      dynamic_init = TRUE;
+      partial_init = TRUE;
     } else if (init_kind == (an_init_kind)initk_dynamic && !C_mode()) {
       /* Built by a STATIC_INIT (spec 11.7). */
       needs_static_init = TRUE;
@@ -1595,6 +1664,12 @@ finish_variable_definition.
   if (type != 0 && (ecil_gid_info(type)->flags & ECIL_GF_FAILED)) {
     ecil_note_unsupported_type(type, "a record type that is not supported");
   }  /* if */
+  if (type != 0 && var->storage_class != (a_storage_class)sc_extern) {
+    /* A definition of static storage duration is zero-initialized where it is
+       not initialized (a definition without an initializer, the unlisted
+       parts of an aggregate): the null member pointer is -1. */
+    (void)ecil_note_zero_init_of_dmp(type);
+  }  /* if */
   if (needs_static_init && is_effective_thread_local(var) &&
       !var->source_corresp.is_local_to_function) {
     ecil_note_unsupported("a thread_local variable that is initialized or "
@@ -1616,12 +1691,14 @@ finish_variable_definition.
                                 needs_static_init);
       if (needs_static_init && ecil_unsupported_reason == NULL) {
         ecil_gid_info(gid)->flags |= ECIL_GF_NEEDS_STATIC_INIT;
+        if (partial_init) ecil_gid_info(gid)->flags |= ECIL_GF_PARTIAL_INIT;
         if (!dynamic_init) ecil_gid_info(gid)->flags |= ECIL_GF_CONST_INIT;
       }  /* if */
       if (ecil_unsupported_reason != NULL) {
         /* No DECL_VAR could be sent (the name is not final): introduce the
            G-id as an unsupported declaration so that it is not left
            unintroduced, and define nothing. */
+        ecil_remember_drop_reason(gid, ecil_unsupported_reason);
         ecil_emit_dropped_decl_var(frame, gid, type,
                                    (unsigned int)elk_internal, flags,
                                    (uint32_t)ecil_variable_alignment(var), 0);
@@ -1639,7 +1716,10 @@ finish_variable_definition.
     ecil_save_reason(&saved);
     gid = ecil_global_variable_id(frame, var);
     if (gid != 0) {
-      const an_ecil_gid_info  *info = ecil_gid_info(gid);
+      const an_ecil_gid_info  *info;
+
+      ecil_remember_drop_reason(gid, saved.text);
+      info = ecil_gid_info(gid);
 
       ecil_emit_dropped_decl_var(frame, gid, info->decl_type,
                                  info->decl_linkage, info->decl_flags,
@@ -1800,15 +1880,15 @@ this translation unit (tentative definitions included, without VAR_INIT).
       ecil_define_variable(frame, var, scope);
       ecil_drain_variable_definitions(frame);
       if (ecil_unsupported_reason != NULL) {
-        char  message[400];
+        char  message[ECIL_DIAGNOSTIC_MAX];
 
         (void)snprintf(message, sizeof(message),
-                       "the initializer of \"%.200s\" uses %s, which the "
+                       "the initializer of \"%.200s\" uses %.*s, which the "
                        "CIR back end does not support; the definition is "
                        "dropped",
                        var->source_corresp.name != NULL ?
                                    var->source_corresp.name : "?",
-                       ecil_unsupported_reason);
+                       ECIL_REASON_MAX - 1, ecil_unsupported_reason);
         if (ecil_variable_is_root(var)) {
           cir_be_error(message);
         } else {

@@ -1,0 +1,121 @@
+; ECIL 1.1: STATIC_INIT_BEGIN flag PARTIAL (partial static initialization as
+; g++ does it).  `ar` has a VAR_INIT with its constant element (a = 42) and a
+; PARTIAL STATIC_INIT that stores only the dynamic one (b = f()); another
+; global's initializer, which comes first in module order, already sees
+; ar.a == 42.  The same for a guarded function-local static (sl = {7, 9}).
+;   struct S { int a, b; };  S ar = {42, f()};  int seen = ar.a;
+;   int h() { static S sl = {7, 9 /* dynamic */}; return sl.a * 10 + sl.b; }
+; RUN: cat %S/Inputs/header11_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK-DAG: @_ZZ1hvE2sl = #cir.const_record<{#cir.int<7> : !s32i, #cir.int<0> : !s32i}> : !rec_S align(4) dynamic_init_info<local = true
+; CHECK-DAG: cir.local_init static_local @_ZZ1hvE2sl ctor {
+; CHECK-DAG: @ar = #cir.const_record<{#cir.int<42> : !s32i, #cir.int<0> : !s32i}> : !rec_S ctor {
+
+frame DECLS
+  STR 100 "S"
+  STR 101 "ar"
+  STR 102 "seen"
+  STR 103 "_Z1fv"
+  STR 104 "_Z1hv"
+  STR 105 "_ZZ1hvE2sl"
+  STR 106 "main"
+  TY_RECORD_DECL 41 0 100
+  TY_RECORD_BODY 41 8 8 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 1 4 nil nil nil 0
+  TY_FUNC 49 1 0 []
+  DECL_VAR 301 41 0 1 4 101
+  C_AGG_BEGIN 41
+  C_SEL 0
+  C_INT 1 42
+  C_AGG_END
+  VAR_INIT 301
+  DECL_VAR 302 1 0 1 4 102
+  DECL_VAR 303 41 1 273 4 105
+  C_AGG_BEGIN 41
+  C_SEL 0
+  C_INT 1 7
+  C_AGG_END
+  VAR_INIT 303
+  DECL_FUNC 110 49 0 1 103
+  DECL_FUNC 111 49 0 1 104
+  DECL_FUNC 120 49 0 9 106
+frame REGION
+  FUNC_BEGIN 110 0
+  CONST_INT 1 43
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 111 0
+  STATIC_INIT_BEGIN 303 4
+  GREF 303
+  FIELD 41 1
+  CONST_INT 1 9
+  STORE 2 0
+  STATIC_INIT_END
+  GREF 303
+  FIELD 41 0
+  LOAD 0
+  CONST_INT 1 10
+  MUL 1
+  GREF 303
+  FIELD 41 1
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 120 0
+  GREF 302
+  LOAD 0
+  CONST_INT 1 42
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  GREF 301
+  FIELD 41 1
+  LOAD 0
+  CONST_INT 1 43
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  CALL 111 49 0 0
+  CONST_INT 1 79
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  CALL 111 49 0 0
+  CONST_INT 1 79
+  CMP 5
+  IF_BEGIN 0
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  STATIC_INIT_BEGIN 302 0
+  GREF 302
+  GREF 301
+  FIELD 41 0
+  LOAD 0
+  STORE 2 0
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 301 4
+  GREF 301
+  FIELD 41 1
+  CALL 110 49 0 0
+  STORE 2 0
+  STATIC_INIT_END
+frame END
+  END auto 0

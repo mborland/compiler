@@ -15,12 +15,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Warning: CIR back end: the unused definition of 'ssefunc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of 'ssefunc' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of 'caster' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of 'caster' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Error: CIR back end: the definition of 'ctor' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'ctor' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported) (and it is referenced)
 
-Error: CIR back end: the definition of 'method' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'method' was dropped: it uses a construct the CIR back end cannot express: a call with an argument of unsupported type (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

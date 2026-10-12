@@ -25,6 +25,15 @@ build/gcc (cpfe):
 
   edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-rss big.c
   edg-cir-rss --generate-functions 50000 -o big.c    # make an input first
+  edg-cir-rss --generate-cxx-templates 300 -o tmpl.cpp     # template/lambda TU
+  edg-cir-rss --cxx --stats tmpl.cpp   # also the region statistics
+
+--stats sets ECIL_STATS=1: the debug front end (build/gcc-cir) then prints
+"ecil: function regions N, resident at finish M" for each front end row, the
+number of memory regions that survive the streaming (the region keeps of
+prototype instantiations, expression trees and lambdas).  Compare the rows
+inproc (regions freed per function) and keep (--ecil_keep_regions) and the
+peak RSS before and after a change of the keeps.
 
 Output is a table of wall seconds and peak RSS in MB.
 '''
@@ -162,6 +171,112 @@ def generate_cxx_functions(count: int, out_path: Path) -> None:
   out_path.write_text('\n'.join(lines) + '\n')
 
 
+def generate_cxx_templates(count: int, out_path: Path) -> None:
+  '''Write a template- and lambda-heavy C++17 file of `count` units.
+
+  The file stresses what makes the front end keep memory regions: prototype
+  instantiations, expression trees that later instantiations refer to, and
+  lambda call operators.  Every unit (namespace t<N>) has
+
+    - a class template with member templates, one of them a member class
+      template with its own member template (Box::Inner::mix), used with
+      several types and non-type arguments (including constexpr results);
+    - constexpr functions (a loop in a constexpr function, the result used
+      as a non-type template argument and in a static_assert);
+    - variadic function templates with pack expansions (an initializer list
+      expansion, a fold expression, sizeof...), and a variadic class
+      template with a non-type parameter pack;
+    - a function template whose body has lambdas: a lambda with a
+      capture list, a generic lambda called with three types, an
+      init-capture, a lambda in a lambda, and a lambda in a member
+      function template;
+    - instantiations of all of those with several types.
+
+  No virtual functions, no exceptions.  main() prints a checksum that does
+  not depend on the compiler.  Compile it with --c++17 (edg-cir-rss --cxx).
+  '''
+  lines = [
+    'extern "C" int printf(const char *, ...);',
+    'unsigned long g_total = 0;'
+  ]
+  for index in range(max(1, count)):
+    lines += [
+      f"namespace t{index} {{",
+      '  constexpr int cfib(int n) {',
+      '    int a = 0, b = 1;',
+      '    for (int i = 0; i < n; i++) { int t = a + b; a = b; b = t; }',
+      '    return a;',
+      '  }',
+      f"  constexpr int kc = cfib({5 + index % 7}) + {index % 11};",
+      '  static_assert(cfib(10) == 55, "cfib");',
+      '  template <class T, int K> struct Box {',
+      '    T v;',
+      '    Box(T x) : v(x) { }',
+      '    template <class U> U conv(U u) const { return u + (U)v + K; }',
+      '    template <class U, int M> struct Inner {',
+      '      U w;',
+      '      Inner(U x) : w(x) { }',
+      '      template <class V> V mix(V a) const { return a + (V)w + M + K; }',
+      '    };',
+      '    template <class U> Inner<U, K + 1> inner(U u) const {',
+      '      return Inner<U, K + 1>(u + (U)v);',
+      '    }',
+      '    template <class U> U apply(U u) const {',
+      '      auto g = [this, u](auto a) { return a + (U)v + u; };',
+      '      return g(u) + (U)g(1) + (U)g(2L);',
+      '    }',
+      '  };',
+      '  template <int... Ns> struct Sum {',
+      '    static constexpr int value = (Ns + ... + 0);',
+      '    static constexpr int count = sizeof...(Ns);',
+      '  };',
+      '  template <class... Ts> long fsum(Ts... ts) {',
+      '    long r = 0;',
+      '    int dummy[] = { 0, (r += (long)ts, 0)... };',
+      '    (void)dummy;',
+      '    return r + (long)sizeof...(Ts);',
+      '  }',
+      '  template <class... Ts> long ffold(Ts... ts) {',
+      '    return (0L + ... + (long)ts);',
+      '  }',
+      '  template <class T> T run_t(T x) {',
+      f"    Box<T, kc % 5 + {index % 3}> b(x);",
+      '    int base = 3;',
+      '    auto add = [&](auto a) { return a + b.v; };',
+      '    auto mul = [x](T y) { return (T)(x * y); };',
+      '    auto init = [k = x + 1](int d) { return k + d; };',
+      '    auto nest = [&](auto a) {',
+      '      auto inner = [a, base](auto c) { return a + c + base; };',
+      '      return inner(a) + inner((T)1);',
+      '    };',
+      '    return add(x) + mul(x) + b.conv(x) + b.inner(x).mix(x) +',
+      '           b.apply(x) + (T)init(2) + nest(x) + (T)fsum(x, 1, 2L) +',
+      '           (T)ffold(x, (short)3);',
+      '  }',
+      '  unsigned long run(int x) {',
+      '    unsigned long r = 0;',
+      '    r += (unsigned long)run_t<int>(x);',
+      '    r += (unsigned long)run_t<long>(x + 1);',
+      '    r += (unsigned long)run_t<short>((short)x);',
+      '    r += (unsigned long)Sum<1, 2, 3, kc % 4>::value;',
+      '    r += (unsigned long)Sum<1, 2>::count;',
+      '    r += (unsigned long)fsum(x, 2L, (short)3, 4u);',
+      '    r += (unsigned long)ffold(x, 5L, 6);',
+      '    return r;',
+      '  }',
+      '}'
+    ]
+  lines.append('int main() {')
+  for index in range(max(1, count)):
+    lines.append(f"  g_total += t{index}::run({index % 7});")
+  lines += [
+    '  printf("%lu\\n", g_total);',
+    '  return 0;',
+    '}'
+  ]
+  out_path.write_text('\n'.join(lines) + '\n')
+
+
 def run_timed(command: List[str], env: Dict[str, str], cwd: Path,
               label: str) -> Tuple[Optional[float], Optional[float], int,
                                    str]:
@@ -204,6 +319,20 @@ def main() -> None:
                              'statics, dynamic initialization, lambdas, '
                              'new/delete) with about this many functions '
                              'to -o and exit')
+  parser.add_argument('--generate-cxx-templates', type = int, default = 0,
+                      metavar = 'N',
+                      help = 'write a generated template- and lambda-heavy '
+                             'C++17 input of N units (class templates with '
+                             'member templates, generic and non-generic '
+                             'lambdas, constexpr functions, non-type '
+                             'arguments, pack expansions; about 40 '
+                             'functions and instances per unit) to -o and '
+                             'exit; measure it with --cxx and --stats')
+  parser.add_argument('--stats', action = 'store_true',
+                      help = 'set ECIL_STATS=1 and print the writer\'s '
+                             'region statistics ("ecil: function regions N, '
+                             'resident at finish M", debug front end '
+                             'only) of the front end rows')
   parser.add_argument('-o', dest = 'output', default = 'big.c')
   parser.add_argument('--cxx', action = 'store_true',
                       help = 'the input is C++ (compile it with --c++17)')
@@ -218,6 +347,10 @@ def main() -> None:
 
   if args.generate_cxx_functions:
     generate_cxx_functions(args.generate_cxx_functions, Path(args.output))
+    print(f"wrote {args.output}")
+    return
+  if args.generate_cxx_templates:
+    generate_cxx_templates(args.generate_cxx_templates, Path(args.output))
     print(f"wrote {args.output}")
     return
   if args.generate_functions:
@@ -238,11 +371,14 @@ def main() -> None:
   ]
 
   work = Path(tempfile.mkdtemp(prefix = 'edg-cir-rss.'))
+  stats_lines: List[str] = []
   results: List[Tuple[str, Optional[float], Optional[float], int]] = []
   try:
     base_env = dict(os.environ)
     base_env.update(cir_env)
     base_env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+    if args.stats:
+      base_env['ECIL_STATS'] = '1'
     base_env['ECCP_LIBDIR'] = str(Path(cir_env.get('EDG_CIR_RT_LIBDIR', '')))
     eccp = str(root / 'util/eccp.sh')
     timed_fe = make_wrapper(
@@ -256,6 +392,11 @@ def main() -> None:
       return [eccp, '-S', '--c++17' if args.cxx else '--c11',
               *extra.split(), str(source)]
 
+
+    def note_stats(row: str, proc: 'subprocess.CompletedProcess') -> None:
+      stats_lines.extend(f"{row}: {line}" for line in proc.stdout.splitlines()
+                         if line.startswith('ecil:'))
+
     for row in rows:
       env = dict(base_env)
       (work / 'fe.time').write_text('')
@@ -266,6 +407,7 @@ def main() -> None:
         proc = subprocess.run(eccp_fe_only(env), cwd = work, env = env,
                               stdout = subprocess.PIPE,
                               stderr = subprocess.STDOUT, text = True)
+        note_stats(row, proc)
         stats = (work / 'fe.time').read_text().strip().splitlines()
         parts = stats[-1].split() if stats else []
         results.append((row,
@@ -278,6 +420,7 @@ def main() -> None:
         proc = subprocess.run(eccp_fe_only(env), cwd = work, env = env,
                               stdout = subprocess.PIPE,
                               stderr = subprocess.STDOUT, text = True)
+        note_stats(row, proc)
         stats = (work / 'fe.time').read_text().strip().splitlines()
         parts = stats[-1].split() if stats else []
         results.append((row,
@@ -324,6 +467,9 @@ def main() -> None:
     wall = f"{seconds:.2f}" if seconds is not None else 'n/a'
     rss = f"{megabytes:.0f}" if megabytes is not None else 'n/a'
     print(f"{row:<12} {wall:>8} {rss:>12} {rc:>4}")
+  for line in stats_lines:
+    print(line)
 
 
-main()
+if __name__ == '__main__':
+  main()

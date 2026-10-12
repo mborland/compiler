@@ -12,10 +12,10 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   ^
           detected during instantiation of "void f<T>() [with T=int]" at line 190
 
-Error: CIR back end: the definition of '_Z4pmffi' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z4pmffi' was dropped: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Error: CIR back end: the definition of '_Z1gv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z1gv' was dropped: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (.*)" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z1fIiEvv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z1fIiEvv' was dropped: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (.*)" (and it is referenced)
 
 3 errors detected in the compilation of "Test_name.c".

@@ -3,8 +3,8 @@ Warning: CIR back end: the initializer of "p0" uses an initializer of a new[] wi
 
 Warning: CIR back end: the initializer of "a1" uses an initializer of a new[] with a run-time count, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'p0' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'p0' was dropped: it uses a construct the CIR back end cannot express: an initializer of a new[] with a run-time count
 
-Error: CIR back end: the definition of 'a1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'a1' was dropped: it uses a construct the CIR back end cannot express: an initializer of a new[] with a run-time count
 
 2 errors detected in the compilation of "Test_name.c".

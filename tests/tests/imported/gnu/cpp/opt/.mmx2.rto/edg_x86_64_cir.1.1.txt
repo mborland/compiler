@@ -7,264 +7,264 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the unused definition of '_Z9_mm_emptyv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_mm_emptyv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_ia32_emms
 
-Warning: CIR back end: the unused definition of '_Z16_mm_cvtsi32_si64i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z16_mm_cvtsi32_si64i' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z11_m_from_inti' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z11_m_from_inti' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_m_from_int64x' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_m_from_int64x' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z15_mm_cvtsi64_m64x' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z15_mm_cvtsi64_m64x' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z17_mm_cvtsi64x_si64x' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z17_mm_cvtsi64x_si64x' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_set_pi64xx' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_set_pi64xx' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z16_mm_cvtsi64_si32Dv2_i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z16_mm_cvtsi64_si32Dv2_i' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_to_intDv2_i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_to_intDv2_i' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z11_m_to_int64Dv2_i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z11_m_to_int64Dv2_i' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z15_mm_cvtm64_si64Dv2_i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z15_mm_cvtm64_si64Dv2_i' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z17_mm_cvtsi64_si64xDv2_i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z17_mm_cvtsi64_si64xDv2_i' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z14_mm_packs_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14_mm_packs_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z11_m_packsswbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z11_m_packsswbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z14_mm_packs_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14_mm_packs_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z11_m_packssdwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z11_m_packssdwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z14_mm_packs_pu16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14_mm_packs_pu16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z11_m_packuswbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z11_m_packuswbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z16_mm_unpackhi_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z16_mm_unpackhi_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_m_punpckhbwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_m_punpckhbwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z17_mm_unpackhi_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z17_mm_unpackhi_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_m_punpckhwdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_m_punpckhwdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z17_mm_unpackhi_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z17_mm_unpackhi_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_m_punpckhdqDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_m_punpckhdqDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z16_mm_unpacklo_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z16_mm_unpacklo_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_m_punpcklbwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_m_punpcklbwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z17_mm_unpacklo_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z17_mm_unpacklo_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_m_punpcklwdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_m_punpcklwdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z17_mm_unpacklo_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z17_mm_unpacklo_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_m_punpckldqDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_m_punpckldqDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z11_mm_add_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z11_mm_add_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_paddbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_paddbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_add_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_add_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_paddwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_paddwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_add_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_add_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_padddDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_padddDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_add_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_add_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_adds_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_adds_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_paddsbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_paddsbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_adds_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_adds_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_paddswDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_paddswDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_adds_pu8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_adds_pu8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_paddusbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_paddusbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_adds_pu16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_adds_pu16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_padduswDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_padduswDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z11_mm_sub_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z11_mm_sub_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psubbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psubbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_sub_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_sub_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psubwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psubwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_sub_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_sub_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psubdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psubdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_sub_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_sub_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_subs_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_subs_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_psubsbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_psubsbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_subs_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_subs_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_psubswDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_psubswDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_subs_pu8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_subs_pu8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_psubusbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_psubusbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_subs_pu16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_subs_pu16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_psubuswDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_psubuswDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_madd_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_madd_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_pmaddwdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_pmaddwdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z14_mm_mulhi_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14_mm_mulhi_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_pmulhwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_pmulhwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z14_mm_mullo_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14_mm_mullo_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_pmullwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_pmullwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_sll_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_sll_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psllwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psllwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_slli_pi16Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_slli_pi16Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_psllwiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_psllwiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_sll_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_sll_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_pslldDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_pslldDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_slli_pi32Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_slli_pi32Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_pslldiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_pslldiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_sll_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_sll_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psllqDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psllqDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_slli_si64Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_slli_si64Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_psllqiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_psllqiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_sra_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_sra_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psrawDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psrawDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_srai_pi16Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_srai_pi16Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_psrawiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_psrawiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_sra_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_sra_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psradDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psradDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_srai_pi32Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_srai_pi32Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_psradiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_psradiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_srl_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_srl_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psrlwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psrlwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_srli_pi16Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_srli_pi16Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_psrlwiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_psrlwiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_srl_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_srl_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psrldDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psrldDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_srli_pi32Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_srli_pi32Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_psrldiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_psrldiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_srl_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_srl_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_psrlqDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_psrlqDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_srli_si64Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_srli_si64Dv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z9_m_psrlqiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z9_m_psrlqiDv2_ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_and_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_and_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z7_m_pandDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z7_m_pandDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z15_mm_andnot_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z15_mm_andnot_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z8_m_pandnDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z8_m_pandnDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z11_mm_or_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z11_mm_or_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z6_m_porDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z6_m_porDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_xor_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_xor_si64Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z7_m_pxorDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z7_m_pxorDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_cmpeq_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_cmpeq_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_pcmpeqbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_pcmpeqbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_cmpgt_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_cmpgt_pi8Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_pcmpgtbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_pcmpgtbDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z14_mm_cmpeq_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14_mm_cmpeq_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_pcmpeqwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_pcmpeqwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z14_mm_cmpgt_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14_mm_cmpgt_pi16Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_pcmpgtwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_pcmpgtwDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z14_mm_cmpeq_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14_mm_cmpeq_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_pcmpeqdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_pcmpeqdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z14_mm_cmpgt_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14_mm_cmpgt_pi32Dv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z10_m_pcmpgtdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_m_pcmpgtdDv2_iS_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z16_mm_setzero_si64v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z16_mm_setzero_si64v' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_set_pi32ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_set_pi32ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_set_pi16ssss' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_set_pi16ssss' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z11_mm_set_pi8cccccccc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z11_mm_set_pi8cccccccc' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_setr_pi32ii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_setr_pi32ii' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_setr_pi16ssss' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_setr_pi16ssss' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_setr_pi8cccccccc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_setr_pi8cccccccc' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_set1_pi32i' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_set1_pi32i' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z13_mm_set1_pi16s' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z13_mm_set1_pi16s' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z12_mm_set1_pi8c' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z12_mm_set1_pi8c' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Error: CIR back end: the definition of '_Z3barDv2_i' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z3barDv2_i' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
 2 errors detected in the compilation of "Test_name.c".

@@ -24,7 +24,50 @@ metadata, inline-only bodies, unsupported entities).
 
 namespace edg_cir {
 
+namespace {
+
+std::string reason_suffix(const a_entity &e)
+/*
+": <reason>" when the writer gave a reason for dropping the definition (the
+unsupported_reason supp key), else nothing.
+*/
+{
+  std::string result;
+
+  if (!e.reason.empty()) {
+    result = ": ";
+    result += e.reason;
+  }
+  return result;
+}  /* reason_suffix */
+
+}  /* anonymous namespace */
+
 /* Entities. */
+
+std::string_view a_emitter::unsupported_reason(const ecil::a_record &r)
+/*
+The writer's reason for a declaration it marked UNSUPPORTED (the supp key
+unsupported_reason, ECIL 1.1), or an empty view.  The validator has checked
+the value.
+*/
+{
+  std::string_view reason;
+
+  if (r.supp != nullptr) {
+    std::vector<std::pair<uint64_t, ecil::an_operand>> pairs;
+
+    ecil::supp_pairs(r, pairs);
+    for (const auto &pair : pairs) {
+      if (pair.first == esk_unsupported_reason &&
+          pair.second.kind == ecil::an_operand_kind::bin)
+        reason = keep_string(std::string_view(
+            reinterpret_cast<const char *>(pair.second.data),
+            pair.second.length));
+    }
+  }
+  return reason;
+}  /* a_emitter::unsupported_reason */
 
 std::string_view a_emitter::keep_string(std::string_view text)
 /*
@@ -329,6 +372,8 @@ renames the entity (spec 7); the new name is applied at finish.
     if (linkage == elk_linkonce_odr)
       e.had_linkonce = true;
     e.flags = static_cast<uint32_t>(flags);
+    if (std::string_view why = unsupported_reason(r); !why.empty())
+      e.reason = why;
     e.named = r.ops[4].kind != ecil::an_operand_kind::nil;
     if (e.named)
       e.want = name;
@@ -359,6 +404,8 @@ renames the entity (spec 7); the new name is applied at finish.
       if (linkage == elk_linkonce_odr)
         e.had_linkonce = true;
       e.flags = static_cast<uint32_t>(flags);
+      if (std::string_view why = unsupported_reason(r); !why.empty())
+        e.reason = why;
       if (r.ops[4].kind != ecil::an_operand_kind::nil &&
           (!e.named || e.want != name)) {
         e.named = true;
@@ -426,6 +473,8 @@ Create or update a variable entity (a cir.global).
     if (linkage == elk_linkonce_odr)
       e.had_linkonce = true;
     e.flags = static_cast<uint32_t>(flags);
+    if (std::string_view why = unsupported_reason(r); !why.empty())
+      e.reason = why;
     e.align = static_cast<uint32_t>(align);
     e.named = r.ops[5].kind != ecil::an_operand_kind::nil;
     /* An unnamed string literal is named ".str" (made unique at finish). */
@@ -467,6 +516,8 @@ Create or update a variable entity (a cir.global).
       if (linkage == elk_linkonce_odr)
         e.had_linkonce = true;
       e.flags = static_cast<uint32_t>(flags);
+      if (std::string_view why = unsupported_reason(r); !why.empty())
+        e.reason = why;
       if (align != 0) {
         e.align = static_cast<uint32_t>(align);
         g.setAlignmentAttr(alignment_attr(align));
@@ -1577,14 +1628,14 @@ entity policy (spec 8.11).  Runs on the worker thread.
       } else if (!keep_going) {
         errors.push_back("the definition of '" + std::string(e.symbol) +
                          "' was dropped: it uses a construct the CIR back "
-                         "end cannot express" +
+                         "end cannot express" + reason_suffix(e) +
                          (live.count(&e) != 0 ? " (and it is referenced)"
                                               : ""));
       } else if (e.linkage != elk_internal && e.linkage != elk_private) {
         session_.report(EDG_CIR_SEVERITY_WARNING, edc_unsupported,
                         "'" + std::string(e.symbol) + "' is only declared: "
                         "its definition uses a construct the CIR back end "
-                        "cannot express");
+                        "cannot express" + reason_suffix(e));
         if (!e.is_function) {
           compat::clear_initial_value(mlir::cast<cir::GlobalOp>(e.op));
           mlir::SymbolTable::setSymbolVisibility(
@@ -1593,7 +1644,7 @@ entity policy (spec 8.11).  Runs on the worker thread.
       } else {
         errors.push_back("the internal definition of '" +
                          std::string(e.symbol) + "' was dropped but is "
-                         "still referenced");
+                         "still referenced" + reason_suffix(e));
       }
     }
     if (!erase_set.empty()) {
@@ -1625,7 +1676,7 @@ entity policy (spec 8.11).  Runs on the worker thread.
                         "the unused definition of '" +
                         std::string(entity->symbol) + "' was dropped and "
                         "erased: it uses a construct the CIR back end "
-                        "cannot express");
+                        "cannot express" + reason_suffix(*entity));
       }
       for (a_entity *entity : erase_set) {
         entity->op->erase();

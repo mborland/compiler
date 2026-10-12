@@ -3,7 +3,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
   }
   ^
 
-ecil 1.0 features=0x00000008
+ecil 1.1 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -18,7 +18,7 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_FUNC 4 1 0 []
   STR 5 "main"
   DECL_FUNC 5 4 0 8 5
@@ -26,7 +26,7 @@ frame REGION
   TY_INT 6 8 true 1 1
   TY_PTR 7 6
   STR 6 "p"
-  DECL_FUNC 5 4 0 40 5
+  DECL_FUNC 5 4 0 40 5 supp{13: "a new[] with 2^32 or more elements"}
 frame GLOBALS
 frame NAMES
 frame END

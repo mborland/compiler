@@ -52,7 +52,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
   int bad_for(int n) { for (int i = 0; T2 q = mkt2(i); i++) { } return 0; }
                                                                           ^
 
-ecil 1.0 features=0x00000008
+ecil 1.1 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -83,7 +83,7 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   TY_VOID 6
   STR 7 "V"
   TY_RECORD_DECL 7 0 7
@@ -101,15 +101,15 @@ frame REGION
   STRUCTOR 11 12 0
   DECL_FUNC 11 9 0 1 9
   DECL_FUNC 12 9 0 1 10
-  DECL_FUNC 11 9 0 32 9
-  DECL_FUNC 12 9 0 32 10
-frame REGION
+  DECL_FUNC 11 9 0 32 9 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+  DECL_FUNC 12 9 0 32 10 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+frame REGION supp
   TY_FUNC 13 1 0 [8]
   STR 11 "_ZN1V1fEv"
   DECL_FUNC 14 13 0 0 11
   DECL_FUNC 14 13 0 1 11
-  DECL_FUNC 14 13 0 32 11
-frame REGION
+  DECL_FUNC 14 13 0 32 11 supp{13: "a virtual function"}
+frame REGION supp
   STR 12 "DV"
   TY_RECORD_DECL 15 0 12
   TY_PTR 16 15
@@ -126,25 +126,25 @@ frame REGION
   STRUCTOR 19 20 0
   DECL_FUNC 19 17 0 1 15
   DECL_FUNC 20 17 0 1 16
-  DECL_FUNC 19 17 0 32 15
-  DECL_FUNC 20 17 0 32 16
-frame REGION
+  DECL_FUNC 19 17 0 32 15 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+  DECL_FUNC 20 17 0 32 16 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+frame REGION supp
   STR 17 "_Z9virt_callP1V"
   DECL_FUNC 21 13 0 0 17
   DECL_FUNC 21 13 0 1 17
   STR 18 "v"
-  DECL_FUNC 21 13 0 32 17
-frame REGION
+  DECL_FUNC 21 13 0 32 17 supp{13: "a virtual call"}
+frame REGION supp
   STR 19 "_Z7try_usei"
   DECL_FUNC 22 4 0 0 19
   DECL_FUNC 22 4 0 1 19
-  DECL_FUNC 22 4 0 32 19
-frame REGION
+  DECL_FUNC 22 4 0 32 19 supp{13: "the statement \"try statement\""}
+frame REGION supp
   STR 20 "_Z9throw_usei"
   DECL_FUNC 23 4 0 0 20
   DECL_FUNC 23 4 0 1 20
   TY_BOOL 24 1 1
-  DECL_FUNC 23 4 0 32 20
+  DECL_FUNC 23 4 0 32 20 supp{13: "the expression kind \"throw expression\""}
 frame REGION
   STR 21 "_Z7lam_usei"
   DECL_FUNC 25 4 0 0 21
@@ -258,7 +258,7 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 35 "P"
   TY_RECORD_DECL 42 0 35
   TY_PTR 43 42
@@ -273,9 +273,9 @@ frame REGION
   STRUCTOR 45 46 0
   DECL_FUNC 45 44 3 67 36
   DECL_FUNC 46 44 3 67 37
-  DECL_FUNC 45 44 0 34 36
-  DECL_FUNC 46 44 0 34 37
-frame REGION
+  DECL_FUNC 45 44 0 34 36 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+  DECL_FUNC 46 44 0 34 37 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+frame REGION supp
   STR 38 "DP"
   TY_RECORD_DECL 47 0 38
   TY_PTR 48 47
@@ -291,9 +291,9 @@ frame REGION
   STRUCTOR 50 51 0
   DECL_FUNC 50 49 3 67 40
   DECL_FUNC 51 49 3 67 41
-  DECL_FUNC 50 49 0 34 40
-  DECL_FUNC 51 49 0 34 41
-frame REGION
+  DECL_FUNC 50 49 0 34 40 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+  DECL_FUNC 51 49 0 34 41 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+frame REGION supp
   STR 42 "_ZN2DPD1Ev"
   DECL_FUNC 52 49 0 2 42
   STR 43 "_ZN2DPD2Ev"
@@ -301,9 +301,9 @@ frame REGION
   STRUCTOR 52 53 1
   DECL_FUNC 52 49 3 67 42
   DECL_FUNC 53 49 3 67 43
-  DECL_FUNC 52 49 0 34 42
-  DECL_FUNC 53 49 0 34 43
-frame REGION
+  DECL_FUNC 52 49 0 34 42 supp{13: "a virtual function"}
+  DECL_FUNC 53 49 0 34 43 supp{13: "a virtual function"}
+frame REGION supp
   STR 44 "BF"
   TY_RECORD_DECL 54 0 44
   TY_PTR 55 54
@@ -317,7 +317,7 @@ frame REGION
   DECL_FUNC 57 56 0 1 46
   STR 47 "s"
   STR 48 "c"
-  DECL_FUNC 57 56 0 32 46
+  DECL_FUNC 57 56 0 32 46 supp{13: "a conditional lvalue with a bit-field operand"}
 frame REGION
   TY_RECORD_DECL 58 0 nil
   TY_PTR 59 58
@@ -362,12 +362,12 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 53 "_Z7bad_fori"
   DECL_FUNC 69 4 0 0 53
   DECL_FUNC 69 4 0 1 53
   STR 54 "i"
-  DECL_FUNC 69 4 0 32 53
+  DECL_FUNC 69 4 0 32 53 supp{13: "a for loop with a condition declaration and an increment"}
 frame GLOBALS
   DECL_VAR 39 1 0 1 0 32
   DECL_VAR 41 40 0 1 0 34

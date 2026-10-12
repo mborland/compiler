@@ -20,16 +20,16 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the unused definition of '_ZN1AaSERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1AaSERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1AC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1AC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1AC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1AC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Error: CIR back end: the definition of '_Z1fv' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z1fv' was dropped: it uses a construct the CIR back end cannot express: a constant of a class with virtual functions or virtual bases
 
-Error: CIR back end: the definition of '_Z1gv' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z1gv' was dropped: it uses a construct the CIR back end cannot express: a constant of a class with virtual functions or virtual bases
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a virtual call
 
 3 errors detected in the compilation of "Test_name.c".

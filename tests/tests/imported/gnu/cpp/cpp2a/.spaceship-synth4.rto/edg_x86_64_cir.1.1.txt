@@ -1,8 +1,0 @@
-eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++20 Test_name.c
-"./cpp2a/spaceship-synth4.C", line 25: warning: CIR back end: the body of "operator<=>" uses the initialization of an undeclared local variable, which the CIR back end does not support; the function is dropped
-    do { if (!(is_eq (d <=> d))) __builtin_abort(); } while (0);
-                        ^
-
-Error: CIR back end: the definition of '_ZssRK1DS1_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
-
-1 error detected in the compilation of "Test_name.c".

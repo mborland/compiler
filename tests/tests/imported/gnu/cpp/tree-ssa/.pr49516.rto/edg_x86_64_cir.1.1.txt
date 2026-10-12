@@ -8,12 +8,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
            ^
           detected during implicit generation of "Tp::Tp(const Tp &) noexcept" at line 71
 
-Warning: CIR back end: the unused definition of '_ZN2TpC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2TpC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct
 
-Warning: CIR back end: the unused definition of '_ZN2TpC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2TpC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct
 
-Error: CIR back end: the definition of '_ZN2TpC1Eiii' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN2TpC1Eiii' was dropped: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN2TpC2Eiii' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN2TpC2Eiii' was dropped: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

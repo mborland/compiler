@@ -11,10 +11,10 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: the definition of 'test' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'test' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported) (and it is referenced)
 
-Error: CIR back end: the definition of 'testf' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'testf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported) (and it is referenced)
 
-Error: CIR back end: the definition of 'testl' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'testl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported) (and it is referenced)
 
 3 errors detected in the compilation of "Test_name.c".

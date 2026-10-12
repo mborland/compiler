@@ -28,22 +28,22 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the unused definition of '_Z10_mm_set_psffff' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z10_mm_set_psffff' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZN3vec4zeroEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3vec4zeroEv' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZN3vecC1ERKDv4_f' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3vecC1ERKDv4_f' was dropped and erased: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct
 
-Warning: CIR back end: the unused definition of '_ZN3vecC2ERKDv4_f' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3vecC2ERKDv4_f' was dropped and erased: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct
 
-Warning: CIR back end: the unused definition of '_ZN4vec24loadEPKf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN4vec24loadEPKf' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_ZeqRK3vecS1_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZeqRK3vecS1_' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_ia32_movmskps
 
-Warning: CIR back end: the unused definition of '_ZN3vecC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3vecC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct
 
-Warning: CIR back end: the unused definition of '_ZN3vecC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3vecC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a call returning an unsupported type
 
 1 error detected in the compilation of "Test_name.c".

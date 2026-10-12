@@ -31,14 +31,14 @@ Warning: CIR back end: the initializer of "i" uses an _Atomic type, which the CI
 
 Warning: CIR back end: the initializer of "j" uses an _Atomic type, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'fn1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn1' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'fn2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn2' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'fn3' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn3' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'fn4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'fn4' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: an _Atomic type
 
 5 errors detected in the compilation of "Test_name.c".

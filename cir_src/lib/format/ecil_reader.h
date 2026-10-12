@@ -131,7 +131,8 @@ enum class an_operand_class : uint8_t {
   array,     /* array of uint. */
   floating,  /* f32, f64 or fbits. */
   flags,     /* uint, no bits outside mask. */
-  enumerator /* uint in [lo, hi]. */
+  enumerator,/* uint in [lo, hi]. */
+  integer_or_nil  /* integer, or nil (1.1). */
 };  /* an_operand_class */
 
 struct an_operand_spec {
@@ -312,6 +313,13 @@ public:
       if (!brackets_.empty() && brackets_.back().kind == bk_static_init)
         brackets_.back().flags |= abf_exit_only;
     }
+  void mark_static_init_partial()
+  /* The STATIC_INIT just opened is PARTIAL (1.1): it stores the dynamic
+     elements of a variable that has a VAR_INIT. */
+    {
+      if (!brackets_.empty() && brackets_.back().kind == bk_static_init)
+        brackets_.back().flags |= abf_partial;
+    }
   size_t bracket_depth() const
     { return brackets_.size(); }
   const char *innermost_name() const
@@ -328,8 +336,11 @@ private:
   };  /* a_bracket */
   enum { abf_exit_only = 1,   /* Only the exit cleanup of a variable that has
                                  a VAR_INIT. */
-         abf_own_ids = 2 };   /* Opened outside a function: fresh L-id
+         abf_own_ids = 2,     /* Opened outside a function: fresh L-id
                                  space. */
+         abf_partial = 4,     /* PARTIAL (1.1). */
+         abf_content = 8 };   /* A PARTIAL group has seen code that is not
+                                 its exit cleanup. */
   struct a_region {
     uint8_t kind;
     size_t  first;     /* Index into scope_locals_ of its first local. */
@@ -361,6 +372,9 @@ private:
 };  /* a_bracket_tracker */
 
 /* Reference checking. */
+
+/* The longest unsupported_reason supp value (ECIL 1.1), in bytes. */
+const uint64_t unsupported_reason_max = 255;
 
 /*
 Checks that every id a record refers to was introduced earlier: string ids
@@ -413,6 +427,14 @@ private:
   bool check_v1(const a_record &record, std::string &problem);
   /* The operand rules of the C++ records that need the id tables. */
   bool check_structor(const a_record &record, std::string &problem);
+  bool check_supp(const a_record &record, std::string &problem);
+  /* The meaning rules of the supp keys this reader knows (1.1:
+     unsupported_reason). */
+  uint64_t type_size(const a_gid_entry *e) const;
+  /* The size in bytes of a field type, derived for pointers and arrays. */
+  uint64_t field_end(const a_record &r, const a_gid_entry *e,
+                     uint64_t type_g) const;
+  /* The end offset of a REC_FIELD (0 for an EMPTY_FOR_ABI field). */
   bool check_comdat(uint64_t decl_flags, uint64_t linkage, a_gid_kind kind,
                     std::string &problem) const;
   /* COMDAT, linkonce_odr and weak_odr describe definitions (spec 11.2). */
@@ -422,6 +444,11 @@ private:
   uint64_t                 fields_pending_;
   uint32_t                 cur_record_;     /* TY_RECORD_BODY being read. */
   bool                     members_seen_;   /* A non-base field was read. */
+  uint64_t                 cur_size_;       /* Its size and data size. */
+  uint64_t                 cur_data_size_;
+  uint64_t                 cur_end_;        /* End of its fields so far. */
+  bool                     cur_union_;
+  uint32_t                 ptr_bytes_;      /* HDR_TARGET ptr_bits / 8. */
   std::vector<a_fn_state>  fns_;
   std::vector<bool>        static_own_ids_;  /* Per open STATIC_INIT. */
   std::vector<uint32_t>    agg_targets_;

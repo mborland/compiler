@@ -15,14 +15,14 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the unused definition of '_ZN13vector_holdercvDv8_sEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN13vector_holdercvDv8_sEv' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZN13vector_holdercvDv4_jEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN13vector_holdercvDv4_jEv' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Error: CIR back end: the definition of '_ZN13vector_holderC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN13vector_holderC1Ev' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported) (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN13vector_holderC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN13vector_holderC2Ev' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported) (and it is referenced)
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
 3 errors detected in the compilation of "Test_name.c".

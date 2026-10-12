@@ -44,22 +44,22 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   ^
           detected during instantiation of "void f8<N>(v4df *) [with N=5]" at line 134
 
-Error: CIR back end: the definition of '_Z2f1ILi0EEvPDv4_jPDv4_i' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f1ILi0EEvPDv4_jPDv4_i' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_convertvector" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f2IDv4_fEvPT_PDv4_i' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f2IDv4_fEvPT_PDv4_i' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_convertvector" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f3IDv4_fEvPDv4_iPT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f3IDv4_fEvPDv4_iPT_' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_convertvector" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f4ILi12EEvPDv4_dPDv4_i' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f4ILi12EEvPDv4_dPDv4_i' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_convertvector" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f4ILi13EEvPDv4_dPDv4_i' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f4ILi13EEvPDv4_dPDv4_i' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_convertvector" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f5IDv4_iDv4_dEvPT_PT0_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f5IDv4_iDv4_dEvPT_PT0_' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_convertvector" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f6IDv256_xEvPDv256_dPT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f6IDv256_xEvPDv256_dPT_' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_convertvector" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f7ILin1EEvPDv256_xPDv256_d' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f7ILin1EEvPDv256_xPDv256_d' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_convertvector" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f8ILi5EEvPDv4_d' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f8ILi5EEvPDv4_d' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported) (and it is referenced)
 
 9 errors detected in the compilation of "Test_name.c".

@@ -33,9 +33,13 @@ Steps (names for --only/--skip):
              configs: all pass, no difference from the recorded expectations
   corpus     the C corpus in edg_x86_64_cir: summary, CIR-specific failures
              against edg_x86_64's expectations; no CIR-specific FE_CRASH or
-             LIB_CRASH (only a front end crash of the same class, ABORT or
+             LIB_CRASH (a front end crash of the same class, ABORT or
              CATASTROPHE, that edg_x86_64 records for the case is excused and
-             listed as INFO; a LIB_CRASH never is), no KILLED/TIMEOUT test, and
+             listed as INFO in excused-crashes.txt only if its backtrace has
+             no ecil_/cir_be frame or, without one, it is the same assertion
+             at the same file:line and source position (crash_excuse in
+             edg-cir-summary); a LIB_CRASH never is), no KILLED/TIMEOUT test,
+             and
              no difference from the recorded edg_x86_64_cir expectations
              (unless --allow-status-changes)
   modes      in-process and two-process output identical over the corpus
@@ -90,6 +94,19 @@ Steps (names for --only/--skip):
              is printed with every difference.  Passes
              only if all are identical (or, with --asm-allow-order, only
              reordered); report.txt has the details
+  cpp-asm-diff  asm-diff for the C++ corpus (--cpp-corpus-filter, compiled as
+             C++) against --cpp-asm-baseline, made in an old tree with
+             `edg-cir-compare-modes --cxx
+             @tests/.edgy/filters/cir-cpp-corpus.txt --types rp,lp -j 12
+             --save-asm D --in-process-only`
+  crash-sweep  every test type of the C corpus, of
+             the C++ corpus (its filters) and of imported/gnu/cpp/eh/, rtti/
+             and cir/ through edg_x86_64_cir, run by run (--sweep-timeout per
+             test): every FE_CRASH, LIB_CRASH, kill and timeout that
+             edg_x86_64 does not have too (the same crash_excuse rules) fails
+             the step and is listed with a reproducer command in
+             crashes.txt; the statuses of the tests themselves (fp, fn, ...
+             have no CIR expectations) are not gated
   perf       edg-cir-perf (instruction counts, CPU time and RSS of a big
              generated file and of the whole corpus) and, with --perf-baseline
              (the JSON of an earlier run), the before/after table;
@@ -115,11 +132,14 @@ ninja then rebuilds nothing and the evidence is for the old code.
 
 import argparse
 import difflib
+import importlib.machinery
+import importlib.util
 import json
 import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -132,10 +152,14 @@ STEPS = ('build', 'identity', 'isolation', 'smoke', 'cir-suite', 'corpus',
          'modes',
          'stress', 'writer-stress', 'rss', 'day', 'ctest', 'asm-diff', 'perf',
          'cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
-         'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke')
+         'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
+         'cpp-asm-diff', 'crash-sweep')
 # The steps of the C++ milestones; they run only with --with-cpp or --only.
 CPP_STEPS = ('cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
-             'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke')
+             'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
+             'cpp-asm-diff')
+# Steps that take long and run only with --only (none at present).
+LONG_STEPS: Tuple[str, ...] = ()
 # The synthetic C++ stress streams (cir_src/scripts/ecil-stress-gen.py) of
 # the cpp-stress steps: normal sizes, and the smaller ASan sizes.
 CPP_STRESS_CASES = ('cxx_locals:2000 cxx_temps:5000 cxx_meminit:2000 '
@@ -236,8 +260,8 @@ def runs_before(ctx: Context) -> set:
 
 
 def summarize_run(ctx: Context, step: str, run: Path, config: str,
-                  json_name: str, extra: Optional[List[str]] = None
-                  ) -> Tuple[List[dict], str]:
+                  json_name: str, extra: Optional[List[str]] = None,
+                  text_tag: str = '') -> Tuple[List[dict], str]:
   '''Run edg-cir-summary on a run directory; return (results, text).'''
   json_file = ctx.out / step / json_name
   proc = subprocess.run(
@@ -248,7 +272,8 @@ def summarize_run(ctx: Context, step: str, run: Path, config: str,
     cwd = ctx.tree, env = ctx.env, stdout = subprocess.PIPE,
     stderr = subprocess.STDOUT, text = True
   )
-  (ctx.out / step / f"summary-{config}.txt").write_text(proc.stdout)
+  (ctx.out / step / f"summary-{config}{text_tag}.txt").write_text(
+    proc.stdout)
   results = json.loads(json_file.read_text()).get(config, [])
   return results, proc.stdout
 
@@ -329,54 +354,47 @@ def step_isolation(ctx: Context) -> Tuple[bool, str]:
   return code == 0, f"{passes} checks passed, {fails} failed"
 
 
-def _crash_class(status: str) -> str:
-  base = status.split('--')[0].split('(')[0]
-  return base if base in ('ABORT', 'CATASTROPHE') else ''
+def _load_tool(name: str):
+  '''Load the module of a sibling tool of dev_tools/bin (a file without
+  .py), so that its functions are shared and not copied.'''
+  path = str(Path(__file__).resolve().with_name(name))
+  loader = importlib.machinery.SourceFileLoader(name.replace('-', '_'), path)
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
 
 
-# A crash or assertion in the CIR writer (ecil_*) or the back end shim
-# (cir_be*) is never pre-existing: the reference does not run that code.
-_CIR_CODE_REGEX = re.compile(r'\b(?:ecil_\w+|cir_be\w*)\b')
+_summary = _load_tool('edg-cir-summary')
 
 
-def _in_cir_code(message: str) -> bool:
-  return _CIR_CODE_REGEX.search(message) is not None
-
-
-def reference_message(ctx: Context, test_path: str) -> str:
-  '''The crash message in the reference's recording of a test: the first
-  line of tests/tests/<test>'s .rto directory (edg_x86_64 or default
-  recording) that looks like a crash, else its first output line.'''
-  path = ctx.tree / 'tests' / 'tests' / test_path
-  rto = path.parent / f".{path.name.split('.')[0]}.rto"
-  files = sorted(rto.glob('edg_x86_64.*.txt')) + sorted(
-    rto.glob('default.*.txt'))
-  for file in files[:1]:
-    lines = file.read_text(errors = 'replace').splitlines()[1:]
-    for line in lines:
-      if re.search(r'assert|internal error|Segmentation|Abort|catastrophic',
-                   line, re.I):
-        return line.strip()[:120]
-    return (lines[0].strip()[:120] if lines else '')
-  return ''
+def reference_message(ctx: Context, test_path: str, variant: str = '') -> str:
+  '''The crash line in the reference's recording of a case of a test (the
+  first line of its output if it has no crash line).'''
+  output = _summary.reference_output(ctx.tree / 'tests' / 'tests', test_path,
+                                     variant)
+  line, _ = _summary.crash_details(output)
+  if not line:
+    lines = [l.strip() for l in output.splitlines() if l.strip()]
+    line = lines[0] if lines else ''
+  return line[:200]
 
 
 def split_crashes(results: List[dict]) -> Tuple[List[dict], List[dict]]:
   '''The crashes of a summary: (CIR-specific ones, pre-existing ones).
 
-  Only a front end crash (FE_CRASH) of the same class (ABORT or CATASTROPHE)
-  that the edg_x86_64 reference recorded for the case is pre-existing.  A
-  library crash (LIB_CRASH) is never excused: the reference does not run the
-  library.  Kills and timeouts (KILLED, TIMEOUT) are not crashes of this kind
-  and are counted by killed_tests; they are never excused either.
+  Only a front end crash (FE_CRASH) that the edg_x86_64 reference has too is
+  pre-existing, by the rules of edg-cir-summary's crash_excuse: the same
+  class (ABORT or CATASTROPHE), no writer file in the message, and either a
+  backtrace without a writer frame or the same assertion (text, file:line,
+  source position) as the reference's.  A library crash (LIB_CRASH) is never
+  excused: the reference does not run the library.  Kills and timeouts
+  (KILLED, TIMEOUT) are not crashes of this kind and are counted by
+  killed_tests; they are never excused either.
   '''
   crashes = [r for r in results if r['bucket'] in ('FE_CRASH', 'LIB_CRASH')]
-  def excused(r: dict) -> bool:
-    return (r['bucket'] == 'FE_CRASH' and bool(_crash_class(r['status'])) and
-            _crash_class(r['status']) == _crash_class(r.get('ref_status', ''))
-            and not _in_cir_code(r.get('message', '')))
-  return ([r for r in crashes if not excused(r)],
-          [r for r in crashes if excused(r)])
+  excused = [r for r in crashes if _summary.crash_excuse(r)[0]]
+  return ([r for r in crashes if r not in excused], excused)
 
 
 def killed_tests(ctx: Context, step: str, results: List[dict]) -> List[str]:
@@ -462,9 +480,17 @@ def step_corpus(ctx: Context) -> Tuple[bool, str]:
     '\n'.join(changes) + ('\n' if changes else ''))
   info = ''
   if preexisting:
+    with open(ctx.out / 'corpus' / 'excused-crashes.txt', 'w') as excused_log:
+      for r in preexisting:
+        excused_log.write(
+          f"{r['path']} [{r['status']}] {r.get('message', '')} | reference "
+          f"{r.get('ref_status', '')}: "
+          f"{reference_message(ctx, r['path'], r['variant'])} | excused: "
+          f"{_summary.crash_excuse(r)[1]}\n")
     names = '; '.join(
       f"{r['path']} [{r['status']}] {r.get('message', '')[:60]} | reference "
-      f"{r.get('ref_status', '')} {reference_message(ctx, r['path'])[:60]}"
+      f"{r.get('ref_status', '')} "
+      f"{reference_message(ctx, r['path'], r['variant'])[:60]}"
       for r in preexisting[:5])
     info = (f" INFO: {len(preexisting)} front end crash(es) of the same class "
             f"in the reference: {names};")
@@ -518,7 +544,8 @@ def _cpp_run_step(ctx: Context, step: str, filters: str, types: str,
         excused_log.write(
           f"{config} {r['path']} [{r['status']}] {r.get('message', '')} | "
           f"reference {r.get('ref_status', '')}: "
-          f"{reference_message(ctx, r['path'])}\n")
+          f"{reference_message(ctx, r['path'], r['variant'])} | excused: "
+          f"{_summary.crash_excuse(r)[1]}\n")
     passed = counts.get('PASS', 0)
     parts.append(f"{config} {passed}/{len(results)} pass, {len(crashes)} "
                  f"crashes" + (f" (+{len(preexisting)} same FE crash in the "
@@ -603,9 +630,9 @@ def step_release_smoke(ctx: Context) -> Tuple[bool, str]:
   '''
   problems: List[str] = []
   parts: List[str] = []
-  preexisting_keys: set = set()
   for config in ctx.args.cpp_configs.split(','):
     results: Dict[str, Dict[str, str]] = {}
+    preexisting_keys: set = set()
     for kind, filters, types in (
         ('c', ctx.args.smoke_filter, 'rp,lp'),
         ('c++', ctx.args.cpp_smoke_filter, 'rp')):
@@ -624,12 +651,17 @@ def step_release_smoke(ctx: Context) -> Tuple[bool, str]:
         results[f"{kind}-{flavor}"] = {
           f"{r['path']} {r['variant']}": r['bucket'] for r in rows}
         if kind == 'c++' and flavor == 'release':
-          # A front end crash of the same class in the reference does not
-          # count.
+          # A front end crash that the reference has too does not count.
+          _, excused = split_crashes(rows)
           preexisting_keys.update(
-            f"{r['path']} {r['variant']}" for r in rows
-            if r['bucket'] == 'FE_CRASH' and _crash_class(r['status']) and
-            _crash_class(r['status']) == _crash_class(r.get('ref_status', '')))
+            f"{r['path']} {r['variant']}" for r in excused)
+          with open(ctx.out / 'release-smoke' / 'excused-crashes.txt',
+                    'a') as excused_log:
+            for r in excused:
+              excused_log.write(
+                f"{config} {r['path']} [{r['status']}] "
+                f"{r.get('message', '')} | excused: "
+                f"{_summary.crash_excuse(r)[1]}\n")
     c_rel = results['c-release']
     c_bad = [t for t, b in c_rel.items() if b != 'PASS']
     cx_rel, cx_dbg = results['c++-release'], results['c++-debug']
@@ -990,17 +1022,41 @@ def source_of(tests_dir: Path, asm_name: str) -> str:
   return re.sub(r'^\s*(extern\b|#).*$', '', text, flags = re.M)
 
 
-def compare_asm_dirs(baseline_dir: Path, new_dir: Path, tests_dir: Path
+# The frame description directives that --asm-normalize-cfi removes: what an
+# unwind table (uwtable) adds to a function.  .cfi_personality, .cfi_lsda,
+# .cfi_escape, .cfi_signal_frame and .cfi_sections are NOT among them: they
+# say how an exception is handled or what kind of frame it is, and a
+# difference in them must stay visible.
+_CFI_NORMALIZED = (
+  'startproc', 'endproc', 'def_cfa', 'def_cfa_offset', 'def_cfa_register',
+  'def_cfa_expression', 'adjust_cfa_offset', 'offset', 'rel_offset',
+  'register', 'restore', 'remember_state', 'restore_state', 'undefined',
+  'same_value', 'window_save'
+)
+_CFI_REGEX = re.compile(
+  r'^[ \t]*\.cfi_(?:' + '|'.join(_CFI_NORMALIZED) + r')\b.*(?:\n|$)', re.M)
+
+
+def strip_cfi(text: str) -> str:
+  '''The assembly without its frame description directives
+  (--asm-normalize-cfi; see _CFI_NORMALIZED).'''
+  return _CFI_REGEX.sub('', text)
+
+
+def compare_asm_dirs(baseline_dir: Path, new_dir: Path, tests_dir: Path,
+                     normalize_cfi: bool = False
                      ) -> Tuple[Dict[str, List[str]], List[str]]:
   '''Compare two --save-asm directories.
 
   Returns (groups, report lines): the case names by class and the
-  description of every case that is not identical.
+  description of every case that is not identical.  With normalize_cfi the
+  .cfi_* directives are removed from both sides first, and a case that only
+  differs in them is in the group "cfi" (and has no report entry).
   '''
   old_manifest = json.loads((baseline_dir / 'manifest.json').read_text())
   new_manifest = json.loads((new_dir / 'manifest.json').read_text())
   groups: Dict[str, List[str]] = {
-    'identical': [], 'order': [], 'labels': [], 'layout': [],
+    'identical': [], 'cfi': [], 'order': [], 'labels': [], 'layout': [],
     'symbols': [], 'other': [],
     'status': [], 'only-old': [], 'only-new': []
   }
@@ -1031,6 +1087,11 @@ def compare_asm_dirs(baseline_dir: Path, new_dir: Path, tests_dir: Path
     if old_text == new_text:
       groups['identical'].append(name)
       continue
+    if normalize_cfi:
+      old_text, new_text = strip_cfi(old_text), strip_cfi(new_text)
+      if old_text == new_text:
+        groups['cfi'].append(name)
+        continue
     kind, why = classify_asm_difference(old_text, new_text)
     groups[kind].append(name)
     if name in alloca_users:
@@ -1051,34 +1112,44 @@ def compare_asm_dirs(baseline_dir: Path, new_dir: Path, tests_dir: Path
   return groups, details
 
 
-def step_asm_diff(ctx: Context) -> Tuple[bool, str]:
-  baseline = ctx.args.asm_baseline
+def _run_asm_diff(ctx: Context, step: str, filters: str, baseline: str,
+                  new: str, types: str, cxx: bool) -> Tuple[bool, str]:
+  '''The assembly of a corpus against the baseline's (asm-diff for C,
+  cpp-asm-diff for C++).'''
+  option = 'cpp-asm-baseline' if cxx else 'asm-baseline'
   if not baseline:
-    return False, '--asm-baseline is required'
+    return False, f"--{option} is required"
   baseline_dir = Path(baseline).resolve()
   if not (baseline_dir / 'manifest.json').exists():
     return False, f"{baseline_dir} has no manifest.json"
-  if ctx.args.asm_new:
+  if new:
     # Re-classify assembly that an earlier run produced.
-    new_dir = Path(ctx.args.asm_new).resolve()
+    new_dir = Path(new).resolve()
   else:
     # The corpus assembly of this tree; in a container, so inside the tree.
-    new_dir = ctx.tree / '.tmp' / 'gate-asm' / ctx.out.name
+    new_dir = ctx.tree / '.tmp' / ('gate-cpp-asm' if cxx else 'gate-asm') / \
+      ctx.out.name
     command = (f"python3 dev_tools/bin/edg-cir-compare-modes "
-               f"{shlex.quote(ctx.args.corpus_filter)} -j {BUILD_JOBS} "
+               f"{'--cxx ' if cxx else ''}{shlex.quote(filters)} "
+               f"-j {BUILD_JOBS} "
                f"--save-asm {shlex.quote(rel(ctx, new_dir))} "
                f"--in-process-only")
-    if ctx.args.types:
-      command += f" --types {ctx.args.types}"
-    in_cir_env(ctx, 'asm-diff', command)
+    if types:
+      command += f" --types {types}"
+    in_cir_env(ctx, step, command)
   if not (new_dir / 'manifest.json').exists():
     return False, 'could not produce the assembly of this tree'
   groups, details = compare_asm_dirs(baseline_dir, new_dir,
-                                     ctx.tree / 'tests' / 'tests')
-  (ctx.out / 'asm-diff').mkdir(parents = True, exist_ok = True)
-  (ctx.out / 'asm-diff' / 'report.txt').write_text('\n'.join(details) + '\n')
-  differing = sum(len(v) for k, v in groups.items() if k != 'identical')
-  detail = (f"{len(groups['identical'])} identical, {len(groups['order'])} "
+                                     ctx.tree / 'tests' / 'tests',
+                                     ctx.args.asm_normalize_cfi)
+  (ctx.out / step).mkdir(parents = True, exist_ok = True)
+  (ctx.out / step / 'report.txt').write_text('\n'.join(details) + '\n')
+  differing = sum(len(v) for k, v in groups.items()
+                  if k not in ('identical', 'cfi'))
+  detail = (f"{len(groups['identical'])} identical, "
+            + (f"{len(groups['cfi'])} .cfi_* directives only, "
+               if ctx.args.asm_normalize_cfi else '') +
+            f"{len(groups['order'])} "
             f"order only, {len(groups['labels'])} label numbers only, "
             f"{len(groups['layout'])} block layout only, "
             f"{len(groups['symbols'])} symbols added/removed/renamed, "
@@ -1087,6 +1158,233 @@ def step_asm_diff(ctx: Context) -> Tuple[bool, str]:
             f"only in baseline/now (report.txt)")
   allowed = len(groups['order']) if ctx.args.asm_allow_order else 0
   return differing == allowed, detail
+
+
+def step_asm_diff(ctx: Context) -> Tuple[bool, str]:
+  return _run_asm_diff(ctx, 'asm-diff', ctx.args.corpus_filter,
+                       ctx.args.asm_baseline, ctx.args.asm_new,
+                       ctx.args.types, False)
+
+
+def step_cpp_asm_diff(ctx: Context) -> Tuple[bool, str]:
+  return _run_asm_diff(ctx, 'cpp-asm-diff', ctx.args.cpp_corpus_filter,
+                       ctx.args.cpp_asm_baseline, ctx.args.cpp_asm_new,
+                       'rp,lp', True)
+
+
+# The filters of the crash sweep: the corpora of the C and C++ milestones with
+# the directories they exclude (every test type is run), and the directories
+# that the C++ corpus leaves out for M4 plus the CIR tests.
+SWEEP_EXTRA_FILTER = 'imported/gnu/cpp/eh/,imported/gnu/cpp/rtti/,cir/'
+
+
+def read_crash_allowlist(path: Path
+                         ) -> Dict[Tuple[str, str], Tuple[str, str, str]]:
+  '''The reviewed allowlist of crashes (tests/.edgy/filters/
+  cir-excused-crashes.txt): one line per test,
+
+    <test path> | [variant=<options> |] assertion=<text> | <reason>
+    <test path> | [variant=<options> |] signal=<SIGSEGV|SIGABRT|...> | <reason>
+
+  variant is the case's options as in the status logs (without it every case
+  of the test).  One of assertion and signal is required.  An assertion is a
+  literal text that the crash line must contain (the front end's assertion
+  line): a test on the list whose crash is another one is not excused.  A
+  signal pins a bare signal crash (no identity): the front end must die of
+  that signal and its compile output must still equal the reference's
+  recording (without the CIR back end's notes); another signal or a
+  different output is a problem.  The reason is required.  Patterns are not
+  allowed: a path or variant with * ? [ or ] is an error.  # starts a comment
+  line.  Returns {(path, variant): (assertion, signal, reason)}.
+  '''
+  allow: Dict[Tuple[str, str], Tuple[str, str, str]] = {}
+  if not path.exists():
+    return allow
+  for number, raw in enumerate(path.read_text().splitlines(), 1):
+    if not raw.strip() or raw.lstrip().startswith('#'):
+      continue
+    parts = [p.strip() for p in raw.split('|')]
+    test, variant, assertion, signal_name = parts[0], '', '', ''
+    if len(parts) < 3 or not parts[-1] or not test:
+      raise ValueError(f"{path}:{number}: expected '<test path> | "
+                       f"[variant=<options> | ](assertion=<text> | "
+                       f"signal=<SIGNAL>) | <reason>'")
+    for field in parts[1:-1]:
+      if field.startswith('variant=') and not variant:
+        variant = field[len('variant='):].strip()
+      elif field.startswith('assertion=') and not assertion:
+        assertion = field[len('assertion='):].strip()
+      elif field.startswith('signal=') and not signal_name:
+        signal_name = field[len('signal='):].strip()
+        if signal_name not in {s.name for s in signal.Signals}:
+          raise ValueError(f"{path}:{number}: unknown signal "
+                           f"'{signal_name}'")
+      else:
+        raise ValueError(f"{path}:{number}: unknown field '{field[:30]}'")
+    if not assertion and not signal_name:
+      raise ValueError(f"{path}:{number}: an assertion= or a signal= is "
+                       f"required")
+    if assertion and signal_name:
+      raise ValueError(f"{path}:{number}: assertion= and signal= are "
+                       f"exclusive")
+    if re.search(r'[*?\[\]]', test + variant):
+      raise ValueError(f"{path}:{number}: patterns are not allowed, list "
+                       f"each test")
+    allow[(test, variant)] = (assertion, signal_name, parts[-1])
+  return allow
+
+
+def allowlist_excuses(entry: Tuple[str, str, str], result: dict) -> bool:
+  '''Whether an allowlist entry excuses a crash: its assertion is in the
+  crash line, or the front end died of its signal and the output equals the
+  reference's (the reference crashing the same way).'''
+  assertion, signal_name, _ = entry
+  if assertion:
+    return assertion in (result.get('crash_line') or '')
+  return (result.get('signal') == signal_name and
+          bool(result.get('ref_output_same')) and
+          _summary.crash_class(str(result['status'])) ==
+          _summary.crash_class(str(result.get('ref_status', ''))) != '')
+
+
+def is_real_crash(result: dict) -> bool:
+  '''Whether a result in the FE_CRASH or LIB_CRASH bucket is a crash: an
+  abort or signal, an assertion or internal error, a sanitizer report.  A
+  CATASTROPHE status alone (the front end's fatal diagnostic, "1
+  catastrophic error detected") is a normal fatal error, not a crash.'''
+  text = f"{result.get('crash_line', '')} {result.get('message', '')}"
+  return (_summary.crash_class(str(result['status'])) == 'ABORT' or
+          _summary._CRASH_REGEX.search(text) is not None or
+          _summary._LIB_INTERNAL_REGEX.search(text) is not None)
+
+
+def sweep_report(results: List[dict], label: str, config: str,
+                 killed: List[str],
+                 allow: Optional[Dict[Tuple[str, str],
+                                      Tuple[str, str, str]]] = None
+                 ) -> Tuple[List[str], List[str], List[str], Dict[str, int]]:
+  '''The problems of the results of one sweep run.
+
+  Returns (problems, excused, fatal errors, counts) as lines for
+  crashes.txt.  A problem is a real crash (see is_real_crash) that
+  split_crashes does not excuse, and a killed or timed out test that the
+  reference does not have too (its recorded status is not TIMEOUT or
+  KILLED).  A fatal error that the reference does not have (a CATASTROPHE
+  that is no crash) is listed, but is no problem.  A crash on the reviewed
+  allowlist (`allow`, see read_crash_allowlist) is excused, with its reason.
+  '''
+  allow = allow or {}
+  crashes, excused = split_crashes(results)
+  problems: List[str] = []
+  fatal: List[str] = []
+  def line(r: dict, why: str) -> str:
+    command = (f"edg-docker-test --non-interactive --posture cir "
+               f"--only-configs {config} -T 180 {r['path']}")
+    return (f"{label} {r['path']} [{r['test_type']}] "
+            f"{r['variant']} {r['status']} {r['bucket']}: "
+            f"{r.get('crash_line') or r.get('message', '')[:160]} | "
+            f"reference {r.get('ref_status') or 'passes or not recorded'} | "
+            f"{why} | reproduce: {command}")
+  for r in crashes:
+    entry = allow.get((r['path'], r['variant'])) or allow.get(
+      (r['path'], ''))
+    if is_real_crash(r) and entry is not None and allowlist_excuses(entry,
+                                                                    r):
+      excused.append(dict(r, _allowed = entry[2]))
+    elif is_real_crash(r):
+      pinned = ''
+      if entry is not None:
+        pinned = ("; the test is allowlisted for the assertion "
+                  f"'{entry[0]}'" if entry[0] else
+                  f"; the test is allowlisted for the signal {entry[1]} with "
+                  "the reference's output")
+        pinned += ', this crash differs'
+      problems.append(line(r, 'not excused: ' +
+                           _summary.crash_excuse(r)[1] + pinned))
+    else:
+      fatal.append(line(r, 'fatal error, not a crash; the reference '
+                           'does not have it'))
+  for r in results:
+    if r['bucket'] in ('KILLED', 'TIMEOUT') and not str(
+        r.get('ref_status', '')).startswith(('TIMEOUT', 'KILLED')):
+      problems.append(line(r, 'killed or timed out, the reference not'))
+  for name in killed:
+    if not any(name in p for p in problems):
+      problems.append(f"{label} {name}: cancelled by edgy (an X line)")
+  excused_lines = [
+    line(r, 'excused: ' + (f"allowlisted: {r['_allowed']}" if '_allowed' in r
+                           else _summary.crash_excuse(r)[1]))
+    for r in excused]
+  counts = {'cases': len(results), 'excused': len(excused),
+            'fatal': len(fatal), 'problems': len(problems)}
+  return problems, excused_lines, fatal, counts
+
+
+def step_crash_sweep(ctx: Context) -> Tuple[bool, str]:
+  '''Run every test type of the C and C++ corpus directories (and of eh/,
+  rtti/ and cir/) through edg_x86_64_cir and report the crashes that the
+  reference does not have.  The statuses are not gated.'''
+  config = 'edg_x86_64_cir'
+  step_dir = ctx.out / 'crash-sweep'
+  step_dir.mkdir(parents = True, exist_ok = True)
+  try:
+    allow = read_crash_allowlist(ctx.tree / ctx.args.excused_crashes)
+  except ValueError as error:
+    return False, f"bad allowlist: {error}"
+  used: set = set()
+  all_problems: List[str] = []
+  excused_all: List[str] = []
+  fatal_all: List[str] = []
+  parts: List[str] = []
+  for label, filters in (('c', ctx.args.corpus_filter),
+                         ('c++', ctx.args.cpp_corpus_filter),
+                         ('extra', SWEEP_EXTRA_FILTER)):
+    started = time.time()
+    run = edgy_run(ctx, 'crash-sweep', config, filters, '',
+                   timeout = ctx.args.sweep_timeout)
+    if run is None:
+      return False, f"no run for {label}"
+    results, _ = summarize_run(ctx, 'crash-sweep', run, config,
+                               f"{label}.json".replace('+', 'x'),
+                               text_tag = f"-{label}".replace('+', 'x'))
+    killed = killed_tests(ctx, 'crash-sweep', results)
+    problems, excused, fatal, counts = sweep_report(results, label, config,
+                                                    killed, allow)
+    used.update(k for k in allow if any(
+      r['path'] == k[0] and k[1] in ('', r['variant']) for r in results))
+    types = collections_counter(r['test_type'] for r in results)
+    parts.append(f"{label}: {counts['cases']} cases "
+                 f"({', '.join(f'{t} {n}' for t, n in sorted(types.items()))}"
+                 f"), {counts['excused']} excused, {counts['fatal']} fatal "
+                 f"errors, {counts['problems']} problem(s), {(time.time() - started) / 60:.0f} min")
+    all_problems += problems
+    excused_all += excused
+    fatal_all += fatal
+    killed.clear()
+    # The log of this run must not count again in the next one.
+    log = step_dir / 'log.txt'
+    if log.exists():
+      log.rename(step_dir / f"log-{label}.txt".replace('+', 'x'))
+  (step_dir / 'crashes.txt').write_text(
+    '\n'.join(['# CIR-specific crashes, kills and timeouts', *all_problems,
+                '# excused: the reference has the same crash', *excused_all,
+                '# fatal errors (CATASTROPHE, no crash) that the reference '
+                'does not have: not gated', *fatal_all,
+                '# allowlist entries (' + ctx.args.excused_crashes + ') '
+                'whose test was not run', *(f"{k[0]} | {k[1]}"
+                                            for k in sorted(set(allow) -
+                                                            used))]
+               ) + '\n')
+  return not all_problems, '; '.join(parts) + (
+    f"; PROBLEMS {len(all_problems)} (crashes.txt)" if all_problems else
+    '; no CIR-specific crash')
+
+
+def collections_counter(items) -> Dict[str, int]:
+  counts: Dict[str, int] = {}
+  for item in items:
+    counts[item] = counts.get(item, 0) + 1
+  return counts
 
 
 def step_perf(ctx: Context) -> Tuple[bool, str]:
@@ -1163,6 +1461,8 @@ STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'cir-suite': step_cir_suite, 'poison': step_poison, 'release-smoke': step_release_smoke, 'cpp-stress': step_cpp_stress, 'cpp-stress-asan': step_cpp_stress_asan,
   'rss': step_rss,
   'day': step_day, 'ctest': step_ctest, 'asm-diff': step_asm_diff,
+  'cpp-asm-diff': step_cpp_asm_diff,
+  'crash-sweep': step_crash_sweep,
   'perf': step_perf
 }
 
@@ -1194,6 +1494,19 @@ def main() -> None:
   parser.add_argument('--asm-new', default = '',
                       help = 'compare this --save-asm directory instead of '
                              'compiling the corpus (step asm-diff)')
+  parser.add_argument('--cpp-asm-baseline', default = '',
+                      help = 'directory of the C++ corpus assembly of the '
+                             'baseline commit (step cpp-asm-diff)')
+  parser.add_argument('--cpp-asm-new', default = '',
+                      help = 'compare this --save-asm directory instead of '
+                             'compiling the C++ corpus (step cpp-asm-diff)')
+  parser.add_argument('--asm-normalize-cfi', action = 'store_true',
+                      help = 'remove the frame description directives '
+                             '(.cfi_startproc, .cfi_def_cfa*, .cfi_offset, '
+                             '...; not .cfi_personality, .cfi_lsda, '
+                             '.cfi_escape) from both sides in asm-diff and '
+                             'cpp-asm-diff (every function has an unwind '
+                             'table); off by default')
   parser.add_argument('--asm-allow-order', action = 'store_true',
                       help = 'asm-diff passes if files differ only in the '
                              'order of their lines')
@@ -1218,6 +1531,12 @@ def main() -> None:
   parser.add_argument('--with-cpp', action = 'store_true',
                       help = 'also run the C++ steps (cpp-smoke, cpp-corpus, '
                              'cpp-modes, cpp-writer-stress)')
+  parser.add_argument('--excused-crashes',
+                      default = 'tests/.edgy/filters/cir-excused-crashes.txt',
+                      help = 'the reviewed allowlist of crashes that the '
+                             'crash-sweep step excuses (one line per test)')
+  parser.add_argument('--sweep-timeout', type = int, default = 180,
+                      help = 'per-test limit (-T) of the crash-sweep step')
   parser.add_argument('--cpp-configs',
                       default = 'edg_x86_64_cir,edg_x86_64_cir_2p',
                       help = 'the configs of the C++ steps')
@@ -1255,7 +1574,8 @@ def main() -> None:
   ctx = Context(args)
   ctx.out.mkdir(parents = True, exist_ok = True)
   only = [s for s in args.only.split(',') if s] or [
-    s for s in STEPS if args.with_cpp or s not in CPP_STEPS]
+    s for s in STEPS if (args.with_cpp or s not in CPP_STEPS) and
+    s not in LONG_STEPS]
   skip = set(s for s in args.skip.split(',') if s)
   unknown = [s for s in [*only, *skip] if s not in STEPS]
   if unknown:
@@ -1305,4 +1625,5 @@ def main() -> None:
   sys.exit(1 if failed else 0)
 
 
-main()
+if __name__ == '__main__':
+  main()

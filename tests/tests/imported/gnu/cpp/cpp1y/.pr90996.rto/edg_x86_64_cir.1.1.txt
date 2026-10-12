@@ -3,8 +3,8 @@ Warning: CIR back end: the initializer of "c" uses this kind of aggregate member
 
 Warning: CIR back end: the initializer of "d" uses this kind of aggregate member initializer, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express: this kind of aggregate member initializer (and it is referenced)
 
-Error: CIR back end: the definition of 'd' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'd' was dropped: it uses a construct the CIR back end cannot express: this kind of aggregate member initializer (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

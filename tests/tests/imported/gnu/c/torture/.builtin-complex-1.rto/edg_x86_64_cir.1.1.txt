@@ -23,16 +23,16 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: the definition of 'comparecf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'comparecf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'comparec' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'comparec' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'comparecl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'comparecl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'check_float' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'check_float' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_complex" (and it is referenced)
 
-Error: CIR back end: the definition of 'check_double' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'check_double' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_complex" (and it is referenced)
 
-Error: CIR back end: the definition of 'check_long_double' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'check_long_double' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_complex" (and it is referenced)
 
 6 errors detected in the compilation of "Test_name.c".

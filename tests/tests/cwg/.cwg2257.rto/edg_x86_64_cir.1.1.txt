@@ -7,10 +7,10 @@ eccp -DTEST_NUMBER=1 -A --c++20 -tused -e 200 --no_wrap Test_name.c
     }
     ^
 
-Error: CIR back end: the definition of '_ZN1AC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN1AC1Ev' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN1AC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN1AC2Ev' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 3 errors detected in the compilation of "Test_name.c".

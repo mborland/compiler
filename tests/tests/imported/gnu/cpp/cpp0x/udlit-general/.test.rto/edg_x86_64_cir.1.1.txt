@@ -7,376 +7,376 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt9type_infoC1EPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9type_infoC1EPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt9type_infoC2EPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9type_infoC2EPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt8bad_castC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt8bad_castC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt8bad_castC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt8bad_castC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_Z18__gthread_active_pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z18__gthread_active_pv' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z16__gthread_createPmPFPvS0_ES0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z16__gthread_createPmPFPvS0_ES0_' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z14__gthread_joinmPPv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14__gthread_joinmPPv' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z16__gthread_detachm' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z16__gthread_detachm' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z15__gthread_equalmm' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z15__gthread_equalmm' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z14__gthread_selfv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14__gthread_selfv' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z15__gthread_yieldv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z15__gthread_yieldv' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z14__gthread_oncePiPFvvE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z14__gthread_oncePiPFvvE' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z20__gthread_key_createPjPFvPvE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z20__gthread_key_createPjPFvPvE' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z20__gthread_key_deletej' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z20__gthread_key_deletej' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z21__gthread_getspecificj' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z21__gthread_getspecificj' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z21__gthread_setspecificjPKv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z21__gthread_setspecificjPKv' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z29__gthread_mutex_init_functionP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z29__gthread_mutex_init_functionP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z23__gthread_mutex_destroyP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z23__gthread_mutex_destroyP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z20__gthread_mutex_lockP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z20__gthread_mutex_lockP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z23__gthread_mutex_trylockP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z23__gthread_mutex_trylockP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z25__gthread_mutex_timedlockP15pthread_mutex_tPK8timespec' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z25__gthread_mutex_timedlockP15pthread_mutex_tPK8timespec' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z22__gthread_mutex_unlockP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z22__gthread_mutex_unlockP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z24__gthread_cond_broadcastP14pthread_cond_t' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z24__gthread_cond_broadcastP14pthread_cond_t' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z21__gthread_cond_signalP14pthread_cond_t' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z21__gthread_cond_signalP14pthread_cond_t' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z19__gthread_cond_waitP14pthread_cond_tP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z19__gthread_cond_waitP14pthread_cond_tP15pthread_mutex_t' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z24__gthread_cond_timedwaitP14pthread_cond_tP15pthread_mutex_tPK8timespec' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z24__gthread_cond_timedwaitP14pthread_cond_tP15pthread_mutex_tPK8timespec' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_Z22__gthread_cond_destroyP14pthread_cond_t' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z22__gthread_cond_destroyP14pthread_cond_t' was dropped and erased: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
 
-Warning: CIR back end: the unused definition of '_ZN9__gnu_cxx18__exchange_and_addEPVii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN9__gnu_cxx18__exchange_and_addEPVii' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_add_4
 
-Warning: CIR back end: the unused definition of '_ZN9__gnu_cxx12__atomic_addEPVii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN9__gnu_cxx12__atomic_addEPVii' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_add_4
 
-Warning: CIR back end: the unused definition of '_ZNSt6locale5facetC1Em' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt6locale5facetC1Em' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt6locale5facetC2Em' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt6locale5facetC2Em' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNKSt6locale5facet19_M_remove_referenceEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt6locale5facet19_M_remove_referenceEv' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZNSt6locale5_Impl19_M_remove_referenceEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt6locale5_Impl19_M_remove_referenceEv' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZNKSt10error_code7messageB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt10error_code7messageB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNKSt15error_condition7messageB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt15error_condition7messageB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZSteqRKSt10error_codeRKSt15error_condition' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSteqRKSt10error_codeRKSt15error_condition' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZSteqRKSt15error_conditionRKSt10error_code' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSteqRKSt15error_conditionRKSt10error_code' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1ESt10error_code' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1ESt10error_code' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2ESt10error_code' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2ESt10error_code' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1ESt10error_codeRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1ESt10error_codeRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2ESt10error_codeRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2ESt10error_codeRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1ESt10error_codePKc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1ESt10error_codePKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2ESt10error_codePKc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2ESt10error_codePKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1EiRKNSt3_V214error_categoryEPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1EiRKNSt3_V214error_categoryEPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2EiRKNSt3_V214error_categoryEPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2EiRKNSt3_V214error_categoryEPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1EiRKNSt3_V214error_categoryE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1EiRKNSt3_V214error_categoryE' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2EiRKNSt3_V214error_categoryE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2EiRKNSt3_V214error_categoryE' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1EiRKNSt3_V214error_categoryERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC1EiRKNSt3_V214error_categoryERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2EiRKNSt3_V214error_categoryERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt12system_errorC2EiRKNSt3_V214error_categoryERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7toupperEc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7toupperEc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7toupperEPcPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7toupperEPcPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7tolowerEc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7tolowerEc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7tolowerEPcPKc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE7tolowerEPcPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE5widenEc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE5widenEc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE5widenEPKcS2_Pc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE5widenEPKcS2_Pc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE6narrowEcc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE6narrowEcc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE6narrowEPKcS2_cPc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE6narrowEPKcS2_cPc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE8do_widenEc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE8do_widenEc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE8do_widenEPKcS2_Pc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE8do_widenEPKcS2_Pc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE9do_narrowEcc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE9do_narrowEcc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE9do_narrowEPKcS2_cPc' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt5ctypeIcE9do_narrowEPKcS2_cPc' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_absCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_absCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_absCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_absCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_absRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_absRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_cabsl
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_argCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_argCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_argCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_argCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_argRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_argRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_cargl
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_cosCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_cosCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_cosCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_cosCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_cosRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_cosRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_coshCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_coshCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_coshCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_coshCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_coshRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_coshRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_expCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_expCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_expCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_expCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_expRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_expRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_logCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_logCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_logCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_logCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_logRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_logRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_sinCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_sinCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_sinCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_sinCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_sinRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_sinRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_sinhCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_sinhCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_sinhCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_sinhCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_sinhRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_sinhRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_sqrtCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_sqrtCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_sqrtCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_sqrtCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_sqrtRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_sqrtRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_tanCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_tanCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_tanCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_tanCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_tanRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_tanRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_tanhCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_tanhCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_tanhCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_tanhCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_tanhRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_tanhRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_powCfS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_powCfS_' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_powCdS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_powCdS_' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt13__complex_powRKCeS1_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt13__complex_powRKCeS1_' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC1ECf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC1ECf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC2ECf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC2ECf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC1Eff' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC1Eff' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC2Eff' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC2Eff' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNKSt7complexIfE4realB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt7complexIfE4realB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNKSt7complexIfE4imagB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt7complexIfE4imagB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfE4realEf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfE4realEf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfE4imagEf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfE4imagEf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEaSEf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEaSEf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEpLEf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEpLEf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEmIEf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEmIEf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEmLEf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEmLEf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEdVEf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEdVEf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNKSt7complexIfE5__repEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt7complexIfE5__repEv' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC1ECd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC1ECd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC2ECd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC2ECd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC1Edd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC1Edd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC2Edd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC2Edd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC1ERKS_IfE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC1ERKS_IfE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC2ERKS_IfE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC2ERKS_IfE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNKSt7complexIdE4realB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt7complexIdE4realB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNKSt7complexIdE4imagB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt7complexIdE4imagB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdE4realEd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdE4realEd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdE4imagEd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdE4imagEd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEaSEd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEaSEd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEpLEd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEpLEd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEmIEd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEmIEd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEmLEd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEmLEd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEdVEd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEdVEd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNKSt7complexIdE5__repEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt7complexIdE5__repEv' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC1ECe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC1ECe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC2ECe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC2ECe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC1Eee' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC1Eee' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC2Eee' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC2Eee' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC1ERKS_IfE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC1ERKS_IfE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC2ERKS_IfE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC2ERKS_IfE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC1ERKS_IdE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC1ERKS_IdE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC2ERKS_IdE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEC2ERKS_IdE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNKSt7complexIeE4realB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt7complexIeE4realB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNKSt7complexIeE4imagB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt7complexIeE4imagB5cxx11Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeE4realEe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeE4realEe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeE4imagEe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeE4imagEe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEaSEe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEaSEe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEpLEe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEpLEe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEmIEe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEmIEe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEmLEe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEmLEe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIeEdVEe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIeEdVEe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNKSt7complexIeE5__repEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNKSt7complexIeE5__repEv' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC1ERKS_IdE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC1ERKS_IdE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC2ERKS_IdE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC2ERKS_IdE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC1ERKS_IeE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC1ERKS_IeE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC2ERKS_IeE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIfEC2ERKS_IeE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC1ERKS_IeE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC1ERKS_IeE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC2ERKS_IeE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt7complexIdEC2ERKS_IeE' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_acosCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_acosCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_acosCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_acosCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_acosRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_acosRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_asinCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_asinCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_asinCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_asinCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_asinRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_asinRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_atanCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_atanCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_atanCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_atanCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_atanRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_atanRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt15__complex_acoshCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt15__complex_acoshCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt15__complex_acoshCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt15__complex_acoshCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt15__complex_acoshRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt15__complex_acoshRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt15__complex_asinhCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt15__complex_asinhCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt15__complex_asinhCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt15__complex_asinhCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt15__complex_asinhRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt15__complex_asinhRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt15__complex_atanhCf' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt15__complex_atanhCf' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt15__complex_atanhCd' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt15__complex_atanhCd' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt15__complex_atanhRKCe' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt15__complex_atanhRKCe' was dropped and erased: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_projRKSt7complexIfE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_projRKSt7complexIfE' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_projRKSt7complexIdE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_projRKSt7complexIdE' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_ZSt14__complex_projRKSt7complexIeE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZSt14__complex_projRKSt7complexIeE' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Error: CIR back end: the definition of '_Zli2_ie' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Zli2_ie' was dropped: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Error: CIR back end: the definition of '_Z5test1v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z5test1v' was dropped: it uses a construct the CIR back end cannot express: a call returning an unsupported type (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

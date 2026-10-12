@@ -24,7 +24,9 @@ Everything is compiled only when `BACK_END_TYPE == BACK_END_TYPE_CIR` (or
 ## 2. Entry points and lifecycle
 
 `ecil_stream_open` (from `fe_init.c`, after the option processing) opens the
-sink and writes the preamble. `F_HEADER` is sent with the first hand-off, because the triple's operating system comes from the predefined macros, which do not exist at open (section 7).
+sink and writes the preamble. `F_HEADER` is sent with the first hand-off. Its triple is
+captured earlier: `ecil_note_target_triple` is called from `fe_init.c` right after
+`init_predefined_macros`, before any source is read (section 7).
 `ecil_hand_off_region(n)` is called from `mem_manage.c`
 (`hand_off_memory_region`): for a function region it builds one `F_REGION`
 frame per function; for the file-scope region it builds `F_GLOBALS`.
@@ -213,7 +215,17 @@ In CHECKING builds
 The header's target triple has two parts:
 - the architecture, from the front end's target flags;
 - the operating system, from the target's predefined macros (`__linux__`,
-  `__APPLE__`, `_WIN32`), looked up at the first hand-off.
+  `__APPLE__`, `_WIN32`).
+
+The whole triple is captured by `ecil_note_target_triple`, which `fe_init.c`
+calls (CIR configuration only) right after `init_predefined_macros`, so a
+source-level `#undef __linux__` or `#define __APPLE__` cannot change it (golden
+`writer-target-undef-os`; GNU mode lets a source undefine a predefined macro).
+If the capture did not happen (an error during start-up), the triple is
+derived when the header is written, and then only once the file scope exists
+(the symbol table cannot be asked before). A command-line `-U__linux__` is
+processed before the capture, on purpose: it changes the target identity, and
+the library rejects the resulting `unknown` triple.
 
 The sizes of `int`, `double` and pointers, and the integer promotion width,
 come from the FE target.
@@ -221,11 +233,6 @@ come from the FE target.
 `CHEAP_UNALIGNED_BF` is set for x86 and AArch64.
 
 The in-process sink requires x86-64.
-
-Follow-up: a source-level `#undef __linux__` before the first function would
-mislabel the triple. The library then rejects it, so it is an error, not a
-miscompile. A later milestone should capture the OS before user source is
-processed.
 
 The library accepts x86-64 Linux only; other
 front-end targets (the Mac's aarch64) produce valid streams that are only
@@ -563,14 +570,27 @@ from the `bswap128` builtin mapping, the `constructor` attribute error and the
     `<target> DUP LOAD <value>` reads the target before the value, so the
     target goes first only if both operands are pure. Otherwise the value goes
     into a temporary first (`a[i++] += i`, `b |= f(b)`).
-  * **Class assignment (built-in).** A record that is not `NONTRIVIAL_ABI`
-    follows the scalar rule: when the order could be observed, the value is
-    kept in a `LOCAL` (`STORE INIT`), then come the target, `LREF tmp`,
-    `LOAD` and `STORE` (with `DSIZE` as before). A `NONTRIVIAL_ABI` record (a
-    trivial copy assignment and a non-trivial destructor) in that position is
-    unsupported. `p->pt = make_pt()` is spilled and works. g++ stores
-    `*p = next(&p)` through the old `p`; clang and the writer use the new one,
-    as C++17 requires (golden `writer-cxx-class-assign-order`).
+  * **Class assignment (built-in).** The right operand of a class is bound to
+    the parameter of the (trivial) assignment and read when the assignment is
+    made, after the target is designated. When the order could be observed, what
+    is kept in a pointer `LOCAL` is therefore the *address* of the right operand:
+    the object itself (the glvalue under its load), or the temporary of the full
+    expression that holds a prvalue, which keeps its normal cleanup (a class with
+    a destructor, `NONTRIVIAL_ABI`, works the same way). Then come the target,
+    `LREF tmp`, `LOAD`, `DEREF`, `LOAD` and `STORE` (with `DSIZE` as before).
+    A call whose result is a trivially copyable class value is a fixed value and
+    is kept as it is; a cv-adjusted explicit glvalue is kept by address
+    (`CIF_GLV`). Any other right operand (a conditional, a comma expression, the
+    result of an assignment) is diagnosed: neither its address can be kept nor
+    its value fixed (a copy at that point would miscompile
+    `*getp() = c ? a : b`). The suppressed-load state is a single node, not a
+    stack: it is reset at the start and the end of every code stack run, and a
+    class assignment nested in the right operand of another is diagnosed
+    (`writer-cxx-class-assign-rhs-unsupported`; probe
+    `cxx_class_assign_rhs_shapes`). `p->pt = make_pt()` works. g++ stores `*p = next(&p)` through the old `p`; clang and the writer
+    use the new one, as C++17 requires (golden `writer-cxx-class-assign-order`);
+    `*getp() = obj` where `getp` changes `obj` agrees with g++ and clang (golden
+    and probe `writer-cxx-class-assign-address`, `cxx_class_assign_address`).
   * **Overloaded calls.** An overloaded assignment or compound assignment, and
     a reversed rewritten comparison, are calls with `eval_right_to_left`. With
     two operands, the call is emitted left to right when
@@ -663,17 +683,23 @@ translation unit fails (the stream is aborted), in C and in C++. Tests:
 virtual functions, virtual bases, polymorphic classes' constructors, destructors
 and constants (M4: a vptr needs the vtable); exception handling (`try`, `throw`,
 `catch`, `typeid`, `dynamic_cast`); coroutines; pointers to members (types,
-constants, calls and `.*`); the built-in `<=>`; a `for` with a condition declaration
+constants, calls and `.*`); a `for` with a condition declaration
 and an increment; a conditionally lifetime-extended temporary; a non-trivial class
 through `...`; a constructor initializer of an anonymous-union member; a repeated
 initializer of a multi-dimensional array; the copy of an array of objects;
 `thread_local` with dynamic initialization at namespace scope;
 `new` with a non-throwing allocation function; a destroying `operator delete`;
-`__attribute__((constructor))` and friends, GNU multiversioning; a for-init
-variable with a destructor, or a for-init reference to a class with a
-destructor, under `--old_for_init` (the hoisted declaration's cleanup, or that
-of the temporary it extends, would end at `FOR_END` while the variable is still
-used after the loop);
+`__attribute__((constructor))` and friends, GNU multiversioning; a function whose
+symbol name is that of a constructor or destructor variant of another routine,
+or of a defined function of another type (a symbol clash: `writer-cxx-symbol-clash`, and `-negative` for
+the clashing definition that cannot be sent, which is a `cir_error`); under
+`--cfront_2.1`, a case or goto label after a declaration of an object with a
+destructor (the front end accepts a jump past it there, which would run the
+cleanup of an unconstructed object);
+the zero-initialization (explicit, by static storage, or by value-initialization)
+of an object that contains a pointer to a data member, whose null value is -1 and
+not 0 (`writer-cxx-dmp-zero-init`; until M4 implements member pointers, the types
+are opaque storage); an address constant that names a local variable;
 a constant `new[]` count of 2^32 or more; a constant initialization of a
 `[[no_unique_address]]` member; structured bindings in conditions; variable
 length arrays.
@@ -682,7 +708,7 @@ length arrays.
 falling off the end of a non-void C++ function is `trap` + `unreachable` as clang
 does (`parse/crash78a`, `rma/mri_bug03`); a variable initialized from another
 that is initialized dynamically before it is dynamic, as in clang
-(`cpp0x/constexpr-static4`); in GNU mode the front end does not extend the lifetime
+(`cpp0x/constexpr-static4` is the exception that is split: see 9.15); in GNU mode the front end does not extend the lifetime
 of `const int &r = A().i` the way default mode does (`init/ref19`).
 **Kind names.** Unsupported kinds are named in diagnostics, for example
 `the expression kind "throw expression"`, `the statement "try statement"`,
@@ -750,3 +776,98 @@ kinds (`cik_new`, `cik_meminit`, `cik_ctor_call`, ...) to the same stack.
   and `USE_INLINE_EXPANSION`. The streams of all goldens and probes are identical
   for both configurations apart from the weak pragma, and so are the run results of the
   C++ corpus sweep.
+
+### 9.15 ECIL 1.1 and the M3.1 changes
+
+* **`unsupported_reason` supp key (ECIL 1.1).** Every re-issue of an
+  unsupported `DECL_FUNC` or `DECL_VAR` is followed by a supp blob with key 13
+  and the reason that the warning uses (at most 255 bytes, cut at a UTF-8
+  boundary; bytes that are not valid UTF-8, in a source identifier, are replaced by
+  `?` so that an optional string cannot make a stream invalid). The reason is
+  remembered per G-id when the definition is dropped (`ecil_remember_drop_reason`)
+  and is only ever attached to that G-id (both variants of a constructor or
+  destructor); the frame has `HAS_SUPP`, and the preamble has the `SUPP` feature
+  bit on every 1.1 stream. The diagnostics are cut at `ECIL_REASON_MAX - 1` bytes,
+  not at 100 characters (golden `writer-cxx-long-reason`, `writer-cxx-supp-reason`).
+* **Pending records.** `ecil_complete_pending_records` rescans only when a class
+  was completed since the last scan (the hook `ecil_note_class_completed`, called by
+  `complete_class_definition` after `do_class_layout`) or when a complete record
+  is pending only for the order. CHECKING builds verify that nothing complete is
+  pending when the scan is skipped.
+* **Built-in `<=>`.** `CMP3WAY(t, lt, eq, gt, unordered|nil)` pops the converted
+  operands and stores its integer result into the member of a temporary of the
+  comparison category (a record with one integer member), which is read back
+  as the record value. The values are read from the constants that initialize the
+  category's static members (`initialize_ordering_constants`), not assumed. A
+  FE-synthesized local that has an initialization and no declaration statement
+  (the result variable of a defaulted `operator<=>`) is declared where it is
+  initialized. Golden and probe `writer-cxx-spaceship`, `cxx_spaceship`.
+* **Constant `if`.** An `if` whose condition the front end folded to an integer
+  constant sends only the arm that is taken, unless the other arm contains a label
+  (a `goto` or a `case` can reach it) or a statement whose structure the search
+  does not know (a try, coroutine, if consteval statement); `if constexpr` is
+  unchanged. Goldens `writer-constant-if`, `writer-cxx-constant-if`; probe
+  `cxx_constant_if`.
+* **Partial static initialization.** A partly constant aggregate initializer of
+  a variable of static storage duration (not thread_local, not vague-linkage, a
+  function-local static included unless its function may exist in several
+  translation units: inline functions and template instances, whose statics are
+  COMDAT, get zero data and the full guarded initialization, as clang does) is
+  `VAR_INIT` with the constant elements (zero for the dynamic ones) plus a
+  `STATIC_INIT` with the `PARTIAL` flag that stores only the dynamic elements,
+  without zero-fill (`cpp0x/constexpr-static4`; golden and probe
+  `writer-cxx-partial-static-init`).
+  - **Skipping is a property of the level** (`an_init_level.skip_constants`): the
+    variable's own aggregate and the nested aggregates of its constant that have a
+    dynamic part skip the constant elements; every other aggregate that the same
+    `STATIC_INIT` builds (the aggregate of a dynamic element, a temporary in a
+    call argument, a `new`, a closure) is initialized completely and keeps its
+    `ZERO_FILL` flag. One predicate (`entry_has_dynamic_part`: a dynamic element, a
+    repeat of one, an aggregate with a dynamic part, merged sources with one)
+    decides what is skipped; a repeat of an aggregate with a dynamic part cannot be
+    built element by element and is diagnosed. Goldens `writer-cxx-partial-static-
+    levels`, `-repeat`; probe `cxx_partial_static_levels`.
+* **Nested lambdas.** A capture of a variable that the enclosing closure captured
+  is read from the member of the enclosing closure through the enclosing lambda's
+  `this` (`captured_source_field_of`; golden and probe `nested-capture`).
+* **Inheriting constructors.** The inherited constructor is called with the
+  original arguments: the front end's copy of a by-value parameter of a class that
+  is not trivially copyable is replaced by the parameter itself
+  (`forwarded_parameter`; g++ and clang agree; probe `cxx_nontrivial_abi_forwarding`).
+* **Linkage of members of nested unnamed classes.** A member function of an
+  unnamed class declared inside a class has the Itanium name with `Ut_` and the
+  linkage of the enclosing class (vague for an inline one), so do its local statics;
+  an unnamed class at namespace scope or in a function stays internal. The
+  names of such members are final once the enclosing class is complete
+  (`cir_name_may_change`). A function instance whose template arguments or type
+  hold a lambda in a default argument that has no parent yet is named late
+  (`cir_routine_name_may_change`).
+* **`--old_for_init`.** The whole init of a for (declaration, initialization,
+  cleanup) is sent before `FOR_BEGIN`, in the enclosing scope region, when the
+  loop's IL has no for-init scope (`for_init_scope == NULL`), so the cleanup ends with
+  the enclosing block (unbraced bodies of `case` and `if` are scope regions of their
+  own).
+* **Data size.** A zero-width bit-field ends the data size at its offset
+  (`struct S { char c; int : 0; }` has dsize 4); a `[[no_unique_address]]` member
+  declared through an alias counts as its data size.
+* **Hardening (M3.1).**
+  - The walk that decides whether an entity is local to the translation unit
+    queues each class once per walk (a type of nested template arguments that share
+    parts is a tree of exponential size: `gnats-26324`).
+  - A `#pragma redefine_extname` is applied at the end of the translation unit: the
+    DECL_FUNC of a function that was sent before is re-issued with the asm name
+    (`ecil_resolve_late_names`; `pragma-re-2`).
+  - A function that is declared constexpr and found not to be one keeps its region
+    (the constant evaluator reads its scope; `constexpr-fno-elide-ctors1`).
+  - An automatic variable is never a G-id (`ecil_variable_id`, C too).
+  - The symbol clash of a definition (no G-id for it) is an error only for an
+    external definition that no other translation unit can supply.
+  - Under `--cfront_2.1` the scope regions are followed in the record writer
+    (`ecil_track_regions`) and a case or goto label with a cleanup open is
+    diagnosed. The check is deliberately coarse: it diagnoses any label that
+    follows the declaration of an object with a destructor in an open scope
+    region, whether or not a jump bypasses it (the front end accepts such jumps
+    there and the cleanup would run for an unconstructed object).
+    `FUNC_BEGIN` resets the region stack; `STATIC_INIT_BEGIN` pushes a region
+    (a static local's initialization is inside the body;
+    `writer-cxx-cfront-static-init-regions`).

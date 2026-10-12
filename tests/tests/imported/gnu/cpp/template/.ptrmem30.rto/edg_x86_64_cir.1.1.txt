@@ -9,8 +9,8 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   ^
           detected during instantiation of "void test2<F>() [with F=void ()]" at line 46
 
-Error: CIR back end: the definition of '_Z5test1IFvvEEvv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z5test1IFvvEEvv' was dropped: it uses a construct the CIR back end cannot express: the constant "pointer-to-member constant" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z5test2IFvvEEvv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z5test2IFvvEEvv' was dropped: it uses a construct the CIR back end cannot express: the constant "pointer-to-member constant" (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

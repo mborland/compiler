@@ -1,10 +1,10 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
-Warning: CIR back end: the initializer of "should_be_0" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+Warning: CIR back end: the initializer of "should_be_0" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Warning: CIR back end: the initializer of "should_be_4" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+Warning: CIR back end: the initializer of "should_be_4" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'should_be_0' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'should_be_0' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
 
-Error: CIR back end: the definition of 'should_be_4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'should_be_4' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
 
 2 errors detected in the compilation of "Test_name.c".

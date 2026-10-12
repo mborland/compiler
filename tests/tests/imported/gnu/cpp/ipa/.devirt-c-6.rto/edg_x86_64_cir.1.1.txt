@@ -28,20 +28,20 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
              ^
           detected during implicit generation of "B::B()" at line 64
 
-Warning: CIR back end: the unused definition of '_ZL9middlemanP1Ai' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL9middlemanP1Ai' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Error: CIR back end: the definition of '_ZN1A3fooEi' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN1A3fooEi' was dropped: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN1B3fooEi' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN1B3fooEi' was dropped: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN1C3fooEi' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN1C3fooEi' was dropped: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN1AC1Ev' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN1AC1Ev' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Error: CIR back end: the definition of '_ZN1AC2Ev' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN1AC2Ev' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Error: CIR back end: the definition of '_ZN1BC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN1BC1Ev' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN1BC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN1BC2Ev' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
 7 errors detected in the compilation of "Test_name.c".

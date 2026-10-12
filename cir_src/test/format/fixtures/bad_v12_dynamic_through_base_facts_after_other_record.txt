@@ -1,0 +1,45 @@
+; expect: format follow its TY_RECORD_BODY directly
+ecil 1.2 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame REGION
+  TY_INT 1 32 true 4 4
+  TY_VPTR 3
+  STR 2 "1A"
+  STR 3 "1B"
+  STR 4 "1V"
+  STR 5 "1D"
+  STR 6 "1E"
+  STR 7 "v"
+  TY_RECORD_DECL 10 0 nil
+  TY_RECORD_BODY 10 8 8 8 0 1
+  REC_FIELD 3 0 nil nil nil 1
+  CLASS_MANGLE 10 2
+  CLASS_INFO 10 8 8 nil 1
+  CLASS_BASES 10 []
+  TY_RECORD_DECL 20 0 nil
+  TY_RECORD_BODY 20 8 8 8 0 1
+  REC_FIELD 10 0 nil nil nil 16
+  TY_RECORD_DECL 30 0 nil
+  TY_RECORD_BODY 30 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 7 0
+  CLASS_MANGLE 20 3
+  CLASS_INFO 20 8 8 0 1
+  CLASS_BASES 20 [0, 1]
+  TY_RECORD_DECL 40 0 nil
+  TY_RECORD_BODY 40 16 12 8 0 2
+  REC_FIELD 20 0 nil nil nil 16
+  REC_FIELD 30 8 nil nil nil 64
+  CLASS_MANGLE 40 5
+  CLASS_INFO 40 8 8 0 1
+  CLASS_BASES 40 [0, 1, 1, 1]
+  TY_RECORD_DECL 50 0 nil
+  TY_RECORD_BODY 50 8 8 8 0 1
+  REC_FIELD 20 0 nil nil nil 64
+  CLASS_MANGLE 50 6
+  CLASS_INFO 50 8 8 0 1
+  CLASS_BASES 50 [0, 1]
+frame END
+  END 2 0

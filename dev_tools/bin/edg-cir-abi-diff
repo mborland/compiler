@@ -1,0 +1,652 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Compare the vtable and record layouts of clang's and the CIR back end's ABI.
+
+Status: skeleton for M4 (not wired into the gate).  It has the clang side and
+the normalize and diff machinery; the library's `ecil-dump --vtable-layouts`
+(M4a) will print the same canonical text, and then
+
+  edg-cir-abi-diff compare FILE.cpp --ours OURS.txt
+
+compares the two.  Run it inside the cir-env image (the pin's clang is
+$EDG_LLVM_CIR_PREFIX/bin/clang):
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-abi-diff dump t.cpp
+  ... normalize DUMP.txt           # a raw clang dump (file or - for stdin)
+  ... diff A.txt B.txt             # raw or canonical text, either side
+  ... compare t.cpp --ours O.txt   # clang's layouts of t.cpp against O.txt
+  ... gather DIR                   # copy the clang tests of CLANG_TESTS
+  ... --self-test                  # no clang needed (uses it if present)
+
+`dump` runs
+
+  clang -cc1 -triple x86_64-linux-gnu -std=c++17 -fcxx-exceptions
+        -fexceptions -fdump-vtable-layouts -fdump-record-layouts
+        -emit-llvm-only FILE
+
+(it also prints the IRgen layout of clang's code generator, which no other
+implementation can reproduce; `normalize` ignores it; the "-simple" variant
+prints no names).
+
+The canonical form is a list of blocks sorted by (kind, name), each
+
+  ## record struct B                 (the AST record layout, "offset | text")
+  ## vtable B (13 entries)           (the Itanium vtable with thunk notes)
+  ## construction-vtable (B, 16) in D (7 entries)
+  ## vtable-indices B (3 entries)
+  ## vbase-offset-offsets B (1 entry)
+  ## thunks B::f() (1 entry)
+
+followed by its lines with the offset column reduced to "N |" (the nesting
+inside a record layout is kept, runs of spaces elsewhere are collapsed, blank
+lines and trailing blanks are dropped).  The "Original map" lines clang prints
+before a vtable (an implementation detail of the thunk builder) are dropped
+unless --keep-original-map is given.  clang does not dump VTTs or typeinfo
+with these options: those are compared by edg-cir-symbols and, as IR, by the
+two-TU tests.
+
+`compare` takes the library's side either as text (--ours) or as a stream
+(--ecil FILE.ecil [--ecil-dump BINARY]: it runs `ecil-dump --vtable-layouts`).
+It never reports a layout as equal that was not compared: an ecil-dump whose
+`--help` text does not list --vtable-layouts (it does not have the option
+yet), and a file for which neither side has a layout block, give "SKIP"
+(status 3); once the option exists, a failing invocation is an error (status
+2), and a library side that lacks blocks that clang has gives "differs"
+(status 1).
+
+Exit status: 0 if the layouts are equal (or for dump, normalize and gather), 1
+if they differ, 2 for a setup problem, 3 for SKIP (nothing was compared).
+'''
+
+import argparse
+import difflib
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+DEFAULT_TRIPLE = 'x86_64-linux-gnu'
+EXIT_SKIP = 3
+
+# clang's test/CodeGenCXX files that are about the Itanium vtable layout,
+# thunks, virtual bases and RTTI (the M4 inputs); `gather` copies them.  Files
+# of the LLVM project are under the Apache License v2.0 with LLVM Exceptions,
+# like this repository (the files have no header of their own).
+CLANG_TESTS = (
+  'vtable-layout.cpp', 'vtable-layout-abi-examples.cpp',
+  'vtable-layout-extreme.cpp', 'vtt-layout.cpp', 'thunks.cpp',
+  '2003-11-27-MultipleInheritanceThunk.cpp',
+  '2005-02-19-UnnamedVirtualThunkArgument.cpp', 'virt-thunk-reference.cpp',
+  'thunk-returning-memptr.cpp', 'thunk-linkonce-odr.cpp',
+  'virtual-bases.cpp', 'virtual-base-ctor.cpp', 'virtual-base-cast.cpp',
+  'virtual-base-destructor-call.cpp', 'virtual-destructor-calls.cpp',
+  'virtual-destructor-synthesis.cpp', 'virtual-function-calls.cpp',
+  'virtual-inherited-destructor.cpp', 'vtable-key-function.cpp',
+  'key-function-vtable.cpp', 'cxx11-vtable-key-function.cpp',
+  'vtable-linkage.cpp', 'vtable-pointer-initialization.cpp',
+  'rtti-layout.cpp', 'rtti-linkage.cpp', 'rtti-fundamental.cpp',
+  'typeid.cpp', 'dynamic-cast.cpp', 'construction-vtable-unnamed-addr.cpp',
+  'zero-init-empty-virtual.cpp', 'virt-template-vtable.cpp'
+)
+
+# The kinds of block, in the order of the canonical form.
+KINDS = ('record', 'vtable', 'construction-vtable', 'vtable-indices',
+         'vbase-offset-offsets', 'thunks')
+
+_HEADINGS = (
+  ('vtable', re.compile(r"^Vtable for '(?P<name>.*)' \((?P<n>.*)\)\.$")),
+  ('construction-vtable', re.compile(
+    r"^Construction vtable for \((?P<name>'.*', \d+)\) in '(?P<in>.*)' "
+    r"\((?P<n>.*)\)\.$")),
+  ('vtable-indices', re.compile(
+    r"^VTable indices for '(?P<name>.*)' \((?P<n>.*)\)\.$")),
+  ('vbase-offset-offsets', re.compile(
+    r"^Virtual base offset offsets for '(?P<name>.*)' \((?P<n>.*)\)\.$")),
+  ('thunks', re.compile(r"^Thunks for '(?P<name>.*)' \((?P<n>.*)\)\.$")),
+)
+_RECORD_HEADING = re.compile(r'^\*\*\* Dumping AST Record Layout\s*$')
+_OTHER_HEADING = re.compile(r'^\*\*\* ')
+_OFFSET_LINE = re.compile(
+  r'^\s*(?P<off>\d+(?::\d+(?:-\d+)?)?)\s*\|(?P<rest>.*)$')
+_CONTINUATION = re.compile(r'^\s+\|(?P<rest>.*)$')
+_ORIGINAL_MAP = re.compile(r'^Original map\s*$')
+_MAP_LINE = re.compile(r'^ .* -> .*$')
+
+
+class Block:
+  '''One block of a dump: a kind, a name and its normalized lines.'''
+  def __init__(self, kind: str, name: str, header: str) -> None:
+    self.kind = kind
+    self.name = name
+    self.header = header
+    self.lines: List[str] = []
+
+  def key(self) -> Tuple[int, str]:
+    return KINDS.index(self.kind), self.name
+
+  def text(self) -> str:
+    return '\n'.join([f"## {self.header}", *self.lines])
+
+
+def normalize_line(line: str) -> str:
+  '''One line of a block: the offset column "N |", spaces collapsed.
+
+  The text after the bar keeps its nesting (the spaces after the one that
+  follows the bar, in a record layout); runs of spaces inside the text become
+  one.  Another indented line (the "-- (B, 0) vtable address --" and
+  "[this adjustment ...]" notes, "A | -24") gets a fixed indentation.
+  '''
+  line = line.rstrip()
+  for regex, head in ((_OFFSET_LINE, None), (_CONTINUATION, '')):
+    match = regex.match(line)
+    if match:
+      rest = match.group('rest')[1:] if match.group('rest').startswith(' ') \
+        else match.group('rest')
+      indent = len(rest) - len(rest.lstrip(' '))
+      text = f"{' ' * indent}{re.sub(r' {2,}', ' ', rest.lstrip(' '))}"
+      column = match.group('off') if head is None else head
+      return f"{column} |{' ' if text else ''}{text}"
+  if line.startswith(' '):
+    return '    ' + re.sub(r' {2,}', ' ', line.lstrip(' '))
+  return re.sub(r' {2,}', ' ', line)
+
+
+def record_name(lines: List[str]) -> str:
+  '''The "struct X" of the first "0 | struct X" line of a record layout.'''
+  for line in lines:
+    match = _OFFSET_LINE.match(line)
+    if match:
+      return match.group('rest').strip()
+  return '?'
+
+
+def parse_dump(text: str, keep_original_map: bool = False) -> List[Block]:
+  '''Split a raw clang dump into blocks (not sorted).
+
+  Lines of the other dumps clang prints with -fdump-record-layouts (the
+  IRgen layout and the AST) are ignored.
+  '''
+  blocks: List[Block] = []
+  current: Optional[Block] = None
+  in_record = False
+  in_map = False
+  pending: List[str] = []
+  for raw in text.splitlines():
+    if _RECORD_HEADING.match(raw):
+      current, in_record, in_map = None, True, False
+      pending = []
+      continue
+    if _OTHER_HEADING.match(raw):
+      current, in_record, in_map = None, False, False
+      continue
+    if _ORIGINAL_MAP.match(raw):
+      current, in_record, in_map = None, False, True
+      continue
+    if in_map and _MAP_LINE.match(raw):
+      if keep_original_map:
+        pending.append(normalize_line(raw))
+      continue
+    in_map = False
+    for kind, regex in _HEADINGS:
+      match = regex.match(raw)
+      if match:
+        name = match.group('name')
+        header = f"{kind} {name}"
+        if kind == 'construction-vtable':
+          header = f"{kind} {name} in {match.group('in')}"
+          name = f"{name} in {match.group('in')}"
+        header += f" ({match.group('n')})"
+        current = Block(kind, name, header)
+        current.lines = list(pending) if kind == 'vtable' else []
+        pending = []
+        blocks.append(current)
+        in_record = False
+        break
+    else:
+      if in_record:
+        if not raw.strip():
+          current = None
+          continue
+        if current is None:
+          current = Block('record', '', '')
+          blocks.append(current)
+        current.lines.append(normalize_line(raw))
+        continue
+      if current is not None:
+        if raw.strip():
+          current.lines.append(normalize_line(raw))
+  for block in blocks:
+    if block.kind == 'record':
+      block.name = record_name(block.lines)
+      block.header = f"record {block.name}"
+      block.lines = block.lines[1:] if block.lines else block.lines
+  return blocks
+
+
+def canonical(text: str, keep_original_map: bool = False) -> str:
+  '''The canonical text of a raw dump, or of canonical text (idempotent).
+
+  Blocks with the same kind and name are kept once if their lines are equal
+  (clang can dump a layout more than once).
+  '''
+  if text.lstrip().startswith('## '):
+    return text if text.endswith('\n') else text + '\n'
+  seen: Dict[Tuple[str, str], Block] = {}
+  order: List[Block] = []
+  for block in parse_dump(text, keep_original_map):
+    key = (block.header, '\n'.join(block.lines))
+    if key in seen:
+      continue
+    seen[key] = block
+    order.append(block)
+  order.sort(key = lambda b: (b.key(), b.header, b.lines))
+  return '\n'.join(b.text() for b in order) + ('\n' if order else '')
+
+
+def diff_text(old: str, new: str, old_name: str = 'clang',
+              new_name: str = 'ours') -> List[str]:
+  '''The differences of two canonical texts, block by block.
+
+  Returns [] if equal.  A block in only one of them is reported as such; a
+  block in both with other lines gets a unified diff of its lines.
+  '''
+  def split(text: str) -> Dict[str, List[str]]:
+    blocks: Dict[str, List[str]] = {}
+    name = ''
+    for line in text.splitlines():
+      if line.startswith('## '):
+        name = line[3:]
+        blocks[name] = []
+      elif name:
+        blocks[name].append(line)
+    return blocks
+  # Compare by "kind name": the entry count in the header is part of it, so
+  # a different vtable size is a different heading and also shows as a block
+  # present on one side only; pair such headings by their kind and name.
+  def base(heading: str) -> str:
+    return re.sub(r' \(\d+ entr(?:y|ies)\)$', '', heading)
+  a, b = split(old), split(new)
+  by_a = {base(h): h for h in a}
+  by_b = {base(h): h for h in b}
+  report: List[str] = []
+  for key in sorted(set(by_a) | set(by_b)):
+    if key not in by_b:
+      report.append(f"only in {old_name}: {by_a[key]}")
+    elif key not in by_a:
+      report.append(f"only in {new_name}: {by_b[key]}")
+    else:
+      ha, hb = by_a[key], by_b[key]
+      if ha != hb or a[ha] != b[hb]:
+        report.append(f"differs: {key}")
+        report.extend(difflib.unified_diff(
+          [ha, *a[ha]], [hb, *b[hb]], old_name, new_name, lineterm = '',
+          n = 1))
+  return report
+
+
+def clang_binary(option: str = '') -> str:
+  '''The clang to run: --clang, else $EDG_LLVM_CIR_PREFIX/bin/clang, else
+  `clang` on PATH.'''
+  if option:
+    return option
+  prefix = os.environ.get('EDG_LLVM_CIR_PREFIX', '')
+  if prefix and (Path(prefix) / 'bin' / 'clang').exists():
+    return str(Path(prefix) / 'bin' / 'clang')
+  return shutil.which('clang') or 'clang'
+
+
+def include_options(clang: str) -> List[str]:
+  '''-internal-isystem options for `clang -cc1` (which, unlike the driver,
+  knows no include path): the C++ library directories of
+  $EDG_CLANG_INCL_SCRAPE (set in the cir-env image: libstdc++ and the C
+  headers, without the system's own clang resource directory) and the
+  resource directory of the clang that runs.'''
+  options: List[str] = []
+  for path in os.environ.get('EDG_CLANG_INCL_SCRAPE', '').split(':'):
+    if path and not path.startswith('/usr/lib/clang'):
+      options += ['-internal-isystem', path]
+  resource = Path(clang).resolve().parent.parent / 'lib' / 'clang'
+  for include in sorted(resource.glob('*/include')):
+    options += ['-internal-isystem', str(include)]
+  return options
+
+
+def run_clang_dump(source: Path, clang: str, triple: str, std: str,
+                   extra: List[str], records: bool = True,
+                   vtables: bool = True) -> Tuple[int, str]:
+  '''Run clang -cc1 on a source and return (exit status, its dump).'''
+  command = [clang, '-cc1', '-triple', triple, f"-std={std}",
+             '-fcxx-exceptions', '-fexceptions', *include_options(clang)]
+  if vtables:
+    command.append('-fdump-vtable-layouts')
+  if records:
+    command.append('-fdump-record-layouts')
+  command += [*extra, '-emit-llvm-only', str(source)]
+  # The vtable dump is on stdout and the record layouts are on stderr (with
+  # the diagnostics): read both, one after the other, so that a diagnostic
+  # never falls inside a layout (the canonical form sorts the blocks).
+  proc = subprocess.run(command, stdout = subprocess.PIPE,
+                        stderr = subprocess.PIPE, text = True)
+  return proc.returncode, proc.stdout + proc.stderr
+
+
+def ecil_dump_has_option(binary: str, option: str) -> Optional[bool]:
+  '''Does `binary --help` mention the option?  None if it cannot be run.
+
+  An ecil-dump without a --help option reports a usage error that lists its
+  options; one that has the option lists it.'''
+  try:
+    proc = subprocess.run([binary, '--help'], stdout = subprocess.PIPE,
+                          stderr = subprocess.PIPE, text = True)
+  except OSError:
+    return None
+  return option in proc.stdout + proc.stderr
+
+
+def ecil_dump_layouts(binary: str, ecil: str) -> Tuple[str, str]:
+  '''Run `ecil-dump --vtable-layouts` on a stream.
+
+  Returns ("ok", the text), ("skip", why) only if the ecil-dump does not
+  have the option (its --help text does not list it), or ("error", why): once
+  the option exists, a failing invocation is an error and never a SKIP.'''
+  has_option = ecil_dump_has_option(binary, '--vtable-layouts')
+  if has_option is None:
+    return 'error', f"cannot run {binary}"
+  if not has_option:
+    return 'skip', f"{binary} has no --vtable-layouts option yet"
+  try:
+    proc = subprocess.run([binary, '--vtable-layouts', ecil],
+                          stdout = subprocess.PIPE, stderr = subprocess.PIPE,
+                          text = True)
+  except OSError as error:
+    return 'error', f"cannot run {binary}: {error}"
+  if proc.returncode != 0:
+    return 'error', (f"{binary} --vtable-layouts failed with status "
+                     f"{proc.returncode}: {proc.stderr.strip()[:200]}")
+  return 'ok', proc.stdout
+
+
+def compare_result(clang_text: str, ours_text: str,
+                   ours_name: str = 'ours') -> Tuple[int, List[str]]:
+  '''The outcome of `compare` on two canonical texts: (exit status, report
+  lines).  Two texts without any block compare nothing: SKIP, not equal.'''
+  if not clang_text.strip() and not ours_text.strip():
+    return EXIT_SKIP, ['SKIP: neither side has a layout block (nothing '
+                       'was compared)']
+  report = diff_text(clang_text, ours_text, 'clang', ours_name)
+  return (1 if report else 0), (report or ['layouts identical'])
+
+
+def gather(source_dir: Path, out_dir: Path) -> List[str]:
+  '''Copy the CLANG_TESTS that exist in source_dir (clang/test/CodeGenCXX)
+  to out_dir; returns the names copied.'''
+  out_dir.mkdir(parents = True, exist_ok = True)
+  copied = []
+  for name in CLANG_TESTS:
+    if (source_dir / name).exists():
+      shutil.copy2(source_dir / name, out_dir / name)
+      copied.append(name)
+  return copied
+
+
+def read_text(path: str) -> str:
+  return sys.stdin.read() if path == '-' else Path(path).read_text(
+    errors = 'replace')
+
+
+# A sample of clang's output (struct A { virtual int f(); virtual ~A(); };
+# struct B : virtual A { int f() override; }), for the self-test.
+SAMPLE = '''
+*** Dumping AST Record Layout
+         0 | struct B
+         0 |   (B vtable pointer)
+         8 |   int b
+        16 |   struct A (virtual base)
+        16 |     (A vtable pointer)
+        24 |     int a
+           | [sizeof=32, dsize=28, align=8,
+           |  nvsize=12, nvalign=8]
+
+Original map
+ C::~C() -> B::~B()
+Vtable for 'B' (6 entries).
+   0 | vbase_offset (16)
+   1 | offset_to_top (0)
+   2 | B RTTI
+       -- (B, 0) vtable address --
+   3 | int B::f()
+   4 | vcall_offset (-16)
+   5 | offset_to_top (-16)
+
+Virtual base offset offsets for 'B' (1 entry).
+   A | -24
+
+Thunks for 'int B::f()' (1 entry).
+   0 | this adjustment: 0 non-virtual, -24 vcall offset offset
+
+VTable indices for 'B' (1 entry).
+   0 | int B::f()
+
+*** Dumping IRgen Record Layout
+Record: CXXRecordDecl 0x1 <t.cpp:2:1> struct B definition
+Layout: <CGRecordLayout
+]>
+'''
+
+
+class SelfTest(unittest.TestCase):
+  def test_canonical_form(self) -> None:
+    text = canonical(SAMPLE)
+    self.assertIn('## record struct B\n0 |   (B vtable pointer)', text)
+    self.assertIn('## vtable B (6 entries)\n0 | vbase_offset (16)', text)
+    self.assertNotIn('Original map', text)
+    self.assertNotIn('IRgen', text)
+    self.assertNotIn('CGRecordLayout', text)
+    # The blocks are sorted by kind, then name.
+    heads = [l for l in text.splitlines() if l.startswith('## ')]
+    self.assertEqual([h.split()[1] for h in heads],
+                     ['record', 'vtable', 'vtable-indices',
+                      'vbase-offset-offsets', 'thunks'])
+    # Idempotent, and the canonical text is accepted as input.
+    self.assertEqual(canonical(text), text)
+
+  def test_order_and_spacing_do_not_matter(self) -> None:
+    reordered = SAMPLE.replace('   3 | int B::f()', '3 | int B::f()')
+    self.assertEqual(canonical(reordered), canonical(SAMPLE))
+    blocks = SAMPLE.split('\n\n')
+    shuffled = '\n\n'.join(reversed(blocks[:5]))
+    self.assertEqual(canonical(shuffled), canonical('\n\n'.join(blocks[:5])))
+
+  def test_keep_original_map(self) -> None:
+    self.assertIn('C::~C() -> B::~B()', canonical(SAMPLE, True))
+
+  def test_diff(self) -> None:
+    ours = canonical(SAMPLE.replace('(B, 0) vtable address',
+                                    '(B, 8) vtable address'))
+    clang = canonical(SAMPLE)
+    self.assertEqual(diff_text(clang, clang), [])
+    report = diff_text(clang, ours)
+    self.assertEqual(report[0], 'differs: vtable B')
+    self.assertTrue(any(l.startswith('-') and '(B, 0)' in l for l in report))
+    self.assertTrue(any(l.startswith('+') and '(B, 8)' in l for l in report))
+    # A vtable with another number of entries pairs with the same name.
+    other = canonical(SAMPLE.replace('(6 entries)', '(7 entries)'))
+    self.assertEqual(diff_text(clang, other)[0], 'differs: vtable B')
+    # A block that one side lacks.
+    missing = canonical(SAMPLE.split('Thunks for')[0])
+    self.assertEqual(diff_text(clang, missing)[0],
+                     'only in clang: thunks int B::f() (1 entry)')
+
+  def test_compare_result_never_passes_nothing(self) -> None:
+    clang = canonical(SAMPLE)
+    self.assertEqual(compare_result(clang, clang)[0], 0)
+    # Nothing on either side is SKIP, not "identical".
+    self.assertEqual(compare_result('', '')[0], EXIT_SKIP)
+    # Clang has layouts and the library side has none: they differ.
+    status, report = compare_result(clang, '')
+    self.assertEqual(status, 1)
+    self.assertTrue(report[0].startswith('only in clang'))
+
+  def test_ecil_dump_without_the_option_is_skip(self) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+      def tool(name: str, body: str) -> str:
+        path = Path(tmp) / name
+        path.write_text('#!/bin/sh\n' + body)
+        path.chmod(0o755)
+        return str(path)
+      # Today's ecil-dump: every unknown option is a usage error that does
+      # not list --vtable-layouts.
+      old = tool('old', 'echo "usage: ecil-dump [--no-check] [--offsets] '
+                 'file.ecil|-" >&2\nexit 2\n')
+      self.assertEqual(ecil_dump_layouts(old, 'x.ecil')[0], 'skip')
+      # An ecil-dump that has the option: --help lists it, and an
+      # invocation error (here a usage error, status 2) is an error.
+      new = tool('new', 'if [ "$1" = --help ]; then echo "usage: ecil-dump '
+                 '[--vtable-layouts] file.ecil|-" >&2; exit 2; fi\n'
+                 'echo "## vtable A (3 entries)"\n')
+      self.assertEqual(ecil_dump_layouts(new, 'x.ecil'),
+                       ('ok', '## vtable A (3 entries)\n'))
+      bad = tool('bad', 'if [ "$1" = --help ]; then echo "usage: ecil-dump '
+                 '[--vtable-layouts] file.ecil|-" >&2; exit 2; fi\n'
+                 'echo "usage: ecil-dump [--vtable-layouts] file.ecil|-" '
+                 '>&2\nexit 2\n')
+      self.assertEqual(ecil_dump_layouts(bad, 'x.ecil')[0], 'error')
+      broken = tool('broken', 'if [ "$1" = --help ]; then echo '
+                    '"--vtable-layouts"; exit 0; fi\n'
+                    'echo "format error" >&2\nexit 1\n')
+      self.assertEqual(ecil_dump_layouts(broken, 'x.ecil')[0], 'error')
+      self.assertEqual(ecil_dump_layouts(str(Path(tmp) / 'none'),
+                                         'x.ecil')[0], 'error')
+
+  def test_clang_if_present(self) -> None:
+    clang = clang_binary()
+    if not shutil.which(clang) and not Path(clang).exists():
+      self.skipTest('no clang')
+    with tempfile.TemporaryDirectory() as tmp:
+      source = Path(tmp) / 't.cpp'
+      source.write_text('struct A { virtual int f(); int a; };\n'
+                        'struct B : A { int f(); };\n'
+                        'int A::f() { return 1; }\n'
+                        'int B::f() { return 2; }\n')
+      rc, out = run_clang_dump(source, clang, DEFAULT_TRIPLE, 'c++17', [])
+      if rc != 0:
+        self.skipTest(f"{clang} cannot dump: {out[:100]}")
+      text = canonical(out)
+      self.assertIn('## vtable A (3 entries)', text)
+      self.assertIn('## vtable B (3 entries)', text)
+      self.assertIn('## record struct B', text)
+      self.assertIn('2 | int B::f()', text)
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2]
+  )
+  parser.add_argument('command', nargs = '?',
+                      choices = ('dump', 'normalize', 'diff', 'compare',
+                                 'gather'))
+  parser.add_argument('args', nargs = '*')
+  parser.add_argument('--clang', default = '')
+  parser.add_argument('--triple', default = DEFAULT_TRIPLE)
+  parser.add_argument('--std', default = 'c++17')
+  parser.add_argument('--ours', default = '',
+                      help = 'compare: the library side (raw or canonical)')
+  parser.add_argument('--ecil', default = '',
+                      help = 'compare: a stream; the library side is the '
+                             'output of ecil-dump --vtable-layouts')
+  parser.add_argument('--ecil-dump', default = 'ecil-dump',
+                      help = 'the ecil-dump to run for --ecil')
+  parser.add_argument('--no-records', action = 'store_true')
+  parser.add_argument('--no-vtables', action = 'store_true')
+  parser.add_argument('--keep-original-map', action = 'store_true')
+  parser.add_argument('--self-test', action = 'store_true')
+  parser.add_argument('-o', dest = 'output', default = '')
+  parser.add_argument('-X', dest = 'extra', action = 'append', default = [],
+                      help = 'an extra clang -cc1 option (repeatable)')
+  args = parser.parse_args()
+
+  if args.self_test:
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SelfTest)
+    result = unittest.TextTestRunner(verbosity = 1).run(suite)
+    sys.exit(0 if result.wasSuccessful() else 1)
+  if not args.command:
+    parser.error('a command or --self-test is required')
+
+  def emit(text: str) -> None:
+    if args.output:
+      Path(args.output).write_text(text)
+    else:
+      sys.stdout.write(text)
+
+  if args.command == 'gather':
+    if len(args.args) != 1:
+      parser.error('gather DIR: the directory to copy to')
+    default = Path(os.environ.get('LLVM_PROJECT', Path.home() /
+                                  'edg-cir-config/llvm-project'))
+    source_dir = default / 'clang/test/CodeGenCXX'
+    copied = gather(source_dir, Path(args.args[0]))
+    print(f"copied {len(copied)} of {len(CLANG_TESTS)} files from "
+          f"{source_dir} to {args.args[0]}")
+    return
+  if args.command in ('dump', 'compare'):
+    if len(args.args) != 1:
+      parser.error(f"{args.command} FILE.cpp")
+    rc, out = run_clang_dump(Path(args.args[0]), clang_binary(args.clang),
+                             args.triple, args.std, args.extra,
+                             not args.no_records, not args.no_vtables)
+    if rc != 0:
+      print(out, file = sys.stderr)
+      print(f"clang failed with status {rc}", file = sys.stderr)
+      sys.exit(2)
+    clang_text = canonical(out, args.keep_original_map)
+    if args.command == 'dump':
+      emit(clang_text)
+      return
+    if bool(args.ours) == bool(args.ecil):
+      parser.error('compare needs one of --ours and --ecil')
+    if args.ecil:
+      state, ours_raw = ecil_dump_layouts(args.ecil_dump, args.ecil)
+      if state == 'skip':
+        print(f"SKIP: {ours_raw}")
+        sys.exit(EXIT_SKIP)
+      if state == 'error':
+        print(f"edg-cir-abi-diff: {ours_raw}", file = sys.stderr)
+        sys.exit(2)
+    else:
+      ours_raw = read_text(args.ours)
+    status, report = compare_result(
+      clang_text, canonical(ours_raw, args.keep_original_map))
+    print('\n'.join(report))
+    sys.exit(status)
+  if args.command == 'normalize':
+    if len(args.args) != 1:
+      parser.error('normalize DUMP.txt (or -)')
+    emit(canonical(read_text(args.args[0]), args.keep_original_map))
+    return
+  if args.command == 'diff':
+    if len(args.args) != 2:
+      parser.error('diff A B')
+    report = diff_text(canonical(read_text(args.args[0]),
+                                 args.keep_original_map),
+                       canonical(read_text(args.args[1]),
+                                 args.keep_original_map),
+                       args.args[0], args.args[1])
+    print('\n'.join(report) if report else 'identical')
+    sys.exit(1 if report else 0)
+
+
+if __name__ == '__main__':
+  main()

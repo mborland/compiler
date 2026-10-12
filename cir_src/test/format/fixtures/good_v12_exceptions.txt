@@ -1,0 +1,68 @@
+; ECIL 1.2: try/catch with a scalar handler and a catch-all with a rethrow, a throw, a deactivatable cleanup ended in a FULLEXPR, FUNC_EH_SPEC, nested throw and TERN arm.
+ecil 1.2 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 6
+frame REGION
+  TY_INT 1 32 true 4 4
+  TY_VOID 2
+  STR 2 "_ZTIi"
+  STR 3 "f"
+  STR 4 "n"
+  STR 5 "e"
+  STR 6 "_Z1fv"
+  STR 7 "_Z1nv"
+  TY_FUNC 3 2 0 []
+  DECL_ABI_DATA 10 2 1 0 0 2
+  TYPEINFO_DEF 10 0 0 nil nil
+  DECL_FUNC 20 3 0 1 6
+  DECL_FUNC 21 3 0 129 7
+  FUNC_BEGIN 20 0
+  TRY_BEGIN 0
+  BLOCK_BEGIN
+  THROW_BEGIN 1
+  CONST_INT 1 5
+  STORE 2 0
+  THROW_END 10 nil
+  BLOCK_END
+  CATCH_BEGIN 10
+  LOCAL 2 1 5 4 0
+  CATCH_PARAM 2 2 nil
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  DROP
+  BLOCK_END
+  CATCH_BEGIN nil
+  BLOCK_BEGIN
+  RETHROW
+  BLOCK_END
+  TRY_END
+  FULLEXPR_BEGIN
+  CLEANUP_BEGIN 2 nil 1
+  CLEANUP_BODY
+  CONST_INT 1 1
+  DROP
+  CLEANUP_END
+  FULLEXPR_END
+  FUNC_END 1
+  FUNC_BEGIN 21 0
+  FUNC_EH_SPEC 1 []
+  FULLEXPR_BEGIN
+  CONST_INT 1 1
+  TO_BOOL
+  TERN_BEGIN 1
+  THROW_BEGIN 1
+  CONST_INT 1 7
+  STORE 2 0
+  THROW_END 10 nil
+  CONST_INT 1 1
+  TERN_ELSE
+  CONST_INT 1 2
+  TERN_END
+  DROP
+  FULLEXPR_END
+  FUNC_END 1
+frame END
+  END 2 0

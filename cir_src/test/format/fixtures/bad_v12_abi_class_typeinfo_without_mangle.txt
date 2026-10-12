@@ -1,0 +1,11 @@
+; expect: format needs its CLASS_MANGLE first
+ecil 1.2 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 2
+frame REGION
+  TY_RECORD_DECL 10 0 nil
+  DECL_ABI_DATA 60 2 10 1 0 nil
+frame END
+  END 2 0

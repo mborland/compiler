@@ -253,3 +253,27 @@ writer-side rules are in `writer.md`. The contract additions are ECIL 1.1
 | Microsoft mode, native Windows | Moved to M7. 49 cases are skipped (45 of them pass in the reference, 2.6% of the C++ corpus); upstream's MSVC CIR ABI is a stub | `m31_reassessment.md` |
 | Builtin generator drift (C5) | Deferred as FE maintenance (user). The checked-in `builtin_defs.h` stays authoritative | The generator inputs for gcc 16.2 and the Lx tables cannot reproduce it without a table change |
 | Crash gating | An FE crash is excused (`edg-cir-summary` `crash_excuse`) only when the reference crashes the same way and neither the message nor any backtrace frame names writer code. Then one of these must hold: the compile output equals the reference's recording without the CIR notes *and* the crash has an identity (an assertion with file:line, an "Internal error" line, or a symbolized frame); or a symbolized backtrace has no writer frame (and the assertion, if the reference's crash is one, is the same); or the assertion text, file:line, function and source position equal the reference's. A bare signal is never excused by these rules. A new gate step, `crash-sweep`, runs every test type, not only the corpus types. A crash that the rules cannot excuse but that was reviewed as the reference's own is pinned in `tests/.edgy/filters/cir-excused-crashes.txt` by its assertion text or, for a bare signal, by the signal plus equal output | The sweep found six CIR-only FE crashes in `fp`/`fn` tests that the corpus gate could not see; all six are fixed. Seven reference crashes are pinned: three assertions reported at a different position, and four bare `SIGSEGV`s that the reference also has |
+
+## 12. M4: virtual functions, RTTI, exceptions, member pointers (session 3)
+
+The contract is `ecil_format.md` §12 (ECIL 1.2). The research behind it:
+- `research/m4_ecil_design.md` (the design and how it became §12);
+- `research/m4_cir_shapes.md` (spikes K1–K7 and K9 at the pin, gaps G1–G8; K8 is the upstream-drift study);
+- `research/m4_fe_facts.md` (the FE's facts against clang);
+- `research/m4_upstream_drift.md` (upstream after the pin);
+- `research/il_to_ecil_map_m4.md` (the writer's IL map and probes).
+
+| Topic | Decision | Evidence |
+| --- | --- | --- |
+| Facts and mechanics | The FE sends slots, final overriders per subobject, the primary base, `nvsize`/`nvalign`, class manglings, emission and linkage. The library ports clang's `ItaniumVTableBuilder`, `VTTBuilder` and RTTI layout (`cir_src/lib/abi`, LLVM-free, explicit stacks) | 7712 of 7716 FE facts agree with clang over 761 classes; `lib/abi` is diff-clean against clang on about 1180 vtable and VTT blocks |
+| ABI tiebreak (user) | Follow clang where clang and g++ differ on an ABI-visible detail. Exceptions: object layout is the FE's (`vbase13`, the Itanium "nearly empty" clause, as g++); the typeinfo name of a TU-local type has g++'s `*` prefix (user decision 2026-10-12), so libstdc++ never equates two TU-local types of different TUs | `m4_fe_facts.md`; libstdc++ `type_info::operator==` |
+| LLVM pin (user) | No local llvm-project patches. Upstream gaps are worked around in the library or diagnosed; a pin bump only if upstream has the fix | K8 drift: 264 commits after the pin, none fixes a known M4 gap |
+| `uwtable` (user) | On every function, C included | C asm changes only in `.cfi_*` (the asm diff normalizes it) |
+| Upstream gaps | G1: the library adds `__cxa_free_exception` around the exception initialization. G2: a `#cir.method` constant with an adjustment is emitted in its lowered `{i64, i64}` global form, or as a runtime `derived_method`. G4: `.base` is `nvsize` bytes. G7: new-with-temporaries uses deactivatable cleanups (CIRGen's conditional `new` order is wrong; ours follows g++ and clang). G8: a null data-member pointer is −1, so its types are not zero-initializable | `m4_cir_shapes.md` |
+| Throw-operand temporaries (user) | Destroyed during unwinding, as clang does (g++ destroys them before `__cxa_throw`) | Box test: `std::uncaught_exceptions()` 1 under clang, 0 under g++ |
+| Structors with virtual bases | Both variants are streamed, with no C1 alias. D1 is synthesized by the writer as "D2, then the virtual bases" (equal in behavior to clang's duplicated body, not byte-equal). The library adds the VTT parameter | K1 |
+| vptrs in constants | No record names them; the library fills every vptr as clang's `ConstStructBuilder` does | K9 (named K8 in cir-lib's notes) |
+| Key function and vtable linkage | The writer's, computed with clang's rule from `inline_in_class_definition` (the FE's own decider uses `is_inline` in this configuration) | `il_to_ecil_map_m4.md` 8.1 |
+| `NOTHROW` | Only from the FE predicates `is_non_throwing_routine` and `is_nothrow_type`: a wrong `NOTHROW` skips cleanups silently | — |
+| `cir.try_call` in CallConvLowering | Not a gap for us: CallConvLowering runs before FlattenCFG and EHABILowering, so it never sees `try_call` | `m4_upstream_drift.md` listed it as NYI upstream; the gate M4a review noted the pass order |
+| Base zero-initialization | `INIT_ZERO_BASE` writes only `nvsize` bytes, so a virtual base or field in the base's tail padding survives | Gate M4a review finding 3 (`EmitNullBaseClassInitialization`) |

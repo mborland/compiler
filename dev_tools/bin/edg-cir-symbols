@@ -1,0 +1,522 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Compare the ABI symbols of a C++ file compiled by a reference compiler and
+by the CIR back end.
+
+Status: skeleton for M4 (not wired into the gate).  Run it inside the cir-env
+image, from the repository root, after building build/gcc-cir and build/cir:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-symbols t.cpp
+  ... t.cpp --ref clang --std c++14        # another reference compiler
+  ... --ref-obj a.o --ours-obj b.o         # compare two object files
+  ... --self-test                          # no compiler needed
+
+It compiles the file to an object file with the reference (default `g++`) and
+with cpfe-cir (util/eccp.sh -c -tused, the configuration of edg_x86_64_cir),
+reads `readelf -sW` and `readelf -g` of both, and prints a table of the
+differences for the symbols of the ABI families:
+
+  vtable       _ZTV      typeinfo     _ZTI      typeinfo-name  _ZTS
+  vtt          _ZTT      construction-vtt _ZTC  thunk-this     _ZTh
+  thunk-virtual _ZTv     thunk-covariant _ZTc   ctor           C1 C2 C3 C4 C5
+  dtor         D0 D1 D2 D4 D5  (any other symbol is ignored unless --all)
+
+For each symbol the table has its binding, type, visibility, size and COMDAT
+group (the signature of the group that holds its section); the size is only
+compared for objects (vtables, VTTs, typeinfo): the code of two compilers
+differs.  A symbol that one side lacks, and a symbol whose binding, type,
+visibility, object size or group differs, is a difference.  Notes:
+
+  - g++ names the group of a constructor or destructor after the C5/D5
+    "comdat" name (_ZN1AC5Ev); clang and the CIR back end use the C2/D2 name.
+    The tool maps C5 to C2 and D5 to D2 in the signatures on both sides
+    before comparing (--no-normalize-groups to see them as written).
+  - g++ emits C1/D1 (and D2) as aliases at -O0; clang and cpfe-cir may emit one
+    of them and alias or call the other: a missing C1 or D1 is a difference
+    that matters to another translation unit, so it is reported.
+
+It never reports "agree" for something it did not compare.  The result is
+"SKIP" (status 3) only if cpfe-cir refuses the file with the back end's own
+"CIR back end: ... cannot express" (or "not supported yet") diagnostic, a
+construct it does not support yet, or the reference object has no symbol of an
+ABI family.  Any other failure of cpfe-cir (a crash, an error of the front
+end, the library's format or verifier errors) is a FAIL, and a library object
+that lacks the symbols of the reference is a difference.
+
+Exit status: 0 if the ABI symbols agree, 1 if they differ or cpfe-cir failed,
+2 for a setup problem, 3 for SKIP (nothing was compared).
+'''
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+EXIT_SKIP = 3
+
+
+# What the writer prints for a construct that the back end cannot express yet:
+# "Error: CIR back end: the definition of 'f' was dropped: it uses a construct
+# the CIR back end cannot express: a virtual function".
+_UNSUPPORTED = re.compile(r'CIR back end:.*(cannot express|not supported yet)',
+                          re.S)
+
+
+def is_unsupported(output: str) -> bool:
+  '''Does the compiler output say that the CIR back end does not support a
+  construct yet?'''
+  return bool(_UNSUPPORTED.search(output))
+
+
+class OursFailed(RuntimeError):
+  '''cpfe-cir did not make an object file: `unsupported` if the back end
+  says it cannot express a construct yet (SKIP); else it failed (FAIL).'''
+  def __init__(self, message: str, unsupported: bool) -> None:
+    super().__init__(message)
+    self.unsupported = unsupported
+
+
+# The ABI families by the mangled name (first match).
+FAMILIES = (
+  ('vtable', re.compile(r'^_ZTV')),
+  ('typeinfo', re.compile(r'^_ZTI')),
+  ('typeinfo-name', re.compile(r'^_ZTS')),
+  ('vtt', re.compile(r'^_ZTT')),
+  ('construction-vtt', re.compile(r'^_ZTC')),
+  ('thunk-this', re.compile(r'^_ZTh')),
+  ('thunk-virtual', re.compile(r'^_ZTv')),
+  ('thunk-covariant', re.compile(r'^_ZTc')),
+  ('ctor', re.compile(r'^_Z.*C[1-5]E')),
+  ('dtor', re.compile(r'^_Z.*D[0-5]E')),
+)
+_SYMBOL = re.compile(
+  r'^\s*\d+:\s+[0-9a-f]+\s+(?P<size>\d+)\s+(?P<type>\w+)\s+(?P<bind>\w+)\s+'
+  r'(?P<vis>\w+)\s+(?P<ndx>\S+)\s*(?P<name>\S*)')
+_GROUP = re.compile(r"^COMDAT group section \[\s*\d+\]\s+`[^']*'\s+\[(?P<sig>"
+                    r".*)\]\s+contains")
+_GROUP_SECTION = re.compile(r'^\s+\[\s*(?P<index>\d+)\]\s+\S')
+
+
+class Symbol:
+  '''One symbol of an object file.'''
+  def __init__(self, name: str, size: int, kind: str, bind: str, vis: str,
+               ndx: str, group: str = '') -> None:
+    self.name = name
+    self.size = size
+    self.kind = kind
+    self.bind = bind
+    self.vis = vis
+    self.ndx = ndx
+    self.group = group
+
+  @property
+  def defined(self) -> bool:
+    return self.ndx != 'UND'
+
+  def family(self) -> str:
+    for name, regex in FAMILIES:
+      if regex.search(self.name):
+        return name
+    return ''
+
+
+def parse_readelf(symbols_text: str, groups_text: str) -> Dict[str, Symbol]:
+  '''The symbols of `readelf -sW` with the group signature of their section
+  (from `readelf -g`), by name; section and file symbols are left out.'''
+  group_of: Dict[str, str] = {}
+  signature = ''
+  for line in groups_text.splitlines():
+    match = _GROUP.match(line)
+    if match:
+      signature = match.group('sig')
+      continue
+    match = _GROUP_SECTION.match(line)
+    if match and signature:
+      group_of.setdefault(match.group('index'), signature)
+  result: Dict[str, Symbol] = {}
+  for line in symbols_text.splitlines():
+    match = _SYMBOL.match(line)
+    if not match or not match.group('name'):
+      continue
+    if match.group('type') in ('SECTION', 'FILE'):
+      continue
+    name = match.group('name').split('@')[0]
+    ndx = match.group('ndx')
+    result[name] = Symbol(name, int(match.group('size')),
+                          match.group('type'), match.group('bind'),
+                          match.group('vis'), ndx, group_of.get(ndx, ''))
+  return result
+
+
+def normalize_group(signature: str) -> str:
+  '''g++'s C5/D5 comdat group names as clang's C2/D2 names (both sides are
+  normalized, so a class named C5 stays comparable).'''
+  if not signature.startswith('_Z'):
+    return signature
+  return re.sub(r'([CD])5(?!\d)', lambda m: f"{m.group(1)}2", signature)
+
+
+def compare(reference: Dict[str, Symbol], ours: Dict[str, Symbol],
+            all_symbols: bool = False, normalize_groups: bool = True
+            ) -> List[Tuple[str, str, str]]:
+  '''The differences as (symbol, what, detail) rows.
+
+  Only the symbols of an ABI family are looked at (every one with
+  all_symbols); local NOTYPE group-signature symbols (_ZN1AC5Ev) are
+  ignored.
+  '''
+  rows: List[Tuple[str, str, str]] = []
+  def interesting(symbol: Symbol) -> bool:
+    if symbol.kind == 'NOTYPE' and symbol.bind == 'LOCAL':
+      return False
+    return all_symbols or bool(symbol.family())
+  def group(symbol: Symbol) -> str:
+    return normalize_group(symbol.group) if normalize_groups \
+      else symbol.group
+  for name in sorted(set(reference) | set(ours)):
+    ref, our = reference.get(name), ours.get(name)
+    present = ref if ref is not None else our
+    if not interesting(present):
+      continue
+    if our is None:
+      rows.append((name, 'missing in ours', describe(ref, group(ref))))
+      continue
+    if ref is None:
+      rows.append((name, 'only in ours', describe(our, group(our))))
+      continue
+    if ref.defined != our.defined:
+      rows.append((name, 'defined/undefined',
+                   f"ref {describe(ref, group(ref))} | ours "
+                   f"{describe(our, group(our))}"))
+      continue
+    differences = []
+    for label, a, b in (('binding', ref.bind, our.bind),
+                        ('type', ref.kind, our.kind),
+                        ('visibility', ref.vis, our.vis),
+                        ('group', group(ref), group(our))):
+      if a != b:
+        differences.append(f"{label} {a or '-'} -> {b or '-'}")
+    if ref.kind == 'OBJECT' and ref.size != our.size:
+      differences.append(f"size {ref.size} -> {our.size}")
+    if differences:
+      rows.append((name, 'differs', '; '.join(differences)))
+  return rows
+
+
+def describe(symbol: Symbol, group: str) -> str:
+  return (f"{symbol.bind} {symbol.kind} {symbol.vis} size {symbol.size} "
+          f"group {group or '-'}")
+
+
+def format_table(rows: List[Tuple[str, str, str]],
+                 symbols: Dict[str, Symbol]) -> str:
+  '''The rows as a text table, sorted by family and name.'''
+  def family(row: Tuple[str, str, str]) -> str:
+    for name, regex in FAMILIES:
+      if regex.search(row[0]):
+        return name
+    return 'other'
+  lines = [f"{'family':<17}{'symbol':<44}{'difference':<20}detail"]
+  for row in sorted(rows, key = lambda r: (family(r), r[0])):
+    lines.append(f"{family(row):<17}{row[0][:42]:<44}{row[1]:<20}{row[2]}")
+  return '\n'.join(lines)
+
+
+def readelf(path: Path) -> Dict[str, Symbol]:
+  '''The symbols of an object file.'''
+  def run(flag: str) -> str:
+    proc = subprocess.run(['readelf', flag, str(path)],
+                          stdout = subprocess.PIPE, stderr = subprocess.PIPE,
+                          text = True)
+    if proc.returncode != 0:
+      raise RuntimeError(f"readelf {flag} {path}: {proc.stderr.strip()}")
+    return proc.stdout
+  return parse_readelf(run('-sW'), run('-g'))
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  '''Parse the `export NAME="value"` lines of a CMake environment.sh.'''
+  exports: Dict[str, str] = {}
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  return exports
+
+
+def compile_reference(source: Path, work: Path, compiler: str, std: str,
+                      extra: List[str]) -> Path:
+  out = work / 'ref.o'
+  command = [compiler, f"-std={std}", '-c', *extra, str(source), '-o',
+             str(out)]
+  proc = subprocess.run(command, stdout = subprocess.PIPE,
+                        stderr = subprocess.STDOUT, text = True)
+  if proc.returncode != 0:
+    raise RuntimeError(f"{compiler} failed:\n{proc.stdout}")
+  return out
+
+
+def compile_ours(source: Path, work: Path, root: Path, fe_build: str,
+                 std: str, extra: List[str]) -> Path:
+  '''Compile with eccp and cpfe-cir like the edg_x86_64_cir test config:
+  `eccp -c -tused` (no -o: eccp makes an instantiation file with it).'''
+  env = dict(os.environ)
+  exports = load_exports(root / fe_build / 'environment.sh')
+  env.update(exports)
+  env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+  env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+  env['CPFE'] = exports['CPFE_CIR']
+  # The system headers, as a test with //use_system_includes gets them.
+  env['EDG_USE_SYSTEM_HEADERS'] = '1'
+  local = work / source.name
+  shutil.copy2(source, local)
+  proc = subprocess.run(
+    [str(root / 'util/eccp.sh'), '-c', '-tused', f"--{std}", *extra,
+     local.name], cwd = work, env = env, stdout = subprocess.PIPE,
+    stderr = subprocess.STDOUT, text = True)
+  produced = work / (local.stem + '.o')
+  if proc.returncode != 0 or not produced.exists():
+    tail = '\n'.join(proc.stdout.splitlines()[-12:])
+    crashed = proc.returncode < 0 or proc.returncode >= 128
+    raise OursFailed(f"cpfe-cir (eccp) failed (status {proc.returncode}; "
+                     f"the last lines follow):\n{tail}",
+                     is_unsupported(proc.stdout) and not crashed)
+  return produced
+
+
+# Output of readelf for `struct S { int a; S(int x); ~S(); }`-like code,
+# for the self-test: g++ (reference) and cpfe-cir (ours) at M3.
+SAMPLE_REF_SYMBOLS = '''
+Symbol table '.symtab' contains 12 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND
+     1: 0000000000000000     0 FILE    LOCAL  DEFAULT  ABS nv.cpp
+     2: 0000000000000000     0 SECTION LOCAL  DEFAULT    9 .text._ZN1SC2Ei
+     3: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT    1 _ZN1SC5Ei
+     4: 0000000000000000    23 FUNC    WEAK   DEFAULT    9 _ZN1SC2Ei
+     5: 0000000000000000    23 FUNC    WEAK   DEFAULT    9 _ZN1SC1Ei
+     6: 0000000000000000    11 FUNC    WEAK   DEFAULT   10 _ZN1SD2Ev
+     7: 0000000000000000    11 FUNC    WEAK   DEFAULT   10 _ZN1SD1Ev
+     8: 0000000000000000    40 OBJECT  WEAK   DEFAULT   52 _ZTV1A
+     9: 0000000000000000     3 OBJECT  WEAK   DEFAULT   56 _ZTS1C
+    10: 0000000000000000    71 FUNC    GLOBAL DEFAULT    5 _Z3runi
+'''
+SAMPLE_REF_GROUPS = '''
+COMDAT group section [    1] `.group' [_ZN1SC5Ei] contains 1 sections:
+   [Index]    Name
+   [    9]   .text._ZN1SC2Ei
+
+COMDAT group section [    2] `.group' [_ZN1SD5Ev] contains 1 sections:
+   [Index]    Name
+   [   10]   .text._ZN1SD2Ev
+
+COMDAT group section [    3] `.group' [_ZTV1A] contains 2 sections:
+   [Index]    Name
+   [   52]   .rodata._ZTV1A
+   [   53]   .rela.rodata._ZTV1A
+'''
+SAMPLE_OURS_SYMBOLS = '''
+Symbol table '.symtab' contains 11 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND
+     1: 0000000000000000     0 FILE    LOCAL  DEFAULT  ABS nv.cpp
+     2: 0000000000000000    21 FUNC    WEAK   DEFAULT    9 _ZN1SC2Ei
+     3: 0000000000000000     6 FUNC    WEAK   DEFAULT   10 _ZN1SD2Ev
+     4: 0000000000000000    32 OBJECT  WEAK   DEFAULT   52 _ZTV1A
+     5: 0000000000000000     3 OBJECT  WEAK   HIDDEN    56 _ZTS1C
+     6: 0000000000000000    62 FUNC    GLOBAL DEFAULT    5 _Z3runi
+'''
+SAMPLE_OURS_GROUPS = '''
+COMDAT group section [    1] `.group' [_ZN1SC2Ei] contains 1 sections:
+   [Index]    Name
+   [    9]   .text._ZN1SC2Ei
+
+COMDAT group section [    2] `.group' [_ZN1SD2Ev] contains 1 sections:
+   [Index]    Name
+   [   10]   .text._ZN1SD2Ev
+
+COMDAT group section [    3] `.group' [_ZTV1B] contains 2 sections:
+   [Index]    Name
+   [   52]   .rodata._ZTV1A
+'''
+
+
+class SelfTest(unittest.TestCase):
+  def test_parse(self) -> None:
+    symbols = parse_readelf(SAMPLE_REF_SYMBOLS, SAMPLE_REF_GROUPS)
+    self.assertNotIn('nv.cpp', symbols)
+    self.assertEqual(symbols['_ZN1SC1Ei'].bind, 'WEAK')
+    self.assertEqual(symbols['_ZN1SC1Ei'].group, '_ZN1SC5Ei')
+    self.assertEqual(symbols['_ZTV1A'].size, 40)
+    self.assertEqual(symbols['_ZTV1A'].group, '_ZTV1A')
+    self.assertEqual(symbols['_Z3runi'].group, '')
+    self.assertEqual(symbols['_ZTV1A'].family(), 'vtable')
+    self.assertEqual(symbols['_ZN1SD1Ev'].family(), 'dtor')
+    self.assertEqual(symbols['_Z3runi'].family(), '')
+
+  def test_compare(self) -> None:
+    ref = parse_readelf(SAMPLE_REF_SYMBOLS, SAMPLE_REF_GROUPS)
+    ours = parse_readelf(SAMPLE_OURS_SYMBOLS, SAMPLE_OURS_GROUPS)
+    rows = {r[0]: r for r in compare(ref, ours)}
+    # C1 and D1 are missing, the vtable differs in size and group, the
+    # typeinfo name in visibility; C5 and C2 group names are the same.
+    self.assertEqual(sorted(rows), ['_ZN1SC1Ei', '_ZN1SD1Ev', '_ZTS1C',
+                                    '_ZTV1A'])
+    self.assertEqual(rows['_ZN1SC1Ei'][1], 'missing in ours')
+    self.assertIn('size 40 -> 32', rows['_ZTV1A'][2])
+    self.assertIn('group _ZTV1A -> _ZTV1B', rows['_ZTV1A'][2])
+    self.assertIn('visibility DEFAULT -> HIDDEN', rows['_ZTS1C'][2])
+    # Without the C5 normalization the group names of C2 and D2 differ too.
+    raw = {r[0]: r for r in compare(ref, ours, normalize_groups = False)}
+    self.assertIn('_ZN1SC2Ei', raw)
+    self.assertIn('group _ZN1SC5Ei -> _ZN1SC2Ei', raw['_ZN1SC2Ei'][2])
+    # Equal inputs have no difference.
+    self.assertEqual(compare(ref, ref), [])
+    table = format_table(compare(ref, ours), ref)
+    self.assertIn('vtable', table)
+    self.assertIn('size 40 -> 32', table)
+
+  def test_unsupported_marker(self) -> None:
+    text = ("Error: CIR back end: the definition of 'f' was dropped: it "
+            "uses a\n          construct the CIR back end cannot express: "
+            "a virtual function\n")
+    self.assertTrue(is_unsupported(text))
+    self.assertTrue(is_unsupported('Error: CIR back end: x is not supported '
+                                   'yet'))
+    # Other errors are not "unsupported": a front end error, a library
+    # format or verifier error, and a CIR note without the phrase.
+    self.assertFalse(is_unsupported('"t.cpp", line 3: error: expected a ";"'))
+    self.assertFalse(is_unsupported('Error: CIR back end: the stream is '
+                                    'malformed (verifier)'))
+    self.assertFalse(is_unsupported('ecil: format error at byte 12'))
+    self.assertFalse(is_unsupported(''))
+
+  def test_missing_symbols_are_differences(self) -> None:
+    ref = parse_readelf(SAMPLE_REF_SYMBOLS, SAMPLE_REF_GROUPS)
+    # An object of ours with none of the symbols is all differences.
+    empty = parse_readelf('', '')
+    rows = compare(ref, empty)
+    self.assertTrue(rows)
+    self.assertTrue(all(r[1] == 'missing in ours' for r in rows))
+
+  def test_normalize_group(self) -> None:
+    self.assertEqual(normalize_group('_ZN1SC5Ei'), '_ZN1SC2Ei')
+    self.assertEqual(normalize_group('_ZN1AD5Ev'), '_ZN1AD2Ev')
+    self.assertEqual(normalize_group('_ZTV1A'), '_ZTV1A')
+
+  def test_live_if_readelf_and_a_compiler(self) -> None:
+    compiler = shutil.which('g++') or shutil.which('c++')
+    if not compiler or not shutil.which('readelf'):
+      self.skipTest('no readelf or compiler')
+    with tempfile.TemporaryDirectory() as tmp:
+      work = Path(tmp)
+      source = work / 't.cpp'
+      source.write_text('struct A { virtual int f(); virtual ~A(); int a; };\n'
+                        'int A::f() { return 1; }\nA::~A() {}\n')
+      try:
+        obj = compile_reference(source, work, compiler, 'c++17', [])
+        symbols = readelf(obj)
+      except RuntimeError as error:
+        self.skipTest(str(error)[:100])
+      if '_ZTV1A' not in symbols:
+        self.skipTest('the host compiler does not make ELF objects')
+      self.assertEqual(compare(symbols, symbols), [])
+      self.assertEqual(symbols['_ZTV1A'].family(), 'vtable')
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2]
+  )
+  parser.add_argument('source', nargs = '?', help = 'the C++ file')
+  parser.add_argument('--ref', default = 'g++',
+                      help = 'the reference compiler (default g++)')
+  parser.add_argument('--std', default = 'c++17')
+  parser.add_argument('--ref-flags', default = '',
+                      help = 'more flags for the reference compiler')
+  parser.add_argument('--ours-flags', default = '',
+                      help = 'more flags for eccp')
+  parser.add_argument('--ref-obj', default = '',
+                      help = 'a reference object file instead of compiling')
+  parser.add_argument('--ours-obj', default = '',
+                      help = 'an object file of ours instead of compiling')
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir')
+  parser.add_argument('--all', action = 'store_true', dest = 'all_symbols',
+                      help = 'compare every symbol, not only the families')
+  parser.add_argument('--no-normalize-groups', action = 'store_true')
+  parser.add_argument('--keep', default = '',
+                      help = 'keep the object files in this directory')
+  parser.add_argument('--self-test', action = 'store_true')
+  args = parser.parse_args()
+
+  if args.self_test:
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SelfTest)
+    result = unittest.TextTestRunner(verbosity = 1).run(suite)
+    sys.exit(0 if result.wasSuccessful() else 1)
+  if not args.source and not (args.ref_obj and args.ours_obj):
+    parser.error('a C++ file (or --ref-obj and --ours-obj) is required')
+
+  work = Path(args.keep) if args.keep else Path(
+    tempfile.mkdtemp(prefix = 'edg-cir-symbols.'))
+  work.mkdir(parents = True, exist_ok = True)
+  try:
+    try:
+      if args.ref_obj:
+        ref_path = Path(args.ref_obj)
+      else:
+        ref_path = compile_reference(Path(args.source).resolve(), work,
+                                     args.ref, args.std,
+                                     args.ref_flags.split())
+      if args.ours_obj:
+        ours_path = Path(args.ours_obj)
+      else:
+        ours_path = compile_ours(Path(args.source).resolve(), work,
+                                 Path(args.root).resolve(), args.fe_build,
+                                 args.std, args.ours_flags.split())
+      reference, ours = readelf(ref_path), readelf(ours_path)
+    except OursFailed as error:
+      if not error.unsupported:
+        print(f"edg-cir-symbols: FAIL: {error}", file = sys.stderr)
+        sys.exit(1)
+      print(f"SKIP: the CIR back end does not support the file yet; "
+            f"nothing was compared\n{error}")
+      sys.exit(EXIT_SKIP)
+    except (RuntimeError, KeyError, OSError) as error:
+      print(f"edg-cir-symbols: {error}", file = sys.stderr)
+      sys.exit(2)
+  finally:
+    if not args.keep:
+      shutil.rmtree(work, ignore_errors = True)
+  families = sum(1 for s in reference.values() if s.family())
+  if not families and not args.all_symbols:
+    print('SKIP: the reference object has no symbol of an ABI family; '
+          'nothing was compared')
+    sys.exit(EXIT_SKIP)
+  rows = compare(reference, ours, args.all_symbols,
+                 not args.no_normalize_groups)
+  print(f"{families} ABI-family symbols in the reference, "
+        f"{sum(1 for s in ours.values() if s.family())} in ours; "
+        f"{len(rows)} difference(s)")
+  if rows:
+    print(format_table(rows, reference))
+  sys.exit(1 if rows else 0)
+
+
+if __name__ == '__main__':
+  main()

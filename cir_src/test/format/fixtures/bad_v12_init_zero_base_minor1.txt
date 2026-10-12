@@ -1,0 +1,16 @@
+; expect: format INIT_ZERO_BASE: record needs ECIL minor >= 2
+ecil 1.1 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame REGION
+  TY_VOID 2
+  STR 2 "f"
+  TY_FUNC 3 2 0 []
+  DECL_FUNC 20 3 0 1 2
+  FUNC_BEGIN 20 0
+  INIT_ZERO_BASE
+  FUNC_END 1
+frame END
+  END 2 0

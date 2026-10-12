@@ -23,7 +23,7 @@ ECIL_VERSION_MAJOR or ECIL_VERSION_MINOR (section 9 of the spec).
 #include <stdint.h>
 
 #define ECIL_VERSION_MAJOR 1
-#define ECIL_VERSION_MINOR 1
+#define ECIL_VERSION_MINOR 2
 
 /*
 The stream preamble: 8 magic bytes, then u16 major, u16 minor and
@@ -143,11 +143,26 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(rec_field,        0x19, 6)  /* t, byte_off, bit_off|nil, bit_width|nil,*/\
                                 /* sid|nil, flags                         */ \
   X(ty_opaque,        0x1A, 3)  /* g, size, align */                         \
+  X(ty_vptr,          0x1B, 1)  /* g (1.2) */                                \
+  X(class_info,       0x1E, 5)  /* t, nvsize, nvalign, primary_idx|nil,   */ \
+                                /* nslots (1.2)                           */ \
+  X(class_bases,      0x1F, 2)  /* t, array (field_idx, flags) (1.2) */      \
+  X(class_vfuncs,     0x20, 2)  /* t, array (g, slot, flags, sig) (1.2) */   \
+  X(class_overrides,  0x21, 2)  /* t, array (g_fn, sub_off, g_ovr,        */ \
+                                /* ovr_off) (1.2)                         */ \
+  X(ty_data_member,   0x23, 3)  /* g, t member, t class (1.2) */             \
+  X(ty_method,        0x24, 3)  /* g, t func, t class (1.2) */               \
+  X(class_mangle,     0x25, 2)  /* t, sid (1.2) */                           \
   /* Declarations. */                                                        \
   X(decl_func,        0x30, 5)  /* g, t, linkage, flags, sid|nil */          \
   X(decl_var,         0x31, 6)  /* g, t, linkage, flags, align, sid|nil */   \
   X(var_init,         0x32, 1)  /* g; pops one constant */                   \
   X(structor,         0x33, 3)  /* g complete, g base, flags (v1) */         \
+  X(structor_deleting,0x34, 4)  /* g d0, g d1, g delete, flags (1.2) */      \
+  X(decl_abi_data,    0x35, 6)  /* g, kind, t, linkage, flags, sid|nil    */ \
+                                /* (1.2)                                  */ \
+  X(typeinfo_def,     0x36, 5)  /* g ti, kind, flags, g a|nil, g b|nil    */ \
+                                /* (1.2)                                  */ \
   /* Bodies and statements. */                                               \
   X(func_begin,       0x40, 2)  /* g, flags */                               \
   X(func_end,         0x41, 1)  /* flags */                                  \
@@ -189,13 +204,15 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(agg_init_end,     0x64, 0)                                               \
   X(cleanup_begin,    0x65, 3)  /* kind, g|nil, flags (v1) */                \
   X(cleanup_body,     0x66, 0)  /* v1 */                                     \
-  X(cleanup_end,       0x67, 0)  /* reserved (M4); rejected in v1 */         \
+  X(cleanup_end,      0x67, 0)  /* 1.2: deactivates a cleanup */           \
   X(fullexpr_begin,   0x68, 0)  /* v1 */                                     \
   X(fullexpr_end,     0x69, 0)  /* carries <= 1 value (v1) */                \
   X(static_init_begin,0x6A, 2)  /* g, flags (v1) */                          \
   X(static_init_end,  0x6B, 0)  /* v1 */                                     \
   X(meminit_begin,    0x6C, 3)  /* kind, idx, flags (v1) */                  \
   X(meminit_end,      0x6D, 0)  /* v1 */                                     \
+  X(vptr_init,        0x6E, 0)  /* 1.2 */                                    \
+  X(func_eh_spec,     0x6F, 2)  /* kind, array g ti; header (1.2) */         \
   /* References, memory and values. */                                       \
   X(lref,             0x70, 1)  /* l -> glv */                               \
   X(gref,             0x71, 1)  /* g -> glv */                               \
@@ -245,6 +262,21 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(zero_bytes,       0x9C, 1)  /* bytes; glv (v1) */                        \
   X(cmp3way,          0x9D, 5)  /* t result, lt, eq, gt, unordered|nil;  */  \
                                 /* prv prv -> prv (1.1)                */    \
+  X(vbase_cast,       0x9E, 3)  /* t der, t vbase, flags; prv -> prv (1.2) */\
+  X(vtt_addr,         0x9F, 2)  /* kind, idx|nil; -> prv (1.2) */            \
+  X(dynamic_cast,     0xA0, 4)  /* g src ti, g dst ti|nil, t result,      */ \
+                                /* flags; prv -> prv (1.2)                */ \
+  X(typeid,           0xA1, 3)  /* g ti|nil, t result, flags;             */ \
+                                /* [glv] -> glv (1.2)                     */ \
+  X(pm_field,         0xA2, 1)  /* t dm; prv obj prv dm -> glv (1.2) */      \
+  X(pm_call,          0xA3, 3)  /* t call, nargs, flags; prv obj,         */ \
+                                /* prv method, args -> result (1.2)       */ \
+  X(pm_cast,          0xA4, 4)  /* kind, t from, t to, offset;            */ \
+                                /* prv -> prv (1.2)                       */ \
+  X(const_data_member,0xA5, 2)  /* t, offset|nil -> prv (1.2) */             \
+  X(const_method,     0xA6, 4)  /* t, g|nil, adj, flags -> prv (1.2) */      \
+  X(array_partial_dtor,0xA7, 1) /* g dtor (1.2) */                           \
+  X(init_zero_base,   0xA8, 0)  /* glv; nvsize bytes (1.2) */               \
   /* Calls, casts and varargs (C0, C1 and C7-C9 are never assigned). */     \
   X(cast,             0xC2, 2)  /* kind, t; prv -> prv */                    \
   X(va_start,         0xC3, 0)  /* prv ap */                                 \
@@ -262,6 +294,14 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(land_end,         0xD4, 0)  /* -> bool */                                \
   X(lor_begin,        0xD5, 0)  /* pops bool */                              \
   X(lor_end,          0xD6, 0)  /* -> bool */                                \
+  /* Exceptions (1.2; 0xDA is unassigned). */                                \
+  X(try_begin,        0xD7, 1)  /* flags */                                  \
+  X(catch_begin,      0xD8, 1)  /* g ti|nil */                               \
+  X(catch_param,      0xD9, 3)  /* l, kind, g copy|nil */                    \
+  X(try_end,          0xDB, 0)                                               \
+  X(throw_begin,      0xDC, 1)  /* t; -> glv */                              \
+  X(throw_end,        0xDD, 2)  /* g ti, g dtor|nil; pops nothing */         \
+  X(rethrow,          0xDE, 0)                                               \
   /* Constant initializers (constant stack). */                              \
   X(c_int,            0xE0, 2)  /* t, int */                                 \
   X(c_float,          0xE1, 2)  /* t, float */                               \
@@ -273,7 +313,9 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(c_agg_begin,      0xE7, 1)  /* t */                                      \
   X(c_sel,            0xE8, 1)  /* idx */                                    \
   X(c_repeat,         0xE9, 2)  /* idx, count */                             \
-  X(c_agg_end,        0xEA, 0)
+  X(c_agg_end,        0xEA, 0)                                               \
+  X(c_data_member,    0xEB, 2)  /* t, offset|nil (1.2) */                    \
+  X(c_method,         0xEC, 4)  /* t, g|nil, adj, flags (1.2) */
 
 #define ECIL_DEFINE_OPCODE_ENUMERATOR(name, value, arity) \
   eop_##name = value,
@@ -367,7 +409,7 @@ typedef enum an_ecil_cleanup_kind {
 
 /* MEMINIT_BEGIN kinds (v1), in EDG's constructor-initializer order. */
 typedef enum an_ecil_meminit_kind {
-  emk_vbase      = 0,  /* Virtual base (M4; an error in v1). */
+  emk_vbase      = 0,  /* Virtual base (1.2; C1 of a has_vbases pair). */
   emk_base       = 1,
   emk_field      = 2,
   emk_delegation = 3
@@ -409,6 +451,53 @@ typedef enum an_ecil_builtin {
                              ECIL_FP_CLASS_* bits (LLVM FPClassTest) */
   ebi_signbit      = 16   /* (x) -> bool */
 } an_ecil_builtin;
+
+/* DECL_ABI_DATA kinds (1.2). */
+typedef enum an_ecil_abi_data_kind {
+  eadk_vtable   = 0,
+  eadk_vtt      = 1,
+  eadk_typeinfo = 2
+} an_ecil_abi_data_kind;
+
+/* TYPEINFO_DEF kinds (1.2): the non-class std::type_info classes. */
+typedef enum an_ecil_typeinfo_kind {
+  etik_fundamental    = 0,  /* External declaration only. */
+  etik_pointer        = 1,  /* g_a: pointee typeinfo. */
+  etik_member_pointer = 2,  /* g_a: pointee typeinfo; g_b: class one. */
+  etik_function       = 3,
+  etik_array          = 4,
+  etik_enum           = 5
+} an_ecil_typeinfo_kind;
+
+/* FUNC_EH_SPEC kinds (1.2). */
+typedef enum an_ecil_eh_spec_kind {
+  eesk_noexcept = 1,  /* Terminate if the body throws. */
+  eesk_dynamic  = 2   /* throw(T...): filter, then unexpected. */
+} an_ecil_eh_spec_kind;
+
+/* VTT_ADDR kinds (1.2). */
+typedef enum an_ecil_vtt_addr_kind {
+  evak_self  = 0,  /* The VTT of the function's own class. */
+  evak_base  = 1,  /* idx: a BASE field. */
+  evak_vbase = 2   /* idx: a VIRTUAL_BASE field. */
+} an_ecil_vtt_addr_kind;
+
+/* PM_CAST kinds (1.2). */
+typedef enum an_ecil_pm_cast_kind {
+  epck_to_derived = 0,  /* Base-to-derived member pointer: adds offset. */
+  epck_to_base    = 1   /* Derived-to-base member pointer: subtracts. */
+} an_ecil_pm_cast_kind;
+
+/* CATCH_PARAM kinds (1.2).  Equal to cir::InitCatchKind; 3 is invalid. */
+typedef enum an_ecil_catch_kind {
+  ecat_reference                   = 0,
+  ecat_pointer                     = 1,
+  ecat_scalar                      = 2,
+  ecat_trivial_copy                = 4,
+  ecat_non_trivial_copy            = 5,  /* g_copy: the C1 copy ctor. */
+  ecat_reference_to_pointer        = 6,
+  ecat_reference_to_record_pointer = 7
+} an_ecil_catch_kind;
 
 /* Bits of the ebi_is_fp_class mask (same values as LLVM's FPClassTest). */
 #define ECIL_FP_CLASS_SNAN           0x001u
@@ -457,6 +546,15 @@ typedef enum an_ecil_builtin {
 #define ECIL_FIELD_POTENTIALLY_OVERLAPPING 0x20u
                         /* v1: laid out with the base-subobject type
                            (data_size bytes). */
+#define ECIL_FIELD_VIRTUAL_BASE         0x40u
+                        /* 1.2: a virtual base, direct or indirect, at
+                           its complete-object offset. */
+
+#define ECIL_CLASS_BASE_PUBLIC          0x01u  /* 1.2 (CLASS_BASES) */
+
+#define ECIL_VFUNC_PURE                 0x01u  /* 1.2 (CLASS_VFUNCS) */
+#define ECIL_VFUNC_DELETED              0x02u  /* 1.2 */
+#define ECIL_VFUNC_IMPLICIT             0x04u  /* 1.2 */
 
 #define ECIL_DECL_FUNC_DEFINED_HERE     0x01u
 #define ECIL_DECL_FUNC_INLINE           0x02u
@@ -472,6 +570,9 @@ typedef enum an_ecil_builtin {
 #define ECIL_DECL_FUNC_COMDAT           0x40u
                         /* v1: own comdat named after the symbol (iff the
                            linkage is linkonce_odr or weak_odr). */
+#define ECIL_DECL_FUNC_NOTHROW          0x80u
+                        /* 1.2: the function cannot throw (front end
+                           predicate only). */
 
 #define ECIL_DECL_VAR_DEFINITION        0x01u
 #define ECIL_DECL_VAR_CONST             0x02u
@@ -488,7 +589,27 @@ typedef enum an_ecil_builtin {
                            guard (spec 11.2 gives the guard name). */
 
 #define ECIL_STRUCTOR_DTOR              0x01u  /* v1: D1/D2, not C1/C2. */
-#define ECIL_STRUCTOR_HAS_VBASES        0x02u  /* M4; 0 in v1. */
+#define ECIL_STRUCTOR_HAS_VBASES        0x02u
+                        /* 1.2 (0 before): both variants are streamed;
+                           the base variant takes the VTT. */
+
+#define ECIL_STRUCTOR_DELETING_SIZED    0x01u  /* 1.2 */
+#define ECIL_STRUCTOR_DELETING_ALIGNED  0x02u  /* 1.2 */
+
+#define ECIL_ABI_DATA_DEFINED_HERE      0x01u  /* 1.2 (DECL_ABI_DATA) */
+#define ECIL_ABI_DATA_COMDAT            0x02u  /* 1.2 */
+#define ECIL_ABI_DATA_TU_LOCAL          0x04u
+                        /* 1.2 (typeinfo): the type is TU-local; the
+                           name string starts with '*'. */
+
+/* TYPEINFO_DEF flags (1.2): the __pbase_type_info masks. */
+#define ECIL_TYPEINFO_CONST             0x01u
+#define ECIL_TYPEINFO_VOLATILE          0x02u
+#define ECIL_TYPEINFO_RESTRICT          0x04u
+#define ECIL_TYPEINFO_INCOMPLETE        0x08u
+#define ECIL_TYPEINFO_INCOMPLETE_CLASS  0x10u
+#define ECIL_TYPEINFO_TRANSACTION_SAFE  0x20u
+#define ECIL_TYPEINFO_NOEXCEPT          0x40u
 
 #define ECIL_PARAM_THIS                 0x01u  /* v1 */
 
@@ -519,10 +640,31 @@ typedef enum an_ecil_builtin {
 #define ECIL_CALL_VARIADIC_CALLEE       0x01u
 #define ECIL_CALL_NORETURN              0x02u
 #define ECIL_CALL_RESULT_UNUSED         0x04u
+#define ECIL_CALL_NOTHROW               0x08u
+                        /* 1.2 (CALL, CALL_INDIRECT, PM_CALL): the callee
+                           or call type cannot throw. */
+#define ECIL_CALL_VIRTUAL               0x10u
+                        /* 1.2 (CALL): through the vtable slot of g. */
+#define ECIL_CALL_VTT                   0x20u
+                        /* 1.2 (CALL): a VTT_ADDR operand follows
+                           argument 0. */
 
 #define ECIL_CAST_NONNULL               0x01u
-                        /* v1 (BASE_CAST, DERIVED_CAST): the operand is
-                           known non-null; no null check. */
+                        /* v1 (BASE_CAST, DERIVED_CAST; 1.2 VBASE_CAST):
+                           the operand is known non-null; no null check. */
+#define ECIL_VBASE_CAST_COMPLETE        0x02u
+                        /* 1.2: the static complete-object offset. */
+
+#define ECIL_DYNAMIC_CAST_REF           0x01u  /* 1.2: throws bad_cast. */
+#define ECIL_TYPEID_NULL_CHECK          0x01u  /* 1.2: typeid(*p). */
+#define ECIL_METHOD_VIRTUAL             0x01u
+                        /* 1.2 (CONST_METHOD, C_METHOD). */
+
+#define ECIL_TRY_FUNCTION_TRY           0x01u  /* 1.2 (TRY_BEGIN) */
+
+#define ECIL_CLEANUP_DEACTIVATABLE      0x01u
+                        /* 1.2 (CLEANUP_BEGIN, eh or all): may be ended
+                           early by CLEANUP_END. */
 
 #define ECIL_STATIC_INIT_INLINE_VAR     0x01u  /* v1 */
 #define ECIL_STATIC_INIT_TEMPLATE_INSTANCE 0x02u  /* v1 */
@@ -541,10 +683,12 @@ typedef enum an_ecil_builtin {
 #define ECIL_DELETE_ARRAY               0x01u  /* v1 */
 #define ECIL_DELETE_SIZED               0x02u  /* v1 */
 #define ECIL_DELETE_ALIGNED             0x04u  /* v1 */
+#define ECIL_DELETE_VIRTUAL             0x08u
+                        /* 1.2: D0 through the vtable. */
 
 /* Supplementary blob keys (all optional; readers skip unknown keys). */
 typedef enum an_ecil_supp_key {
-  esk_nothrow       = 1,
+  esk_nothrow       = 1,  /* A hint only. */
   esk_branch_hint   = 2,
   esk_typedef_name  = 3,
   esk_pure          = 4,

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 add_library(ecil_format STATIC
   ecil_brackets.cpp
+  ecil_classes.cpp
   ecil_decode.cpp
   ecil_ids.cpp
   ecil_schema.cpp

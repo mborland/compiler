@@ -60,7 +60,11 @@ private:
 enum a_gid_kind : uint8_t {
   gk_none = 0,   /* Not introduced. */
   gk_void, gk_bool, gk_int, gk_float, gk_ptr, gk_array, gk_func_type,
-  gk_record, gk_opaque, gk_func, gk_var
+  gk_record, gk_opaque, gk_func, gk_var,
+  gk_vptr,         /* TY_VPTR (1.2). */
+  gk_data_member,  /* TY_DATA_MEMBER: element = member type, extent = class. */
+  gk_method,       /* TY_METHOD: element = function type, extent = class. */
+  gk_abi_data      /* DECL_ABI_DATA: role = kind, element = t. */
 };  /* a_gid_kind */
 
 enum a_gid_flag : uint8_t {
@@ -97,7 +101,10 @@ struct a_gid_entry {
 enum a_structor_role : uint8_t {
   sr_complete = 1,    /* C1/D1. */
   sr_base     = 2,    /* C2/D2. */
-  sr_vbases   = 4     /* The pair has virtual bases (M4). */
+  sr_vbases   = 4,    /* The pair has virtual bases (1.2); both variants. */
+  sr_dtor     = 8,    /* A destructor pair (1.2); both variants. */
+  sr_deleting = 16,   /* D1 with a STRUCTOR_DELETING (1.2). */
+  sr_d0       = 32    /* A D0 named by a STRUCTOR_DELETING (1.2). */
 };  /* a_structor_role */
 
 /* a_gid_entry::role of a variable. */
@@ -131,8 +138,48 @@ struct a_lid_entry {
   uint8_t   flags;     /* a_lid_flag bits. */
   uint8_t   seen;      /* Introduced or named by a GOTO (counts for the
                           reader limit). */
+  uint32_t  type;      /* PARAM (declared), LOCAL, MATERIALIZE_TEMP: the type
+                          G-id. */
   void     *payload;
 };  /* a_lid_entry */
+
+/* The class facts of a record (ECIL 1.2): its fields, as the validator needs
+   them, and what the CLASS_* records said. */
+struct a_class_field {
+  uint32_t  type;      /* The field type G-id. */
+  uint64_t  offset;
+  uint8_t   flags;     /* ECIL_FIELD_* of the REC_FIELD. */
+};  /* a_class_field */
+
+enum a_class_stage : uint8_t {
+  cs_mangle    = 1,
+  cs_info      = 2,
+  cs_bases     = 4,
+  cs_vfuncs    = 8,
+  cs_overrides = 16
+};  /* a_class_stage */
+
+struct a_class_facts {
+  std::vector<a_class_field>  fields;
+  uint64_t   size = 0;
+  uint64_t   data_size = 0;
+  uint64_t   align = 0;
+  uint64_t   non_vbase_end = 0;   /* End of the last field that is not a
+                                     virtual base (EMPTY_FOR_ABI: 0). */
+  uint64_t   nvsize = 0;          /* CLASS_INFO; else data_size. */
+  uint64_t   nslots = 0;
+  uint32_t   mangle_sid = 0;
+  uint8_t    stage = 0;           /* a_class_stage bits. */
+  bool       complete = false;    /* All REC_FIELDs seen. */
+  bool       has_vptr = false;    /* A TY_VPTR field. */
+  bool       has_base_fields = false;
+  bool       dynamic = false;     /* A vptr, a virtual base, or a dynamic
+                                     base (structural). */
+  std::vector<uint32_t>  vbases;  /* Classes of the VIRTUAL_BASE fields,
+                                     sorted. */
+  std::vector<uint32_t>  direct_bases;  /* Classes of the direct bases
+                                     (CLASS_BASES), in its order. */
+};  /* a_class_facts */
 
 class a_id_tables {
 public:
@@ -161,6 +208,8 @@ public:
       return g != 0 && g < gids_.size() && gids_[g].kind != gk_none
                  ? &gids_[g] : nullptr;
     }
+  uint64_t gid_table_size() const
+    { return gids_.size(); }
   a_gid_entry *add_gid(uint64_t g, a_gid_kind kind, std::string &problem);
   /* Introduce g (once); nullptr with problem set when g is 0, introduced
      already or beyond the reader limit. */
@@ -200,6 +249,54 @@ public:
       auto it = data_sizes_.find(record);
       return it == data_sizes_.end() ? size : it->second;
     }
+
+  /* Class facts (ECIL 1.2). */
+  a_class_facts &add_class_facts(uint32_t record)
+    { return classes_[record]; }
+  a_class_facts *class_facts(uint32_t record)
+    {
+      auto it = classes_.find(record);
+      return it == classes_.end() ? nullptr : &it->second;
+    }
+  const a_class_facts *class_facts(uint32_t record) const
+    {
+      auto it = classes_.find(record);
+      return it == classes_.end() ? nullptr : &it->second;
+    }
+  const std::unordered_map<uint32_t, a_class_facts> &all_class_facts() const
+    { return classes_; }
+  /* The one ABI-data G-id of a class kind (kind << 32 | class), 0: none. */
+  uint32_t abi_data_of(uint64_t key) const
+    {
+      auto it = abi_keys_.find(key);
+      return it == abi_keys_.end() ? 0 : it->second;
+    }
+  void set_abi_data(uint64_t key, uint32_t g)
+    { abi_keys_[key] = g; }
+  /* STRUCTOR_DELETING: D1 -> (D0, operator delete). */
+  void set_deleting(uint32_t d1, uint32_t d0, uint32_t del)
+    { deleting_[d1] = std::make_pair(d0, del); }
+  const std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> &
+  all_deleting() const
+    { return deleting_; }
+  bool deleting_of(uint32_t d1, uint32_t &d0, uint32_t &del) const
+    {
+      auto it = deleting_.find(d1);
+      bool found = it != deleting_.end();
+      if (found) {
+        d0 = it->second.first;
+        del = it->second.second;
+      }
+      return found;
+    }
+  /* The language flags of HDR_LANG (a C stream: 0). */
+  void set_lang(uint32_t language, uint32_t flags)
+    {
+      lang_ = language;
+      lang_flags_ = flags;
+    }
+  uint32_t lang_flags() const
+    { return lang_flags_; }
 
   /* Base subobjects (REC_FIELD with BASE) of the records, for the casts. */
   void add_base(uint32_t record, uint32_t base, uint64_t offset);
@@ -242,6 +339,11 @@ private:
   std::unordered_map<uint32_t, std::vector<a_base_rec>>
                                          bases_;
   std::unordered_map<uint32_t, uint64_t> data_sizes_;
+  std::unordered_map<uint32_t, a_class_facts> classes_;
+  std::unordered_map<uint64_t, uint32_t> abi_keys_;
+  std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> deleting_;
+  uint32_t                               lang_ = 0;
+  uint32_t                               lang_flags_ = 0;
   uint64_t                               gids_introduced_;
   uint64_t                               sids_introduced_;
 };  /* a_id_tables */

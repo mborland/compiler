@@ -1,4 +1,4 @@
-; expect: version HDR_LANG: C++ with exceptions needs a newer ECIL
+; expect: format HDR_LANG: C++ with exceptions needs ECIL minor >= 2
 ecil 1.0 features=0x00000000
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"

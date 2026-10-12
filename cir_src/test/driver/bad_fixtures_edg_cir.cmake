@@ -17,12 +17,12 @@ foreach(f ${fixtures})
   endif()
   execute_process(COMMAND "${EDG_CIR}" --emit=cir -o /dev/null "${bin}"
     RESULT_VARIABLE rc OUTPUT_QUIET ERROR_VARIABLE err)
-  # The C++ (bad_v1_*) fixtures carry C++ records the emitter does not
-  # implement yet (status 4, "unsupported"); it meets them before the stream
-  # reaches the record that makes the fixture bad.  Anything but a clean
-  # rejection (INTERNAL, a crash) fails.
+  # The C++ (bad_v1_*, bad_v12_*) fixtures carry C++ records the emitter does
+  # not implement yet (status 4, "unsupported"); it meets them before the
+  # stream reaches the record that makes the fixture bad.  Anything but a
+  # clean rejection (INTERNAL, a crash) fails.
   set(want 2 3)
-  if(name MATCHES "^bad_v1_")
+  if(name MATCHES "^bad_v1(2)?_")
     list(APPEND want 4)
   endif()
   if(NOT rc IN_LIST want)

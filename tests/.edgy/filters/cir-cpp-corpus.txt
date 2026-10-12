@@ -2,16 +2,18 @@
 # prefix per line, relative to the tests directory; "!" excludes.  Blank lines
 # and lines starting with "#" are ignored.
 #
-# The M3 C++ corpus of the CIR back end: the run and link tests (use with
+# The C++ corpus of the CIR back end: the run and link tests (use with
 # "--types rp,lp") of the GNU C++ testsuite (imported/gnu/cpp, preprocessed),
 # plus the run tests of the EDG regression suites edg/ and cwg/.  The tests
-# that use constructs M3 diagnoses as unsupported (virtual functions, RTTI,
-# member pointers, ...) stay in: they are counted as UNSUPPORTED, which is the
-# progress metric.  So do the tests with try/throw/catch text (about 450, most
-# of them in expanded library headers): the front end keeps exceptions on and
-# the writer drops only the functions that contain try/throw, so such a test
-# can pass if that code is never emitted.  Whole subdirectories about
-# something else than compiling and running C++ are excluded.
+# that use constructs the writer diagnoses as unsupported (virtual functions,
+# RTTI, member pointers, ...) stay in: they are counted as UNSUPPORTED, which
+# is the progress metric.  Since M4a that includes eh/ (exception handling)
+# and rtti/ (typeid and dynamic_cast), so that every M4 checkpoint tracks
+# them.  So do the tests with try/throw/catch text (about 450, most of them in
+# expanded library headers): the front end keeps exceptions on and the writer
+# drops only the functions that contain try/throw, so such a test can pass if
+# that code is never emitted.  Whole subdirectories about something else than
+# compiling and running C++ are excluded.
 imported/gnu/cpp/
 # sanitizers
 !imported/gnu/cpp/asan/
@@ -25,10 +27,6 @@ imported/gnu/cpp/
 !imported/gnu/cpp/contracts/
 # coroutines (not in M3)
 !imported/gnu/cpp/coroutines/
-# exception handling (M4)
-!imported/gnu/cpp/eh/
-# typeid and dynamic_cast (M4)
-!imported/gnu/cpp/rtti/
 # thread_local with dynamic init (not in M3)
 !imported/gnu/cpp/tls/
 # coverage instrumentation

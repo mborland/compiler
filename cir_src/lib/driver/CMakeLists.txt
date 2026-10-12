@@ -26,7 +26,8 @@ add_library(edg_cir_objects OBJECT
   ../cirgen/types.cpp)
 target_include_directories(edg_cir_objects PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/../cirgen")
-target_link_libraries(edg_cir_objects PUBLIC edg_cir_options ecil_format)
+target_link_libraries(edg_cir_objects PUBLIC edg_cir_options ecil_format
+  edg_abi)
 target_include_directories(edg_cir_objects SYSTEM PRIVATE
   ${LLVM_INCLUDE_DIRS} ${MLIR_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
 target_compile_definitions(edg_cir_objects PRIVATE
@@ -50,7 +51,7 @@ endif()
 # The shared library: static LLVM/MLIR/clang inside, only edg_cir_* exported.
 add_library(edg_cir SHARED $<TARGET_OBJECTS:edg_cir_objects>)
 target_link_libraries(edg_cir PRIVATE
-  ecil_format
+  ecil_format edg_abi
   ${edg_cir_mlir_clang_libs} ${edg_cir_llvm_libs}
   -Wl,--exclude-libs,ALL
   -Wl,-Bsymbolic-functions
@@ -67,7 +68,7 @@ set_target_properties(edg_cir PROPERTIES
 # Static bundle (optional in M1): our objects only; consumers link the LLVM
 # set themselves (a merged archive is an M6 item).
 add_library(edg_cir_static STATIC $<TARGET_OBJECTS:edg_cir_objects>)
-target_link_libraries(edg_cir_static PUBLIC ecil_format)
+target_link_libraries(edg_cir_static PUBLIC ecil_format edg_abi)
 set_target_properties(edg_cir_static PROPERTIES
   OUTPUT_NAME edg_cir_nolinked
   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")

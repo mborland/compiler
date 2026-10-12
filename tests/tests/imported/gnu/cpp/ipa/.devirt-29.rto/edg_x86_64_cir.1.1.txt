@@ -50,50 +50,50 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
                                                     ^
           detected during instantiation of "Box<T> *Box<T>::clone() const [with T=std::vector<int, std::allocator<int>>]" at line 73
 
-Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNK6Object4typeEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNK6Object4typeEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN6ObjectC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6ObjectC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN6ObjectC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6ObjectC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN6ObjectC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6ObjectC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN6ObjectC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6ObjectC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN6ObjectD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6ObjectD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN6ObjectD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN6ObjectD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEEC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEEC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEEC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEEC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEEC1ERKS3_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEEC1ERKS3_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEEC2ERKS3_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3BoxISt6vectorIiSaIiEEEC2ERKS3_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZNK3BoxISt6vectorIiSaIiEEE5cloneEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZNK3BoxISt6vectorIiSaIiEEE5cloneEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_Z1fRK6Object' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z1fRK6Object' was dropped: it uses a construct the CIR back end cannot express: a virtual call
 
-Error: CIR back end: the definition of '_Z24edges_connecting_to_nodei' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z24edges_connecting_to_nodei' was dropped: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a call returning an unsupported type
 
 3 errors detected in the compilation of "Test_name.c".

@@ -1,0 +1,23 @@
+; ECIL 1.1 emitter-side check: operands of different types.
+; RUN: cat %S/Inputs/header11_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: CMP3WAY operands have different types
+
+frame DECLS
+  STR 10 "f"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 100 21 0 9 10
+frame REGION
+  FUNC_BEGIN 100 0
+  CONST_INT 1 1
+  CONST_INT 3 2
+  CMP3WAY 4 -1 0 1 nil
+  DROP
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

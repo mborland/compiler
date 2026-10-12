@@ -534,7 +534,13 @@ reason is named):
   io_uring).
 - **Upstream cost growth** (§5).
 
-### M6 — release and platforms
+### M6 – Address all remaining known gaps and document
+- In each of these handoff files a list of known gaps is maintained.
+Any gap that does not fit into M4 or M5 will be addressed in this milestone.
+- Write two sets of documentation, one for the user and one for developers who will
+continue to work on this functionallity in the future.
+
+### M7 — release and platforms
 As in `handoff.md` §6: a merged static archive for `-static` builds, a
 decision on macOS universal builds, AArch64 and Windows once upstream
 CallConvLowering supports them, and `release/24.x` when it branches.
@@ -589,15 +595,26 @@ addition and review.
 1. **Session-1 box trees.** May the next session delete `~/edg-cir-config/{m0-tree,m1-tree,baseline-tree}`
    (~30 GB) and other stale trees? The M0 identity capture
    (`identity-m0c`) and recent evidence directories would be kept.
+
+Yes, you may delete these files as needed. Anything you create you can delete; anything else you MUST ASK.
+
 2. **Next milestone.** M4 (virtuals, RTTI, EH, member pointers: the biggest
    pass-rate gain) or M5 (performance: lazy decode of header inline
    functions, bounded memory)?
+
+M4
+
 3. **Folding constant conditions (W11).** Should the writer fold constant
    `if` conditions so the ~90 `link_error` tests pass, beyond what the
    C-generating reference passes? It is a small optimization in the writer.
+
+Yes
+
 4. **LLVM pin.** Keep the `main` pin until `release/24.x` branches (expected
    around January 2027)? Or bump earlier if M4's EH lowering needs newer
    upstream CIR work?
+
+Bump earlier as needed.
 
 ## 9. Gate evidence
 

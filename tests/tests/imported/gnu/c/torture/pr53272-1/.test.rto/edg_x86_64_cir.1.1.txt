@@ -16,7 +16,7 @@ Test_name.c:
   }
   ^
 
-Error: CIR back end: the definition of 'rtc_update_irq_enable' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'rtc_update_irq_enable' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
 1 error detected in the compilation of "Test_name.c".
 pr53272-2.c:
@@ -40,8 +40,8 @@ pr53272-2.c:
   extern __attribute__ ((__noinline__, __noclone__))
                                        ^
 
-Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
-Error: CIR back end: the definition of 'foobar' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'foobar' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
 2 errors detected in the compilation of "pr53272-2.c".

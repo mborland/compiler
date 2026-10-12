@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++20 Test_name.c
-ecil 1.0 features=0x00000008
+ecil 1.1 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -183,6 +183,15 @@ frame REGION
 frame GLOBALS
   DECL_VAR 24 13 0 1 0 27
   DECL_VAR 28 15 0 1 0 30
+  C_AGG_BEGIN 15
+  C_SEL 0
+  C_ZERO 1
+  C_SEL 1
+  C_ZERO 5
+  C_SEL 2
+  C_INT 1 7
+  C_AGG_END
+  VAR_INIT 28
   DECL_VAR 25 13 0 1 0 28
   C_AGG_BEGIN 13
   C_SEL 0
@@ -200,7 +209,7 @@ frame GLOBALS
   STORE 0 0
   AGG_INIT_END
   STATIC_INIT_END
-  STATIC_INIT_BEGIN 28 0
+  STATIC_INIT_BEGIN 28 4
   GREF 28
   AGG_INIT_BEGIN 15 0
   AGG_SEL 0
@@ -209,9 +218,6 @@ frame GLOBALS
   AGG_SEL 1
   ADDR
   CALL 8 7 1 0
-  AGG_SEL 2
-  C_INT 1 7
-  INIT_CONST
   AGG_INIT_END
   STATIC_INIT_END
 frame NAMES

@@ -5,5 +5,5 @@ Test_name.c:
     void foo () {}
                  ^
 
-Warning: CIR back end: the unused definition of '_ZN1B3fooEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1B3fooEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 

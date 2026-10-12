@@ -89,62 +89,62 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   ^
           detected during instantiation of "C13<X>::~C13() [with X=C14]" at line 191
 
-Warning: CIR back end: the unused definition of '_ZN2C8D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2C8D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2C8D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2C8D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2C7C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2C7C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN2C7C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2C7C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN2C2D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2C2D1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2C2D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2C2D2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2C2C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2C2C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN2C2C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2C2C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN3C13I2C7ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3C13I2C7ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: inline assembly
 
-Warning: CIR back end: the unused definition of '_ZN3C13I2C7ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3C13I2C7ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: inline assembly
 
-Warning: CIR back end: the unused definition of '_ZN3C13I2C1ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3C13I2C1ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: inline assembly
 
-Warning: CIR back end: the unused definition of '_ZN3C13I2C1ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3C13I2C1ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: inline assembly
 
-Warning: CIR back end: the unused definition of '_ZN3C13I3C14ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3C13I3C14ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: inline assembly
 
-Warning: CIR back end: the unused definition of '_ZN3C13I3C14ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN3C13I3C14ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: inline assembly
 
-Error: CIR back end: the definition of '_ZN2C7D1Ev' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN2C7D1Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN2C7D2Ev' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN2C7D2Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN2C1C1ERK2C3S2_S2_RPS1_' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN2C1C1ERK2C3S2_S2_RPS1_' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Error: CIR back end: the definition of '_ZN2C1C2ERK2C3S2_S2_RPS1_' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN2C1C2ERK2C3S2_S2_RPS1_' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Error: CIR back end: the definition of '_Z4xx14v' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z4xx14v' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Error: CIR back end: the definition of '_Z3xx2v' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z3xx2v' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Error: CIR back end: the definition of '_Z4xx10v' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z4xx10v' was dropped: it uses a construct the CIR back end cannot express: a constant of a class with virtual functions or virtual bases
 
-Error: CIR back end: the definition of '_Z3xx4v' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z3xx4v' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Error: CIR back end: the definition of '_Z4xx13v' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z4xx13v' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
-Error: CIR back end: the definition of '_Z4xx15R2C3R3C13I2C1E' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z4xx15R2C3R3C13I2C1E' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
-Error: CIR back end: the definition of '_Z4xx16PKv' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z4xx16PKv' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
-Error: CIR back end: the definition of '_Z3xx13C13I3C14E' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z3xx13C13I3C14E' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
-Error: CIR back end: the definition of '_Z3xx7v' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z3xx7v' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
-Error: CIR back end: the definition of '_ZN2C52f2ER2C3PKvP2C8' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN2C52f2ER2C3PKvP2C8' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 15 errors detected in the compilation of "Test_name.c".

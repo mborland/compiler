@@ -353,6 +353,15 @@ stacks, and reject mismatches.
 
   bool v1_ok = check_v1(record, problem_text);
 
+  /* A PARTIAL static initializer must store something: note the first record
+     that is not its exit cleanup (CLEANUP_BEGIN, its code up to CLEANUP_BODY,
+     which the cleanup bracket and the code depth both exclude). */
+  if (v1_ok && top != nullptr && top->kind == bk_static_init &&
+      cleanup_code_depth_ == 0 &&
+      (top->flags & abf_partial) != 0 && op != eop_cleanup_begin &&
+      op != eop_static_init_end && op != eop_loc && op != eop_ext)
+    top->flags |= abf_content;
+
   if (!v1_ok)
     problem = "";
   if (v1_ok) switch (op) {
@@ -608,6 +617,10 @@ stacks, and reject mismatches.
   }
   case eop_static_init_end:
     if (top && top->kind == bk_static_init) {
+      if ((top->flags & abf_partial) && !(top->flags & abf_content))
+        problem = "a PARTIAL STATIC_INIT holds only an exit cleanup (a "
+                  "variable with a VAR_INIT and only its exit cleanup is the "
+                  "non-PARTIAL form)";
       if (top->flags & abf_own_ids)
         ended_function_ = true;
       brackets_.pop_back();

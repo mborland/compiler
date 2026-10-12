@@ -21,24 +21,24 @@ Warning: CIR back end: the initializer of "den_ld" uses the constant kind 5, whi
 
 Warning: CIR back end: the initializer of "cres_ld" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'num_f' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'num_f' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
-Error: CIR back end: the definition of 'den_f' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'den_f' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
-Error: CIR back end: the definition of 'cres_f' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'cres_f' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
-Error: CIR back end: the definition of 'num_d' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'num_d' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
-Error: CIR back end: the definition of 'den_d' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'den_d' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
-Error: CIR back end: the definition of 'cres_d' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'cres_d' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
-Error: CIR back end: the definition of 'num_ld' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'num_ld' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
-Error: CIR back end: the definition of 'den_ld' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'den_ld' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
-Error: CIR back end: the definition of 'cres_ld' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'cres_ld' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
 10 errors detected in the compilation of "Test_name.c".

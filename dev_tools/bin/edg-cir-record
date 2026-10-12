@@ -8,9 +8,10 @@
 '''Record test expectations of the CIR configurations on the box.
 
 Run it on the Mac, from the repository root, with the SSH master socket to the
-box open.  The tree on the box (default ~/edg-cir-config/m3b-int) must be
-built and synced (edg-cir-checkpoint --steps build does that).  For the
-selected tests and configurations it
+box open (without the socket, a plain batch-mode ssh is used).  The tree on
+the box (default ~/edg-cir-config/m31-int) must be built and synced
+(edg-cir-checkpoint --steps build does that).  For the selected tests and
+configurations it
 
   1. runs `edg-docker-test --posture cir --only-configs <config> -W --types ...`
      in the tree (-W records: the tests/expectations/<config>/<suite>.log
@@ -125,8 +126,11 @@ for suite in set(removed) | set(added):
 
 
 def ssh_options() -> List[str]:
-  return ['-o', f"ControlPath={SOCKET}", '-o', 'ControlMaster=no',
-          '-o', 'BatchMode=yes']
+  '''The ssh options: through the master socket if it exists, else plain.'''
+  if SOCKET.exists():
+    return ['-o', f"ControlPath={SOCKET}", '-o', 'ControlMaster=no',
+            '-o', 'BatchMode=yes']
+  return ['-o', 'BatchMode=yes']
 
 
 def ssh(command: str, stdin: str = '', capture: bool = True
@@ -144,7 +148,7 @@ def main() -> None:
     formatter_class = argparse.RawDescriptionHelpFormatter,
     epilog = __doc__.split('\n', 2)[2]
   )
-  parser.add_argument('--tree', default = 'm3b-int')
+  parser.add_argument('--tree', default = 'm31-int')
   parser.add_argument('--filter', required = True,
                       help = 'the edgy filter ("@file" or prefixes)')
   parser.add_argument('--types', default = 'rp,lp')

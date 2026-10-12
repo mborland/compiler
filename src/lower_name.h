@@ -126,6 +126,11 @@ extern char *cir_local_static_name(a_variable_ptr variable);
 
 extern a_boolean cir_entity_is_tu_local(an_il_entry_kind kind, void *entity);
 
+/* A member function of an unnamed class declared inside another class: the
+   front end gives it no linkage, Itanium the linkage of its enclosing
+   class. */
+extern a_boolean cir_routine_in_nested_unnamed_class(a_routine_ptr rout);
+
 /* The late names are being resolved: remember the answers from now on. */
 extern void cir_tu_local_names_are_final(void);
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */

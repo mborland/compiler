@@ -1,0 +1,18 @@
+; expect: format PARTIAL of G-id 301, which has no VAR_INIT
+ecil 1.1 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  STR 2 "v"
+  DECL_VAR 301 1 0 1 4 2
+frame GLOBALS
+  STATIC_INIT_BEGIN 301 4
+  GREF 301
+  CONST_INT 1 1
+  STORE 2 0
+  STATIC_INIT_END
+frame END
+  END 3 0

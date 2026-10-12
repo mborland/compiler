@@ -60,52 +60,52 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   K::~K() {}
            ^
 
-Warning: CIR back end: the unused definition of '_ZN1AD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1AD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1AD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1AD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1B7destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1B7destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1G7destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1G7destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1BD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1BD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1BD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1BD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1CD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1CD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1CD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1CD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1DD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1DD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1DD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1DD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1ED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1ED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1FD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1FD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1FD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1FD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1HD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1HD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1HD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1HD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1ID1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1ID1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1ID2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1ID2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1GD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1GD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1GD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1GD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1JD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1JD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1JD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1JD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN1KD1Ev' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN1KD1Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN1KD2Ev' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZN1KD2Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual function
 
 2 errors detected in the compilation of "Test_name.c".

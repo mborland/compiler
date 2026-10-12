@@ -8,19 +8,28 @@
 '''Run a slice checkpoint of the CIR back end on the x86-64 box.
 
 Run it on the Mac, from the repository root, with the SSH master socket to the
-box open (see the box-docker-workflow notes):
+box open (see the box-docker-workflow notes); without the socket
+(~/.ssh/cm-edgbox) it uses a plain batch-mode ssh, which works while the
+key is available:
 
   edg-cir-checkpoint                # sync, clean build, the default steps
   edg-cir-checkpoint --quick        # build, smoke, cpp-smoke only
   edg-cir-checkpoint --steps build,ctest --detach
+  edg-cir-checkpoint --tree m31-int --prune 3 --quick
 
 It does, in this order:
 
+  0. prints the free disk space of the box (a warning under 40 GB) and, with
+     --prune N, deletes all but the newest N of the tests/runs/* and
+     .tmp/checkpoint-* directories of the tree (--prune-only does just that;
+     --prune-evidence adds .tmp/gate-{evidence,asm,cpp-asm,identity,perf}/*).
+     Never pruned: the tree m3-final, a tree with a file KEEP, an entry with a
+     file KEEP, an entry younger than 6 hours or one that a process uses.
   1. rsync --checksum --no-times of the working tree to ~/edg-cir-config/<tree>
-     on the box (default tree m3b-int; build/, tests/runs/, .tmp/ and .git/ are
-     not touched).  --no-times gives changed files the time of the transfer:
-     with `rsync -a` a changed source can keep a time older than the objects
-     of an earlier build, and ninja then rebuilds nothing.
+     on the box (default tree m31-int; build/, tests/runs/, .tmp/ and .git/
+     are not touched).  --no-times gives changed files the time of the
+     transfer: with `rsync -a` a changed source can keep a time older than
+     the objects of an earlier build, and ninja then rebuilds nothing.
   2. wipes the CIR build directories (build/cir, build/cir-*, build/gcc-cir,
      build/gcc-release-cir), unless --incremental.
   3. runs edg-cir-gate-evidence there with the chosen steps, in the
@@ -30,21 +39,28 @@ It does, in this order:
 The default steps are:
 
   build identity smoke corpus asm-diff writer-stress cpp-smoke
-  cpp-writer-stress ctest
+  cpp-writer-stress crash-sweep ctest
 
 that is the C smoke and corpus (statuses against the recorded expectations),
-the C assembly against the M3a baseline (--asm-baseline, default
-~/edg-cir-config/m3a-base-asm: every difference is listed with its class and
-cause), the ASan debug front end with ECIL_GID_STRESS over the writer tests,
-the C++ smoke list in both configs (a crash fails; with --smoke-all-pass every
-test must pass), and the four cir_src presets from clean build directories.
-About 15 minutes.  Day, stress, rss, perf, modes, cpp-corpus and cpp-modes are
-left for the gates; name them with --steps (they exist in the gate tool).
+the C assembly against the M3 baseline (--asm-baseline, default
+~/edg-cir-config/m3-base-asm: every difference is listed with its class and
+cause; --asm-normalize-cfi ignores the frame description directives), the ASan
+debug front end with ECIL_GID_STRESS over the writer tests, the C++ smoke list
+in both configs (a crash fails; with --smoke-all-pass every test must pass),
+the crash sweep (every test type of both corpora, eh/, rtti/ and cir/ through
+edg_x86_64_cir: only crashes, kills and timeouts that the reference does not
+have are gated, against the allowlist tests/.edgy/filters/
+cir-excused-crashes.txt), and the four cir_src presets from clean build
+directories.  About 25 minutes.  Day, stress, rss, perf, modes, cpp-corpus,
+cpp-modes and cpp-asm-diff (the C++ assembly against --cpp-asm-baseline,
+default ~/edg-cir-config/m3-base-cpp-asm) are left for the gates; name them
+with --steps (they exist in the gate tool).
 
 Exit status: 0 if every step passed, 1 otherwise (2 for a setup problem).
 '''
 
 import argparse
+import re
 import shlex
 import subprocess
 import sys
@@ -56,8 +72,10 @@ from typing import List
 
 BOX = 'mborland@192.168.1.167'
 SOCKET = Path.home() / '.ssh' / 'cm-edgbox'
+DEFAULT_TREE = 'm31-int'
+LOW_DISK_GB = 40
 DEFAULT_STEPS = ('build,identity,smoke,corpus,asm-diff,writer-stress,'
-                 'cpp-smoke,cpp-writer-stress,ctest')
+                 'cpp-smoke,cpp-writer-stress,crash-sweep,ctest')
 QUICK_STEPS = 'build,smoke,cpp-smoke'
 EXCLUDES = ['/build/', '/tests/runs/', '/.tmp/', '/cmake-build-debug/',
             '/.idea/', '/.mypy_cache/', '/dev-pref.json', '/.git/',
@@ -65,8 +83,64 @@ EXCLUDES = ['/build/', '/tests/runs/', '/.tmp/', '/cmake-build-debug/',
 
 
 def ssh_options() -> List[str]:
-  return ['-o', f"ControlPath={SOCKET}", '-o', 'ControlMaster=no',
-          '-o', 'BatchMode=yes']
+  '''The ssh options: through the master socket if it exists, else plain.'''
+  if SOCKET.exists():
+    return ['-o', f"ControlPath={SOCKET}", '-o', 'ControlMaster=no',
+            '-o', 'BatchMode=yes']
+  return ['-o', 'BatchMode=yes']
+
+
+def box_reachable() -> bool:
+  '''Whether the box answers (the master socket's check, or a plain ssh).'''
+  if SOCKET.exists():
+    command = ['ssh', '-O', 'check', '-o', f"ControlPath={SOCKET}", BOX]
+  else:
+    command = ['ssh', *ssh_options(), '-o', 'ConnectTimeout=15', BOX, 'true']
+  return subprocess.run(command, stdout = subprocess.DEVNULL,
+                        stderr = subprocess.DEVNULL).returncode == 0
+
+
+# Directories of a tree of which --prune keeps the newest few (relative to
+# the tree; each entry of them is one run or one checkpoint).  The evidence
+# directories of the gates are pruned only with --prune-evidence.
+PRUNE_DIRS = ('tests/runs',)
+EVIDENCE_DIRS = ('.tmp/gate-evidence', '.tmp/gate-asm', '.tmp/gate-cpp-asm',
+                 '.tmp/gate-identity', '.tmp/gate-perf')
+# Trees that are never pruned (the gate evidence is kept in them); any tree
+# or entry that holds a file named KEEP is not pruned either.
+PROTECTED_TREES = ('m3-final',)
+RECENT_MINUTES = 360
+
+
+def prune_command(keep: int, evidence: bool = False,
+                  recent: int = RECENT_MINUTES) -> str:
+  '''The shell command (run in the tree) that deletes all but the newest
+  `keep` entries of PRUNE_DIRS, of .tmp/checkpoint-* and, with `evidence`, of
+  EVIDENCE_DIRS.  An entry is kept, and reported, if it holds a file named
+  KEEP, if it is younger than `recent` minutes (a run in progress has no
+  exit file to look for) or if a process mentions its name (an edgy or
+  edg-docker-test run that uses it).'''
+  parts = []
+  dirs = (*PRUNE_DIRS, *(EVIDENCE_DIRS if evidence else ()))
+  for pattern in (*(f"{d}/*" for d in dirs), '.tmp/checkpoint-*'):
+    parts.append(
+      f"ls -1dt {pattern} 2>/dev/null | tail -n +{keep + 1} | "
+      f"while read -r d; do "
+      f"if [ -e \"$d/KEEP\" ]; then echo \"kept (KEEP marker) $d\"; "
+      f"elif [ -n \"$(find \"$d\" -maxdepth 0 -mmin -{recent})\" ]; then "
+      f"echo \"kept (younger than {recent} min) $d\"; "
+      f"elif pgrep -f -- \"$(basename \"$d\")\" > /dev/null; then "
+      f"echo \"kept (in use) $d\"; "
+      f"else rm -rf \"$d\" && echo \"pruned $d\" || "
+      f"echo \"could not remove $d\"; fi; done")
+  return '; '.join(parts)
+
+
+def headroom_gb(text: str) -> int:
+  '''The free space in GB of a `df -BG --output=avail` output.'''
+  lines = [l.strip() for l in text.splitlines() if l.strip()]
+  digits = re.sub(r'\D', '', lines[-1]) if lines else ''
+  return int(digits) if digits else -1
 
 
 def ssh(command: str, capture: bool = False) -> subprocess.CompletedProcess:
@@ -77,28 +151,51 @@ def ssh(command: str, capture: bool = False) -> subprocess.CompletedProcess:
   )
 
 
+def report_headroom() -> int:
+  '''Print the box's disk usage of the home directory; return the free GB
+  (-1 if unknown).'''
+  usage = ssh('df -h ~ | tail -n 1', capture = True).stdout.strip()
+  free = headroom_gb(ssh('df -BG --output=avail ~', capture = True).stdout)
+  print(f"box disk: {usage} ({free} GB free)", flush = True)
+  return free
+
+
 def main() -> None:
   parser = argparse.ArgumentParser(
     description = __doc__.split('\n')[0],
     formatter_class = argparse.RawDescriptionHelpFormatter,
     epilog = __doc__.split('\n', 2)[2]
   )
-  parser.add_argument('--tree', default = 'm3b-int',
+  parser.add_argument('--tree', default = DEFAULT_TREE,
                       help = 'name of the tree under ~/edg-cir-config')
   parser.add_argument('--steps', default = DEFAULT_STEPS,
                       help = 'comma separated edg-cir-gate-evidence steps')
   parser.add_argument('--quick', action = 'store_true',
                       help = f"only {QUICK_STEPS}")
+  parser.add_argument('--prune', type = int, nargs = '?', const = 3,
+                      default = 0, metavar = 'N',
+                      help = 'first delete all but the newest N (default 3) '
+                             'tests/runs/*, .tmp/checkpoint-* and evidence '
+                             'directories of the tree')
+  parser.add_argument('--prune-evidence', action = 'store_true',
+                      help = 'also prune the .tmp/gate-* evidence '
+                             'directories (never done by default)')
+  parser.add_argument('--prune-only', action = 'store_true',
+                      help = 'prune (--prune, default 3) and stop')
   parser.add_argument('--incremental', action = 'store_true',
                       help = 'keep the CIR build directories')
   parser.add_argument('--no-sync', action = 'store_true',
                       help = 'do not rsync (the tree is up to date)')
   parser.add_argument('--asm-baseline', default = '~/edg-cir-config/'
-                      'm3a-base-asm')
+                      'm3-base-asm')
+  parser.add_argument('--cpp-asm-baseline', default = '~/edg-cir-config/'
+                      'm3-base-cpp-asm')
+  parser.add_argument('--asm-normalize-cfi', action = 'store_true',
+                      help = 'asm-diff steps ignore .cfi_* directives')
   parser.add_argument('--identity-baseline',
                       default = '~/edg-cir-config/identity-m0c')
   parser.add_argument('--perf-baseline',
-                      default = '~/edg-cir-config/m2-base-perf.json')
+                      default = '~/edg-cir-config/m3-base-perf.json')
   parser.add_argument('--smoke-all-pass', action = 'store_true',
                       help = 'cpp-smoke fails unless every test passes')
   parser.add_argument('--jobs', type = int, default = 12)
@@ -112,11 +209,10 @@ def main() -> None:
   if not (root / 'src' / 'cfe.c').exists():
     print('run it from the repository root', file = sys.stderr)
     sys.exit(2)
-  if subprocess.run(['ssh', '-O', 'check', '-o', f"ControlPath={SOCKET}",
-                     BOX], stdout = subprocess.DEVNULL,
-                    stderr = subprocess.DEVNULL).returncode != 0:
-    print('the SSH master socket to the box is not open (ask the user to '
-          'reopen it)', file = sys.stderr)
+  if not box_reachable():
+    print('the box does not answer: the SSH master socket is not open and a '
+          'plain batch-mode ssh fails (ask the user to reopen the socket)',
+          file = sys.stderr)
     sys.exit(2)
 
   steps = QUICK_STEPS if args.quick else args.steps
@@ -127,6 +223,25 @@ def main() -> None:
   done = f"~/edg-cir-config/checkpoint-{args.tree}.exit"
 
   ssh(f"mkdir -p {tree}")
+  if args.prune or args.prune_only:
+    keep = args.prune or 3
+    protected = args.tree in PROTECTED_TREES or ssh(
+      f"test -e {tree}/KEEP", capture = True).returncode == 0
+    if protected:
+      print(f"not pruning {args.tree}: it is a protected tree or has a KEEP "
+            f"marker", flush = True)
+    else:
+      print(f"pruning {args.tree} (keeping the newest {keep}) ...",
+            flush = True)
+      print(ssh(f"cd {tree} && {prune_command(keep, args.prune_evidence)}",
+                capture = True).stdout.strip() or 'nothing to prune')
+  free = report_headroom()
+  if args.prune_only:
+    return
+  if 0 <= free < LOW_DISK_GB:
+    print(f"WARNING: only {free} GB free on the box (< {LOW_DISK_GB} GB): a "
+          f"checkpoint tree takes 10-15 GB; use --prune N or delete old "
+          f"trees", file = sys.stderr, flush = True)
   if not args.no_sync:
     print(f"syncing to {args.tree} ...", flush = True)
     command = ['rsync', '-a', '--checksum', '--no-times', '--delete',
@@ -143,10 +258,13 @@ def main() -> None:
     '--jobs', str(args.jobs), '--only', steps, '--out', out,
     '--identity-baseline', args.identity_baseline,
     '--asm-baseline', args.asm_baseline,
+    '--cpp-asm-baseline', args.cpp_asm_baseline,
     '--perf-baseline', args.perf_baseline
   ]
   if args.smoke_all_pass:
     gate.append('--cpp-smoke-all-pass')
+  if args.asm_normalize_cfi:
+    gate.append('--asm-normalize-cfi')
   gate_command = ' '.join(
     a if a == '$T' or a.startswith('~') else shlex.quote(a) for a in gate
   ) + (f" {args.extra}" if args.extra else '')
@@ -181,4 +299,5 @@ def main() -> None:
   sys.exit(0 if status == 0 else 1)
 
 
-main()
+if __name__ == '__main__':
+  main()

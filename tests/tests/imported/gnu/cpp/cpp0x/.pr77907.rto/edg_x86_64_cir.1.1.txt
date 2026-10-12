@@ -9,12 +9,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
 
 Warning: CIR back end: the initializer of "b" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
 
-Warning: CIR back end: the unused definition of '_ZN1BC1EM1AFivE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1BC1EM1AFivE' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Warning: CIR back end: the unused definition of '_ZN1BC2EM1AFivE' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1BC2EM1AFivE' was dropped and erased: it uses a construct the CIR back end cannot express: a parameter of an unsupported type
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: an operation on an unsupported scalar type
 
-Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express: the constant "pointer-to-member constant"
 
 2 errors detected in the compilation of "Test_name.c".

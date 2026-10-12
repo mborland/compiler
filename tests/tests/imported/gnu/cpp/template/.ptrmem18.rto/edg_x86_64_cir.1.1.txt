@@ -31,20 +31,20 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   ^
           detected during instantiation of "void test2<P>(T *) [with P=&S::f2]" at line 48
 
-Warning: CIR back end: the unused definition of '_ZN1S2f1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1S2f1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN1S2f2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1S2f2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN1SC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN1SC1Ev' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN1SC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN1SC2Ev' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
-Error: CIR back end: the definition of '_Z5test1IXadL_ZN1S2f1EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z5test1IXadL_ZN1S2f1EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (.*)" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z5test1IXadL_ZN1S2f2EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z5test1IXadL_ZN1S2f2EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (.*)" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z5test2IXadL_ZN1S2f1EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z5test2IXadL_ZN1S2f1EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (.*)" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z5test2IXadL_ZN1S2f2EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z5test2IXadL_ZN1S2f2EvEEEvP1T' was dropped: it uses a construct the CIR back end cannot express: the operator "call through a pointer to member (.*)" (and it is referenced)
 
 6 errors detected in the compilation of "Test_name.c".

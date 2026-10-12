@@ -28,26 +28,26 @@ Warning: CIR back end: the initializer of "y1var" uses a record type that is not
 
 Warning: CIR back end: the initializer of "y2var" uses a record type that is not supported, which the CIR back end does not support; the definition is dropped
 
-Warning: CIR back end: the unused definition of '_ZN1XC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1XC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1XCI11WEi' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XCI11WEi' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1XCI21WEi' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XCI21WEi' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1YCI11WEi' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1YCI11WEi' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1YCI21WEi' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1YCI21WEi' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1YC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1YC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1YC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1YC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a variable of a record type that is not supported
 
-Error: CIR back end: the definition of 'y1var' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'y1var' was dropped: it uses a construct the CIR back end cannot express: a record type that is not supported
 
-Error: CIR back end: the definition of 'y2var' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'y2var' was dropped: it uses a construct the CIR back end cannot express: a record type that is not supported
 
 3 errors detected in the compilation of "Test_name.c".

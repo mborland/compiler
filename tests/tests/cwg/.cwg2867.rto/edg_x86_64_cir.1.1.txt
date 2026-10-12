@@ -9,8 +9,8 @@ eccp -DTEST_NUMBER=1 --c++23 -A Test_name.c
     ^
           detected during instantiation of "B<I> get<I>(const C &) [with I=1]" at line 74
 
-Error: CIR back end: the definition of '_Z3getILi0EE1BIXT_EERK1C' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3getILi0EE1BIXT_EERK1C' was dropped: it uses a construct the CIR back end cannot express: the constant kind "aggregate" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z3getILi1EE1BIXT_EERK1C' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3getILi1EE1BIXT_EERK1C' was dropped: it uses a construct the CIR back end cannot express: the constant kind "aggregate" (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

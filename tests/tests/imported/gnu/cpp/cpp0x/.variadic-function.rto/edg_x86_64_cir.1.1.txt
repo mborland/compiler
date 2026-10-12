@@ -109,46 +109,46 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
             instantiation of "function<R (Args...)>::function(const F &) [with R=int, Args=<int, int>, F=multiplies]" at line 60
             instantiation of "function<R (Args...)> &function<R (Args...)>::operator=(const F &) [with R=int, Args=<int, int>, F=multiplies]" at line 92
 
-Warning: CIR back end: the unused definition of '_ZN8functionIFiiiEEC1ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN8functionIFiiiEEC1ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZN8functionIFiiiEEC2ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN8functionIFiiiEEC2ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
-Warning: CIR back end: the unused definition of '_ZN12invoker_baseIiJiiEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN12invoker_baseIiJiiEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN12invoker_baseIiJiiEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN12invoker_baseIiJiiEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN12invoker_baseIiJiiEEC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN12invoker_baseIiJiiEEC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN12invoker_baseIiJiiEEC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN12invoker_baseIiJiiEEC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN15functor_invokerI4plusiJiiEE6invokeEii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN15functor_invokerI4plusiJiiEE6invokeEii' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN15functor_invokerI4plusiJiiEE5cloneEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN15functor_invokerI4plusiJiiEE5cloneEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN15functor_invokerI4plusiJiiEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN15functor_invokerI4plusiJiiEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN15functor_invokerI4plusiJiiEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN15functor_invokerI4plusiJiiEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN15functor_invokerI10multipliesiJiiEE6invokeEii' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN15functor_invokerI10multipliesiJiiEE6invokeEii' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN15functor_invokerI10multipliesiJiiEE5cloneEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN15functor_invokerI10multipliesiJiiEE5cloneEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN15functor_invokerI10multipliesiJiiEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN15functor_invokerI10multipliesiJiiEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN15functor_invokerI10multipliesiJiiEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN15functor_invokerI10multipliesiJiiEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN8functionIFiiiEED1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN8functionIFiiiEED1Ev' was dropped: it uses a construct the CIR back end cannot express: the delete of an object with a virtual destructor (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN8functionIFiiiEED2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN8functionIFiiiEED2Ev' was dropped: it uses a construct the CIR back end cannot express: the delete of an object with a virtual destructor (and it is referenced)
 
-Error: CIR back end: the definition of '_ZNK8functionIFiiiEEclEii' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZNK8functionIFiiiEEclEii' was dropped: it uses a construct the CIR back end cannot express: a virtual call (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN15functor_invokerI4plusiJiiEEC1ERKS0_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN15functor_invokerI4plusiJiiEEC1ERKS0_' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN15functor_invokerI4plusiJiiEEC2ERKS0_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN15functor_invokerI4plusiJiiEEC2ERKS0_' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN15functor_invokerI10multipliesiJiiEEC1ERKS0_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN15functor_invokerI10multipliesiJiiEEC1ERKS0_' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN15functor_invokerI10multipliesiJiiEEC2ERKS0_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN15functor_invokerI10multipliesiJiiEEC2ERKS0_' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
 7 errors detected in the compilation of "Test_name.c".

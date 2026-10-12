@@ -27,13 +27,13 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
     I1& operator=(I1&) throw(int) { throw int(); return *this; }
                                                                ^
 
-Warning: CIR back end: the unused definition of '_ZN2E1aSERKS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2E1aSERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Warning: CIR back end: the unused definition of '_ZN1GC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1GC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Warning: CIR back end: the unused definition of '_ZN1GC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1GC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Warning: CIR back end: the unused definition of '_ZN2H1aSERS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2H1aSERS_' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Warning: CIR back end: the unused definition of '_ZN2I1aSERS_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2I1aSERS_' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 

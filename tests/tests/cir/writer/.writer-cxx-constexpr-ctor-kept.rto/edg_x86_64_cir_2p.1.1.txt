@@ -1,0 +1,293 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++11 --gnu_version=999999 -tused Test_name.c
+"Test_name.c", line 65: warning: expression has no effect
+    __regex_algo_impl<_Bi_iter, _Alloc, _Ch_type, _Rx_traits, _S_auto, false>;
+    ^
+
+ecil 1.1 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201103 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  TY_FUNC 5 4 0 []
+  STR 5 "_Z18main___trans_tmp_2v"
+  DECL_FUNC 6 5 0 0 5
+  DECL_FUNC 6 5 0 1 5
+  STR 6 "Trans_NS___cxx11_basic_regex"
+  TY_RECORD_DECL 7 2 6
+  TY_RECORD_BODY 7 1 1 1 0 0
+  STR 7 "re"
+  TY_INT 8 8 true 1 1
+  TY_PTR 9 5
+  TY_FUNC 10 4 0 [8, 9, 7]
+  STR 8 "_Z12regex_searchIcPFvvEccEvT_T0_28Trans_NS___cxx11_basic_regexIT1_T2_E"
+  DECL_FUNC 11 10 0 0 8
+  STR 9 "main___trans_tmp_1"
+  DECL_VAR 12 8 0 0 0 9
+  FUNC_BEGIN 6 0
+  BLOCK_BEGIN
+  LOCAL 1 7 7 0 0
+  GREF 12
+  LOAD 0
+  GREF 6
+  LREF 1
+  LOAD 0
+  CALL 11 10 3 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 10 "__normal_iterator"
+  TY_RECORD_DECL 13 2 10
+  TY_PTR 14 13
+  TY_FUNC 15 4 0 [14]
+  TY_PTR 16 8
+  STR 11 "__traits_type"
+  TY_RECORD_BODY 13 8 8 8 0 1
+  REC_FIELD 16 0 nil nil 11 0
+  STR 12 "_ZN17__normal_iteratorIPKcEC1Ev"
+  DECL_FUNC 17 15 0 2 12
+  STR 13 "_ZN17__normal_iteratorIPKcEC2Ev"
+  DECL_FUNC 18 15 0 2 13
+  STRUCTOR 17 18 0
+  DECL_FUNC 17 15 3 67 12
+  DECL_FUNC 18 15 3 67 13
+  STR 14 "this"
+  FUNC_BEGIN 18 0
+  PARAM 1 14 14 14 1
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 19 4 0 [14, 14]
+  STR 15 "_ZN17__normal_iteratorIPKcEC1ERKS2_"
+  DECL_FUNC 20 19 0 2 15
+  STR 16 "_ZN17__normal_iteratorIPKcEC2ERKS2_"
+  DECL_FUNC 21 19 0 2 16
+  STRUCTOR 20 21 0
+  DECL_FUNC 20 19 3 67 15
+  DECL_FUNC 21 19 3 67 16
+  FUNC_BEGIN 21 0
+  PARAM 1 14 14 14 1
+  PARAM 2 14 14 nil 0
+  MEMINIT_BEGIN 2 0 1
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 13 0
+  LREF 2
+  LOAD 0
+  DEREF
+  FIELD 13 0
+  LOAD 0
+  STORE 2 0
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 17 "pair"
+  TY_RECORD_DECL 22 0 17
+  TY_PTR 23 22
+  TY_FUNC 24 4 0 [23, 23]
+  TY_RECORD_DECL 25 2 10
+  TY_RECORD_BODY 25 8 8 8 0 1
+  REC_FIELD 16 0 nil nil 11 0
+  STR 18 "first"
+  STR 19 "second"
+  TY_RECORD_BODY 22 16 12 8 0 2
+  REC_FIELD 25 0 nil nil 18 0
+  REC_FIELD 1 8 nil nil 19 0
+  STR 20 "_ZN4pairI17__normal_iteratorIPcEEC1ERKS3_"
+  DECL_FUNC 26 24 0 2 20
+  STR 21 "_ZN4pairI17__normal_iteratorIPcEEC2ERKS3_"
+  DECL_FUNC 27 24 0 2 21
+  STRUCTOR 26 27 0
+  DECL_FUNC 26 24 3 67 20
+  DECL_FUNC 27 24 3 67 21
+  FUNC_BEGIN 27 0
+  PARAM 1 23 23 14 1
+  PARAM 2 23 23 nil 0
+  MEMINIT_BEGIN 2 0 1
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 22 0
+  LREF 2
+  LOAD 0
+  DEREF
+  FIELD 22 0
+  LOAD 0
+  STORE 2 0
+  MEMINIT_END
+  MEMINIT_BEGIN 2 1 1
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 22 1
+  LREF 2
+  LOAD 0
+  DEREF
+  FIELD 22 1
+  LOAD 0
+  STORE 2 0
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 22 "_Executor"
+  TY_RECORD_DECL 28 2 22
+  TY_PTR 29 28
+  TY_FUNC 30 4 0 [29]
+  STR 23 "vector"
+  TY_RECORD_DECL 31 2 23
+  TY_RECORD_BODY 31 1 1 1 0 0
+  STR 24 "_M_rep_count"
+  TY_RECORD_BODY 28 1 1 1 0 1
+  REC_FIELD 31 0 nil nil 24 0
+  STR 25 "_ZN9_ExecutorIiicLb0EE6_M_dfsEv"
+  DECL_FUNC 32 30 0 0 25
+  DECL_FUNC 32 30 3 65 25
+  STR 26 "__rep_count"
+  TY_PTR 33 31
+  TY_FUNC 34 23 0 [33, 3]
+  STR 27 "_ZN6vectorI4pairI17__normal_iteratorIPcEE9allocatorIS4_EEixEl"
+  DECL_FUNC 35 34 0 0 27
+  STR 28 "_M_rep_once_more___i"
+  DECL_VAR 36 3 0 0 0 28
+  FUNC_BEGIN 32 0
+  PARAM 1 29 29 14 1
+  BLOCK_BEGIN
+  LOCAL 2 22 26 0 0
+  LREF 2
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 28 0
+  ADDR
+  GREF 36
+  LOAD 0
+  CALL 35 34 2 0
+  DEREF
+  LOAD 0
+  STORE 4 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 29 "_ZN9_ExecutorIiicLb0EE8_M_matchEv"
+  DECL_FUNC 37 30 0 2 29
+  DECL_FUNC 37 30 3 67 29
+  FUNC_BEGIN 37 0
+  PARAM 1 29 29 14 1
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CALL 32 30 1 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_BOOL 38 1 1
+  STR 30 "Trans_NS___cxx11_match_results"
+  TY_RECORD_DECL 39 2 30
+  TY_PTR 40 39
+  TY_PTR 41 7
+  TY_FUNC 42 38 0 [40, 41]
+  TY_RECORD_DECL 43 2 23
+  TY_RECORD_BODY 43 1 1 1 0 0
+  TY_RECORD_BODY 39 1 0 1 0 1
+  REC_FIELD 43 0 nil nil nil 19
+  STR 31 "_Z17__regex_algo_implIcPFvvEccL20_RegexExecutorPolicy0ELb0EEbR30Trans_NS___cxx11_match_resultsRK28Trans_NS___cxx11_basic_regexIT1_T2_E"
+  DECL_FUNC 44 42 0 0 31
+  DECL_FUNC 44 42 3 65 31
+  STR 32 "__m"
+  STR 33 "__re"
+  STR 34 "__e"
+  STR 35 "__s"
+  STR 36 "__executor"
+  TY_FUNC 45 4 0 [29, 13, 13, 43, 7, 1]
+  STR 37 "_ZN9_ExecutorIiicLb0EEC1E17__normal_iteratorIPKcES4_6vectorIi9allocatorIiEE28Trans_NS___cxx11_basic_regexIccE15match_flag_type"
+  DECL_FUNC 46 45 0 0 37
+  STR 38 "_ZN9_ExecutorIiicLb0EEC2E17__normal_iteratorIPKcES4_6vectorIi9allocatorIiEE28Trans_NS___cxx11_basic_regexIccE15match_flag_type"
+  DECL_FUNC 47 45 0 0 38
+  STRUCTOR 46 47 0
+  STR 39 "__regex_algo_impl___flags"
+  DECL_VAR 48 1 0 0 0 39
+  FUNC_BEGIN 44 0
+  PARAM 1 40 40 32 0
+  PARAM 2 41 41 33 0
+  BLOCK_BEGIN
+  LOCAL 3 13 34 0 0
+  LOCAL 4 13 35 0 0
+  LREF 3
+  ADDR
+  CALL 17 15 1 0
+  LREF 4
+  ADDR
+  CALL 17 15 1 0
+  LOCAL 5 28 36 0 0
+  LREF 5
+  ADDR
+  LREF 4
+  LOAD 0
+  LREF 3
+  LOAD 0
+  LOCAL 6 43 nil 0 2
+  LREF 6
+  C_AGG_BEGIN 43
+  C_AGG_END
+  INIT_CONST
+  LREF 6
+  LOAD 0
+  LOCAL 7 7 nil 0 2
+  LREF 7
+  C_AGG_BEGIN 7
+  C_AGG_END
+  INIT_CONST
+  LREF 7
+  LOAD 0
+  GREF 48
+  LOAD 0
+  CALL 46 45 6 0
+  LREF 5
+  ADDR
+  CALL 37 30 1 4
+  CONST_INT 38 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  DECL_FUNC 11 10 3 65 8
+  FUNC_BEGIN 11 0
+  PARAM 1 8 8 nil 0
+  PARAM 2 9 9 nil 0
+  PARAM 3 7 7 nil 0
+  BLOCK_BEGIN
+  GREF 44
+  DROP
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 48 1 0 33 0 39
+  DECL_VAR 36 3 0 33 0 28
+  DECL_VAR 12 8 0 33 0 9
+frame NAMES
+frame END
+  END 11 0

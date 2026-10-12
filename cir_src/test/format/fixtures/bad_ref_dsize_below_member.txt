@@ -1,0 +1,21 @@
+; expect: format is below the end of its last field
+; struct B { int a; char c; };    // size 8, dsize 8
+; struct D2 : B { B inner; };     // inner at 8: dsize is at least 16
+ecil 1.1 features=0x00000000
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame DECLS
+  TY_INT 1 32 true 4 4
+  TY_INT 4 8 true 1 1
+  TY_RECORD_DECL 21 0 nil
+  TY_RECORD_BODY 21 8 8 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 4 4 nil nil nil 0
+  TY_RECORD_DECL 22 0 nil
+  TY_RECORD_BODY 22 16 13 4 0 2
+  REC_FIELD 21 0 nil nil nil 48
+  REC_FIELD 21 8 nil nil nil 0
+frame END
+  END 2 0

@@ -16177,6 +16177,10 @@ STATIC_THREAD size_t
 STATIC_THREAD a_tu_table
                 tu_seen;        /* Entities examined by this walk. */
 STATIC_THREAD a_tu_table
+                tu_queued;      /* The classes and enums queued by this walk
+                                   (queueing one more than once would walk
+                                   the shared parts of a type again). */
+STATIC_THREAD a_tu_table
                 tu_memo;        /* The answers for entities asked about. */
 STATIC_THREAD a_boolean
                 tu_found;       /* A template argument is a local template. */
@@ -16283,22 +16287,34 @@ Queue an entity to be examined.
 }  /* tu_push */
 
 
-static a_boolean tu_seen_before(an_il_entry_kind kind, void *entity)
+static a_boolean tu_table_seen_before(a_tu_table       *table,
+                                     an_il_entry_kind kind,
+                                     void             *entity)
 /*
-Return TRUE if the entity was examined already; else remember it.
+Return TRUE if the entity is in the table already (for the current
+generation); else add it.
 */
 {
   a_boolean  seen = FALSE;
   a_tu_item  *slot = NULL;
 
-  if (tu_seen.capacity != 0) slot = tu_table_slot(&tu_seen, kind, entity);
+  if (table->capacity != 0) slot = tu_table_slot(table, kind, entity);
   if (slot != NULL && slot->entity != NULL &&
-      slot->generation == tu_seen.generation) {
+      slot->generation == table->generation) {
     seen = TRUE;
   } else {
-    (void)tu_table_add(&tu_seen, kind, entity);
+    (void)tu_table_add(table, kind, entity);
   }  /* if */
   return seen;
+}  /* tu_table_seen_before */
+
+
+static a_boolean tu_seen_before(an_il_entry_kind kind, void *entity)
+/*
+Return TRUE if the entity was examined already; else remember it.
+*/
+{
+  return tu_table_seen_before(&tu_seen, kind, entity);
 }  /* tu_seen_before */
 
 
@@ -16308,9 +16324,15 @@ traverse_type_tree service function: queue every class and enum type of the
 tree (the traversal itself does not recurse into the entities).
 */
 {
-  (void)end_traversal;
   if (is_immediate_class_type(tp) || is_immediate_enum_type(tp)) {
-    tu_push(iek_type, tp);
+    if (tu_table_seen_before(&tu_queued, iek_type, tp)) {
+      /* Queued already, with everything it is made of: a type of nested
+         template arguments that share parts (A<A<T, T>, A<T, T>>) is a tree
+         of exponential size. */
+      *end_traversal = TRUE;
+    } else {
+      tu_push(iek_type, tp);
+    }  /* if */
   }  /* if */
   return FALSE;
 }  /* ttt_collect_classes */
@@ -16430,6 +16452,32 @@ not recorded yet: the lambda is then treated as unnamed).
 }  /* tu_default_arg_lambda_parent */
 
 
+a_boolean cir_routine_in_nested_unnamed_class(a_routine_ptr rout)
+/*
+Return TRUE for a member function of an unnamed class that is declared inside
+another class (a member "struct { ... } m;"), whatever the enclosing classes
+are, as long as none of them is local to a function: the front end gives it
+no linkage, but Itanium (g++ and clang) names it with Ut_ inside the
+enclosing class and gives it the linkage of an ordinary member of that
+class: vague for an inline one.  Whether the enclosing named class is local
+to the translation unit is decided by the walk of that class.
+*/
+{
+  a_boolean  result = FALSE;
+
+  if (rout->source_corresp.is_class_member &&
+      rout->source_corresp.name_linkage == (a_name_linkage_kind)nlk_none) {
+    a_type_ptr  cls = parent_class_of(rout);
+
+    if (type_is_unnamed(cls) && cls->source_corresp.is_class_member &&
+        !cls->source_corresp.is_local_to_function) {
+      result = TRUE;
+    }  /* if */
+  }  /* if */
+  return result;
+}  /* cir_routine_in_nested_unnamed_class */
+
+
 static a_boolean tu_walk(an_il_entry_kind kind, void *entity)
 /*
 Return TRUE if the routine, variable or type is local to the translation
@@ -16445,6 +16493,8 @@ recursion on the nesting of the entities.
   tu_stack_size = 0;
   tu_seen.generation++;
   tu_seen.count = 0;
+  tu_queued.generation++;
+  tu_queued.count = 0;
   tu_found = FALSE;
   tu_push(kind, entity);
   while (!result && tu_stack_size > 0) {
@@ -16460,7 +16510,8 @@ recursion on the nesting of the entities.
 
       if (r->source_corresp.name_linkage ==
                                           (a_name_linkage_kind)nlk_internal ||
-          r->storage_class == (a_storage_class)sc_static ||
+          (r->storage_class == (a_storage_class)sc_static &&
+           !cir_routine_in_nested_unnamed_class(r)) ||
           is_member_of_unnamed_namespace(&r->source_corresp)) {
         result = TRUE;
       } else {

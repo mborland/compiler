@@ -11,8 +11,8 @@ eccp -DTEST_NUMBER=1 -r -x -tused --set_flag=no_checking_pragmas --strict Test_n
   	A() {throw -37;}
   	               ^
 
-Error: CIR back end: the definition of '_ZN1AC1Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN1AC1Ev' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN1AC2Ev' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN1AC2Ev' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

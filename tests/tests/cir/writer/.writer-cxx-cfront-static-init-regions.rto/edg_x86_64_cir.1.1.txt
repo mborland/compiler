@@ -1,0 +1,56 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --cfront_2.1 Test_name.c
+"Test_name.c", line 15: warning: variable "s" was declared but never referenced
+      static int s = x;
+                 ^
+
+"Test_name.c", line 12: warning: transfer of control bypasses initialization of:
+            variable "d" (declared at line 14)
+    switch (x) {
+    ^
+
+"Test_name.c", line 19: warning: CIR back end: the body of "f" uses a case label after a declaration of an object with a destructor (jumping past it is accepted in cfront mode), which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+ecil 1.1 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 199711 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  TY_VOID 4
+  TY_FUNC 5 4 0 [1]
+  STR 5 "_Z1fi"
+  DECL_FUNC 6 5 0 0 5
+  DECL_FUNC 6 5 0 1 5
+  STR 6 "x"
+  STR 7 "D"
+  TY_RECORD_DECL 7 0 7
+  TY_RECORD_BODY 7 1 0 1 12 0
+  STR 8 "d"
+  TY_PTR 8 7
+  TY_FUNC 9 4 0 [8]
+  STR 9 "_ZN1DD1Ev"
+  DECL_FUNC 10 9 1 0 9
+  STR 10 "_ZN1DD2Ev"
+  DECL_FUNC 11 9 1 0 10
+  STRUCTOR 10 11 1
+  STR 11 "_ZZ1fiE1s"
+  DECL_VAR 12 1 1 273 0 11
+  DECL_FUNC 6 5 0 32 5 supp{13: "a case label after a declaration of an object with a destructor (jumping past it is accepted in cfront mode)"}
+frame GLOBALS
+  DECL_FUNC 10 9 0 0 9
+  DECL_FUNC 11 9 0 0 10
+frame NAMES
+frame END
+  END 4 0

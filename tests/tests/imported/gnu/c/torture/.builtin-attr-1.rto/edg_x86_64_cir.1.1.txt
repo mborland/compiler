@@ -575,292 +575,292 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   CPTEST1 (ctanh)
   ^
 
-Error: CIR back end: the definition of 'test_builtin_llceil' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_llceil' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_llceil
 
-Error: CIR back end: the definition of 'test_builtin_llceilf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_llceilf' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_llceilf
 
-Error: CIR back end: the definition of 'test_builtin_llceill' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_llceill' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_llceill
 
-Error: CIR back end: the definition of 'test_builtin_llfloor' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_llfloor' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_llfloor
 
-Error: CIR back end: the definition of 'test_builtin_llfloorf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_llfloorf' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_llfloorf
 
-Error: CIR back end: the definition of 'test_builtin_llfloorl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_llfloorl' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_llfloorl
 
-Error: CIR back end: the definition of 'test_builtin_lceil' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_lceil' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_lceil
 
-Error: CIR back end: the definition of 'test_builtin_lceilf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_lceilf' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_lceilf
 
-Error: CIR back end: the definition of 'test_builtin_lceill' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_lceill' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_lceill
 
-Error: CIR back end: the definition of 'test_builtin_lfloor' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_lfloor' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_lfloor
 
-Error: CIR back end: the definition of 'test_builtin_lfloorf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_lfloorf' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_lfloorf
 
-Error: CIR back end: the definition of 'test_builtin_lfloorl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_lfloorl' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_lfloorl
 
-Error: CIR back end: the definition of 'test_builtin_nans' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_nans' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_nans
 
-Error: CIR back end: the definition of 'test_builtin_nansf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_nansf' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_nansf
 
-Error: CIR back end: the definition of 'test_builtin_nansl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_nansl' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_nansl
 
-Error: CIR back end: the definition of 'test_builtin_pow10' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_pow10' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_pow10
 
-Error: CIR back end: the definition of 'test_builtin_pow10f' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_pow10f' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_pow10f
 
-Error: CIR back end: the definition of 'test_builtin_pow10l' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_pow10l' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_pow10l
 
-Error: CIR back end: the definition of 'test_builtin_cacos' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cacos' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cacosf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cacosf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cacosl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cacosl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cacos' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cacos' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cacosf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cacosf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cacosl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cacosl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cacosh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cacosh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cacoshf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cacoshf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cacoshl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cacoshl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cacosh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cacosh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cacoshf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cacoshf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cacoshl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cacoshl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_carg' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_carg' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cargf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cargf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cargl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cargl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_carg' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_carg' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cargf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cargf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cargl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cargl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_casin' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_casin' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_casinf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_casinf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_casinl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_casinl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_casin' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_casin' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_casinf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_casinf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_casinl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_casinl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_casinh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_casinh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_casinhf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_casinhf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_casinhl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_casinhl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_casinh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_casinh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_casinhf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_casinhf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_casinhl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_casinhl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_catan' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_catan' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_catanf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_catanf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_catanl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_catanl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_catan' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_catan' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_catanf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_catanf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_catanl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_catanl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_catanh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_catanh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_catanhf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_catanhf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_catanhl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_catanhl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_catanh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_catanh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_catanhf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_catanhf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_catanhl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_catanhl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ccos' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ccos' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ccosf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ccosf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ccosl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ccosl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ccos' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ccos' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ccosf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ccosf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ccosl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ccosl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ccosh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ccosh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ccoshf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ccoshf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ccoshl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ccoshl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ccosh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ccosh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ccoshf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ccoshf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ccoshl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ccoshl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cexp' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cexp' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cexpf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cexpf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cexpl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cexpl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cexp' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cexp' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cexpf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cexpf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cexpl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cexpl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cimag' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cimag' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cimagf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cimagf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cimagl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cimagl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cimag' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cimag' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cimagf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cimagf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cimagl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cimagl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_clog' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_clog' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_clogf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_clogf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_clogl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_clogl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_clog' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_clog' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_clogf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_clogf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_clogl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_clogl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_conj' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_conj' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_conjf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_conjf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_conjl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_conjl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_conj' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_conj' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_conjf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_conjf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_conjl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_conjl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cpow' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cpow' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cpowf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cpowf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cpowl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cpowl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cpow' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cpow' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cpowf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cpowf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cpowl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cpowl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cproj' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cproj' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cprojf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cprojf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_cprojl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_cprojl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cproj' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cproj' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cprojf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cprojf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_cprojl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_cprojl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_creal' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_creal' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_crealf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_crealf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_creall' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_creall' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_creal' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_creal' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_crealf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_crealf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_creall' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_creall' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_csin' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_csin' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_csinf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_csinf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_csinl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_csinl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_csin' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_csin' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_csinf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_csinf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_csinl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_csinl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_csinh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_csinh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_csinhf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_csinhf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_csinhl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_csinhl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_csinh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_csinh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_csinhf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_csinhf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_csinhl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_csinhl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_csqrt' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_csqrt' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_csqrtf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_csqrtf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_csqrtl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_csqrtl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_csqrt' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_csqrt' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_csqrtf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_csqrtf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_csqrtl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_csqrtl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ctan' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ctan' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ctanf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ctanf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ctanl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ctanl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ctan' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ctan' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ctanf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ctanf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ctanl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ctanl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ctanh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ctanh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ctanhf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ctanhf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_builtin_ctanhl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_ctanhl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ctanh' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ctanh' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ctanhf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ctanhf' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'test_ctanhl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_ctanhl' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
 144 errors detected in the compilation of "Test_name.c".

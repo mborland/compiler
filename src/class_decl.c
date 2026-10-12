@@ -35,6 +35,9 @@ class_decl.c -- Scanning of class declarations.
 #if MICROSOFT_EXTENSIONS_ALLOWED
 #include "ms_attrib.h"
 #endif /* MICROSOFT_EXTENSIONS_ALLOWED */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+#include "ecil_write.h"
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 /* Conditionally open the "edg" namespace. */
 BEGIN_EDG_NAMESPACE
@@ -33106,6 +33109,12 @@ wrap_up_class_definition.
   /* Do subobject allocation and compute the size and alignment of the
      class. */
   do_class_layout(class_type);
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* The class is complete (do_class_layout cleared its incomplete flag): the
+     ECIL writer has to look again at the records it declared as
+     incomplete. */
+  ecil_note_class_completed();
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   if (C_dialect == C_dialect_cplusplus) {
     /* Go through all the functions declared for this class and set the
        virtual function numbers of virtual functions (some may already have

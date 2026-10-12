@@ -91,32 +91,32 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   bar(my::shared_ptr<blob>)
   ^
 
-Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseD1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_baseD2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_base10_M_destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2my16_Sp_counted_base10_M_destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEE10_M_disposeEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEE10_M_disposeEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEE10_M_destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEE10_M_destroyEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
 
-Error: CIR back end: the definition of '_ZN2my20__throw_bad_weak_ptrEv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN2my20__throw_bad_weak_ptrEv' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN2my16_Sp_counted_base10_M_releaseEv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN2my16_Sp_counted_base10_M_releaseEv' was dropped: it uses a construct the CIR back end cannot express: a virtual call (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN2my16_Sp_counted_base15_M_weak_releaseEv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN2my16_Sp_counted_base15_M_weak_releaseEv' was dropped: it uses a construct the CIR back end cannot express: a virtual call (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEEC1IJEEES3_DpOT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEEC1IJEEES3_DpOT_' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEEC2IJEEES3_DpOT_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZN2my23_Sp_counted_ptr_inplaceI4blobNS_9allocatorIS1_EEEC2IJEEES3_DpOT_' was dropped: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases (and it is referenced)
 
 5 errors detected in the compilation of "Test_name.c".

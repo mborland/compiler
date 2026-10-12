@@ -1,0 +1,2 @@
+./a.out
+subcopy: OK (0 mismatches)

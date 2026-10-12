@@ -16,7 +16,7 @@ Test_name.c:
   }
   ^
 
-Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'foo' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported) (and it is referenced)
 
 1 error detected in the compilation of "Test_name.c".
 ipa-icf-38a.c:
@@ -36,6 +36,6 @@ ipa-icf-38a.c:
   }
   ^
 
-Error: CIR back end: the definition of 'bar' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'bar' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
 1 error detected in the compilation of "ipa-icf-38a.c".

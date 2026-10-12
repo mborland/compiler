@@ -25,22 +25,22 @@ Warning: CIR back end: the initializer of "y" uses a record type that is not sup
 
 Warning: CIR back end: the initializer of "x" uses a record type that is not supported, which the CIR back end does not support; the definition is dropped
 
-Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC1ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC1ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC2ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC2ERKS1_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1XIJS_IJ1AEES0_EEC1ERKS1_RKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XIJS_IJ1AEES0_EEC1ERKS1_RKS0_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1XIJS_IJ1AEES0_EEC2ERKS1_RKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XIJS_IJ1AEES0_EEC2ERKS1_RKS0_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC1ERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC1ERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC2ERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XIJ1AEEC2ERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a variable of a record type that is not supported
 
-Error: CIR back end: the definition of 'x' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'x' was dropped: it uses a construct the CIR back end cannot express: a record type that is not supported
 
-Error: CIR back end: the definition of 'y' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'y' was dropped: it uses a construct the CIR back end cannot express: a record type that is not supported
 
 3 errors detected in the compilation of "Test_name.c".

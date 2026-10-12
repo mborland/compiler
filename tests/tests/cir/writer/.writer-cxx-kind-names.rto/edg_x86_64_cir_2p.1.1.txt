@@ -15,7 +15,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++20 --g++ --gnu_version=140000 Test_name.c
   int pm_field(P *p, int P::*m) { return p->*m; }
                                                 ^
 
-ecil 1.0 features=0x00000008
+ecil 1.1 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -123,18 +123,18 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   TY_FUNC 24 1 0 []
   STR 22 "_Z6throwsv"
   DECL_FUNC 25 24 0 0 22
   DECL_FUNC 25 24 0 1 22
-  DECL_FUNC 25 24 0 32 22
-frame REGION
+  DECL_FUNC 25 24 0 32 22 supp{13: "the expression kind \"throw expression\""}
+frame REGION supp
   STR 23 "_Z5triesv"
   DECL_FUNC 26 24 0 0 23
   DECL_FUNC 26 24 0 1 23
-  DECL_FUNC 26 24 0 32 23
-frame REGION
+  DECL_FUNC 26 24 0 32 23 supp{13: "the statement \"try statement\""}
+frame REGION supp
   STR 24 "P"
   TY_RECORD_DECL 27 0 24
   TY_PTR 28 27
@@ -147,14 +147,14 @@ frame REGION
   DECL_FUNC 31 30 0 0 26
   DECL_FUNC 31 30 0 1 26
   STR 27 "f"
-  DECL_FUNC 31 30 0 32 26
-frame REGION
+  DECL_FUNC 31 30 0 32 26 supp{13: "a parameter of an unsupported type"}
+frame REGION supp
   TY_OPAQUE 32 8 8
   TY_FUNC 33 1 0 [28, 32]
   STR 28 "_Z8pm_fieldP1PMS_i"
   DECL_FUNC 34 33 0 0 28
   DECL_FUNC 34 33 0 1 28
-  DECL_FUNC 34 33 0 32 28
+  DECL_FUNC 34 33 0 32 28 supp{13: "a parameter of an unsupported type"}
 frame REGION
   STR 29 "S"
   TY_RECORD_DECL 35 0 29

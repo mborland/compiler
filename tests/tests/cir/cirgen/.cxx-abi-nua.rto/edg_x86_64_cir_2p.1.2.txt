@@ -1,0 +1,2 @@
+./a.out
+nua: OK (0 mismatches)

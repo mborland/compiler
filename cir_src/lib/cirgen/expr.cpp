@@ -1135,6 +1135,76 @@ ZERO_BYTES: zero the first bytes bytes of the object a glvalue designates
   return ok;
 }  /* a_emitter::zero_bytes */
 
+bool a_emitter::cmp3way(const ecil::a_record &r)
+/*
+CMP3WAY: the built-in <=> of two arithmetic or pointer prvalues of one type
+(cir.cmp3way).  The result is the integer of type t_result holding lt, eq or
+gt, or unordered for a floating operand pair that has a NaN.
+*/
+{
+  bool ok = true;
+  uint64_t tgid = 0;
+  int64_t values[4] = {0, 0, 0, 0};
+  bool partial = r.ops[4].kind != ecil::an_operand_kind::nil;
+  mlir::Value lhs;
+  mlir::Value rhs;
+  a_type *t;
+
+  uint_operand(r.ops[0], tgid);
+  t = type_at(tgid);
+  for (int k = 0; k < 4; ++k) {
+    if (r.ops[k + 1].kind != ecil::an_operand_kind::nil)
+      ecil::operand_i64(r.ops[k + 1], values[k]);
+  }
+  if (!pop_prvalue(rhs) || !pop_prvalue(lhs)) {
+    ok = false;
+  } else if (t == nullptr || !mlir::isa<cir::IntType>(t->cir)) {
+    ok = internal("CMP3WAY result type is not an integer");
+  } else {
+    mlir::Type operand_type = lhs.getType();
+    bool is_floating = cir::isAnyFloatingPointType(operand_type);
+
+    if (lhs.getType() != rhs.getType() &&
+        mlir::isa<cir::PointerType>(lhs.getType()) &&
+        mlir::isa<cir::PointerType>(rhs.getType()))
+      rhs = builder_.createBitcast(loc(), rhs, lhs.getType());
+    if (lhs.getType() != rhs.getType()) {
+      ok = format_error("CMP3WAY operands have different types");
+    } else if (!mlir::isa<cir::IntType, cir::BoolType, cir::PointerType>(
+                   operand_type) && !is_floating) {
+      ok = format_error("CMP3WAY operands are not arithmetic or pointer "
+                        "values");
+    } else if (partial != is_floating) {
+      ok = format_error(is_floating ? "CMP3WAY of floating operands needs "
+                                      "an unordered value"
+                                    : "CMP3WAY unordered is only for "
+                                      "floating operands");
+    } else {
+      cir::IntType result_type = mlir::cast<cir::IntType>(t->cir);
+      unsigned bits = result_type.getWidth();
+
+      /* The op's constants are signed: an unsigned category type is given
+         as its bit pattern. */
+      if (bits < 64) {
+        for (int64_t &value : values)
+          value = static_cast<int64_t>(static_cast<uint64_t>(value) <<
+                                       (64 - bits)) >> (64 - bits);
+      }
+      mlir::Value result = compat::cmp3way(
+          builder_, loc(), bits, lhs, rhs, partial,
+          values[0], values[1], values[2], values[3]);
+
+      /* The op yields a signed integer; an unsigned category type takes
+         the same bits. */
+      if (result.getType() != t->cir)
+        result = builder_.createCast(loc(), cir::CastKind::integral, result,
+                                     t->cir);
+      push_prvalue(result);
+    }
+  }
+  return ok;
+}  /* a_emitter::cmp3way */
+
 bool a_emitter::new_array_record(const ecil::a_record &r)
 /*
 NEW_ARRAY_SIZE: the byte size of new T[n], elements and cookie, with the
@@ -1820,6 +1890,9 @@ Handle one expression record.
     break;
   case eop_zero_bytes:
     ok = zero_bytes(r);
+    break;
+  case eop_cmp3way:
+    ok = cmp3way(r);
     break;
   case eop_new_array_size:
   case eop_new_array_cookie:

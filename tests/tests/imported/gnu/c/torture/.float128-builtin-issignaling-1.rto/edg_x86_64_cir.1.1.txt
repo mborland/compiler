@@ -15,12 +15,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f1' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_nansf128
 
-Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f2' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_nanf128
 
-Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'f3' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
 4 errors detected in the compilation of "Test_name.c".

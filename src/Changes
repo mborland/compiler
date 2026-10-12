@@ -1,5 +1,41 @@
 Version 7.1
 
+10/12/26
+CIR back end: region keeps, pack references and late names
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+pack reference of a structured binding pack now records in the file scope
+region whether its variable is static, so that a later instantiation does not
+read the variable in the function's freed memory region (find_binding_for_pack
+in scope_stk.c); the region of a lambda call operator is kept only if the call
+operator is constexpr or its closure has a conversion function, and the region
+of a function declared constexpr that is not constexpr is kept (mem_manage.c);
+the member functions of an unnamed class that is declared inside a class are
+named when they are written (cir_name_may_change), and
+cir_routine_name_may_change treats a function instance whose type or template
+arguments (a type argument, or a non-type argument of a closure type) hold a
+lambda in a default argument that has no parent routine yet as having a name
+that may change; and lower_name.c has
+cir_routine_in_nested_unnamed_class, which gives such member functions the
+Itanium linkage of their enclosing class.  The other configurations are not
+affected.
+
+10/12/26
+CIR back end: target triple capture and record completion hook
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it, the
+target triple of the ECIL stream is now captured right after the predefined
+macros are entered (a new call in the translation unit initialization of
+fe_init.c), so that a source file that undefines the system macros of the
+target (#undef __linux__) cannot change it; before, it was read from the macro
+table when the stream's header was written.  The class definition scanner
+(class_decl.c, complete_class_definition) now tells the ECIL writer when a
+class is complete, so that the writer looks again at the records it declared
+as incomplete only then, not at the end of every function.  The reason that
+the ECIL writer gives for a dropped function or variable is no longer cut
+after 100 characters and is also sent with the unsupported declaration to the
+CIR library (ECIL 1.1).  The other configurations are not affected.
+
 10/11/26
 The CIR back end configuration accepts C++
 

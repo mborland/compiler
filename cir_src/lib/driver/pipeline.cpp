@@ -74,18 +74,23 @@ Adds the elapsed time of its scope to one of the session's stage counters
 when statistics are requested (no clock is read otherwise).
 */
 public:
-  a_stage_timer(an_edg_cir_session &owner, uint64_t a_session_stats::*field)
-    : owner_(owner), field_(field),
+  a_stage_timer(an_edg_cir_session &owner, uint64_t a_session_stats::*field,
+                uint64_t a_session_stats::*peak_field = nullptr)
+    : owner_(owner), field_(field), peak_field_(peak_field),
       start_(owner.stats_on ? stats_now_ns() : 0)
     {}
   ~a_stage_timer()
     {
-      if (owner_.stats_on)
+      if (owner_.stats_on) {
         owner_.stats.*field_ += stats_now_ns() - start_;
+        if (peak_field_ != nullptr)
+          owner_.stats.*peak_field_ = stats_peak_kib();
+      }
     }
 private:
   an_edg_cir_session       &owner_;
   uint64_t a_session_stats::*field_;
+  uint64_t a_session_stats::*peak_field_;   /* Peak RSS after the stage. */
   uint64_t                  start_;
 };  /* a_stage_timer */
 
@@ -136,7 +141,8 @@ session.status on failure.
   bool go = true;
 
   std::unique_ptr<a_stage_timer> lower_timer(
-      new a_stage_timer(session, &a_session_stats::lower_ns));
+      new a_stage_timer(session, &a_session_stats::lower_ns,
+                        &a_session_stats::rss_lowered_kib));
 
   llvm_context.setDiagnosticHandlerCallBack(llvm_diagnostic, &session);
   lowered = cir::direct::lowerDirectlyFromCIRToLLVMIR(module, llvm_context,
@@ -270,14 +276,18 @@ body): verify, textual CIR, CIR-to-CIR passes, then lower_and_emit.
   }
 #endif
 
+  if (session.stats_on)
+    session.stats.rss_emitted_kib = stats_peak_kib();
   if (session.emitter) {
-    a_stage_timer timer(session, &a_session_stats::finish_ns);
+    a_stage_timer timer(session, &a_session_stats::finish_ns,
+                        &a_session_stats::rss_finished_kib);
     if (!session.emitter->finish())
       go = false;
   }
   /* Debug aid: EDG_CIR_NO_VERIFY=1 lets an invalid module be printed. */
   if (go && std::getenv("EDG_CIR_NO_VERIFY") == nullptr) {
-    a_stage_timer timer(session, &a_session_stats::verify_ns);
+    a_stage_timer timer(session, &a_session_stats::verify_ns,
+                        &a_session_stats::rss_verified_kib);
     if (mlir::failed(mlir::verify(module))) {
       session.fail(EDG_CIR_ERROR_VERIFY, edc_pipeline,
                    "the MLIR verifier rejected the module");
@@ -293,7 +303,8 @@ body): verify, textual CIR, CIR-to-CIR passes, then lower_and_emit.
     go = false;
   }
   if (go && !(session.flags & EDG_CIR_FLAG_DISABLE_CIR_PASSES)) {
-    a_stage_timer timer(session, &a_session_stats::passes_ns);
+    a_stage_timer timer(session, &a_session_stats::passes_ns,
+                        &a_session_stats::rss_passed_kib);
     bool verify_each = (session.flags & EDG_CIR_FLAG_VERIFY_EACH) != 0;
     if (mlir::failed(cir::runCIRToCIRPasses(
             module, cm.context, verify_each, /*enableIdiomRecognizer=*/false,

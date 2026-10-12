@@ -22,6 +22,8 @@ of the C API in edg_cir.h) and the helpers shared by the driver sources.
 #include <string>
 #include <vector>
 
+#include <sys/resource.h>
+
 #include "cir_config.h"
 #include "edg_cir/edg_cir.h"
 #include "ecil_reader.h"
@@ -89,6 +91,15 @@ struct a_session_stats {
   uint64_t passes_ns = 0;    /* CIR-to-CIR passes. */
   uint64_t lower_ns = 0;     /* CIR to LLVM IR, GlobalDCE and the optimizer. */
   uint64_t codegen_ns = 0;   /* Target code generation or printing. */
+  /* Peak resident memory (KiB, the process's maximum so far) at the end of
+     each stage: the growth between two of them is what the stage added.  The
+     module is resident from emit to the end. */
+  uint64_t rss_start_kib = 0;      /* When the session was created. */
+  uint64_t rss_emitted_kib = 0;
+  uint64_t rss_finished_kib = 0;
+  uint64_t rss_verified_kib = 0;
+  uint64_t rss_passed_kib = 0;
+  uint64_t rss_lowered_kib = 0;
 };  /* a_session_stats */
 
 inline uint64_t stats_now_ns()
@@ -98,6 +109,22 @@ inline uint64_t stats_now_ns()
       std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::steady_clock::now().time_since_epoch()).count());
 }  /* stats_now_ns */
+
+inline uint64_t stats_peak_kib()
+/* The process's peak resident set size so far, in KiB (0 if unknown). */
+{
+  struct rusage usage;
+  uint64_t result = 0;
+
+  if (getrusage(RUSAGE_SELF, &usage) == 0) {
+#ifdef __APPLE__
+    result = static_cast<uint64_t>(usage.ru_maxrss) / 1024;
+#else
+    result = static_cast<uint64_t>(usage.ru_maxrss);
+#endif
+  }
+  return result;
+}  /* stats_peak_kib */
 
 class a_cir_module;  /* LLVM-dependent; defined in cir_module.h. */
 class a_emitter;     /* The ECIL-to-CIR emitter; defined in emitter.h. */

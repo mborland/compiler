@@ -4,6 +4,6 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
     ^
           detected during instantiation of "T *std::launder(T *) [with T=A]" at line 38
 
-Error: CIR back end: the definition of '_ZSt7launderI1AEPT_S2_' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZSt7launderI1AEPT_S2_' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_launder (and it is referenced)
 
 1 error detected in the compilation of "Test_name.c".

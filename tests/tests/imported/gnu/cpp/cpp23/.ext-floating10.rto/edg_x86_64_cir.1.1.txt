@@ -19,20 +19,20 @@ Warning: CIR back end: the initializer of "z" uses a floating constant of this f
 
 Warning: CIR back end: the initializer of "nz" uses a floating constant of this format, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of '_Z2fnDF128_' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z2fnDF128_' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
 
-Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'b' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
 
-Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'c' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
 
-Error: CIR back end: the definition of 'a' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'a' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
 
-Error: CIR back end: the definition of 'a2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'a2' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
 
-Error: CIR back end: the definition of 'z' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'z' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
 
-Error: CIR back end: the definition of 'nz' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'nz' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
 
 8 errors detected in the compilation of "Test_name.c".

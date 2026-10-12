@@ -127,10 +127,10 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
     baz ();
     ^
 
-Error: CIR back end: the definition of '_Z3fooh' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3fooh' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported) (and it is referenced)
 
-Error: CIR back end: the definition of '_Z3barh' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3barh' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported) (and it is referenced)
 
-Error: CIR back end: the definition of '_Z3bazv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3bazv' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported) (and it is referenced)
 
 3 errors detected in the compilation of "Test_name.c".

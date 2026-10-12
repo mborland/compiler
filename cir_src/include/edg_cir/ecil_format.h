@@ -23,7 +23,7 @@ ECIL_VERSION_MAJOR or ECIL_VERSION_MINOR (section 9 of the spec).
 #include <stdint.h>
 
 #define ECIL_VERSION_MAJOR 1
-#define ECIL_VERSION_MINOR 0
+#define ECIL_VERSION_MINOR 1
 
 /*
 The stream preamble: 8 magic bytes, then u16 major, u16 minor and
@@ -243,6 +243,8 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(new_array_cookie, 0x9A, 2)  /* t elem, cookie (v1) */                    \
   X(delete,           0x9B, 4)  /* g fn, g dtor|nil, t, flags (v1) */        \
   X(zero_bytes,       0x9C, 1)  /* bytes; glv (v1) */                        \
+  X(cmp3way,          0x9D, 5)  /* t result, lt, eq, gt, unordered|nil;  */  \
+                                /* prv prv -> prv (1.1)                */    \
   /* Calls, casts and varargs (C0, C1 and C7-C9 are never assigned). */     \
   X(cast,             0xC2, 2)  /* kind, t; prv -> prv */                    \
   X(va_start,         0xC3, 0)  /* prv ap */                                 \
@@ -524,6 +526,10 @@ typedef enum an_ecil_builtin {
 
 #define ECIL_STATIC_INIT_INLINE_VAR     0x01u  /* v1 */
 #define ECIL_STATIC_INIT_TEMPLATE_INSTANCE 0x02u  /* v1 */
+#define ECIL_STATIC_INIT_PARTIAL        0x04u
+                        /* 1.1: g has a VAR_INIT with its constant
+                           elements; the STATIC_INIT stores only the
+                           dynamic ones (no zero-fill). */
 
 #define ECIL_MEMINIT_COMPILER_GENERATED 0x01u  /* v1 */
 #define ECIL_MEMINIT_DEFAULT_MEMBER_INIT 0x02u  /* v1 */
@@ -549,7 +555,9 @@ typedef enum an_ecil_supp_key {
   esk_section       = 9,
   esk_visibility    = 10,
   esk_used          = 11,
-  esk_explicit_align = 12
+  esk_explicit_align = 12,
+  esk_unsupported_reason = 13  /* 1.1: bin, UTF-8, at most 255 bytes; on a
+                                  DECL_FUNC or DECL_VAR with UNSUPPORTED. */
 } an_ecil_supp_key;
 
 #endif /* ECIL_FORMAT_H */

@@ -9614,8 +9614,8 @@ send it with a nil name and bind it later.  This is must_wait_for_mangling_
 reasons without the guard on what the routine needs to mangle early: the
 writer names every routine when it hands it off, not only those that
 promote entities out of their scope.  The reasons:
-  - a parent class at namespace or class scope that is unnamed (a typedef
-    name for linkage may still come);
+  - a parent class at namespace scope that is unnamed (a typedef name for
+    linkage may still come);
   - an anonymous union parent (its fabricated name is chosen at the first
     mangling);
   - a closure in the initializer of a structured binding;
@@ -9635,9 +9635,13 @@ promote entities out of their scope.  The reasons:
       if (type->variant.class_struct_union.originally_unnamed &&
           type_is_unnamed(type) &&
           !type->source_corresp.is_local_to_function &&
+          !type->source_corresp.is_class_member &&
           !type_is_lambda_closure(type)) {
         /* (A closure's name is its own: no typedef name for linkage can
-           come.) */
+           come.  Neither can one for an unnamed class declared in a class:
+           the bodies of its member functions are processed after the
+           enclosing class is complete, and the writer names a function
+           when it hands it off, after its body.) */
         result = TRUE;
       } else if (class_type_supp(type)->anonymous_union_kind !=
                                            (an_anonymous_union_kind)auk_none) {
@@ -9667,6 +9671,39 @@ promote entities out of their scope.  The reasons:
   }  /* for */
   return result;
 }  /* cir_name_may_change */
+
+
+a_boolean cir_routine_name_may_change(a_routine_ptr rout)
+/*
+CIR back end: like cir_name_may_change for a routine, and also true if the
+routine's own type or template arguments (a type argument, or the type of a
+non-type argument: a closure in C++20) hold a lambda in a default argument
+that has no parent routine yet (f_adl<lambda in the default argument of g>
+is named when it is instantiated, before g's lambda is recorded; the mangler
+needs the parent).
+*/
+{
+  a_boolean           result = cir_name_may_change(&rout->source_corresp);
+  a_template_arg_ptr  tap;
+
+  if (!result && !C_mode()) {
+    result = cir_has_parentless_lambda(rout->type);
+    for (tap = rout->template_arg_list; tap != NULL && !result;
+         tap = tap->next) {
+      if (tap->kind == (a_templ_arg_kind)tak_type) {
+        result = tap->variant.type != NULL &&
+                 cir_has_parentless_lambda(tap->variant.type);
+      } else if (tap->kind == (a_templ_arg_kind)tak_nontype &&
+                 !tap->is_array_bound_of_unknown_type &&
+                 tap->variant.constant != NULL &&
+                 tap->variant.constant->type != NULL) {
+        /* A non-type argument of a closure type (C++20). */
+        result = cir_has_parentless_lambda(tap->variant.constant->type);
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return result;
+}  /* cir_routine_name_may_change */
 
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
@@ -12389,6 +12426,12 @@ done:
 }  /* find_variable_for_pack */
 
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+/* The bit of the param_or_binding_num of a structured binding pack reference
+   that records that the pack's variable is static. */
+#define CIR_BINDING_PACK_IS_STATIC 0x80000000u
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
 static a_variable_ptr find_binding_for_pack(a_pack_reference_ptr  prp,
                                             uint32_t              *elements)
 /*
@@ -12402,6 +12445,13 @@ pack, return NULL.  Return the number of actual bindings in *elements.
   a_variable_ptr		vp;
   a_variable_ptr		result_vp = NULL;
   uint32_t			binding_num = prp->param_or_binding_num;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* (The variable of the symbol may be in a freed memory region.) */
+  a_boolean			is_static = (binding_num &
+                                         CIR_BINDING_PACK_IS_STATIC) != 0;
+
+  binding_num &= ~CIR_BINDING_PACK_IS_STATIC;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
   ssep = skip_function_or_block_scopes(
                                   ssep, prp->function_or_block_scopes_to_skip);
@@ -12409,7 +12459,11 @@ pack, return NULL.  Return the number of actual bindings in *elements.
     expect_error();
     goto done;
   }  /* if */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  if (is_static) {
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
   if (prp->symbol->variant.variable.ptr->storage_class == sc_static) {
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
     vp = ssep->il_scope->variables;
   } else {
     vp = ssep->il_scope->nonstatic_variables;
@@ -14221,6 +14275,15 @@ that list to pedp.
               }  /* for */
               if (vp != NULL) {
                 prp1->param_or_binding_num = binding_num;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+                /* The variable is in the function's memory region, which a
+                   real instantiation may find freed: keep what it will need
+                   to know about it in the pack reference, which is in the
+                   file scope region. */
+                if (binding_var->storage_class == sc_static) {
+                  prp1->param_or_binding_num |= CIR_BINDING_PACK_IS_STATIC;
+                }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
               } else {
                 unexpected_condition();
               }  /* if */

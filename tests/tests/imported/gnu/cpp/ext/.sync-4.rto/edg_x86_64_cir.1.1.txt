@@ -307,158 +307,158 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the unused definition of '_ZL2f1Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL2f1Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_add_8
 
-Warning: CIR back end: the unused definition of '_ZL2f2Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL2f2Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_sub_8
 
-Warning: CIR back end: the unused definition of '_ZL2f3Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL2f3Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_or_8
 
-Warning: CIR back end: the unused definition of '_ZL2f4Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL2f4Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_and_8
 
-Warning: CIR back end: the unused definition of '_ZL2f5Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL2f5Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_xor_8
 
-Warning: CIR back end: the unused definition of '_ZL2f6Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL2f6Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_nand_8
 
-Warning: CIR back end: the unused definition of '_ZL2f7Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL2f7Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_add_and_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL2f8Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL2f8Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_sub_and_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL2f9Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL2f9Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_or_and_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3f10Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f10Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_and_and_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3f11Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f11Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_xor_and_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3f12Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f12Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_nand_and_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3f13Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f13Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_bool_compare_and_swap_8
 
-Warning: CIR back end: the unused definition of '_ZL3f14Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f14Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_val_compare_and_swap_8
 
-Warning: CIR back end: the unused definition of '_ZL3f15Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f15Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_lock_test_and_set_8
 
-Warning: CIR back end: the unused definition of '_ZL3f16Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f16Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_lock_release_8
 
-Warning: CIR back end: the unused definition of '_ZL3f17Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f17Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_test_and_set
 
-Warning: CIR back end: the unused definition of '_ZL3f18Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f18Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_clear
 
-Warning: CIR back end: the unused definition of '_ZL3f19Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f19Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_exchange
 
-Warning: CIR back end: the unused definition of '_ZL3f20Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f20Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_exchange_8
 
-Warning: CIR back end: the unused definition of '_ZL3f21Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f21Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_load
 
-Warning: CIR back end: the unused definition of '_ZL3t21v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t21v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f22Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f22Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_load_8
 
-Warning: CIR back end: the unused definition of '_ZL3t22v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t22v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f23Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f23Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_compare_exchange
 
-Warning: CIR back end: the unused definition of '_ZL3t23v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t23v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f24Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f24Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_compare_exchange_8
 
-Warning: CIR back end: the unused definition of '_ZL3t24v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t24v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f25Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f25Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_store
 
-Warning: CIR back end: the unused definition of '_ZL3t25v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t25v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f26Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f26Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_store_8
 
-Warning: CIR back end: the unused definition of '_ZL3t26v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t26v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f27Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f27Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_add_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3t27v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t27v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f28Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f28Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_sub_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3t28v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t28v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f29Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f29Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_and_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3t29v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t29v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f30Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f30Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_nand_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3t30v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t30v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f31Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f31Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_xor_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3t31v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t31v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f32Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f32Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_or_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3t32v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t32v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f33Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f33Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_add_8
 
-Warning: CIR back end: the unused definition of '_ZL3t33v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t33v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f34Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f34Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_sub_8
 
-Warning: CIR back end: the unused definition of '_ZL3t34v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t34v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f35Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f35Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_and_8
 
-Warning: CIR back end: the unused definition of '_ZL3t35v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t35v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f36Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f36Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_nand_8
 
-Warning: CIR back end: the unused definition of '_ZL3t36v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t36v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f37Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f37Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_xor_8
 
-Warning: CIR back end: the unused definition of '_ZL3t37v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t37v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Warning: CIR back end: the unused definition of '_ZL3f38Pv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3f38Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_or_8
 
-Warning: CIR back end: the unused definition of '_ZL3t38v' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL3t38v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
-Error: CIR back end: the definition of '_ZL2t1v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL2t1v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t2v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL2t2v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t3v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL2t3v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t4v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL2t4v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t5v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL2t5v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t6v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL2t6v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t7v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL2t7v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t8v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL2t8v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t9v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL2t9v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t10v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t10v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t11v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t11v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t12v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t12v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t13v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t13v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t14v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t14v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t15v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t15v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t16v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t16v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t17v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t17v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t18v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t18v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t19v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t19v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t20v' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL3t20v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL7handleri' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_ZL7handleri' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
 
 21 errors detected in the compilation of "Test_name.c".

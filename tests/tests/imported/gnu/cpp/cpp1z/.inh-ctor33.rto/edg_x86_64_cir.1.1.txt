@@ -1,4 +1,1 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
-/usr/sbin/ld: Test_name.o: in function `_ZN1CCI21BE1A':
-Test_name.c:(.text._ZN1CCI21BE1A[_ZN1CCI21BE1A]+0x18): undefined reference to `_ZN1AC1ERKS_'
-collect2: error: ld returned 1 exit status

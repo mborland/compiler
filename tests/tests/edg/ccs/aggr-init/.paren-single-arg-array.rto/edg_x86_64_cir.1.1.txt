@@ -3,6 +3,6 @@ eccp -DTEST_NUMBER=1 --c++20 Test_name.c
   }
   ^
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: this conversion
 
 1 error detected in the compilation of "Test_name.c".

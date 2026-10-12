@@ -13,10 +13,10 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   ^
           detected during instantiation of "V4SF MlasShuffleFloat32x4<I0,I1,I2,I3>(V4SF) [with I0=3U, I1=3U, I2=3U, I3=3U]" at line 26
 
-Warning: CIR back end: the unused definition of '_Z20MlasShuffleFloat32x4ILj1ELj1ELj1ELj1EEDv4_fS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z20MlasShuffleFloat32x4ILj1ELj1ELj1ELj1EEDv4_fS0_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Warning: CIR back end: the unused definition of '_Z20MlasShuffleFloat32x4ILj3ELj3ELj3ELj3EEDv4_fS0_' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_Z20MlasShuffleFloat32x4ILj3ELj3ELj3ELj3EEDv4_fS0_' was dropped and erased: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
 1 error detected in the compilation of "Test_name.c".

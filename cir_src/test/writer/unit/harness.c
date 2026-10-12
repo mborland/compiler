@@ -51,6 +51,52 @@ static int check_reasons(void) {
     failures++;
   }
   ecil_unsupported_reason = NULL;
+  /* A long reason is cut at ECIL_REASON_MAX - 1 bytes, backing up so that a
+     UTF-8 sequence is not split (U+00E9 is the two bytes C3 A9). */
+  {
+    char  longer[400];
+    size_t  length;
+
+    memset(longer, 'a', sizeof(longer));
+    longer[sizeof(longer) - 1] = '\0';
+    ecil_note_unsupported(longer);
+    length = strlen(ecil_unsupported_reason);
+    if (length != ECIL_REASON_MAX - 1) {
+      fprintf(stderr, "FAIL long reason: %zu bytes\n", length);
+      failures++;
+    }
+    ecil_unsupported_reason = NULL;
+    memset(longer, 'a', sizeof(longer));
+    longer[254] = (char)0xC3;
+    longer[255] = (char)0xA9;
+    longer[sizeof(longer) - 1] = '\0';
+    ecil_note_unsupported(longer);
+    length = strlen(ecil_unsupported_reason);
+    if (length != 254) {
+      fprintf(stderr, "FAIL multibyte cut: %zu bytes\n", length);
+      failures++;
+    }
+    ecil_unsupported_reason = NULL;
+    /* Invalid UTF-8 (an identifier in another encoding) is replaced, so the
+       optional supp string cannot make the stream invalid. */
+    ecil_note_unsupported("a name \xFF\xC3 and \xE2\x82 and \xED\xA0\x80"
+                          " and \xC3\xA9 ok");
+    if (strcmp(ecil_unsupported_reason,
+               "a name ?? and ?? and ??? and \xC3\xA9 ok") != 0) {
+      fprintf(stderr, "FAIL invalid UTF-8: %s\n", ecil_unsupported_reason);
+      failures++;
+    }
+    ecil_unsupported_reason = NULL;
+    if (ecil_utf8_prefix_length("abc", 255) != 3 ||
+        ecil_utf8_prefix_length("ab\xE2\x82\xAC", 4) != 2 ||
+        ecil_utf8_prefix_length("ab\xE2\x82\xAC", 5) != 5 ||
+        ecil_utf8_prefix_length("ab\xE2\x82\xAC", 3) != 2 ||
+        ecil_utf8_prefix_length("ab\xE2\x82\xAC", 2) != 2 ||
+        ecil_utf8_prefix_length("", 0) != 0) {
+      fprintf(stderr, "FAIL utf8 prefix length\n");
+      failures++;
+    }
+  }
   return failures;
 }
 

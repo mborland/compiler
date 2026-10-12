@@ -223,32 +223,32 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: the definition of 'test_builtin_malloc_condphi4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_malloc_condphi4' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_builtin_calloc_condphi' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_builtin_calloc_condphi' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_passthrough_nonssa' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_passthrough_nonssa' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_dynarray' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_dynarray' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_dynarray_cond' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_dynarray_cond' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_dynarray_struct' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_dynarray_struct' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_dynarray_struct_subobj' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_dynarray_struct_subobj' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_substring' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_substring' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_substring_ptrplus' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_substring_ptrplus' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_substring_ptrplus2' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_substring_ptrplus2' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_parmsz_simple3' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_parmsz_simple3' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_parmsz_internal4' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_parmsz_internal4' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 
-Error: CIR back end: the definition of 'test_pr105736' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'test_pr105736' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: variable length array
 
 14 errors detected in the compilation of "Test_name.c".

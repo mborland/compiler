@@ -212,6 +212,12 @@ extern void ecil_arg_int128(an_ecil_frame *frame,
 
 extern void ecil_rec_end(an_ecil_frame *frame);
 
+/* Follow the record just completed (all its operands written, before
+   ecil_rec_end) with a supp blob holding the unsupported_reason key (spec 6,
+   ECIL 1.1) and set HAS_SUPP on the frame.  The text is cut to at most 255
+   bytes at a UTF-8 boundary. */
+extern void ecil_rec_supp_reason(an_ecil_frame *frame, const char *text);
+
 extern void ecil_rec0(an_ecil_frame *frame, unsigned int opcode);
 
 extern void ecil_rec1(an_ecil_frame *frame,
@@ -264,6 +270,15 @@ typedef enum an_ecil_gid_kind {
                                        a destructor). */
 #define ECIL_GF_CONST_INIT  0x2000u /* ... with a constant (or no) initializer:
                                        only its destructor is registered. */
+#define ECIL_GF_PARTIAL_INIT 0x4000u
+                                    /* ... whose aggregate initializer is
+                                       partly constant: VAR_INIT has the
+                                       constant elements (the others zero)
+                                       and STATIC_INIT only the others. */
+#define ECIL_GF_HAS_DMP     0x8000u
+                                    /* A pointer to a data member, or an
+                                       array or record that contains one
+                                       (its null value is -1, not 0). */
 #define ECIL_GF_FUNCTION_LOCAL 0x800u
                                     /* A routine of a function's memory
                                        region: its IL entry is gone when
@@ -307,11 +322,21 @@ typedef struct an_ecil_gid_info {
    text is owned by the stream. */
 extern const char *ecil_unsupported_reason;
 
-/* Note a reason (the first one wins); the text is copied. */
+/* The length of the longest prefix of text that is at most max bytes long
+   and does not end inside a UTF-8 sequence. */
+extern size_t ecil_utf8_prefix_length(const char *text, size_t max);
+
+/* Note a reason (the first one wins); the text is copied, cut to
+   ECIL_REASON_MAX - 1 bytes at a UTF-8 boundary. */
 extern void ecil_note_unsupported(const char *reason);
 
 /* A reason taken aside by ecil_save_reason. */
 #define ECIL_REASON_MAX 256
+
+/* The size of a buffer for a diagnostic that names a function or variable
+   (at most 200 bytes) and a reason (at most ECIL_REASON_MAX - 1 bytes), with
+   room for the fixed text around them. */
+#define ECIL_DIAGNOSTIC_MAX (ECIL_REASON_MAX + 400)
 
 typedef struct an_ecil_saved_reason {
   a_boolean     is_set;
@@ -410,6 +435,25 @@ extern unsigned int ecil_linkage_for(a_storage_class     storage_class,
                                      unsigned int        name_linkage,
                                      a_boolean           is_weak);
 
+/* Return TRUE if the type with G-id gid is, or contains, a pointer to a data
+   member.  Writing zeros into such an object (zero-initialization, explicit or
+   implicit) would write 0, which is not the null member pointer (-1): the
+   writer diagnoses it until member pointers are supported (M4). */
+extern a_boolean ecil_gid_has_data_member_pointer(uint32_t gid);
+
+/* Note the unsupported zero-initialization of an object of the type with
+   G-id gid if it has a data member pointer; return TRUE if it did. */
+extern a_boolean ecil_note_zero_init_of_dmp(uint32_t gid);
+
+/* Remember why the function or variable with G-id gid is dropped: the reason
+   goes into the unsupported_reason supp blob of its unsupported DECL_FUNC or
+   DECL_VAR. */
+extern void ecil_remember_drop_reason(uint32_t gid, const char *text);
+
+/* TRUE while the constant of a partly constant aggregate initializer is built
+   for VAR_INIT: its dynamic elements are zero (their STATIC_INIT follows). */
+extern a_boolean ecil_skip_dynamic_elements;
+
 /* Send DECL_VAR (an introduction or a re-issue) and remember its facts. */
 extern void ecil_emit_decl_var(an_ecil_frame *frame,
                                uint32_t      gid,
@@ -464,6 +508,10 @@ extern uint32_t ecil_func_type_id(an_ecil_frame *frame,
 
 extern void ecil_complete_pending_records(an_ecil_frame *frame);
 
+/* The front end completed a class (class_decl.c): the records declared as
+   incomplete are looked at again by the next ecil_complete_pending_records. */
+extern void ecil_note_class_completed(void);
+
 extern void ecil_forget_local_pending_records(void);
 
 /* The static invokers of lambdas (spec 11.9): queued when first referenced,
@@ -479,6 +527,11 @@ extern void ecil_stream_static_init(an_ecil_frame *frame,
                                     a_dynamic_init_ptr di);
 
 extern uint32_t ecil_function_id(an_ecil_frame *frame, a_routine_ptr rout);
+
+/* Set by ecil_function_id when it returns 0 because the symbol of the routine
+   is already bound to another entity of a different kind or type (a symbol
+   clash, not a construct the writer does not support). */
+extern a_boolean ecil_symbol_clash;
 
 /* The G-id of the base variant (C2/D2) of a constructor or destructor, else
    the routine's own (ecil_function_id returns the complete variant). */
@@ -508,6 +561,8 @@ extern void ecil_cxx_variable_facts(an_ecil_frame *frame,
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 extern a_boolean ecil_variable_may_have_multiple_copies(a_variable_ptr var);
+extern a_boolean ecil_local_static_may_have_multiple_copies(
+                                                       a_variable_ptr var);
 
 extern uint32_t ecil_variable_symbol_gid(an_ecil_frame *frame,
                                          a_variable_ptr var);
@@ -527,6 +582,8 @@ extern a_boolean ecil_routine_is_filtered(a_routine_ptr rout);
 /* TRUE if the mangled name of a routine or variable may still change
    (scope_stk.c): it is sent with a nil name and bound at the end. */
 extern a_boolean cir_name_may_change(a_source_correspondence *scp);
+
+extern a_boolean cir_routine_name_may_change(a_routine_ptr rout);
 
 /* C++ classes: passed and returned indirectly; has a non-trivial dtor. */
 extern a_boolean ecil_class_is_nontrivial_abi(a_type_ptr type);
@@ -601,6 +658,14 @@ typedef struct an_init_level {
   a_constant_ptr
                 *entry_sources;   /* NULL unless merged. */
   size_t        entry_num_sources;
+  /* The level belongs to the constant of a variable whose VAR_INIT has the
+     constant elements (ECIL_GF_PARTIAL_INIT): the code that builds the
+     level's dynamic elements skips the constant ones.  Only the writer's
+     STATIC_INIT of that variable sets it, for the variable's own aggregate
+     and for the nested aggregates of that constant; every other level (a
+     temporary, a closure, a new, the aggregate of a dynamic element) is
+     initialized completely. */
+  a_boolean     skip_constants;
 } an_init_level;
 
 /*
@@ -771,6 +836,10 @@ extern a_boolean ecil_stream_is_active(void);
 
 extern void ecil_stream_open(void);
 
+/* Capture the target triple; called right after the predefined macros are
+   entered (fe_init.c). */
+extern void ecil_note_target_triple(void);
+
 extern void ecil_hand_off_region(a_memory_region_number region_number);
 
 extern void ecil_stream_finish(void);
@@ -780,6 +849,12 @@ extern void ecil_abort(void);
 extern void ecil_stream_finish_back_end(void);
 
 extern void ecil_stream_close(void);
+
+/* TRUE while a function body is written under the rules of cfront 2.1
+   (which accept a jump past the initialization of an object with a
+   destructor): the scope regions are followed, and a case or goto label with
+   a cleanup open is diagnosed. */
+extern a_boolean ecil_jump_check_enabled;
 
 /* TRUE for -fwrapv semantics: never send the nsw flag. */
 extern a_boolean ecil_wrapv;

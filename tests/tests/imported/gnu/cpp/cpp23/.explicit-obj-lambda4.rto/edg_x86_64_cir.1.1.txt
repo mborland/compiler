@@ -3,8 +3,8 @@ Warning: CIR back end: the body of "main" uses this kind of aggregate member ini
 
 Warning: CIR back end: the body of "operator()" uses a member of an anonymous union or struct, which the CIR back end does not support; the function is dropped
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: this kind of aggregate member initializer
 
-Error: CIR back end: the definition of '_ZZ4mainENKUlOT_E_clIR1SIS1_EEEDaS0_' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_ZZ4mainENKUlOT_E_clIR1SIS1_EEEDaS0_' was dropped: it uses a construct the CIR back end cannot express: a member of an anonymous union or struct
 
 2 errors detected in the compilation of "Test_name.c".

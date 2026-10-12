@@ -19,7 +19,7 @@ Warning: CIR back end: the initializer of "we" uses a record type that is not su
 
 Warning: CIR back end: the initializer of "pw" uses a variable of a record type that is not supported, which the CIR back end does not support; the definition is dropped
 
-ecil 1.0 features=0x00000008
+ecil 1.1 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -434,7 +434,7 @@ frame REGION
   RETURN_FROM_SLOT
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 50 "V"
   TY_RECORD_DECL 68 0 50
   TY_PTR 69 68
@@ -449,9 +449,9 @@ frame REGION
   STRUCTOR 72 73 0
   DECL_FUNC 72 70 3 67 51
   DECL_FUNC 73 70 3 67 52
-  DECL_FUNC 72 70 0 34 51
-  DECL_FUNC 73 70 0 34 52
-frame REGION
+  DECL_FUNC 72 70 0 34 51 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+  DECL_FUNC 73 70 0 34 52 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+frame REGION supp
   STR 53 "W"
   TY_RECORD_DECL 74 0 53
   TY_PTR 75 74
@@ -463,13 +463,13 @@ frame REGION
   STRUCTOR 77 78 0
   DECL_FUNC 77 76 3 67 54
   DECL_FUNC 78 76 3 67 55
-  DECL_FUNC 77 76 0 34 54
-  DECL_FUNC 78 76 0 34 55
-frame REGION
+  DECL_FUNC 77 76 0 34 54 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+  DECL_FUNC 78 76 0 34 55 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
+frame REGION supp
   STR 56 "_Z10use_failedv"
   DECL_FUNC 79 24 0 0 56
   DECL_FUNC 79 24 0 1 56
-  DECL_FUNC 79 24 0 32 56
+  DECL_FUNC 79 24 0 32 56 supp{13: "a virtual call"}
 frame REGION
   STR 57 "N"
   TY_RECORD_DECL 80 0 57
@@ -518,7 +518,7 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame GLOBALS
+frame GLOBALS supp
   DECL_VAR 54 1 0 33 0 38
   DECL_VAR 53 49 0 33 0 37
   STR 66 "w"
@@ -534,12 +534,12 @@ frame GLOBALS
   VAR_INIT 94
   STR 68 "we"
   DECL_VAR 95 74 0 0 0 68
-  DECL_VAR 95 74 0 64 0 68
+  DECL_VAR 95 74 0 64 0 68 supp{13: "a record type that is not supported"}
   STR 69 "pw"
   DECL_VAR 96 75 0 1 0 69
   C_ADDR 75 95 0
   VAR_INIT 96
-  DECL_VAR 96 75 0 64 0 69
+  DECL_VAR 96 75 0 64 0 69 supp{13: "a variable of a record type that is not supported"}
   STATIC_INIT_BEGIN 93 0
   GREF 93
   ADDR

@@ -3,6 +3,6 @@ Test_name.c:
 pr85244-2.c:
 Warning: CIR back end: the initializer of "val" uses an initializer of a flexible array member, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'val' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'val' was dropped: it uses a construct the CIR back end cannot express: an initializer of a flexible array member
 
 1 error detected in the compilation of "pr85244-2.c".

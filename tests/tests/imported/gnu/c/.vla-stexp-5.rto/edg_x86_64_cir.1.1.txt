@@ -15,6 +15,6 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
           return sizeof *({ int n = 20; struct { int x[n];} x; x.x[12] = 1; &x; });
                                                        ^
 
-Error: CIR back end: the definition of 'foo2a' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of 'foo2a' was dropped: it uses a construct the CIR back end cannot express: a GNU statement expression (and it is referenced)
 
 1 error detected in the compilation of "Test_name.c".

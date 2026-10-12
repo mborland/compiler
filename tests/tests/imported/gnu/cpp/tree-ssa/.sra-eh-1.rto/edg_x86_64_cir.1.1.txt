@@ -31,12 +31,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the unused definition of '_ZL18unrelated_throwingv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL18unrelated_throwingv' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Warning: CIR back end: the unused definition of '_ZL13crazy_alloc_sP1S' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZL13crazy_alloc_sP1S' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
 
-Error: CIR back end: the definition of '_Z3foov' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3foov' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
-Error: CIR back end: the definition of '_Z3barv' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z3barv' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

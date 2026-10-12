@@ -3,5 +3,5 @@ fe_only -DTEST_NUMBER=1 --c11 Test_name.c
   int vla(int n) { int a[n]; a[0] = 1; return a[0]; }
                                                     ^
 
-edg-cir: error [1003]: the definition of 'vla' was dropped: it uses a construct the CIR back end cannot express
+edg-cir: error [1003]: the definition of 'vla' was dropped: it uses a construct the CIR back end cannot express: a variable length array
 edg-cir: unsupported construct or target

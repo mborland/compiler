@@ -299,6 +299,8 @@ Copy the options (strings included) and set up the stream reader.
     tee = std::fopen(tee_path, "wb");
   handler.reset(new a_handler(*this));
   reader.reset(new ecil::a_stream_reader(*handler));
+  if (stats_on)
+    stats.rss_start_kib = edg_cir::stats_peak_kib();
 }  /* an_edg_cir_session::an_edg_cir_session */
 
 an_edg_cir_session::~an_edg_cir_session()
@@ -472,19 +474,11 @@ notes.
 */
 {
   char line[256];
-  struct rusage usage;
-  unsigned long long peak_kib = 0;
+  unsigned long long peak_kib = edg_cir::stats_peak_kib();
   const a_session_stats &t = stats;
   double decode_ns = t.consume_ns > t.emit_ns
                          ? static_cast<double>(t.consume_ns - t.emit_ns) : 0;
 
-  if (getrusage(RUSAGE_SELF, &usage) == 0) {
-#ifdef __APPLE__
-    peak_kib = static_cast<unsigned long long>(usage.ru_maxrss) / 1024;
-#else
-    peak_kib = static_cast<unsigned long long>(usage.ru_maxrss);
-#endif
-  }
   std::snprintf(line, sizeof line,
                 "stats: %llu frames, %llu records, %llu bytes, peak RSS "
                 "%llu KiB",
@@ -517,6 +511,16 @@ notes.
                 static_cast<double>(t.passes_ns) / 1e6,
                 static_cast<double>(t.lower_ns) / 1e6,
                 static_cast<double>(t.codegen_ns) / 1e6);
+  report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
+  std::snprintf(line, sizeof line,
+                "stats: peak RSS KiB at start %llu, after emit %llu, finish "
+                "%llu, verify %llu, cir passes %llu, lower %llu",
+                static_cast<unsigned long long>(t.rss_start_kib),
+                static_cast<unsigned long long>(t.rss_emitted_kib),
+                static_cast<unsigned long long>(t.rss_finished_kib),
+                static_cast<unsigned long long>(t.rss_verified_kib),
+                static_cast<unsigned long long>(t.rss_passed_kib),
+                static_cast<unsigned long long>(t.rss_lowered_kib));
   report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
 }  /* an_edg_cir_session::print_stats */
 

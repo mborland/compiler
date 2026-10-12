@@ -35,36 +35,48 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Warning: CIR back end: the initializer of "apam0_" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+Warning: CIR back end: the initializer of "apam__" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Warning: CIR back end: the initializer of "apam00" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+Warning: CIR back end: the initializer of "apam0_" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Warning: CIR back end: the initializer of "c0_" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+Warning: CIR back end: the initializer of "apam00" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Warning: CIR back end: the initializer of "c00" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+Warning: CIR back end: the initializer of "c__" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Warning: CIR back end: the initializer of "b0_" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+Warning: CIR back end: the initializer of "c0_" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Warning: CIR back end: the initializer of "b00" uses the constant "pointer-to-member constant", which the CIR back end does not support; the definition is dropped
+Warning: CIR back end: the initializer of "c00" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of '_Z3f__v' was dropped: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the initializer of "b__" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of '_Z3f0_v' was dropped: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the initializer of "b0_" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of '_Z3f00v' was dropped: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the initializer of "b00" uses the zero-initialization of a pointer to a data member (its null value is -1), which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z3f__v' was dropped: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Error: CIR back end: the definition of 'apam0_' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z3f0_v' was dropped: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Error: CIR back end: the definition of 'apam00' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of '_Z3f00v' was dropped: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Error: CIR back end: the definition of '_ZL3c0_' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: an operation on an unsupported scalar type
 
-Error: CIR back end: the definition of '_ZL3c00' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'apam__' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
 
-Error: CIR back end: the definition of 'b0_' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'apam0_' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
 
-Error: CIR back end: the definition of 'b00' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'apam00' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
 
-10 errors detected in the compilation of "Test_name.c".
+Error: CIR back end: the definition of '_ZL3c__' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
+
+Error: CIR back end: the definition of '_ZL3c0_' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
+
+Error: CIR back end: the definition of '_ZL3c00' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
+
+Error: CIR back end: the definition of 'b__' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
+
+Error: CIR back end: the definition of 'b0_' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
+
+Error: CIR back end: the definition of 'b00' was dropped: it uses a construct the CIR back end cannot express: the zero-initialization of a pointer to a data member (its null value is -1)
+
+13 errors detected in the compilation of "Test_name.c".

@@ -1,0 +1,16 @@
+; ECIL 1.1: unsupported_reason on UNSUPPORTED declarations (a function and a
+; variable), at the 255-byte limit, with UTF-8 text; unknown keys still skip.
+ecil 1.1 features=0x00000002
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame DECLS supp
+  TY_INT 1 32 true 4 4
+  TY_FUNC 2 1 0 []
+  STR 3 "f"
+  DECL_FUNC 10 2 0 32 3 supp{13: bin8:"the statement \"try statement\""}
+  DECL_VAR 11 1 0 65 4 nil supp{13: bin8:"caf\xc3\xa9", 99: 7}
+  DECL_FUNC 12 2 0 32 nil supp{13: bin16:"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"}
+frame END
+  END 2 0

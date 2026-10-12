@@ -1,0 +1,35 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --gnu_version=999999 Test_name.c
+ecil 1.1 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FUNC 4 1 0 []
+  STR 5 "_Z3foov"
+  DECL_FUNC 5 4 0 0 5
+  DECL_FUNC 5 4 0 1 5
+  STR 6 "old_name"
+  DECL_FUNC 6 4 0 0 6
+  FUNC_BEGIN 5 0
+  BLOCK_BEGIN
+  CALL 6 4 0 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  STR 7 "new_name"
+  DECL_FUNC 6 4 0 0 7
+frame NAMES
+frame END
+  END 4 0

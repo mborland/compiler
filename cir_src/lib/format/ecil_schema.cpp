@@ -27,6 +27,7 @@ const s s_idn   = {an_operand_class::id_or_nil, 0, 0};
 const s s_uint  = {an_operand_class::uinteger, 0, 0};
 const s s_uintn = {an_operand_class::uinteger_or_nil, 0, 0};
 const s s_int   = {an_operand_class::integer, 0, 0};
+const s s_intn  = {an_operand_class::integer_or_nil, 0, 0};
 const s s_bool  = {an_operand_class::boolean, 0, 0};
 const s s_bin   = {an_operand_class::bin, 0, 0};
 const s s_arr   = {an_operand_class::array, 0, 0};
@@ -140,7 +141,7 @@ const a_spec_row spec_rows[] = {
   {eop_cleanup_end, SS | V1, {}},
   {eop_fullexpr_begin, SS | V1, {}},
   {eop_fullexpr_end, SS | V1, {}},
-  {eop_static_init_begin, SS | V1, {s_id, s_flags(3)}},
+  {eop_static_init_begin, SS | V1, {s_id, s_flags(7)}},
   {eop_static_init_end, SS | V1, {}},
   {eop_meminit_begin, SS | V1, {s_enum(emk_vbase, emk_delegation), s_uint,
                                 s_flags(3)}},
@@ -190,6 +191,7 @@ const a_spec_row spec_rows[] = {
   {eop_new_array_cookie, SB | V1, {s_id, s_uint}},
   {eop_delete, SB | V1, {s_id, s_idn, s_id, s_flags(7)}},
   {eop_zero_bytes, SB | V1, {s_uint}},
+  {eop_cmp3way, SB | V1, {s_id, s_int, s_int, s_int, s_intn}},
   {eop_cast, SB, {s_enum(0, eck_array_to_ptrdecay), s_id}},
   {eop_va_start, SB, {}},
   {eop_va_arg, SB, {s_id}},

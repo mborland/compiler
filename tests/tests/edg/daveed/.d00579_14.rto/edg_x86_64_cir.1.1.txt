@@ -13,8 +13,8 @@ eccp -DTEST_NUMBER=1 --gcc Test_name.c
 
 Warning: CIR back end: the initializer of "z1" uses the constant kind 5, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a complex type (complex types are not supported)
 
-Error: CIR back end: the definition of 'z1' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'z1' was dropped: it uses a construct the CIR back end cannot express: the constant kind 5
 
 2 errors detected in the compilation of "Test_name.c".

@@ -15,12 +15,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Error: CIR back end: the definition of '_Z2f2ii' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f2ii' was dropped: it uses a construct the CIR back end cannot express: a conditional lvalue with a bit-field operand (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f3ii' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f3ii' was dropped: it uses a construct the CIR back end cannot express: a conditional lvalue with a bit-field operand (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f4ii' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f4ii' was dropped: it uses a construct the CIR back end cannot express: a conditional lvalue with a bit-field operand (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f5ii' was dropped: it uses a construct the CIR back end cannot express (and it is referenced)
+Error: CIR back end: the definition of '_Z2f5ii' was dropped: it uses a construct the CIR back end cannot express: a conditional lvalue with a bit-field operand (and it is referenced)
 
 4 errors detected in the compilation of "Test_name.c".

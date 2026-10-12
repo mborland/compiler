@@ -159,21 +159,26 @@ The producer name written to HDR_PRODUCER.
 #define ECIL_PRODUCER_NAME \
   "EDG C/C++ front end " VERSION_NUMBER " (ECIL writer)"
 
+STATIC_THREAD a_boolean
+                ecil_triple_guarded;  /* Look macros up only once the file
+                                         scope exists (see below). */
+
 static a_boolean ecil_predefined_macro_is_defined(const char *name)
 /*
 Return TRUE if the preprocessor has a macro of that name: the predefined
 macros are the front end's own description of the target (they come from
-the target configuration's auxiliary information).
+the target configuration's auxiliary information).  When the triple is
+derived late, as a fallback (an error during start-up), the file scope of the
+translation unit is created right after the predefined macros, and before
+that the symbol table cannot be asked.
 */
 {
   a_symbol_locator  locator;
   a_boolean         defined = FALSE;
 
-  /* The file scope of the translation unit is created right after the
-     predefined macros; before that (an error during start-up) the symbol
-     table cannot be asked. */
-  if (curr_translation_unit != NULL &&
-      curr_translation_unit->primary_scope != NULL) {
+  if (!ecil_triple_guarded ||
+      (curr_translation_unit != NULL &&
+       curr_translation_unit->primary_scope != NULL)) {
     clear_locator(&locator, &null_source_position);
     defined = find_macro_symbol_by_name(name, (sizeof_t)strlen(name),
                                         &locator) != NULL;
@@ -182,21 +187,27 @@ the target configuration's auxiliary information).
 }  /* ecil_predefined_macro_is_defined */
 
 
-static const char *ecil_target_triple(void)
+/* The target triple, captured when the predefined macros were entered (see
+   ecil_note_target_triple), or empty. */
+STATIC_THREAD char
+                ecil_triple_text[96];
+
+void ecil_note_target_triple(void)
 /*
-The target triple, derived from the front end's target configuration: the
-architecture from the targ_supports_* flags, the operating system from the
+Record the target triple, derived from the front end's target configuration:
+the architecture from the targ_supports_* flags, the operating system from the
 target's predefined macros (not from the host the front end was built on, so
-a cross-configured front end is labelled correctly).  The CIR library
-supports x86-64 Linux only and rejects any other triple, including the
-"unknown" one written when the target defines none of the known system
-macros; a front end for another target still writes a valid stream, so the
-writer-only test loop works there, but its output is not authoritative.
+a cross-configured front end is labelled correctly).  It is called right
+after the predefined macros are entered, so that a source-level #undef or
+#define of a system macro cannot change it.  The CIR library supports x86-64
+Linux only and rejects any other triple, including the "unknown" one written
+when the target defines none of the known system macros; a front end for
+another target still writes a valid stream, so the writer-only test loop
+works there, but its output is not authoritative.
 */
 {
   const char  *arch;
   const char  *os;
-  static char triple[96];
 
   if (target_is_arm_based()) {
     arch = target_is_64_bits() ? "aarch64" : "armv7";
@@ -214,8 +225,24 @@ writer-only test loop works there, but its output is not authoritative.
   } else {
     os = "unknown-unknown";
   }  /* if */
-  (void)snprintf(triple, sizeof(triple), "%s-%s", arch, os);
-  return triple;
+  (void)snprintf(ecil_triple_text, sizeof(ecil_triple_text), "%s-%s", arch,
+                 os);
+}  /* ecil_note_target_triple */
+
+
+static const char *ecil_target_triple(void)
+/*
+The target triple of the stream: the one captured when the predefined macros
+were entered.  If that did not happen (an error during start-up, a test
+driver) it is derived now.
+*/
+{
+  if (ecil_triple_text[0] == '\0') {
+    ecil_triple_guarded = TRUE;
+    ecil_note_target_triple();
+    ecil_triple_guarded = FALSE;
+  }  /* if */
+  return ecil_triple_text;
 }  /* ecil_target_triple */
 
 /*
@@ -779,6 +806,155 @@ At F_END: every G-id and sid the writer allocated was introduced.
 
 /* Record helpers. */
 
+/* Open scope regions and their cleanups (the jump check). */
+
+a_boolean ecil_jump_check_enabled = FALSE;
+
+typedef struct a_region_entry {
+  unsigned int  cleanups;         /* CLEANUP_BEGIN records in the region. */
+  a_boolean     is_switch;        /* The region is a switch's body. */
+} a_region_entry;
+
+STATIC_THREAD a_region_entry
+                *region_stack;
+STATIC_THREAD size_t
+                region_stack_size;
+STATIC_THREAD size_t
+                region_stack_capacity;
+
+static void ecil_push_region(a_boolean is_switch)
+/*
+Open a scope region.  If memory runs out the check is turned off for the rest
+of the function (the check only diagnoses; it never changes the stream).
+*/
+{
+  if (region_stack_size == region_stack_capacity) {
+    size_t          new_capacity = region_stack_capacity == 0 ? 64 :
+                                   region_stack_capacity * 2;
+    a_region_entry  *new_stack = (a_region_entry *)realloc(region_stack,
+                                  new_capacity * sizeof(a_region_entry));
+
+    if (new_stack == NULL) {
+      ecil_jump_check_enabled = FALSE;
+    } else {
+      region_stack = new_stack;
+      region_stack_capacity = new_capacity;
+    }  /* if */
+  }  /* if */
+  if (ecil_jump_check_enabled) {
+    region_stack[region_stack_size].cleanups = 0;
+    region_stack[region_stack_size].is_switch = is_switch;
+    region_stack_size++;
+  }  /* if */
+}  /* ecil_push_region */
+
+
+static void ecil_pop_region(void)
+/*
+Close the innermost scope region.
+*/
+{
+  if (region_stack_size > 0) region_stack_size--;
+}  /* ecil_pop_region */
+
+
+static unsigned int ecil_open_cleanups(a_boolean down_to_switch)
+/*
+The number of cleanups begun in the open regions: those from the innermost
+switch's body inwards, or all of them.
+*/
+{
+  unsigned int  count = 0;
+  size_t        i = region_stack_size;
+
+  while (i > 0) {
+    i--;
+    count += region_stack[i].cleanups;
+    if (down_to_switch && region_stack[i].is_switch) break;
+  }  /* while */
+  return count;
+}  /* ecil_open_cleanups */
+
+
+static void ecil_track_regions(unsigned int opcode)
+/*
+Follow the scope regions that the body records open and close.  A case or
+default label is reached by a jump from the head of its switch, and a label
+may be reached by a jump from outside the cleanups that are open at it: under
+the rules of cfront 2.1 the front end accepts that jump (past the
+initialization of an object with a destructor), but the cleanup would run for
+an object that was not constructed, so it is diagnosed.
+*/
+{
+  switch (opcode) {
+    case eop_func_begin:
+      region_stack_size = 0;
+      ecil_push_region(FALSE);
+      break;
+    case eop_static_init_begin:
+      /* The initialization of a static local is a region inside the body. */
+      ecil_push_region(FALSE);
+      break;
+    case eop_block_begin:
+    case eop_if_begin:
+    case eop_while_body:
+    case eop_do_begin:
+    case eop_for_begin:
+    case eop_for_body:
+    case eop_fullexpr_begin:
+    case eop_meminit_begin:
+    case eop_array_ctor_begin:
+      ecil_push_region(FALSE);
+      break;
+    case eop_switch_begin:
+      ecil_push_region(TRUE);
+      break;
+    case eop_if_else:
+      ecil_pop_region();
+      ecil_push_region(FALSE);
+      break;
+    case eop_block_end:
+    case eop_if_end:
+    case eop_while_end:
+    case eop_do_cond:
+    case eop_switch_end:
+    case eop_fullexpr_end:
+    case eop_meminit_end:
+    case eop_array_ctor_end:
+    case eop_static_init_end:
+      ecil_pop_region();
+      break;
+    case eop_for_end:
+      ecil_pop_region();                /* The body, then the init scope. */
+      ecil_pop_region();
+      break;
+    case eop_cleanup_begin:
+      if (region_stack_size > 0) {
+        region_stack[region_stack_size - 1].cleanups++;
+      }  /* if */
+      break;
+    case eop_case_value:
+    case eop_case_range:
+    case eop_case_default:
+      if (ecil_open_cleanups(TRUE) != 0) {
+        ecil_note_unsupported("a case label after a declaration of an object "
+                              "with a destructor (jumping past it is "
+                              "accepted in cfront mode)");
+      }  /* if */
+      break;
+    case eop_label:
+      if (ecil_open_cleanups(FALSE) != 0) {
+        ecil_note_unsupported("a label after a declaration of an object with "
+                              "a destructor (a jump past it is accepted in "
+                              "cfront mode)");
+      }  /* if */
+      break;
+    default:
+      break;
+  }  /* switch */
+}  /* ecil_track_regions */
+
+
 void ecil_rec_begin(an_ecil_frame *frame, unsigned int opcode)
 /*
 Start a record: write its opcode byte.
@@ -796,6 +972,9 @@ Start a record: write its opcode byte.
     frame->intro_kind = ecil_intro_table[opcode];
   }
 #endif /* CHECKING */
+  if (ecil_jump_check_enabled && frame->current == &frame->body) {
+    ecil_track_regions(opcode);
+  }  /* if */
   ecil_buf_put_byte(frame->current, opcode);
 }  /* ecil_rec_begin */
 
@@ -944,6 +1123,34 @@ operands its opcode declares.
                   ecil_unsupported_reason != NULL);
   frame->pending_operands = -1;
 }  /* ecil_rec_end */
+
+
+static size_t ecil_sanitize_utf8(char *to, const char *from, size_t max);
+
+void ecil_rec_supp_reason(an_ecil_frame *frame, const char *text)
+/*
+Append the supp blob of the unsupported_reason key (13) to the record just
+written (spec 6): the key, then the text as a bin of at most 255 bytes.  The
+blob is supp8 if its payload fits in one byte of length, else supp16.
+*/
+{
+  char    clean[256];
+  size_t  length = ecil_sanitize_utf8(clean, text, 255);
+  size_t  payload = 1 + (length < 32 ? 1 : 2) + length;
+
+  check_assertion(frame->pending_operands == 0 ||
+                  frame->pending_operands == -1);
+  frame->flags |= ECIL_FRAME_FLAG_HAS_SUPP;
+  if (payload <= 0xFF) {
+    ecil_buf_put_byte(frame->current, ECIL_TAG_SUPP8);
+    ecil_buf_put_le(frame->current, payload, 1);
+  } else {
+    ecil_buf_put_byte(frame->current, ECIL_TAG_SUPP16);
+    ecil_buf_put_le(frame->current, payload, 2);
+  }  /* if */
+  ecil_put_uint(frame->current, (uint64_t)esk_unsupported_reason);
+  ecil_put_bin(frame->current, clean, length);
+}  /* ecil_rec_supp_reason */
 
 
 void ecil_rec0(an_ecil_frame *frame, unsigned int opcode)
@@ -1142,6 +1349,96 @@ const char *ecil_unsupported_reason;
    and temporary buffers). */
 static char     ecil_reason_text[ECIL_REASON_MAX];
 
+size_t ecil_utf8_prefix_length(const char *text, size_t max)
+/*
+Return the length of the longest prefix of text that is at most max bytes
+long and does not end inside a UTF-8 sequence: a cut that would split one
+backs up to the start of the sequence.
+*/
+{
+  size_t  length = strlen(text);
+
+  if (length > max) {
+    length = max;
+    while (length > 0 && (((unsigned char)text[length]) & 0xC0) == 0x80) {
+      length--;
+    }  /* while */
+  }  /* if */
+  return length;
+}  /* ecil_utf8_prefix_length */
+
+
+static size_t ecil_utf8_sequence_length(const unsigned char *p)
+/*
+Return the length of the valid UTF-8 sequence that starts at p (which is
+NUL-terminated), or 0 if the bytes do not form one (overlong forms, the
+surrogates and values above U+10FFFF are not valid).
+*/
+{
+  size_t  length = 0;
+
+  if (p[0] < 0x80) {
+    length = 1;
+  } else if (p[0] >= 0xC2 && p[0] <= 0xDF) {
+    if ((p[1] & 0xC0) == 0x80) length = 2;
+  } else if (p[0] >= 0xE0 && p[0] <= 0xEF) {
+    if ((p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 &&
+        !(p[0] == 0xE0 && p[1] < 0xA0) && !(p[0] == 0xED && p[1] >= 0xA0)) {
+      length = 3;
+    }  /* if */
+  } else if (p[0] >= 0xF0 && p[0] <= 0xF4) {
+    if ((p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 &&
+        (p[3] & 0xC0) == 0x80 && !(p[0] == 0xF0 && p[1] < 0x90) &&
+        !(p[0] == 0xF4 && p[1] >= 0x90)) {
+      length = 4;
+    }  /* if */
+  }  /* if */
+  return length;
+}  /* ecil_utf8_sequence_length */
+
+
+static size_t ecil_sanitize_utf8(char *to, const char *from, size_t max)
+/*
+Copy at most max bytes of the NUL-terminated text from into to (which has
+room for max + 1), replacing each byte that is not part of a valid UTF-8
+sequence with '?', and cutting at a sequence boundary.  The reason strings are
+optional information: an invalid byte (in a source identifier) must not make
+the stream invalid.  Return the length.
+*/
+{
+  size_t                i = 0;
+  size_t                n = 0;
+  const unsigned char   *p = (const unsigned char *)from;
+
+  while (p[i] != 0 && n < max) {
+    size_t  len = ecil_utf8_sequence_length(p + i);
+
+    if (len == 0) {
+      to[n++] = '?';
+      i++;
+    } else if (n + len > max) {
+      break;
+    } else {
+      memcpy(to + n, p + i, len);
+      n += len;
+      i += len;
+    }  /* if */
+  }  /* while */
+  to[n] = '\0';
+  return n;
+}  /* ecil_sanitize_utf8 */
+
+
+static void ecil_copy_reason(char *to, const char *from)
+/*
+Copy a reason into a buffer of ECIL_REASON_MAX bytes, cut at a UTF-8
+boundary if it is too long, and with invalid UTF-8 replaced.
+*/
+{
+  (void)ecil_sanitize_utf8(to, from, ECIL_REASON_MAX - 1);
+}  /* ecil_copy_reason */
+
+
 void ecil_note_unsupported(const char *reason)
 /*
 Record why the current function or initializer cannot be expressed.  The
@@ -1151,7 +1448,7 @@ so the argument need not outlive the call.
 */
 {
   if (ecil_unsupported_reason == NULL) {
-    (void)snprintf(ecil_reason_text, sizeof(ecil_reason_text), "%s", reason);
+    ecil_copy_reason(ecil_reason_text, reason);
     ecil_unsupported_reason = ecil_reason_text;
   }  /* if */
 }  /* ecil_note_unsupported */
@@ -1165,8 +1462,7 @@ run code that may note and discard reasons of its own.
 {
   saved->is_set = (ecil_unsupported_reason != NULL);
   if (saved->is_set) {
-    (void)snprintf(saved->text, sizeof(saved->text), "%s",
-                   ecil_unsupported_reason);
+    ecil_copy_reason(saved->text, ecil_unsupported_reason);
   } else {
     saved->text[0] = '\0';
   }  /* if */
@@ -1928,6 +2224,10 @@ static void ecil_release_stream_tables(an_ecil_stream *stream)
 Free the tables of the stream.
 */
 {
+  free(region_stack);
+  region_stack = NULL;
+  region_stack_size = region_stack_capacity = 0;
+  ecil_jump_check_enabled = FALSE;
   uint32_t  i;
 
   for (i = 0; i < stream->num_strings; i++) free(stream->strings[i].text);
@@ -2001,9 +2301,12 @@ nothing.
           preamble[9] = (char)((ECIL_VERSION_MAJOR >> 8) & 0xFF);
           preamble[10] = (char)(ECIL_VERSION_MINOR & 0xFF);
           preamble[11] = (char)((ECIL_VERSION_MINOR >> 8) & 0xFF);
-          /* Features: LATE_NAMES for C++ (NAME_BIND in F_NAMES); LOCATIONS
-             is off. */
-          preamble[12] = C_mode() ? 0 : (char)ECIL_FEATURE_LATE_NAMES;
+          /* Features: SUPP (ECIL 1.1: a dropped declaration carries its
+             reason; the preamble goes out before any frame, so the bit says
+             that frames may carry a blob); LATE_NAMES for C++ (NAME_BIND in
+             F_NAMES); LOCATIONS is off. */
+          preamble[12] = (char)(ECIL_FEATURE_SUPP |
+                                (C_mode() ? 0 : ECIL_FEATURE_LATE_NAMES));
           preamble[13] = 0;
           preamble[14] = 0;
           preamble[15] = 0;

@@ -1,0 +1,2 @@
+./a.out
+empty: OK (0 mismatches)

@@ -19,11 +19,11 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
                                                               ^
           detected during instantiation of "T Z<T, V>::value() [with T=int (C::*)() const, V=&C::c1]" at line 66
 
-Warning: CIR back end: the unused definition of '_ZN1WIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1WIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_ZN1XIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1XIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_ZN1YIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1YIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 
-Warning: CIR back end: the unused definition of '_ZN1ZIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express
+Warning: CIR back end: the unused definition of '_ZN1ZIM1CKFivEXadL_ZNKS0_2c1EvEEE5valueEv' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
 

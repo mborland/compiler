@@ -1436,19 +1436,40 @@ memory because of the properties of rout.  scope is the scope of rout
        access to the enclosing function scope. */
     keep_memory = TRUE;
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
+  } else if (rout->is_declared_constexpr) {
+    /* A function declared constexpr that the front end found not to be one
+       (is_constexpr is cleared: a C++11 constructor that does not initialize
+       every member, say) is still called by the constant evaluator when it
+       folds an initializer, and the evaluator reads its scope before it
+       decides that the function cannot be evaluated (interpret.c,
+       process_ctor_work). */
+    keep_memory = TRUE;
   } else if (rout->source_corresp.is_class_member &&
-             type_is_lambda_closure(parent_class_of(rout))) {
-    /* A lambda call operator is implicitly constexpr when it can be: the
-       constant evaluator may call it later (interpret.c needs its scope), so
-       the region stays until the end of the compilation (it is streamed
-       now). */
+             type_is_lambda_closure(parent_class_of(rout)) &&
+             (rout->is_constexpr ||
+              class_type_supp(parent_class_of(rout))->
+                                          has_lambda_conversion_function)) {
+    /* A lambda call operator that is constexpr (implicitly, from C++17, when
+       it can be) may be called by the constant evaluator later
+       (interpret.c needs its scope), and the conversion function to a
+       function pointer of a lambda without captures is defined when the
+       lambda is complete (define_lambda_conversion_function writes to the
+       call operator's region), so the region stays until the end of the
+       compilation (it is streamed now).  Any other lambda call operator (a
+       capturing one before C++17) is freed like any other function. */
     keep_memory = TRUE;
   } else if (rout->is_prototype_instantiation) {
     /* Without MAINTAIN_NEEDED_FLAGS nothing keeps the region of a prototype
        instantiation, but later instantiations of the template read what the
-       file scope holds about it (the variable of a structured binding pack,
-       see find_binding_for_pack).  It is not streamed (ecil_routine_is_
-       filtered); the region stays until the end of the compilation. */
+       file scope holds about it.  (The use of the variable of a structured
+       binding pack that this was first kept for, find_binding_for_pack, no
+       longer reads the region: scope_stk.c keeps what it needs in the pack
+       reference.  Freeing the region is still not safe: gnats-26823 then
+       fails an assertion in ecil_check_variable_use on a variable that an
+       address constant reaches, see doc/research/m31_reassessment.md.)  It
+       is not streamed
+       (ecil_routine_is_filtered); the region stays until the end of the
+       compilation. */
     keep_memory = TRUE;
   } else if (scope->expr_node_refs != NULL) {
     /* A template argument in the file scope region refers to an expression

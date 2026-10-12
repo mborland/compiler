@@ -39,24 +39,24 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
   }
   ^
 
-Error: CIR back end: the definition of 'powif' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'powif' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powif
 
-Error: CIR back end: the definition of 'powi' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'powi' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powi
 
-Error: CIR back end: the definition of 'powil' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'powil' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powil
 
-Error: CIR back end: the definition of 'powcif' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'powcif' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powif
 
-Error: CIR back end: the definition of 'powci' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'powci' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powi
 
-Error: CIR back end: the definition of 'powcil' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'powcil' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powil
 
-Error: CIR back end: the definition of 'powicf' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'powicf' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powif
 
-Error: CIR back end: the definition of 'powic' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'powic' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powi
 
-Error: CIR back end: the definition of 'powicl' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'powicl' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powil
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_powi
 
 10 errors detected in the compilation of "Test_name.c".

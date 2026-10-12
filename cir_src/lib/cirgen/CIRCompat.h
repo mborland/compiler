@@ -572,6 +572,26 @@ zero-undefined flag of clz/ctz is set, as for the GNU builtins).
   return result;
 }
 
+inline mlir::Value cmp3way(a_builder &b, mlir::Location loc,
+                            unsigned result_bits, mlir::Value lhs,
+                            mlir::Value rhs, bool partial, int64_t lt,
+                            int64_t eq, int64_t gt, int64_t unordered)
+/*
+Create cir.cmp3way: the built-in <=>.  The result is a signed integer of
+result_bits bits holding lt, eq or gt (and unordered when partial); the
+operands have the same arithmetic or pointer type.  LoweringPrepare turns it
+into compares and selects.
+*/
+{
+  cir::CmpThreeWayInfoAttr info = partial
+      ? cir::CmpThreeWayInfoAttr::get(b.getContext(), lt, eq, gt, unordered)
+      : cir::CmpThreeWayInfoAttr::get(b.getContext(), cir::CmpOrdering::Strong,
+                                      lt, eq, gt);
+
+  return cir::CmpThreeWayOp::create(b, loc, b.getSIntNTy(result_bits), lhs,
+                                    rhs, info);
+}
+
 inline mlir::Value sign_bit(a_builder &b, mlir::Location loc, mlir::Value x)
 /* Create cir.signbit (a bool). */
 { return cir::SignBitOp::create(b, loc, b.getBoolTy(), x); }

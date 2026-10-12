@@ -1,0 +1,5 @@
+Two translation units that both define a class with an unnamed class nested in
+it (a member function and its local static, Itanium names with Ut_): vague
+linkage, so the two copies merge.  Compile una.cpp and unb.cpp with the CIR
+front end or g++ (all four combinations), link with unm.cpp and run: the
+output is "11 2 13 4 5" in every combination (g++ and clang agree).

@@ -2,7 +2,7 @@
 # prefix per line, relative to the tests directory; "!" excludes.  Blank lines
 # and lines starting with "#" are ignored.
 #
-# cir-cpp-smoke: 56 small C++ run tests (use with "--types rp") for the M3
+# cir-cpp-smoke: 57 small C++ run tests (use with "--types rp") for the M3
 # (core C++) smoke list of the CIR back end, drawn from imported/gnu/cpp, edg/
 # and cwg/.  None uses exceptions, virtual functions, RTTI, member pointers,
 # coroutines, thread_local, inline assembly, vector or complex types, atomics,
@@ -126,3 +126,5 @@ cwg/cwg3100.sft.cpp
 edg/rma/del02.sft.cpp
 # copy ctor selection with conversion operators, by-value class parameters
 edg/rma/cctor16.sft.cpp
+# for-init variable with a destructor under the old scope rule (--cfront_3.0): the declaration is hoisted so its cleanup protects to the end of the enclosing scope (W7)
+edg/rma/lifetime25.sft.cpp

@@ -1,17 +1,4 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++17 --c++11 Test_name.c
-"./eh/async-unwind2.C", line 114: warning: CIR back end: the body of "yfn1" uses a virtual function, which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"./eh/async-unwind2.C", line 116: warning: CIR back end: the body of "Y" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-  Y y;
-     ^
-          detected during implicit generation of "Y::Y()" at line 116
-
-"./eh/async-unwind2.C", line 145: warning: CIR back end: the body of "baz2" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
 "./eh/async-unwind2.C", line 151: warning: CIR back end: the body of "bar1" uses inline assembly, which the CIR back end does not support; the function is dropped
   }
   ^
@@ -28,47 +15,9 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-"./eh/async-unwind2.C", line 196: warning: CIR back end: the body of "bar5" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+"./eh/async-unwind2.C", line 260: warning: CIR back end: the body of "foo" uses inline assembly, which the CIR back end does not support; the function is dropped
   }
   ^
-
-"./eh/async-unwind2.C", line 260: warning: CIR back end: the body of "foo" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"./eh/async-unwind2.C", line 81: warning: CIR back end: the body of "~X" uses a virtual call, which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during instantiation of "X<T>::~X() [with T=V]" at line 226
-
-"./eh/async-unwind2.C", line 81: warning: CIR back end: the body of "~X" uses a virtual call, which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during instantiation of "X<T>::~X() [with T=Z]" at line 222
-
-"./eh/async-unwind2.C", line 81: warning: CIR back end: the body of "~X" uses a virtual call, which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during instantiation of "X<T>::~X() [with T=Y]" at line 223
-
-"./eh/async-unwind2.C", line 211: warning: CIR back end: the body of "operator>>=" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during instantiation of "unsigned char operator>>=(const U &, C &) [with C=X<Z>]" at line 241
-
-Warning: CIR back end: the initializer of "y" uses a constant of a class with virtual functions or virtual bases, which the CIR back end does not support; the definition is dropped
-
-Warning: CIR back end: the unused definition of '_ZN1YC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN1YC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN1XI1YED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
-
-Warning: CIR back end: the unused definition of '_ZN1XI1YED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
-
-Warning: CIR back end: the unused definition of '_ZN1XI1VED1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
-
-Warning: CIR back end: the unused definition of '_ZN1XI1VED2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
 
 Error: CIR back end: the definition of 'bar2' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
@@ -78,20 +27,6 @@ Error: CIR back end: the definition of 'bar1' was dropped: it uses a construct t
 
 Error: CIR back end: the definition of 'bar4' was dropped: it uses a construct the CIR back end cannot express: inline assembly
 
-Error: CIR back end: the definition of '_ZN1Y4yfn1ERK1S' was dropped: it uses a construct the CIR back end cannot express: a virtual function
+Error: CIR back end: the definition of '_Z3foov' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of '_Z4baz2RK1XI1ZE' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
-
-Error: CIR back end: the definition of 'bar5' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
-
-Error: CIR back end: the definition of '_Z3foov' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
-
-Error: CIR back end: the definition of '_ZN1XI1ZED1Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual call (and it is referenced)
-
-Error: CIR back end: the definition of '_ZN1XI1ZED2Ev' was dropped: it uses a construct the CIR back end cannot express: a virtual call (and it is referenced)
-
-Error: CIR back end: the definition of 'y' was dropped: it uses a construct the CIR back end cannot express: a constant of a class with virtual functions or virtual bases (and it is referenced)
-
-Error: CIR back end: the definition of '_ZrSI1XI1ZEEhRK1URT_' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
-
-12 errors detected in the compilation of "Test_name.c".
+5 errors detected in the compilation of "Test_name.c".

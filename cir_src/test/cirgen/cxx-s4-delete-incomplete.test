@@ -1,0 +1,55 @@
+; C++23: delete of a pointer to a class that is incomplete here (or to void,
+; which is undefined but compiles) and has no destructor to call: a null check
+; and the plain operator delete or delete[].
+;   struct Z; extern Z *p, *q; extern void *v;
+;   void c_del() { delete p; }  void c_dela() { delete[] q; }  void c_delv() { delete v; }
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -std=c++17 -w %S/Inputs/s4_delete_incomplete_host.cpp %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK: cir.func {{.*}}@c_del
+; CHECK: cir.call @_ZdlPv
+
+frame DECLS
+  STR 100 "Z"
+  STR 101 "p"
+  STR 102 "_ZdlPv"
+  STR 103 "c_del"
+  STR 104 "q"
+  STR 105 "v"
+  STR 106 "_ZdaPv"
+  STR 107 "c_dela"
+  STR 108 "c_delv"
+  TY_RECORD_DECL 201 0 100
+  TY_PTR 211 201
+  DECL_VAR 301 211 0 0 8 101
+  TY_FUNC 221 11 0 [12]
+  DECL_FUNC 401 221 0 0 102
+  TY_FUNC 222 11 0 []
+  DECL_FUNC 402 222 0 1 103
+  DECL_VAR 302 211 0 0 8 104
+  DECL_VAR 303 12 0 0 8 105
+  DECL_FUNC 403 221 0 0 106
+  DECL_FUNC 404 222 0 1 107
+  DECL_FUNC 405 222 0 1 108
+frame REGION
+  FUNC_BEGIN 402 0
+  GREF 301
+  LOAD 0
+  DELETE 401 nil 201 0
+  FUNC_END 1
+  FUNC_BEGIN 404 0
+  GREF 302
+  LOAD 0
+  DELETE 403 nil 201 1
+  FUNC_END 1
+  FUNC_BEGIN 405 0
+  GREF 303
+  LOAD 0
+  DELETE 401 nil 11 0
+  FUNC_END 1
+frame END
+  END auto 0

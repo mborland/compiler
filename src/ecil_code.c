@@ -66,8 +66,11 @@ enum a_code_item_kind {
   cik_var_init,     /* The initialization of a variable and its cleanup. */
   cik_new,          /* A new expression (phases: count, size, operands,
                        call, initialization) or a delete expression. */
-  cik_meminit       /* The member initializers of a constructor body. */
+  cik_meminit,      /* The member initializers of a constructor body. */
+  cik_emit          /* Emit the record without operands whose opcode is a. */
 };
+
+#define NO_SELF ((size_t)-1)   /* emit_ctor_loop: no item asks. */
 
 /* Item flags. */
 #define CIF_COND 0x01u      /* The result is wanted as a bool (TO_BOOL). */
@@ -84,6 +87,15 @@ enum a_code_item_kind {
 #define ASSIGN_RHS_FIRST 5u     /* An assignment: value in a temporary. */
 #define ASSIGN_LHS_NEXT  6u     /* ... and its target is evaluated next. */
 
+/* Phases of the assignment of a class without data: nothing is copied. */
+#define EMPTY_ASSIGN_RHS 9u     /* The right operand, discarded. */
+#define EMPTY_ASSIGN_LHS 10u    /* ... then the target. */
+
+/* Phases of a subscript with the integer first, as in 2[p]: the integer is
+   evaluated before the pointer (C++17), so it is kept in a temporary. */
+#define SUBSCRIPT_INT_FIRST 7u  /* The integer: value in a temporary. */
+#define SUBSCRIPT_PTR_NEXT  8u  /* ... and the pointer is evaluated next. */
+
 /* A for statement under the old scope rule: its init was sent before
    FOR_BEGIN. */
 #define FOR_OLD_INIT_DONE 20u
@@ -91,6 +103,10 @@ enum a_code_item_kind {
 /* cik_new state (it->c): the cookie size is in the bits above 8. */
 #define NEW_ARRAY       0x01u
 #define NEW_DYNAMIC     0x02u     /* The count is in the local it->a. */
+#define NEW_LIST        0x20000000u  /* new T[n]{...} with a run-time n. */
+#define NEW_FULLEXPR    0x40000000u  /* ... with its own FULLEXPR. */
+#define NEW_NOTHROW     0x80000000u  /* The allocation function returns null on
+                                     failure. */
 #define NEW_NARGS_SHIFT 2u
 #define NEW_NARGS_ONE   (1u << NEW_NARGS_SHIFT)
 #define NEW_NARGS_MASK  (0x3Fu << NEW_NARGS_SHIFT)
@@ -113,6 +129,18 @@ typedef struct a_code_item {
   uint32_t      a;                /* Scratch (a type id, a lid, ...). */
   uint32_t      b;
   uint32_t      c;
+  uint32_t      d;                /* More scratch (a new[] list: the local
+                                     that holds the pointer). */
+  /* A member call devirtualized to the final overrider of the function it
+     names (spec 12.6): the object expression without the front end's
+     conversion to the class that declares the function, the function that
+     is called, the entry of its class in the base list of the object's
+     class (NULL: the object's class itself) and the object's class. */
+  void          *object;
+  a_routine_ptr devirt_routine;
+  a_base_class_ptr
+                devirt_base;
+  a_type_ptr    devirt_class;
 } a_code_item;
 
 STATIC_THREAD a_code_item
@@ -121,6 +149,51 @@ STATIC_THREAD size_t
                 code_stack_size;
 STATIC_THREAD size_t
                 code_stack_capacity;
+STATIC_THREAD a_boolean
+                function_try_open;/* TRY_BEGIN(FUNCTION_TRY) of the function's
+                                     try block was sent with the header (a
+                                     constructor or destructor). */
+STATIC_THREAD size_t
+                fullexpr_depth;   /* How many FULLEXPRs are open. */
+
+/* A new expression whose storage is freed if its initialization throws: the
+   locals that keep what the free needs (the allocation function's result, the
+   size and the placement operands), evaluated once (spec 12.6).  The entries
+   nest as the new expressions do. */
+#define NEW_MAX_ARGS 8
+typedef struct a_new_cleanup {
+  uint32_t      size_lid;
+  uint32_t      ptr_lid;
+  uint32_t      arg_lids[NEW_MAX_ARGS];
+  unsigned int  num_args;
+  a_routine_ptr del;
+  a_boolean     sized;
+} a_new_cleanup;
+STATIC_THREAD a_new_cleanup
+                *new_cleanups;
+STATIC_THREAD size_t
+                num_new_cleanups;
+STATIC_THREAD size_t
+                new_cleanups_capacity;
+
+/* The destination that an arm of a class ?: builds its value in when the
+   conditional initializes a temporary: the temporary that the master entry
+   (the dynamic initialization of that temporary) stands for. */
+typedef struct a_master_dest {
+  a_dynamic_init_ptr  master;
+  uint32_t            dest;
+} a_master_dest;
+STATIC_THREAD a_master_dest
+                *master_dests;
+STATIC_THREAD size_t
+                num_master_dests;
+STATIC_THREAD size_t
+                master_dests_capacity;
+STATIC_THREAD size_t
+                cond_depth;       /* How many conditional regions (a TERN
+                                     arm, the right operand of LAND or LOR)
+                                     enclose the expression being
+                                     translated. */
 STATIC_THREAD uint32_t
                 next_lid;         /* The last frame-local id assigned. */
 STATIC_THREAD uint8_t
@@ -166,6 +239,28 @@ STATIC_THREAD a_scope_ptr
                 function_scope;   /* The scope of that function. */
 STATIC_THREAD a_type_ptr
                 function_class;   /* The class of a member function. */
+/* The static temporaries made while one function is translated, so that the
+   second walk of a constructor of a class with virtual bases finds them
+   (spec 12.3: a second walk introduces no new G-id). */
+typedef struct a_static_temp {
+  a_variable_ptr  owner;
+  unsigned int    seq;
+  uint32_t        gid;
+} a_static_temp;
+
+STATIC_THREAD a_static_temp
+                *static_temps;
+STATIC_THREAD size_t
+                num_static_temps;
+STATIC_THREAD size_t
+                static_temps_capacity;
+
+STATIC_THREAD unsigned int
+                walk_variant;     /* The variant of the structor of a class
+                                     with virtual bases being walked
+                                     (ECIL_VARIANT_COMPLETE for C1,
+                                     ECIL_VARIANT_BASE for C2 and D2); else
+                                     ECIL_VARIANT_NONE (spec 12.3). */
 
 typedef struct a_pending_cleanup {
   uint32_t      lid;
@@ -198,6 +293,10 @@ STATIC_THREAD a_variable_ptr
                                      built, or NULL. */
 STATIC_THREAD unsigned int
                 static_temp_count;/* The static temporaries it has made. */
+STATIC_THREAD a_boolean
+                vptr_init_pending;/* The constructor being translated is of
+                                     a dynamic class and has not had its
+                                     VPTR_INIT yet. */
 
 void ecil_code_reset(void)
 /*
@@ -208,7 +307,13 @@ Release the writer's function-body storage at the end of a compilation.
     ecil_init_level_end(&agg_levels[--num_agg_levels]);
   }  /* while */
   free(code_stack);
+  free(new_cleanups);
+  new_cleanups = NULL;
+  num_new_cleanups = new_cleanups_capacity = 0;
   free(function_states);
+  free(static_temps);
+  static_temps = NULL;
+  num_static_temps = static_temps_capacity = 0;
   free(agg_levels);
   free(pending_cleanups);
   free(pure_stack);
@@ -307,6 +412,17 @@ A record whose single operand is a bool (written as false/true, spec 5).
 }  /* rec_bool */
 
 
+static void emit_vptr_init(an_ecil_frame *frame)
+/*
+VPTR_INIT in a constructor or destructor of a dynamic class (the pointee of
+this): the vtable facts first, and the vtable is used (spec 12.4, 12.8).
+*/
+{
+  ecil_note_vtable_used(frame, function_class);
+  if (ecil_unsupported_reason == NULL) ecil_rec0(frame, eop_vptr_init);
+}  /* emit_vptr_init */
+
+
 static a_code_item *push_item(enum a_code_item_kind kind,
                               void                  *entry,
                               unsigned int          flags)
@@ -343,6 +459,11 @@ stack could not grow.
     item->a = 0;
     item->b = 0;
     item->c = 0;
+    item->d = 0;
+    item->object = NULL;
+    item->devirt_routine = NULL;
+    item->devirt_base = NULL;
+    item->devirt_class = NULL;
   } else {
     ecil_note_unsupported("out of memory in the ECIL writer");
   }  /* if */
@@ -390,6 +511,46 @@ Return TRUE for simple and compound assignment.
 }  /* is_assignment_operator */
 
 
+static a_boolean is_array_temp_init(an_expr_node_ptr node)
+/*
+Return TRUE for the initialization of a temporary of array type (a reference
+binds to the temporary itself).
+*/
+{
+  return node->kind == (an_expr_node_kind)enk_temp_init &&
+         skip_typerefs(node->type)->kind == tk_array;
+}  /* is_array_temp_init */
+
+
+static a_boolean is_discarded_conditional_temp(an_expr_node_ptr node,
+                                               a_boolean        unused)
+/*
+Return TRUE for the temporary that holds the value of a class conditional
+(?:) that the context discards: it is initialized by the conditional itself
+(not through a master entry), whose arms are the objects.
+*/
+{
+  a_dynamic_init_ptr  di = NULL;
+  an_expr_node_ptr    expr;
+  a_boolean           result = FALSE;
+
+  if ((node->kind == (an_expr_node_kind)enk_temp_init ||
+       node->kind == (an_expr_node_kind)enk_lambda) &&
+      (node->result_is_not_used || unused)) {
+    di = node->variant.init.dynamic_init;
+  }  /* if */
+  if (di != NULL && di->master_entry == NULL &&
+      di->kind == (a_dynamic_init_kind)dik_expression &&
+      !di->class_rvalue_initialized_through_master_entry) {
+    expr = skip_parens(di->variant.expression);
+    result = expr->kind == (an_expr_node_kind)enk_operation &&
+             expr->variant.operation.kind == eok_question &&
+             !is_glvalue_node(expr);
+  }  /* if */
+  return result;
+}  /* is_discarded_conditional_temp */
+
+
 static a_boolean value_is_pushed(an_expr_node_ptr node, a_boolean unused)
 /*
 Return TRUE if translating the expression leaves a value on the consumer's
@@ -424,6 +585,17 @@ cast, a statement).
   } else if (node->kind == (an_expr_node_kind)enk_operation &&
              is_assignment_operator(node->variant.operation.kind) &&
              node->result_is_not_used) {
+    pushes = FALSE;
+  } else if (node->kind == (an_expr_node_kind)enk_operation &&
+             node->variant.operation.kind == eok_question &&
+             !is_glvalue_node(node) && !C_mode() &&
+             is_immediate_class_type(skip_typerefs(node->type)) &&
+             (node->result_is_not_used || unused)) {
+    /* A discarded class conditional is a void TERN: each arm is discarded
+       (a trivial class value is dropped in its arm). */
+    pushes = FALSE;
+  } else if (is_discarded_conditional_temp(node, unused)) {
+    /* Its conditional is translated as a discarded one. */
     pushes = FALSE;
   } else if ((node->kind == (an_expr_node_kind)enk_temp_init ||
               node->kind == (an_expr_node_kind)enk_lambda) &&
@@ -472,6 +644,27 @@ Assign the next frame-local id.
 {
   return ++next_lid;
 }  /* new_lid */
+
+
+static void emit_fullexpr_begin(an_ecil_frame *frame)
+/*
+FULLEXPR_BEGIN, counted: a throw in a conditional region needs one around the
+region (spec 12.5), and does not add one when a full expression is open.
+*/
+{
+  ecil_rec0(frame, eop_fullexpr_begin);
+  fullexpr_depth++;
+}  /* emit_fullexpr_begin */
+
+
+static void emit_fullexpr_end(an_ecil_frame *frame)
+/*
+FULLEXPR_END.
+*/
+{
+  ecil_rec0(frame, eop_fullexpr_end);
+  if (fullexpr_depth > 0) fullexpr_depth--;
+}  /* emit_fullexpr_end */
 
 
 static void emit_materialize_temp(an_ecil_frame *frame,
@@ -749,7 +942,21 @@ and address-resolution parts are shared with the initializer emitter
         { a_boolean is_function;
           uint32_t  g = ecil_address_constant_gid(frame, c, &is_function);
 
-          if (g != 0) {
+          if (g != 0 && c->variant.address.kind == (an_address_base_kind)
+                                                              abk_typeid) {
+            /* Typeinfo is named only by TYPEID and C_ADDR: &typeid(T) is
+               the address of the glvalue that TYPEID yields. */
+            if (info_of(t)->kind != egk_ptr) {
+              ecil_note_unsupported("a typeid address of integer type");
+            } else {
+              ecil_rec_begin(frame, eop_typeid);
+              ecil_arg_uint(frame, g);
+              ecil_arg_uint(frame, info_of(t)->ref);
+              ecil_arg_uint(frame, 0);
+              ecil_rec_end(frame);
+              ecil_rec0(frame, eop_addr);
+            }  /* if */
+          } else if (g != 0) {
             ecil_rec1(frame, eop_gref, g);
             if (!is_function) ecil_rec0(frame, eop_addr);
             if (!is_function || c->variant.address.offset != 0) {
@@ -769,6 +976,12 @@ and address-resolution parts are shared with the initializer emitter
             }  /* if */
           }  /* if */
         }
+        break;
+      case ck_ptr_to_member:
+        (void)ecil_emit_ptr_to_member_constant(frame, c, FALSE);
+        break;
+      case ck_void:
+        /* A value of type void: nothing is pushed. */
         break;
       case ck_aggregate:
         if (!C_mode() && info_of(t)->kind == egk_record &&
@@ -875,6 +1088,13 @@ unsupported.
     if (gid != 0 && (info_of(gid)->kind == egk_opaque ||
                      (info_of(gid)->flags & ECIL_GF_FAILED) != 0)) {
       ecil_note_unsupported_type(gid, "a value of an unsupported type");
+    } else if (gid != 0 && (info_of(gid)->flags & ECIL_GF_DYNAMIC) != 0 &&
+               info_of(gid)->kind == egk_record) {
+      /* Never a LOAD of a record with a vptr (a by-value argument of a
+         NONTRIVIAL_ABI class has its own LOAD): a copy is a constructor
+         call (spec 12.2). */
+      ecil_note_unsupported("a value of a class with virtual functions "
+                            "(copied other than by a constructor)");
     } else if (t->kind != tk_array && t->kind != tk_routine) {
       ecil_rec_begin(frame, eop_load);
       ecil_arg_uint(frame, access_is_volatile(node) ?
@@ -1540,13 +1760,150 @@ object pointer of a member function, the address of an object, a reference.
 }  /* operand_is_known_non_null */
 
 
+static void emit_base_chain(an_ecil_frame *frame,
+                            a_type_ptr    derived,
+                            a_base_class_ptr bcp,
+                            a_boolean     is_base_cast,
+                            unsigned int  flags,
+                            a_boolean     complete)
+/*
+The casts of a pointer between a class and one of its bases (the entry bcp of
+its base list): BASE_CAST (derived to base) or DERIVED_CAST (base to derived),
+one per step of the derivation, since each cast is to or from a direct base
+(spec 11.3).  Each cast has the byte offset of its base subobject from the
+base list of the class the step starts at.  A virtual base, or a base reached
+through one, starts with VBASE_CAST to the virtual base (spec 12.4), COMPLETE
+when the object is known to be the complete object (complete); a conversion
+from a virtual base to its derived class is ill-formed (a static_cast) and
+unsupported.
+*/
+{
+  a_base_class_ptr  *steps = NULL;
+  size_t            nsteps = 0;
+  a_derivation_step_ptr
+                    step;
+  a_boolean         done = FALSE;
+  a_boolean         virtual_start = bcp->is_virtual ||
+                                    (bcp->derivation != NULL &&
+                                     any_virtual_steps_in_derivation(bcp));
+
+  if (bcp->derivation == NULL) {
+    ecil_note_unsupported("a cast to a base class without a derivation");
+  } else if (virtual_start && !is_base_cast) {
+    ecil_note_unsupported("a cast from a virtual base class to its derived "
+                          "class");
+  } else if (bcp->is_virtual) {
+    /* One step: the virtual base itself (the last step of its derivation). */
+    steps = (a_base_class_ptr *)malloc(2 * sizeof(a_base_class_ptr));
+    if (steps == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+    } else {
+      steps[0] = bcp;
+      nsteps = 1;
+    }  /* if */
+  } else {
+    for (step = bcp->derivation->path; step != NULL && !done;
+         step = step->next) {
+      nsteps++;
+      done = step == bcp->derivation->path_tail;
+    }  /* for */
+    steps = (a_base_class_ptr *)malloc((nsteps + 1) *
+                                       sizeof(a_base_class_ptr));
+    if (steps == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+    } else {
+      size_t  i = 0;
+
+      done = FALSE;
+      for (step = bcp->derivation->path; step != NULL && !done;
+           step = step->next) {
+        steps[i++] = step->base_class;
+        done = step == bcp->derivation->path_tail;
+      }  /* for */
+    }  /* if */
+  }  /* if */
+  if (ecil_unsupported_reason == NULL) {
+    uint32_t  tder = ecil_type_id(frame, derived);
+    uint32_t  prev = tder;
+    uint64_t  total = 0;
+    size_t    i;
+
+    for (i = 0; i < nsteps && tder != 0 && ecil_unsupported_reason == NULL;
+         i++) {
+      /* The base-to-derived chain walks the steps backwards. */
+      a_base_class_ptr  sb = steps[is_base_cast ? i : nsteps - 1 - i];
+      uint32_t          sg = ecil_type_id(frame, sb->type);
+      uint32_t          from_gid = 0;
+      uint32_t          to_gid = 0;
+
+      if (is_base_cast) {
+        from_gid = prev;
+        to_gid = sg;
+      } else {
+        a_base_class_ptr  below = nsteps - 1 - i > 0 ?
+                                  steps[nsteps - 2 - i] : NULL;
+
+        from_gid = sg;
+        to_gid = below != NULL ? ecil_type_id(frame, below->type) : tder;
+      }  /* if */
+      if (sg != 0 && to_gid != 0 && ecil_unsupported_reason == NULL) {
+        if (i == 0 && virtual_start && sb->is_virtual) {
+          /* The facts of the class come before VBASE_CAST (spec 12.2). */
+          ecil_class_vtable_facts(frame, derived);
+        }  /* if */
+        if (ecil_unsupported_reason != NULL) {
+          /* (The reason is noted.) */
+        } else if (i == 0 && virtual_start && sb->is_virtual) {
+          ecil_rec_begin(frame, eop_vbase_cast);
+          ecil_arg_uint(frame, from_gid);
+          ecil_arg_uint(frame, to_gid);
+          ecil_arg_uint(frame, (flags & ECIL_CAST_NONNULL) |
+                               (complete ? ECIL_VBASE_CAST_COMPLETE : 0u));
+          ecil_rec_end(frame);
+        } else {
+          ecil_rec_begin(frame, is_base_cast ? eop_base_cast :
+                                               eop_derived_cast);
+          ecil_arg_uint(frame, from_gid);
+          ecil_arg_uint(frame, to_gid);
+          ecil_arg_uint(frame, (uint64_t)sb->offset);
+          ecil_arg_uint(frame, flags);
+          ecil_rec_end(frame);
+          total += (uint64_t)sb->offset;
+        }  /* if */
+        prev = sg;
+      }  /* if */
+    }  /* for */
+#if CHECKING
+    if (ecil_unsupported_reason == NULL && !virtual_start) {
+      /* The offsets of the steps add up to the offset of the base. */
+      check_assertion(total == (uint64_t)bcp->offset);
+    }  /* if */
+#endif /* CHECKING */
+    (void)total;
+  }  /* if */
+  free(steps);
+}  /* emit_base_chain */
+
+
+static a_boolean operand_is_this_parameter(an_expr_node_ptr node)
+/*
+Return TRUE if the node is the this pointer of the function being translated
+(possibly under parentheses).
+*/
+{
+  node = skip_parens(node);
+  return node->kind == (an_expr_node_kind)enk_variable &&
+         node_variable(node)->is_this_parameter;
+}  /* operand_is_this_parameter */
+
+
 static void emit_class_cast(an_ecil_frame *frame, an_expr_node_ptr node)
 /*
 eok_base_class_cast and eok_derived_class_cast between a class and one of its
-direct bases: [ADDR] BASE_CAST|DERIVED_CAST [DEREF].  The operand (already
-translated) is a pointer, or a class glvalue (then the address is taken and
-the result is a glvalue again).  The byte offset of the base subobject comes
-from the derived class's base list.
+non-virtual bases: [ADDR] BASE_CAST|DERIVED_CAST... [DEREF].  The operand
+(already translated) is a pointer, or a class glvalue (then the address is
+taken and the result is a glvalue again).  A conversion through several
+levels is a chain of casts (emit_base_chain).
 */
 {
   an_expr_node_ptr  op = node->variant.operation.operands;
@@ -1570,45 +1927,43 @@ from the derived class's base list.
   } else if (!pointers && !glvalue_operand) {
     ecil_note_unsupported("a class cast of a class prvalue");
   } else {
-    for (bcp = class_type_supp(derived)->direct_base_classes; bcp != NULL;
+    for (bcp = class_type_supp(derived)->base_classes; bcp != NULL;
          bcp = bcp->next) {
-      if (bcp->direct && skip_typerefs(bcp->type) == base_class) break;
+      if (skip_typerefs(bcp->type) == base_class) break;
     }  /* for */
     if (bcp == NULL) {
-      ecil_note_unsupported("a cast through an indirect base class");
-    } else if (bcp->is_virtual) {
-      ecil_note_unsupported("a virtual base class");
+      ecil_note_unsupported("a cast to a class that is not a base class");
+    } else if (bcp->derivation == NULL) {
+      ecil_note_unsupported("a cast to a base class without a derivation");
+    } else if (bcp->ambiguous) {
+      ecil_note_unsupported("a cast to an ambiguous base class");
     }  /* if */
   }  /* if */
   if (ecil_unsupported_reason == NULL) {
-    uint32_t      tder = ecil_type_id(frame, derived);
-    uint32_t      tbase = ecil_type_id(frame, base_class);
     unsigned int  flags = 0;
 
-    if (tder != 0 && tbase != 0 && ecil_unsupported_reason == NULL) {
-      if (glvalue_operand) {
-        ecil_rec0(frame, eop_addr);
-        flags |= ECIL_CAST_NONNULL;
-      } else if (node->variant.operation.implicit_in_member_naming ||
-                 operand_is_known_non_null(op)) {
-        flags |= ECIL_CAST_NONNULL;
-      }  /* if */
-      ecil_rec_begin(frame, is_base_cast ? eop_base_cast : eop_derived_cast);
-      ecil_arg_uint(frame, is_base_cast ? tder : tbase);
-      ecil_arg_uint(frame, is_base_cast ? tbase : tder);
-      ecil_arg_uint(frame, (uint64_t)bcp->offset);
-      ecil_arg_uint(frame, flags);
-      ecil_rec_end(frame);
-      if (glvalue_operand) {
-        ecil_rec0(frame, eop_deref);
-        emit_load_if_value(frame, node);
-      }  /* if */
+    if (glvalue_operand) {
+      ecil_rec0(frame, eop_addr);
+      flags |= ECIL_CAST_NONNULL;
+    } else if (node->variant.operation.implicit_in_member_naming ||
+               operand_is_known_non_null(op)) {
+      flags |= ECIL_CAST_NONNULL;
+    }  /* if */
+    emit_base_chain(frame, derived, bcp, is_base_cast, flags,
+                    walk_variant == ECIL_VARIANT_COMPLETE &&
+                    derived == function_class &&
+                    operand_is_this_parameter(op));
+    if (glvalue_operand && ecil_unsupported_reason == NULL) {
+      ecil_rec0(frame, eop_deref);
+      emit_load_if_value(frame, node);
     }  /* if */
   }  /* if */
 }  /* emit_class_cast */
 
 
 /* Per-call item bits (a_code_item.c). */
+#define COND_FULLEXPR        0x100u /* ? :, && or ||: its FULLEXPR is open
+                                       (a throw in its operands). */
 #define CALL_MEMBER_DOT      0x01u  /* x.f(...): the object is a class glvalue
                                        (or prvalue) whose address is passed. */
 #define CALL_MEMBER_PTR      0x02u  /* p->f(...): the object is a pointer. */
@@ -1617,6 +1972,7 @@ from the derived class's base list.
                              0x20u  /* The operand just pushed is a class
                                        that is not trivially copyable: its
                                        storage is passed (a LOAD). */
+#define CALL_VIRTUAL         0x04u  /* A call through the vtable. */
 #define CALL_REVERSE         0x40u  /* The second operand is evaluated first
                                        (C++17: an overloaded assignment) into
                                        a temporary, whose lid is in the bits
@@ -1894,7 +2250,10 @@ glvalue of that object, with no load.
            inner->variant.operation.kind == eok_class_rvalue_adjust) {
       inner = skip_parens(inner->variant.operation.operands);
     }  /* while */
-    adjusted = is_glvalue_node(inner);
+    /* (A constant that is a glvalue has no object whose address could be
+       kept: its value is spilled, rhs_is_fixed_value.) */
+    adjusted = is_glvalue_node(inner) &&
+               inner->kind != (an_expr_node_kind)enk_constant;
   }  /* if */
   return adjusted;
 }  /* rhs_is_adjusted_glvalue */
@@ -1917,7 +2276,7 @@ that is built in a temporary), possibly cv-adjusted.
     rhs = skip_parens(rhs->variant.operation.operands);
   }  /* while */
   if (rhs->kind == (an_expr_node_kind)enk_constant) {
-    fixed = !is_glvalue_node(rhs);
+    fixed = TRUE;
   } else if (rhs->kind == (an_expr_node_kind)enk_operation) {
     an_expr_operator_kind  k = rhs->variant.operation.kind;
 
@@ -1984,6 +2343,8 @@ the statement that initializes the reference.
                            byte offset. */
 #define DT_THIS   3u    /* The object *lid points to. */
 #define DT_GLOBAL 4u    /* A static-duration object: G-id lid. */
+#define DT_VBASE  5u    /* A virtual base of *lid: record rec, base base_gid,
+                           VIRTUAL_BASE field index. */
 
 typedef struct a_destroy_target {
   unsigned int  kind;
@@ -1993,6 +2354,7 @@ typedef struct a_destroy_target {
   uint32_t      base_gid;
   uint64_t      offset;
   uint32_t      array_elem;     /* An array: the G-id of its element type. */
+  a_type_ptr    base_type;      /* A base: its class (for the VTT). */
 } a_destroy_target;
 
 
@@ -2052,6 +2414,89 @@ variable lid points to.
 }  /* emit_this_base */
 
 
+static a_boolean class_has_vbases(a_type_ptr type)
+/*
+Return TRUE for a class that has virtual base classes, direct or indirect (its
+record has VIRTUAL_BASE fields, its structors are a has_vbases pair).
+*/
+{
+  type = skip_typerefs(type);
+  return !C_mode() && is_immediate_class_type(type) &&
+         type->variant.class_struct_union.any_virtual_base_classes;
+}  /* class_has_vbases */
+
+
+static void emit_this_vbase(an_ecil_frame *frame,
+                            uint32_t      lid,
+                            uint32_t      rec,
+                            uint32_t      vbase_gid,
+                            a_boolean     complete)
+/*
+Push the address of a virtual base subobject (direct or indirect) of the object
+that the pointer variable lid points to: VBASE_CAST, with COMPLETE when the
+object is known to be the complete object (the construction and destruction
+of the virtual bases in C1 and D1, spec 12.4).
+*/
+{
+  ecil_class_vtable_facts(frame, function_class);
+  ecil_rec1(frame, eop_lref, lid);
+  ecil_rec1(frame, eop_load, 0);
+  ecil_rec_begin(frame, eop_vbase_cast);
+  ecil_arg_uint(frame, rec);
+  ecil_arg_uint(frame, vbase_gid);
+  ecil_arg_uint(frame, ECIL_CAST_NONNULL |
+                       (complete ? ECIL_VBASE_CAST_COMPLETE : 0u));
+  ecil_rec_end(frame);
+}  /* emit_this_vbase */
+
+
+static void emit_this_subobject(an_ecil_frame *frame,
+                                uint32_t      lid,
+                                uint32_t      rec,
+                                uint32_t      base_gid,
+                                uint64_t      offset,
+                                a_boolean     is_virtual,
+                                uint32_t      index)
+/*
+Push the address of a base class subobject of the object that the pointer
+variable lid points to: a direct base (BASE_CAST at its offset), or a virtual
+base (VBASE_CAST, with COMPLETE for the constructor's own object: the
+mem-initializers of the virtual bases are only in C1).
+*/
+{
+  if (is_virtual) {
+    (void)index;
+    emit_this_vbase(frame, lid, rec, base_gid, lid == this_lid);
+  } else {
+    emit_this_base(frame, lid, rec, base_gid, offset);
+  }  /* if */
+}  /* emit_this_subobject */
+
+
+static void emit_vtt_addr(an_ecil_frame *frame,
+                          unsigned int  kind,
+                          uint32_t      index)
+/*
+VTT_ADDR(kind, idx): the VTT operand of a call of the base variant of a
+constructor or destructor of a class with virtual bases (spec 12.4): self (nil
+idx), a base (BASE field idx) or a virtual base (VIRTUAL_BASE field idx) of the
+class being constructed or destroyed.  The class's vtable is used.
+*/
+{
+  ecil_note_vtable_used(frame, function_class);
+  if (ecil_unsupported_reason == NULL) {
+    ecil_rec_begin(frame, eop_vtt_addr);
+    ecil_arg_uint(frame, kind);
+    if (kind == (unsigned int)evak_self) {
+      ecil_arg_nil(frame);
+    } else {
+      ecil_arg_uint(frame, index);
+    }  /* if */
+    ecil_rec_end(frame);
+  }  /* if */
+}  /* emit_vtt_addr */
+
+
 static void emit_target_address(an_ecil_frame         *frame,
                                 const a_destroy_target *tgt)
 /*
@@ -2070,10 +2515,36 @@ Push the address of the object a destructor is applied to.
   } else if (tgt->kind == DT_GLOBAL) {
     ecil_rec1(frame, eop_gref, tgt->lid);
     ecil_rec0(frame, eop_addr);
+  } else if (tgt->kind == DT_VBASE) {
+    /* Only in C1 and D1, where this is the complete object. */
+    emit_this_vbase(frame, tgt->lid, tgt->rec, tgt->base_gid, TRUE);
   } else {
     emit_this_base(frame, tgt->lid, tgt->rec, tgt->base_gid, tgt->offset);
   }  /* if */
 }  /* emit_target_address */
+
+
+static void emit_call_flags(an_ecil_frame *frame,
+                            uint32_t      gid,
+                            a_routine_ptr rout,
+                            uint64_t      nargs,
+                            unsigned int  flags)
+/*
+CALL of a constructor or destructor G-id with nargs arguments and the CALL
+flags (VTT: the VTT_ADDR operand follows argument 0, spec 12.6).
+*/
+{
+  uint32_t  t_call = ecil_func_type_id(frame, rout->type, FALSE);
+
+  if (gid != 0 && t_call != 0 && ecil_unsupported_reason == NULL) {
+    ecil_rec_begin(frame, eop_call);
+    ecil_arg_uint(frame, gid);
+    ecil_arg_uint(frame, t_call);
+    ecil_arg_uint(frame, nargs);
+    ecil_arg_uint(frame, flags);
+    ecil_rec_end(frame);
+  }  /* if */
+}  /* emit_call_flags */
 
 
 static void emit_call_record(an_ecil_frame *frame,
@@ -2084,16 +2555,7 @@ static void emit_call_record(an_ecil_frame *frame,
 CALL of a constructor or destructor G-id with nargs arguments.
 */
 {
-  uint32_t  t_call = ecil_func_type_id(frame, rout->type, FALSE);
-
-  if (gid != 0 && t_call != 0 && ecil_unsupported_reason == NULL) {
-    ecil_rec_begin(frame, eop_call);
-    ecil_arg_uint(frame, gid);
-    ecil_arg_uint(frame, t_call);
-    ecil_arg_uint(frame, nargs);
-    ecil_arg_uint(frame, 0);
-    ecil_rec_end(frame);
-  }  /* if */
+  emit_call_flags(frame, gid, rout, nargs, 0u);
 }  /* emit_call_record */
 
 
@@ -2113,7 +2575,17 @@ or base variant) runs when the enclosing scope region or full expression ends
                   ecil_function_base_id(frame, dtor) :
                   ecil_function_id(frame, dtor);
 
-  if (gid != 0 && ecil_unsupported_reason == NULL) {
+  if (ecil_has_exceptions() && kind != (unsigned int)ecl_eh &&
+      kind != (unsigned int)ecl_exit && !is_non_throwing_routine(dtor) &&
+      tgt->array_elem != 0) {
+    /* A throw from the destructor of an element of an array: the library
+       (the pin) skips the elements before the one that threw, while clang
+       and g++ destroy them: diagnosed until that is fixed upstream.  A
+       throwing destructor of a local, a temporary or an enclosing scope
+       runs the cleanups that remain. */
+    ecil_note_unsupported("the destructor of an array element that may "
+                          "throw (noexcept(false))");
+  } else if (gid != 0 && ecil_unsupported_reason == NULL) {
     ecil_rec_begin(frame, eop_cleanup_begin);
     ecil_arg_uint(frame, kind);
     if (kind == (unsigned int)ecl_exit) {
@@ -2136,8 +2608,21 @@ or base variant) runs when the enclosing scope region or full expression ends
       emit_call_record(frame, gid, dtor, 1);
       ecil_rec0(frame, eop_array_dtor_end);
     } else {
+      unsigned int  flags = 0;
+
       emit_target_address(frame, tgt);
-      emit_call_record(frame, gid, dtor, 1);
+      if (variant == ECIL_VARIANT_BASE &&
+          (info_of(gid)->flags & ECIL_GF_STRUCTOR_VBASES) != 0) {
+        /* The base variant of a destructor of a class with virtual bases
+           takes the VTT (spec 12.3). */
+        emit_vtt_addr(frame, tgt->kind == DT_BASE ?
+                             (unsigned int)evak_base :
+                             tgt->kind == DT_VBASE ?
+                             (unsigned int)evak_vbase :
+                             (unsigned int)evak_self, tgt->index);
+        flags |= ECIL_CALL_VTT;
+      }  /* if */
+      emit_call_flags(frame, gid, dtor, 1, flags);
     }  /* if */
     ecil_rec0(frame, eop_cleanup_body);
   }  /* if */
@@ -2180,9 +2665,10 @@ Begin the cleanups of the lifetime-extended temporaries recorded since
 }  /* flush_pending_cleanups */
 
 
-static uint32_t make_static_temp(an_ecil_frame *frame,
-                                 uint32_t      t,
-                                 a_variable_ptr owner)
+static uint32_t new_static_temp(an_ecil_frame *frame,
+                                uint32_t      t,
+                                a_variable_ptr owner,
+                                unsigned int  seq)
 /*
 Introduce the static-duration object that holds a temporary which the
 reference variable "owner" extends: an internal definition named _ZGR<the
@@ -2192,7 +2678,6 @@ STATIC_INIT and registered for destruction at exit there.
 {
   char          text[1500];
   const char    *base;
-  unsigned int  seq = static_temp_count++;
   uint32_t      gid = 0;
 
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
@@ -2237,6 +2722,47 @@ STATIC_INIT and registered for destruction at exit there.
                        ECIL_DECL_VAR_DEFINITION,
                        (uint32_t)ecil_gid_info(t)->align,
                        ecil_intern_cstring(frame, text));
+  }  /* if */
+  return gid;
+}  /* new_static_temp */
+
+
+static uint32_t make_static_temp(an_ecil_frame *frame,
+                                 uint32_t      t,
+                                 a_variable_ptr owner)
+/*
+The static temporary number static_temp_count of the owner: the one the first
+walk made, if this is the second walk of a function, else a new one.
+*/
+{
+  unsigned int  seq = static_temp_count++;
+  uint32_t      gid = 0;
+  size_t        k;
+
+  for (k = 0; k < num_static_temps; k++) {
+    if (static_temps[k].owner == owner && static_temps[k].seq == seq) {
+      gid = static_temps[k].gid;
+    }  /* if */
+  }  /* for */
+  if (gid == 0) {
+    gid = new_static_temp(frame, t, owner, seq);
+    if (gid != 0 && num_static_temps == static_temps_capacity) {
+      size_t         new_capacity = static_temps_capacity == 0 ?
+                                    8 : static_temps_capacity * 2;
+      a_static_temp  *new_list = (a_static_temp *)realloc(static_temps,
+                                        new_capacity * sizeof(a_static_temp));
+
+      if (new_list != NULL) {
+        static_temps = new_list;
+        static_temps_capacity = new_capacity;
+      }  /* if */
+    }  /* if */
+    if (gid != 0 && num_static_temps < static_temps_capacity) {
+      static_temps[num_static_temps].owner = owner;
+      static_temps[num_static_temps].seq = seq;
+      static_temps[num_static_temps].gid = gid;
+      num_static_temps++;
+    }  /* if */
   }  /* if */
   return gid;
 }  /* make_static_temp */
@@ -2316,6 +2842,170 @@ of a function with an ellipsis (its position is beyond the parameters).
   }  /* if */
   return result;
 }  /* call_arg_is_variadic */
+
+
+static a_boolean object_is_complete_object(an_expr_node_ptr node)
+/*
+Return TRUE if the object expression of a member call designates a complete
+object of its static type, neither through a reference nor an indirection: a
+variable, a temporary, or a member of one (spec 12.6).
+*/
+{
+  a_boolean  result = FALSE;
+  a_boolean  walking = TRUE;
+
+  node = skip_parens(node);
+  while (walking) {
+    walking = FALSE;
+    if (node->kind == (an_expr_node_kind)enk_variable) {
+      result = TRUE;
+    } else if (node->kind == (an_expr_node_kind)enk_temp_init) {
+      result = TRUE;
+    } else if (node->kind == (an_expr_node_kind)enk_operation &&
+               node->variant.operation.kind == eok_dot_field &&
+               node->variant.operation.operands != NULL) {
+      node = skip_parens(node->variant.operation.operands);
+      walking = TRUE;
+    }  /* if */
+  }  /* while */
+  return result;
+}  /* object_is_complete_object */
+
+
+static a_type_ptr object_class_of(an_expr_node_ptr node, a_boolean is_pointer)
+/*
+The class of the object a member call is on: the class of the expression, or
+the class its pointer points to; NULL if it is not a class.
+*/
+{
+  a_type_ptr  t = skip_typerefs(node->type);
+
+  if (is_pointer) {
+    t = t->kind == tk_pointer ? skip_typerefs(t->variant.pointer.type) : NULL;
+  }  /* if */
+  return (t != NULL && is_immediate_class_type(t)) ? t : NULL;
+}  /* object_class_of */
+
+
+static void setup_virtual_call(an_ecil_frame *frame, a_code_item *it,
+                               an_expr_node_ptr callee, a_routine_ptr direct,
+                               a_boolean is_dot)
+/*
+A member call with is_virtual_call set (spec 12.6): the call is CALL VIRTUAL
+of the routine the front end named, unless the writer devirtualizes it as
+clang does.  The call is plain when the object is a complete object that is
+neither a reference nor an indirection, when its class is final (after the
+front end's conversion to the class that declares the function is looked
+through) or when the function is final; a plain call calls the final overrider
+of the named function in the object's class, which is another function when
+the object's class overrides it, or inherits a using-declaration of a base's
+function; a final overrider with another return type (a covariant one) keeps
+the dispatch.
+*/
+{
+  an_expr_node_ptr  sel = skip_parens(callee->next);
+  an_expr_node_ptr  obj = sel;
+  a_type_ptr        decl_class = parent_class_of(direct);
+  a_type_ptr        cobj;
+  uint64_t          cast_offset = 0;
+  a_boolean         plain = FALSE;
+  a_boolean         keep_virtual = FALSE;
+
+  /* The object expression: without the front end's base-class conversions
+     (and the offsets of their steps, to find the base class entry). */
+  while (ecil_unsupported_reason == NULL &&
+         obj->kind == (an_expr_node_kind)enk_operation &&
+         obj->variant.operation.kind == eok_base_class_cast) {
+    an_expr_node_ptr  operand = skip_parens(obj->variant.operation.operands);
+    a_type_ptr        src = object_class_of(operand, !is_dot);
+    a_type_ptr        tgt = object_class_of(obj, !is_dot);
+    a_base_class_ptr  bp = NULL;
+
+    if (src != NULL && tgt != NULL) {
+      for (bp = class_type_supp(src)->base_classes; bp != NULL;
+           bp = bp->next) {
+        if (skip_typerefs(bp->type) == tgt) break;
+      }  /* for */
+    }  /* if */
+    if (bp == NULL) {
+      ecil_note_unsupported("a virtual call through a conversion that is "
+                            "not to a base class");
+    } else {
+      cast_offset += (uint64_t)bp->offset;
+      obj = operand;
+    }  /* if */
+  }  /* while */
+  cobj = ecil_unsupported_reason == NULL ? object_class_of(obj, !is_dot) :
+                                           NULL;
+  if (ecil_unsupported_reason == NULL && cobj == NULL) {
+    ecil_note_unsupported("a virtual call on an object that is not a class");
+  }  /* if */
+  if (ecil_unsupported_reason == NULL) {
+    plain = (is_dot && object_is_complete_object(obj)) ||
+            cobj->variant.class_struct_union.final || direct->final;
+  }  /* if */
+  if (plain) {
+    /* The final overrider of the named function in the object's class. */
+    a_base_class_ptr  entry = NULL;
+    a_routine_ptr     target = direct;
+    a_base_class_ptr  obc = NULL;
+
+    if (decl_class != cobj) {
+      for (entry = class_type_supp(cobj)->base_classes; entry != NULL;
+           entry = entry->next) {
+        if (skip_typerefs(entry->type) == decl_class &&
+            (uint64_t)entry->offset == cast_offset) {
+          break;
+        }  /* if */
+      }  /* for */
+      if (entry == NULL) {
+        ecil_note_unsupported("a virtual call whose class is not a base of "
+                              "the object's class");
+      }  /* if */
+    }  /* if */
+    obc = entry;
+    if (ecil_unsupported_reason == NULL && entry != NULL) {
+      an_overriding_virtual_function_ptr  ovr;
+
+      for (ovr = entry->variant.overriding_virtual_functions; ovr != NULL;
+           ovr = ovr->next) {
+        if (ovr->primary_function == direct) {
+          a_type_ptr  ovr_return = skip_typerefs(
+                  ovr->overriding_function->type)->variant.routine.return_type;
+          a_type_ptr  named_return = skip_typerefs(
+                  direct->type)->variant.routine.return_type;
+
+          if (!identical_types(ovr_return, named_return)) {
+            keep_virtual = TRUE;     /* Covariant: the dispatch stays. */
+          } else {
+            target = ovr->overriding_function;
+            obc = ovr->base_class;
+          }  /* if */
+          break;
+        }  /* if */
+      }  /* for */
+    }  /* if */
+#if CHECKING
+    if (ecil_unsupported_reason == NULL && !keep_virtual) {
+      /* The front end's own answer (it walks the chain of conversions of the
+         selector) is the same function. */
+      check_assertion(final_overrider(direct, sel, cobj) == target);
+    }  /* if */
+#endif /* CHECKING */
+    if (ecil_unsupported_reason == NULL && !keep_virtual) {
+      it->object = obj;
+      it->devirt_routine = target;
+      it->devirt_base = obc;
+      it->devirt_class = cobj;
+    }  /* if */
+  }  /* if */
+  if (ecil_unsupported_reason == NULL && (!plain || keep_virtual)) {
+    /* A call through the vtable: the facts of the class that declares the
+       function (spec 12.2). */
+    ecil_class_vtable_facts(frame, decl_class);
+    it->c |= CALL_VIRTUAL;
+  }  /* if */
+}  /* setup_virtual_call */
 
 
 static void do_call(an_ecil_frame *frame, size_t idx)
@@ -2398,15 +3088,17 @@ as their first argument: its address (for x.f) is the object pointer.
       }  /* if */
     }  /* if */
     if (is_member_call) {
-      if (node->variant.operation.is_virtual_call) {
-        ecil_note_unsupported("a virtual call");
-      } else if (direct == NULL || callee->next == NULL ||
-                 !routine_type_is_nonstatic_member_function(direct->type)) {
+      if (direct == NULL || callee->next == NULL ||
+          !routine_type_is_nonstatic_member_function(direct->type)) {
         ecil_note_unsupported("a member call of a static or unknown "
                               "member function");
       } else {
         it->c |= (call_op == eok_dot_member_call) ? CALL_MEMBER_DOT :
                                                     CALL_MEMBER_PTR;
+        if (node->variant.operation.is_virtual_call) {
+          setup_virtual_call(frame, it, callee, direct,
+                             call_op == eok_dot_member_call);
+        }  /* if */
       }  /* if */
     }  /* if */
     if (direct != NULL && direct->source_corresp.name != NULL &&
@@ -2430,6 +3122,14 @@ as their first argument: its address (for x.f) is the object pointer.
       code_stack_size--;
       done = TRUE;
     } else if (direct != NULL && direct->source_corresp.name != NULL &&
+               strcmp(direct->source_corresp.name, "__builtin_launder") == 0 &&
+               callee->next != NULL && callee->next->next == NULL) {
+      /* std::launder is the identity on the pointer: the argument is the
+         expression. */
+      it->entry = callee->next;
+      it->phase = 0;
+      done = TRUE;
+    } else if (direct != NULL && direct->source_corresp.name != NULL &&
                strcmp(direct->source_corresp.name,
                       "__builtin_is_constant_evaluated") == 0) {
       /* Code that runs is not being evaluated as a constant expression. */
@@ -2451,7 +3151,8 @@ as their first argument: its address (for x.f) is the object pointer.
         it->b = cls.special_id;
       }  /* if */
       if (ecil_unsupported_reason == NULL && it->b == 0) {
-        it->a = ecil_function_id(frame, direct);
+        it->a = ecil_function_id(frame, it->devirt_routine != NULL ?
+                                        it->devirt_routine : direct);
       }  /* if */
       it->cursor = callee->next;
       if (ecil_unsupported_reason == NULL && it->b >= ECIL_SPECIAL_FP_FIRST &&
@@ -2503,7 +3204,9 @@ as their first argument: its address (for x.f) is the object pointer.
   if (!done && ecil_unsupported_reason == NULL &&
       (code_stack[idx].c & CALL_OBJECT_PENDING) != 0) {
     /* The object operand is complete: pass its address. */
-    an_expr_node_ptr  object = skip_parens(callee->next);
+    an_expr_node_ptr  object = skip_parens(code_stack[idx].object != NULL ?
+                                   (an_expr_node_ptr)code_stack[idx].object :
+                                   callee->next);
 
     it = &code_stack[idx];
     it->c &= ~CALL_OBJECT_PENDING;
@@ -2520,6 +3223,12 @@ as their first argument: its address (for x.f) is the object pointer.
         }  /* if */
       }  /* if */
       if (ecil_unsupported_reason == NULL) ecil_rec0(frame, eop_addr);
+    }  /* if */
+    if (ecil_unsupported_reason == NULL && it->devirt_base != NULL) {
+      /* A devirtualized call: the object's address converted to the class of
+         the final overrider (spec 12.6). */
+      emit_base_chain(frame, it->devirt_class, it->devirt_base, TRUE,
+                      ECIL_CAST_NONNULL, FALSE);
     }  /* if */
   }  /* if */
   if (done) {
@@ -2565,9 +3274,16 @@ as their first argument: its address (for x.f) is the object pointer.
                  ecil_class_is_nontrivial_abi(arg->type)) {
         code_stack[idx].c |= CALL_ARG_LOAD_PENDING;
       }  /* if */
-      push_expr(arg, (code_stack[idx].c & CALL_OBJECT_PENDING) != 0 &&
-                     (code_stack[idx].c & CALL_MEMBER_DOT) != 0 &&
-                     is_class_temp_object(arg) ? CIF_GLV : 0u);
+      {
+        an_expr_node_ptr  pushed = (arg == callee->next &&
+                                    code_stack[idx].object != NULL) ?
+                                   (an_expr_node_ptr)code_stack[idx].object :
+                                   arg;
+
+        push_expr(pushed, (code_stack[idx].c & CALL_OBJECT_PENDING) != 0 &&
+                          (code_stack[idx].c & CALL_MEMBER_DOT) != 0 &&
+                          is_class_temp_object(pushed) ? CIF_GLV : 0u);
+      }
     }  /* if */
   } else if (ecil_unsupported_reason == NULL) {
     /* All operands are on the stack: emit the call. */
@@ -2610,7 +3326,8 @@ as their first argument: its address (for x.f) is the object pointer.
                                                     ECIL_GF_ABI_OPAQUE)))) {
       ecil_note_unsupported("a call returning an unsupported type");
     }  /* if */
-    fn_type = skip_typerefs(callee->type);
+    fn_type = skip_typerefs(it->devirt_routine != NULL ?
+                            it->devirt_routine->type : callee->type);
     if (fn_type->kind == tk_pointer) {
       fn_type = skip_typerefs(fn_type->variant.pointer.type);
     }  /* if */
@@ -2625,6 +3342,7 @@ as their first argument: its address (for x.f) is the object pointer.
         flags |= ECIL_CALL_NORETURN;
       }  /* if */
       if (node->result_is_not_used) flags |= ECIL_CALL_RESULT_UNUSED;
+      if ((it->c & CALL_VIRTUAL) != 0) flags |= ECIL_CALL_VIRTUAL;
       if (ecil_unsupported_reason == NULL && t_call != 0) {
         it = &code_stack[idx];
         if (it->b >= ECIL_SPECIAL_FP_FIRST && it->b <= ECIL_SPECIAL_FP_LAST) {
@@ -2657,7 +3375,10 @@ as their first argument: its address (for x.f) is the object pointer.
                                   callee->next->next->next->type);
           uint32_t  lid = new_lid();
 
-          if (tt != 0) {
+          if (node_is_bit_field(callee->next->next->next)) {
+            /* The check is made against the width of the bit-field. */
+            ecil_note_unsupported("an overflow check against a bit-field");
+          } else if (tt != 0) {
             emit_local(frame, lid, tt, 0, 0);
             ecil_rec1(frame, eop_lref, lid);
             ecil_rec0(frame, eop_addr);
@@ -2688,6 +3409,9 @@ as their first argument: its address (for x.f) is the object pointer.
           ecil_arg_uint(frame, flags);
           ecil_rec_end(frame);
         } else {
+          if (ecil_has_exceptions() && is_nothrow_type(fn_type)) {
+            flags |= ECIL_CALL_NOTHROW;
+          }  /* if */
           ecil_rec_begin(frame, eop_call_indirect);
           ecil_arg_uint(frame, t_call);
           ecil_arg_uint(frame, nargs);
@@ -2945,6 +3669,635 @@ is not one that CMP3WAY can produce.
 }  /* spaceship_shape */
 
 
+static a_boolean new_has_throwing_initializer(a_new_delete_supplement_ptr nds);
+
+static a_boolean push_throw_scan(an_expr_node_ptr **work, size_t *size,
+                                 size_t *capacity, an_expr_node_ptr node)
+/*
+Push an expression node on the work list of expr_may_contain_throw; FALSE if
+memory ran out.
+*/
+{
+  a_boolean  ok = TRUE;
+
+  if (*size == *capacity) {
+    size_t            new_capacity = *capacity == 0 ? 32 : *capacity * 2;
+    an_expr_node_ptr  *new_work = (an_expr_node_ptr *)realloc(*work,
+                                   new_capacity * sizeof(an_expr_node_ptr));
+
+    if (new_work == NULL) {
+      ok = FALSE;
+    } else {
+      *work = new_work;
+      *capacity = new_capacity;
+    }  /* if */
+  }  /* if */
+  if (ok) (*work)[(*size)++] = node;
+  return ok;
+}  /* push_throw_scan */
+
+
+static a_boolean push_dynamic_init_scan(an_expr_node_ptr **work,
+                                        size_t *size, size_t *capacity,
+                                        a_dynamic_init_ptr di,
+                                        a_boolean *unknown)
+/*
+Push the expressions a dynamic initialization evaluates on the work list of
+expr_may_contain_throw; *unknown is set for a kind that is not looked into
+(an aggregate).  FALSE if memory ran out.
+*/
+{
+  a_boolean         ok = TRUE;
+  an_expr_node_ptr  e;
+
+  if (di != NULL) {
+    switch (di->kind) {
+      case dik_none:
+      case dik_zero:
+      case dik_constant:
+        break;
+      case dik_expression:
+      case dik_class_result_via_ctor:
+        ok = push_throw_scan(work, size, capacity, di->variant.expression);
+        break;
+      case dik_bitwise_copy:
+        if (di->variant.bitwise_copy.source != NULL) {
+          ok = push_throw_scan(work, size, capacity,
+                               di->variant.bitwise_copy.source);
+        }  /* if */
+        break;
+      case dik_constructor:
+        for (e = di->variant.constructor.args; e != NULL && ok;
+             e = e->next) {
+          ok = push_throw_scan(work, size, capacity, e);
+        }  /* for */
+        break;
+      default:
+        *unknown = TRUE;
+        break;
+    }  /* switch */
+  }  /* if */
+  return ok;
+}  /* push_dynamic_init_scan */
+
+
+static a_boolean expr_may_contain_throw(an_expr_node_ptr root)
+/*
+Return TRUE if the expression contains a throw expression (or has a form
+that is not looked into: the answer only decides whether a conditional
+region gets its own FULLEXPR).  The walk uses a heap list.
+*/
+{
+  an_expr_node_ptr  *work = NULL;
+  size_t            size = 0;
+  size_t            capacity = 0;
+  a_boolean         found = FALSE;
+  a_boolean         ok = push_throw_scan(&work, &size, &capacity, root);
+
+  while (ok && !found && size > 0) {
+    an_expr_node_ptr  node = skip_parens(work[--size]);
+    an_expr_node_ptr  operand;
+
+    switch (node->kind) {
+      case enk_constant:
+      case enk_variable:
+      case enk_routine:
+      case enk_param_ref:
+      case enk_type_operand:
+      case enk_field:
+      case enk_lambda:
+      case enk_reuse_value:
+      case enk_sizeof:
+      case enk_alignof:
+      case enk_datasizeof:
+        break;
+      case enk_throw:
+        found = TRUE;
+        break;
+      case enk_operation:
+        for (operand = node->variant.operation.operands;
+             operand != NULL && ok; operand = operand->next) {
+          ok = push_throw_scan(&work, &size, &capacity, operand);
+        }  /* for */
+        break;
+      case enk_object_lifetime:
+        ok = push_throw_scan(&work, &size, &capacity,
+                             node->variant.object_lifetime.expr);
+        break;
+      case enk_temp_init:
+        ok = push_dynamic_init_scan(&work, &size, &capacity,
+                                    node->variant.init.dynamic_init, &found);
+        break;
+      case enk_new_delete:
+        { a_new_delete_supplement_ptr  nds = node->variant.new_delete;
+
+          if (nds->is_new && nds->freeing_of_storage_on_exception != NULL &&
+              new_has_throwing_initializer(nds)) {
+            found = TRUE;      /* Its free cleanup needs a FULLEXPR too. */
+          }  /* if */
+          for (operand = nds->arg; operand != NULL && ok;
+               operand = operand->next) {
+            ok = push_throw_scan(&work, &size, &capacity, operand);
+          }  /* for */
+          if (ok && nds->number_of_elements != NULL) {
+            ok = push_throw_scan(&work, &size, &capacity,
+                                 nds->number_of_elements);
+          }  /* if */
+          if (ok) {
+            ok = push_dynamic_init_scan(&work, &size, &capacity,
+                                        nds->dynamic_init, &found);
+          }  /* if */
+        }
+        break;
+      case enk_c11_generic:
+        ok = push_throw_scan(&work, &size, &capacity,
+                             node->variant.c11_generic.result);
+        break;
+      case enk_typeid:
+        for (operand = node->variant.typeid_info.type_with_opt_expr;
+             operand != NULL && ok; operand = operand->next) {
+          ok = push_throw_scan(&work, &size, &capacity, operand);
+        }  /* for */
+        break;
+      case enk_builtin_operation:
+        for (operand = node->variant.builtin_operation.operands;
+             operand != NULL && ok; operand = operand->next) {
+          ok = push_throw_scan(&work, &size, &capacity, operand);
+        }  /* for */
+        break;
+      default:
+        found = TRUE;                    /* Not known. */
+        break;
+    }  /* switch */
+  }  /* while */
+  free(work);
+  return found || !ok;
+}  /* expr_may_contain_throw */
+
+
+static a_boolean conditional_needs_fullexpr(an_expr_node_ptr node,
+                                            an_expr_node_ptr op2)
+/*
+Return TRUE for the outermost conditional operation (? :, && or ||) of an
+expression translated with exceptions that has no full expression open and
+whose conditional operands may throw: the throw's implicit free needs a
+FULLEXPR around the whole conditional region (spec 12.5).  op2 is its first
+conditional operand.
+*/
+{
+  a_boolean  wrap = FALSE;
+
+  if (ecil_has_exceptions() && cond_depth == 0 && fullexpr_depth == 0 &&
+      op2 != NULL) {
+    an_expr_node_ptr  arm;
+
+    for (arm = op2; arm != NULL && !wrap; arm = arm->next) {
+      if (node->variant.operation.kind == eok_question || arm == op2) {
+        wrap = expr_may_contain_throw(arm);
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return wrap;
+}  /* conditional_needs_fullexpr */
+
+
+static void emit_pm_object_address(an_ecil_frame *frame,
+                                   an_expr_node_ptr object)
+/*
+The class object of a .* is evaluated: pass its address (a temporary is
+materialized for a value).
+*/
+{
+  object = skip_parens(object);
+  if (!is_glvalue_node(object) && !is_class_temp_object(object)) {
+    uint32_t  ot = ecil_type_id(frame, object->type);
+
+    if (ecil_class_has_nontrivial_dtor(object->type)) {
+      ecil_note_unsupported("a temporary with a destructor");
+    } else if (ot != 0) {
+      emit_materialize_temp(frame, new_lid(), ot);
+    }  /* if */
+  }  /* if */
+  if (ecil_unsupported_reason == NULL) ecil_rec0(frame, eop_addr);
+}  /* emit_pm_object_address */
+
+
+static void emit_pm_field(an_ecil_frame *frame, an_expr_node_ptr node,
+                          an_expr_node_ptr pm)
+/*
+PM_FIELD of the object pointer and the pointer to a data member that are on
+the stack: a glvalue of the member (read if the node is a value).
+*/
+{
+  uint32_t  t_dm = ecil_type_id(frame, pm->type);
+
+  if (t_dm != 0) {
+    ecil_rec1(frame, eop_pm_field, t_dm);
+    emit_load_if_value(frame, node);
+  }  /* if */
+}  /* emit_pm_field */
+
+
+static void emit_pm_cast(an_ecil_frame *frame, an_expr_node_ptr node)
+/*
+eok_pm_base_class_cast and eok_pm_derived_class_cast: one PM_CAST step to a
+direct base class or from one (spec 12.4).  A virtual base is ill-formed.
+*/
+{
+  an_expr_node_ptr  op = node->variant.operation.operands;
+  a_boolean         to_base = node->variant.operation.kind ==
+                              (an_expr_operator_kind)eok_pm_base_class_cast;
+  a_type_ptr        from_class = skip_typerefs(pm_class_type(op->type));
+  a_type_ptr        to_class = skip_typerefs(pm_class_type(node->type));
+  a_type_ptr        derived = to_base ? from_class : to_class;
+  a_type_ptr        base_class = to_base ? to_class : from_class;
+  a_base_class_ptr  bcp = NULL;
+  uint32_t          t_from = ecil_type_id(frame, op->type);
+  uint32_t          t_to = ecil_type_id(frame, node->type);
+
+  if (!is_immediate_class_type(derived) ||
+      !is_immediate_class_type(base_class)) {
+    ecil_note_unsupported("a pointer to member cast of unsupported types");
+  } else {
+    for (bcp = class_type_supp(derived)->base_classes; bcp != NULL;
+         bcp = bcp->next) {
+      if (bcp->direct && skip_typerefs(bcp->type) == base_class) break;
+    }  /* for */
+    if (bcp == NULL) {
+      ecil_note_unsupported("a pointer to member cast to a class that is "
+                            "not a direct base class");
+    } else if (bcp->is_virtual) {
+      ecil_note_unsupported("a pointer to member cast through a virtual "
+                            "base class");
+    } else if (bcp->ambiguous) {
+      ecil_note_unsupported("a pointer to member cast to an ambiguous base "
+                            "class");
+    }  /* if */
+  }  /* if */
+  if (ecil_unsupported_reason == NULL && t_from != 0 && t_to != 0) {
+    ecil_rec_begin(frame, eop_pm_cast);
+    ecil_arg_uint(frame, to_base ? (unsigned int)epck_to_base :
+                                   (unsigned int)epck_to_derived);
+    ecil_arg_uint(frame, t_from);
+    ecil_arg_uint(frame, t_to);
+    ecil_arg_uint(frame, (uint64_t)bcp->offset);
+    ecil_rec_end(frame);
+  }  /* if */
+}  /* emit_pm_cast */
+
+
+static a_boolean rtti_is_enabled(void)
+/*
+Return TRUE if typeid and dynamic_cast are available (the front end rejects
+them without RTTI; the typeinfo objects of exceptions exist all the same).
+*/
+{
+  return rtti_enabled;
+}  /* rtti_is_enabled */
+
+
+static a_type_ptr rtti_class_of(a_type_ptr type)
+/*
+The class of a pointer to a class, or of a class (references are looked
+through); NULL for another type (void, a non-class pointee).
+*/
+{
+  a_type_ptr  t = skip_typerefs(type);
+  a_type_ptr  result = NULL;
+
+  if (t->kind == tk_pointer) t = skip_typerefs(t->variant.pointer.type);
+  if (is_immediate_class_type(t)) result = t;
+  return result;
+}  /* rtti_class_of */
+
+
+static uint32_t rtti_class_typeinfo(an_ecil_frame *frame, a_type_ptr cls)
+/*
+The typeinfo of a class that a dynamic_cast or a typeid names, with the facts
+of the class (the library computes the offset hint from the class graph).
+*/
+{
+  uint32_t  ti = 0;
+
+  if (!rtti_is_enabled()) {
+    ecil_note_unsupported("an RTTI operation with RTTI disabled");
+  } else if (cls == NULL || cls->incomplete) {
+    ecil_note_unsupported("an RTTI operation on an incomplete class");
+  } else {
+    ecil_class_layout_facts(frame, cls);
+    if (ecil_unsupported_reason == NULL && ecil_class_is_dynamic(cls)) {
+      ecil_class_vtable_facts(frame, cls);
+    }  /* if */
+    if (ecil_unsupported_reason == NULL) ti = ecil_typeinfo_id(frame, cls);
+  }  /* if */
+  return ti;
+}  /* rtti_class_typeinfo */
+
+
+static void emit_dynamic_cast(an_ecil_frame *frame, an_expr_node_ptr node)
+/*
+eok_dynamic_cast (pointers, void *) and eok_ref_dynamic_cast (the operand and
+the result are glvalues, and the node's type is T, not T &): DYNAMIC_CAST of
+the operand's pointer, with the typeinfo of its class and of the target
+class (nil for void *).  A reference cast throws bad_cast (REF) and takes the
+address of its operand first (spec 12.4).
+*/
+{
+  an_expr_node_ptr  op = node->variant.operation.operands;
+  a_boolean         is_ref = node->variant.operation.kind ==
+                             (an_expr_operator_kind)eok_ref_dynamic_cast;
+  a_type_ptr        src_class = rtti_class_of(op->type);
+  a_type_ptr        dst_type = skip_typerefs(node->type);
+  a_type_ptr        dst_class;
+  a_boolean         to_void = FALSE;
+  uint32_t          t_result;
+  uint32_t          g_src;
+  uint32_t          g_dst = 0;
+
+  if (!is_ref && dst_type->kind == tk_pointer) {
+    dst_type = skip_typerefs(dst_type->variant.pointer.type);
+  }  /* if */
+  to_void = !is_ref && dst_type->kind == tk_void;
+  dst_class = to_void ? NULL : rtti_class_of(dst_type);
+  if (is_ref && !is_glvalue_node(skip_parens(op))) {
+    ecil_note_unsupported("a dynamic_cast to a reference of a value");
+  } else if (!to_void && dst_class == NULL) {
+    ecil_note_unsupported("a dynamic_cast to an unsupported type");
+  }  /* if */
+  if (ecil_unsupported_reason == NULL) {
+    g_src = rtti_class_typeinfo(frame, src_class);
+    if (ecil_unsupported_reason == NULL && !to_void) {
+      g_dst = rtti_class_typeinfo(frame, dst_class);
+    }  /* if */
+    /* The result is the node's pointer, or the address of the referent. */
+    t_result = is_ref ? ecil_ptr_type(frame, ecil_type_id(frame,
+                                                          node->type)) :
+                        ecil_type_id(frame, node->type);
+    if (ecil_unsupported_reason == NULL && g_src != 0 &&
+        (to_void || g_dst != 0) && t_result != 0) {
+      if (is_ref) ecil_rec0(frame, eop_addr);
+      ecil_rec_begin(frame, eop_dynamic_cast);
+      ecil_arg_uint(frame, g_src);
+      if (to_void) {
+        ecil_arg_nil(frame);
+      } else {
+        ecil_arg_uint(frame, g_dst);
+      }  /* if */
+      ecil_arg_uint(frame, t_result);
+      ecil_arg_uint(frame, is_ref ? (unsigned int)ECIL_DYNAMIC_CAST_REF : 0u);
+      ecil_rec_end(frame);
+      if (is_ref) {
+        ecil_rec0(frame, eop_deref);
+        emit_load_if_value(frame, node);
+      }  /* if */
+    }  /* if */
+  }  /* if */
+}  /* emit_dynamic_cast */
+
+
+static a_boolean glvalue_from_pointer_deref(an_expr_node_ptr root)
+/*
+Clang's isGLValueFromPointerDeref, for the null check of typeid(*p): the
+operand, through parentheses, the right operand of a comma, either arm of a
+conditional and the casts of a glvalue, is an indirection through a pointer
+(not through a reference).  The walk uses a heap list.
+*/
+{
+  an_expr_node_ptr  *work = NULL;
+  size_t            size = 0;
+  size_t            capacity = 0;
+  a_boolean         result = FALSE;
+  a_boolean         ok = push_throw_scan(&work, &size, &capacity, root);
+
+  while (ok && !result && size > 0) {
+    an_expr_node_ptr  node = skip_parens(work[--size]);
+
+    if (node->kind == (an_expr_node_kind)enk_operation) {
+      an_expr_operator_kind  op = node->variant.operation.kind;
+      an_expr_node_ptr       ops = node->variant.operation.operands;
+
+      if (op == eok_indirect) {
+        result = TRUE;
+      } else if (op == eok_comma && ops != NULL && ops->next != NULL) {
+        ok = push_throw_scan(&work, &size, &capacity, ops->next);
+      } else if (op == eok_question && ops != NULL && ops->next != NULL &&
+                 ops->next->next != NULL) {
+        ok = push_throw_scan(&work, &size, &capacity, ops->next) &&
+             push_throw_scan(&work, &size, &capacity, ops->next->next);
+      } else if ((op == eok_lvalue_cast || op == eok_lvalue_adjust ||
+                  op == eok_base_class_cast ||
+                  op == eok_derived_class_cast) && ops != NULL &&
+                 is_glvalue_node(skip_parens(ops))) {
+        ok = push_throw_scan(&work, &size, &capacity, ops);
+      }  /* if */
+    }  /* if */
+  }  /* while */
+  free(work);
+  return result;
+}  /* glvalue_from_pointer_deref */
+
+
+static void do_typeid(an_ecil_frame *frame, size_t idx)
+/*
+enk_typeid: TYPEID with the typeinfo of the type operand (the static form,
+nothing popped), or with the glvalue of a polymorphic operand on the stack
+(the dynamic form, nil typeinfo; NULL_CHECK iff the operand is an indirection
+through a pointer, typeid(*p)).  The result is a glvalue of std::type_info.
+*/
+{
+  a_code_item       *it = &code_stack[idx];
+  an_expr_node_ptr  node = (an_expr_node_ptr)it->entry;
+  an_expr_node_ptr  type_op = node->variant.typeid_info.type_with_opt_expr;
+  an_expr_node_ptr  operand = type_op != NULL ? type_op->next : NULL;
+  a_boolean         dynamic = node->variant.typeid_info.is_dynamic &&
+                              operand != NULL;
+  uint32_t          t_result = ecil_type_id(frame, node->type);
+  uint32_t          ti = 0;
+  unsigned int      cflags = 0;
+
+  if (type_op == NULL ||
+      type_op->kind != (an_expr_node_kind)enk_type_operand) {
+    ecil_note_unsupported("a typeid without a type operand");
+    code_stack_size--;
+  } else if (dynamic && it->phase == 0) {
+    a_type_ptr  cls = rtti_class_of(operand->type);
+
+    it->phase = 1;
+    if (cls == NULL) {
+      ecil_note_unsupported("a typeid of a value that is not a class");
+    } else {
+      (void)rtti_class_typeinfo(frame, cls);
+      if (ecil_unsupported_reason == NULL) {
+        push_expr(operand, is_class_temp_object(operand) ? CIF_GLV : 0u);
+      }  /* if */
+    }  /* if */
+  } else {
+    if (dynamic) {
+      an_expr_node_ptr  op = skip_parens(operand);
+
+      if (!is_glvalue_node(op) && !is_class_temp_object(op)) {
+        uint32_t  ot = ecil_type_id(frame, op->type);
+
+        if (ecil_class_has_nontrivial_dtor(op->type)) {
+          ecil_note_unsupported("a temporary with a destructor");
+        } else if (ot != 0) {
+          emit_materialize_temp(frame, new_lid(), ot);
+        }  /* if */
+      }  /* if */
+      if (glvalue_from_pointer_deref(op)) cflags |= ECIL_TYPEID_NULL_CHECK;
+    } else if (!rtti_is_enabled()) {
+      ecil_note_unsupported("a typeid with RTTI disabled");
+    } else {
+      ti = ecil_typeinfo_id(frame, type_op->variant.type_operand.type);
+    }  /* if */
+    if (ecil_unsupported_reason == NULL && t_result != 0 &&
+        (dynamic || ti != 0)) {
+      ecil_rec_begin(frame, eop_typeid);
+      if (dynamic) {
+        ecil_arg_nil(frame);
+      } else {
+        ecil_arg_uint(frame, ti);
+      }  /* if */
+      ecil_arg_uint(frame, t_result);
+      ecil_arg_uint(frame, cflags);
+      ecil_rec_end(frame);
+    }  /* if */
+    code_stack_size--;
+  }  /* if */
+}  /* do_typeid */
+
+
+static void do_pm_call(an_ecil_frame *frame, size_t idx)
+/*
+eok_dot_pm_call and eok_points_to_pm_call, (x.*pmf)(args) and (p->*pmf)(args):
+the object (its address for x) comes first (C++17 evaluates it first), then
+the pointer to the member function, then the arguments, then PM_CALL.  The
+first operand of the node is the pointer, the second is the object.
+*/
+{
+  a_code_item       *it = &code_stack[idx];
+  an_expr_node_ptr  node = (an_expr_node_ptr)it->entry;
+  an_expr_node_ptr  pmf = node->variant.operation.operands;
+  an_expr_node_ptr  object = pmf != NULL ? pmf->next : NULL;
+  a_boolean         is_dot = node->variant.operation.kind ==
+                             (an_expr_operator_kind)eok_dot_pm_call;
+  a_type_ptr        fn_type = NULL;
+
+  if (object == NULL) {
+    ecil_note_unsupported("a call through a pointer to member without an "
+                          "object");
+    code_stack_size--;
+  } else if (it->phase == 0) {
+    it->phase = 1;
+    push_expr(object, is_dot && is_class_temp_object(object) ? CIF_GLV : 0u);
+  } else if (it->phase == 1) {
+    if (is_dot) emit_pm_object_address(frame, object);
+    it->phase = 2;
+    push_expr(pmf, 0);
+  } else {
+    if (it->phase == 2) {
+      it->phase = 3;
+      it->cursor = object->next;
+    } else if ((it->c & CALL_ARG_LOAD_PENDING) != 0) {
+      /* A by-value argument of a NONTRIVIAL_ABI class is the load of the
+         storage that holds it (spec 11.6). */
+      it->c &= ~CALL_ARG_LOAD_PENDING;
+      ecil_rec1(frame, eop_load, 0);
+    }  /* if */
+    fn_type = skip_typerefs(pm_member_type(pmf->type));
+    if (ecil_unsupported_reason == NULL && it->cursor != NULL) {
+      an_expr_node_ptr  arg = (an_expr_node_ptr)it->cursor;
+
+      it->cursor = arg->next;
+      if (ecil_class_is_nontrivial_abi(arg->type) &&
+          rout_type_supp(fn_type)->has_ellipsis) {
+        ecil_note_unsupported("a class that is not trivially copyable "
+                              "passed through an ellipsis");
+      } else if (is_glvalue_node(skip_parens(arg)) &&
+                 ecil_class_is_nontrivial_abi(arg->type)) {
+        it->c |= CALL_ARG_LOAD_PENDING;
+      }  /* if */
+      push_expr(arg, 0);
+    } else {
+      /* All operands are on the stack: emit the call. */
+      uint32_t          t_call = ecil_func_type_id(frame, fn_type, FALSE);
+      uint32_t          result_gid = ecil_type_id(frame, node->type);
+      an_expr_node_ptr  arg;
+      uint64_t          nargs = 1;
+      unsigned int      cflags = 0;
+
+      for (arg = object->next; arg != NULL; arg = arg->next) nargs++;
+      if (ecil_class_is_nontrivial_abi(node->type) &&
+          (it->flags & CIF_DEST) == 0) {
+        if (!node->result_is_not_used && (it->flags & CIF_UNUSED) == 0) {
+          ecil_note_unsupported("a class value that is not trivially "
+                                "copyable used other than to initialize an "
+                                "object");
+        } else if (ecil_class_has_nontrivial_dtor(node->type)) {
+          ecil_note_unsupported("a temporary with a destructor");
+        }  /* if */
+      }  /* if */
+      if (result_gid != 0 && (info_of(result_gid)->kind == egk_opaque ||
+                              (info_of(result_gid)->kind == egk_record &&
+                               (info_of(result_gid)->flags &
+                                                    ECIL_GF_ABI_OPAQUE)))) {
+        ecil_note_unsupported("a call returning an unsupported type");
+      }  /* if */
+      if (rout_type_supp(fn_type)->has_ellipsis) {
+        cflags |= ECIL_CALL_VARIADIC_CALLEE;
+      }  /* if */
+      if (rout_type_supp(fn_type)->does_not_return) {
+        cflags |= ECIL_CALL_NORETURN;
+      }  /* if */
+      if (node->result_is_not_used) cflags |= ECIL_CALL_RESULT_UNUSED;
+      if (ecil_has_exceptions() && is_nothrow_type(fn_type)) {
+        cflags |= ECIL_CALL_NOTHROW;
+      }  /* if */
+      if (ecil_unsupported_reason == NULL && t_call != 0) {
+        ecil_rec_begin(frame, eop_pm_call);
+        ecil_arg_uint(frame, t_call);
+        ecil_arg_uint(frame, nargs);
+        ecil_arg_uint(frame, cflags);
+        ecil_rec_end(frame);
+        finish_value(frame, it->flags);
+      }  /* if */
+      code_stack_size--;
+    }  /* if */
+  }  /* if */
+}  /* do_pm_call */
+
+
+static a_boolean type_is_empty_class(an_ecil_frame *frame, a_type_ptr type);
+
+
+static an_expr_node_ptr empty_assign_operand(an_expr_node_ptr operand)
+/*
+The operand of the assignment of a class without data that is evaluated for
+its effects only: the adjustments that read the object (an implicit indirection
+through a reference, a cv adjustment of the class value) are skipped, so that
+no value of the class is produced.
+*/
+{
+  an_expr_node_ptr  node = skip_parens(operand);
+  a_boolean         walking = TRUE;
+
+  while (walking) {
+    walking = FALSE;
+    if (node->kind == (an_expr_node_kind)enk_operation &&
+        (node->variant.operation.kind == eok_ref_indirect ||
+         node->variant.operation.kind == eok_class_rvalue_adjust ||
+         node->variant.operation.kind == eok_lvalue_adjust) &&
+        node->variant.operation.operands != NULL) {
+      node = skip_parens(node->variant.operation.operands);
+      walking = TRUE;
+    }  /* if */
+  }  /* while */
+  return node;
+}  /* empty_assign_operand */
+
+
+
+
 static void do_operation(an_ecil_frame *frame, size_t idx)
 /*
 An enk_operation node.  Most operators are post-order: push the operands
@@ -2966,6 +4319,8 @@ revisit.
   if (op == eok_call || op == eok_dot_member_call ||
       op == eok_points_to_member_call) {
     do_call(frame, idx);
+  } else if (op == eok_dot_pm_call || op == eok_points_to_pm_call) {
+    do_pm_call(frame, idx);
   } else if (is_assignment_operator(op) && op != eok_assign) {
     do_compound_assignment(frame, idx);
   } else if (op == eok_dot_static || op == eok_points_to_static) {
@@ -2986,6 +4341,21 @@ revisit.
   } else if (it->phase == 0) {
     /* Phase 0: push the continuation and the operands. */
     it->phase = 1;
+    if ((op == eok_question || op == eok_land || op == eok_lor) &&
+        conditional_needs_fullexpr(node, op2)) {
+      uint32_t  vt = (is_void_node_type(node) || is_glvalue_node(node) ||
+                      !value_is_pushed(node, (flags & CIF_UNUSED) != 0)) ? 0 :
+                     ecil_type_id(frame, node->type);
+
+      if (vt != 0 && (info_of(vt)->kind == egk_record ||
+                      info_of(vt)->kind == egk_array)) {
+        ecil_note_unsupported("a throw in a conditional operand of a class "
+                              "value");
+      } else {
+        emit_fullexpr_begin(frame);
+        it->c |= COND_FULLEXPR;
+      }  /* if */
+    }  /* if */
     if (op == eok_question &&
         node->variant.operation.is_gnu_two_operand_question_mark) {
       ecil_note_unsupported("the GNU ?: with an omitted operand");
@@ -3009,6 +4379,21 @@ revisit.
         /* A member of a class temporary is read from the temporary's
            storage (a record prvalue is never taken apart: spec 11.6). */
         push_expr(op1, is_class_temp_object(op1) ? CIF_GLV : 0u);
+        break;
+      case eok_pm_field:
+        /* The object's address first (a temporary is materialized for a
+           value), then the pointer to the member. */
+        push_expr(op1, is_class_temp_object(op1) ? CIF_GLV : 0u);
+        break;
+      case eok_pm_points_to_field:
+        push_expr(op2, 0);
+        push_expr(op1, 0);
+        break;
+      case eok_pm_base_class_cast:
+      case eok_pm_derived_class_cast:
+      case eok_dynamic_cast:
+      case eok_ref_dynamic_cast:
+        push_expr(op1, 0);
         break;
       case eok_points_to_field:
       case eok_array_to_pointer:
@@ -3035,7 +4420,14 @@ revisit.
         push_expr(op1, ((op == eok_cast ||
                          op == eok_dot_vacuous_destructor_call ||
                          op == eok_points_to_vacuous_destructor_call) &&
-                        is_void_node_type(node)) ? CIF_UNUSED : 0u);
+                        is_void_node_type(node)) ? CIF_UNUSED :
+                       ((op == eok_lvalue_adjust && is_glvalue_node(node) &&
+                         skip_parens(op1)->kind ==
+                                  (an_expr_node_kind)enk_temp_init) ||
+                        ((op == eok_reference_to ||
+                          op == eok_array_to_pointer) &&
+                         is_array_temp_init(skip_parens(op1)))) ?
+                                                         CIF_GLV : 0u);
         break;
       case eok_class_rvalue_adjust:
         push_expr(op1, it->flags & CIF_GLV);
@@ -3049,8 +4441,21 @@ revisit.
           if (pointer_operand_first(op1, op2, &ptr_op, &int_op, frame)) {
             it = &code_stack[idx];
             it->cursor = int_op;
-            push_expr(int_op, 0);
-            push_expr(ptr_op, 0);
+            if (op == eok_subscript && int_op == op1 && !C_mode() &&
+                skip_parens(int_op)->kind != (an_expr_node_kind)enk_constant) {
+              /* The integer operand is written first (C++17 sequences it
+                 before the pointer; C does not). */
+              uint32_t  tmp = new_lid();
+
+              emit_local(frame, tmp, ecil_type_id(frame, int_op->type), 0, 0);
+              it->a = tmp;
+              it->phase = SUBSCRIPT_INT_FIRST;
+              ecil_rec1(frame, eop_lref, tmp);
+              push_expr(int_op, 0);
+            } else {
+              push_expr(int_op, 0);
+              push_expr(ptr_op, 0);
+            }  /* if */
           }  /* if */
         }
         break;
@@ -3079,7 +4484,20 @@ revisit.
         }
         break;
       case eok_assign:
-        if (!C_mode() && node->variant.operation.eval_right_to_left &&
+        if (!C_mode() && is_immediate_class_type(skip_typerefs(op1->type)) &&
+            type_is_empty_class(frame, op1->type) &&
+            (node->result_is_not_used || is_glvalue_node(node))) {
+          /* A class without data: the assignment copies nothing (a store
+             would write a byte of whatever shares its address).  The
+             operands are evaluated, the right one first. */
+          an_expr_node_ptr  rhs = empty_assign_operand(op2);
+
+          it->phase = EMPTY_ASSIGN_RHS;
+          it->cursor = rhs;
+          push_expr(rhs, (is_glvalue_node(rhs) &&
+                          is_immediate_class_type(skip_typerefs(rhs->type))) ?
+                         CIF_GLV : CIF_UNUSED);
+        } else if (!C_mode() && node->variant.operation.eval_right_to_left &&
             !target_may_be_evaluated_first(op1, op2) &&
             skip_typerefs(op1->type)->kind != tk_array &&
             ecil_type_id(frame, op2->type) != 0) {
@@ -3176,10 +4594,13 @@ revisit.
         if (it->phase == 1) {
           ecil_rec0(frame, op == eok_land ? eop_land_begin : eop_lor_begin);
           it->phase = 2;
+          cond_depth++;                 /* The right operand is conditional. */
           push_expr(op2, CIF_COND);
           done = FALSE;
         } else {
+          if (cond_depth > 0) cond_depth--;
           ecil_rec0(frame, op == eok_land ? eop_land_end : eop_lor_end);
+          if ((it->c & COND_FULLEXPR) != 0) emit_fullexpr_end(frame);
           finish_bool_result(frame, node, flags);
         }  /* if */
         break;
@@ -3193,11 +4614,18 @@ revisit.
                   skip_parens(op2)->variant.init.dynamic_init != NULL &&
                   skip_parens(op2)->variant.init.dynamic_init->master_entry !=
                                                                       NULL;
+          /* A class value that the context discards (a statement, a void
+             cast, a comma's left operand) is not carried: the conditional is
+             a void TERN and each arm is discarded in its own region. */
+          a_boolean  discarded_class = !lvalue && !is_void_node_type(node) &&
+                  !C_mode() &&
+                  is_immediate_class_type(skip_typerefs(node->type)) &&
+                  (node->result_is_not_used ||
+                   (flags & (CIF_UNUSED | CIF_DROP)) != 0);
           a_boolean  unused_class = !lvalue &&
-                                    ((node->result_is_not_used &&
-                                      ecil_class_is_nontrivial_abi(
-                                                              node->type)) ||
-                                     master_arms);
+                                    (discarded_class || master_arms);
+          unsigned int  arm_flags = (discarded_class && !master_arms) ?
+                                    CIF_UNUSED : 0u;
 
           if (it->phase == 1) {
             t = (is_void_node_type(node) || unused_class) ? 0 :
@@ -3230,18 +4658,29 @@ revisit.
               ecil_rec_end(frame);
               it = &code_stack[idx];
               it->phase = 2;
-              push_expr(op2, 0);
+              cond_depth++;             /* The first arm is conditional. */
+              push_expr(op2, arm_flags);
             }  /* if */
             done = FALSE;
           } else if (it->phase == 2) {
+            if (cond_depth > 0) cond_depth--;
             if (lvalue) ecil_rec0(frame, eop_addr);
+            if (arm_flags != 0 && value_is_pushed(op2, TRUE)) {
+              ecil_rec0(frame, eop_drop);
+            }  /* if */
             ecil_rec0(frame, eop_tern_else);
             it->phase = 3;
-            push_expr(op2->next, 0);
+            cond_depth++;               /* ... and so is the second. */
+            push_expr(op2->next, arm_flags);
             done = FALSE;
           } else {
+            if (cond_depth > 0) cond_depth--;
             if (lvalue) ecil_rec0(frame, eop_addr);
+            if (arm_flags != 0 && value_is_pushed(op2->next, TRUE)) {
+              ecil_rec0(frame, eop_drop);
+            }  /* if */
             ecil_rec0(frame, eop_tern_end);
+            if ((it->c & COND_FULLEXPR) != 0) emit_fullexpr_end(frame);
             if (lvalue) {
               ecil_rec0(frame, eop_deref);
             } else {
@@ -3301,6 +4740,21 @@ revisit.
         finish_value(frame, flags);
         break;
       case eok_subscript:
+        if (it->phase == SUBSCRIPT_INT_FIRST) {
+          /* The integer is evaluated: store it, then evaluate the pointer. */
+          ecil_rec_begin(frame, eop_store);
+          ecil_arg_uint(frame, ECIL_STORE_INIT);
+          ecil_arg_uint(frame, (unsigned int)esr_none);
+          ecil_rec_end(frame);
+          it->phase = SUBSCRIPT_PTR_NEXT;
+          push_expr(op2, 0);
+          done = FALSE;
+          break;
+        }  /* if */
+        if (it->phase == SUBSCRIPT_PTR_NEXT) {
+          ecil_rec1(frame, eop_lref, it->a);
+          ecil_rec1(frame, eop_load, 0);
+        }  /* if */
         emit_ptr_stride(frame, (an_expr_node_ptr)it->cursor, FALSE);
         ecil_rec0(frame, eop_deref);
         emit_load_if_value(frame, node);
@@ -3319,7 +4773,8 @@ revisit.
         break;
       case eok_array_to_pointer:
         { a_boolean         operand_is_glvalue =
-                                      is_glvalue_node(skip_parens(op1));
+                                      is_glvalue_node(skip_parens(op1)) ||
+                                      is_array_temp_init(skip_parens(op1));
           uint32_t          array_gid = ecil_type_id(frame, op1->type);
           uint32_t          ptr_gid = ecil_type_id(frame, node->type);
 
@@ -3384,6 +4839,31 @@ revisit.
         }
         finish_value(frame, flags);
         break;
+      case eok_pm_field:
+        if (it->phase == 1) {
+          emit_pm_object_address(frame, op1);
+          it->phase = 2;
+          push_expr(op2, 0);
+          done = FALSE;
+        } else {
+          emit_pm_field(frame, node, op2);
+          finish_value(frame, flags);
+        }  /* if */
+        break;
+      case eok_pm_points_to_field:
+        emit_pm_field(frame, node, op2);
+        finish_value(frame, flags);
+        break;
+      case eok_pm_base_class_cast:
+      case eok_pm_derived_class_cast:
+        emit_pm_cast(frame, node);
+        finish_value(frame, flags);
+        break;
+      case eok_dynamic_cast:
+      case eok_ref_dynamic_cast:
+        emit_dynamic_cast(frame, node);
+        finish_value(frame, flags);
+        break;
       case eok_ref_indirect:
         /* The operand is the reference (a pointer value): the referent is
            its target.  A reference to a function that is converted to a
@@ -3408,6 +4888,9 @@ revisit.
 
           if (target->kind == (an_expr_node_kind)enk_routine) {
             /* A reference to a function is the function. */
+          } else if (is_array_temp_init(target)) {
+            /* The array temporary itself (its storage was pushed). */
+            ecil_rec0(frame, eop_addr);
           } else if (!is_glvalue_node(target)) {
             uint32_t  tt = ecil_type_id(frame, target->type);
 
@@ -3475,6 +4958,23 @@ revisit.
 
           if (is_void_node_type(node)) {
             if (value_is_pushed(op1, TRUE)) ecil_rec0(frame, eop_drop);
+          } else if (dst != 0 && src != 0 && op == eok_lvalue_adjust &&
+                     src != dst && is_glvalue_node(skip_parens(op1)) &&
+                     is_glvalue_node(node) &&
+                     (info_of(src)->kind == egk_record ||
+                      info_of(src)->kind == egk_array) &&
+                     (info_of(dst)->kind == egk_record ||
+                      info_of(dst)->kind == egk_array)) {
+            /* The same object seen as another aggregate type (the array
+               temporary that a reference binds to): its address,
+               converted. */
+            uint32_t  pt = ecil_ptr_type(frame, dst);
+
+            ecil_rec0(frame, eop_addr);
+            if (pt != 0) emit_cast(frame, (unsigned int)eck_bitcast, pt);
+            ecil_rec0(frame, eop_deref);
+            if ((flags & CIF_GLV) == 0) emit_load_if_value(frame, node);
+            finish_value(frame, flags);
           } else if (dst != 0 && src != 0) {
             if (op == eok_bool_cast) {
               if (info_of(src)->kind != egk_bool) {
@@ -3525,6 +5025,20 @@ revisit.
         }
         break;
       case eok_assign:
+        if (it->phase == EMPTY_ASSIGN_RHS) {
+          if (value_is_pushed((an_expr_node_ptr)it->cursor, TRUE)) {
+            ecil_rec0(frame, eop_drop);
+          }  /* if */
+          it->phase = EMPTY_ASSIGN_LHS;
+          push_expr(op1, 0);
+          done = FALSE;
+          break;
+        }  /* if */
+        if (it->phase == EMPTY_ASSIGN_LHS) {
+          if (node->result_is_not_used) ecil_rec0(frame, eop_drop);
+          finish_value(frame, flags);
+          break;
+        }  /* if */
         if (it->phase == ASSIGN_RHS_FIRST) {
           /* The value (or, for a class, the glvalue of the right operand)
              is evaluated: store it in the temporary, then designate the
@@ -3579,7 +5093,13 @@ revisit.
               ecil_rec1(frame, eop_load, 0);
             }  /* if */
           }  /* if */
-          if (ecil_unsupported_reason == NULL) {
+          if (ecil_unsupported_reason != NULL) {
+            /* Noted. */
+          } else if (type_is_empty_class(frame, op1->type)) {
+            /* Its value is used as a prvalue: not expressed. */
+            ecil_note_unsupported("the value of an assignment of a class "
+                                  "without data");
+          } else {
             ecil_rec_begin(frame, eop_store);
             ecil_arg_uint(frame, (access_is_volatile(op1) ?
                                   ECIL_ACCESS_VOLATILE : 0u) | dsize);
@@ -3711,22 +5231,68 @@ need_zeroing_for_value_initialization).
 }  /* ctor_needs_zeroing */
 
 
-static void emit_zero_object(an_ecil_frame *frame, uint32_t gid)
+static a_boolean gid_is_empty_class(uint32_t gid)
 /*
-Zero the object whose glvalue is on top of the stack (consumed).  A record or
-array is zeroed byte by byte, so that its padding is zero too
-(value-initialization zero-initializes the object representation).
+Return TRUE for the ECIL type of a class without data (no member or vptr, and
+bases that are empty themselves): an object of it has no value and nothing is
+written for it (clang's data size is 0).
 */
 {
-  (void)ecil_note_zero_init_of_dmp(gid);
-  if (gid != 0 && !C_mode() && (info_of(gid)->kind == egk_record ||
-                                info_of(gid)->kind == egk_array) &&
+  return gid != 0 && !C_mode() && info_of(gid)->kind == egk_record &&
+         (info_of(gid)->flags & ECIL_GF_COMPLETE) != 0 &&
+         (info_of(gid)->count == 0 || info_of(gid)->data_size == 0);
+}  /* gid_is_empty_class */
+
+
+static void emit_zero_object(an_ecil_frame *frame, uint32_t gid)
+/*
+Zero the object whose glvalue is on top of the stack (consumed).  An empty
+class is not written.  A record or
+array is zeroed byte by byte, so that its padding is zero too
+(value-initialization zero-initializes the object representation).  One that
+contains a pointer to a data member is not zero-initializable (its null is
+-1): INIT_ZERO writes the null constants (spec 12.7).
+*/
+{
+  if (gid_is_empty_class(gid)) {
+    /* An empty class has no value: its byte may belong to another object
+       (an empty base or a [[no_unique_address]] member at the address of a
+       member), and nothing is written for it. */
+    ecil_rec0(frame, eop_drop);
+  } else if (gid != 0 && !C_mode() && !ecil_gid_has_data_member_pointer(gid) &&
+      (info_of(gid)->kind == egk_record ||
+       info_of(gid)->kind == egk_array) &&
       info_of(gid)->size != 0) {
     ecil_rec1(frame, eop_zero_bytes, info_of(gid)->size);
   } else {
     ecil_rec0(frame, eop_init_zero);
   }  /* if */
 }  /* emit_zero_object */
+
+
+static void emit_zero_data_size(an_ecil_frame *frame, a_type_ptr type)
+/*
+Zero the data size of the object whose glvalue is on top of the stack
+(consumed): its tail padding may hold a later member.  A class that is not
+zero-initializable (a pointer to a data member) uses INIT_ZERO_BASE, which
+writes the null constants of the first nvsize bytes (spec 12.7).
+*/
+{
+  uint32_t  gid = ecil_type_id(frame, type);
+
+  if (gid != 0 && ecil_gid_has_data_member_pointer(gid)) {
+    if (info_of(gid)->kind == egk_record) {
+      ecil_rec0(frame, eop_init_zero_base);
+    } else {
+      ecil_note_unsupported("the zero-initialization of an array of data "
+                            "member pointers in a [[no_unique_address]] "
+                            "member");
+    }  /* if */
+  } else {
+    ecil_rec1(frame, eop_zero_bytes, (uint64_t)ecil_data_size_of_type(
+                                          skip_typerefs(type)));
+  }  /* if */
+}  /* emit_zero_data_size */
 
 
 static void emit_zero_pointee(an_ecil_frame *frame, a_type_ptr type,
@@ -3739,9 +5305,9 @@ The object pointer on top of the stack stays; its pointee is zeroed first
   ecil_rec0(frame, eop_dup);
   ecil_rec0(frame, eop_deref);
   if (subobject) {
-    (void)ecil_note_zero_init_of_dmp(ecil_type_id(frame, type));
-    ecil_rec1(frame, eop_zero_bytes, (uint64_t)ecil_data_size_of_type(
-                                            skip_typerefs(type)));
+    /* Only the base's nvsize bytes: its tail padding may hold members of the
+       derived class (spec 12.7). */
+    ecil_rec0(frame, eop_init_zero_base);
   } else {
     emit_zero_object(frame, ecil_type_id(frame, type));
   }  /* if */
@@ -3852,8 +5418,8 @@ static a_routine_ptr new_array_default_ctor(a_dynamic_init_ptr di,
                                             a_dynamic_init_ptr *ctor_di)
 /*
 The constructor that default-constructs every element of a new[] (one
-repeated constructor call without arguments), or NULL; *ctor_di is its
-initialization.
+repeated constructor call, with the default arguments if it has them), or
+NULL; *ctor_di is its initialization.
 */
 {
   a_routine_ptr   ctor = NULL;
@@ -3874,8 +5440,7 @@ initialization.
 
     if (rc->kind == (a_constant_repr_kind)ck_dynamic_init &&
         rc->variant.dynamic_init.ptr->kind ==
-                                (a_dynamic_init_kind)dik_constructor &&
-        rc->variant.dynamic_init.ptr->variant.constructor.args == NULL) {
+                                (a_dynamic_init_kind)dik_constructor) {
       ctor = rc->variant.dynamic_init.ptr->variant.constructor.ptr;
       *ctor_di = rc->variant.dynamic_init.ptr;
     }  /* if */
@@ -3932,6 +5497,9 @@ operator delete), else the global one.
 }  /* delete_routine_of */
 
 
+static a_routine_ptr class_destructor_of(a_type_ptr type);
+
+
 static void do_delete(an_ecil_frame *frame, size_t idx)
 /*
 A delete expression: <pointer> DELETE(operator delete, destructor, type,
@@ -3951,12 +5519,14 @@ flags) (null check, destructor and operator delete are the consumer's).
     if (del == NULL || nds->arg == NULL) {
       ecil_note_unsupported("a delete without an operator delete");
     } else if (is_default_operator_delete(del, &sized, &aligned,
-                                          &destroying) && destroying) {
-      ecil_note_unsupported("a destroying operator delete");
+                                          &destroying) && destroying &&
+               nds->array_delete) {
+      ecil_note_unsupported("a destroying operator delete of an array");
     } else {
       it->a = (uint32_t)(nds->array_delete ? ECIL_DELETE_ARRAY : 0u) |
               (sized ? ECIL_DELETE_SIZED : 0u) |
-              (aligned ? ECIL_DELETE_ALIGNED : 0u);
+              (aligned ? ECIL_DELETE_ALIGNED : 0u) |
+              (destroying ? ECIL_DELETE_DESTROYING : 0u);
       it->phase = 1;
       push_expr(nds->arg, 0);
     }  /* if */
@@ -3966,13 +5536,41 @@ flags) (null check, destructor and operator delete are the consumer's).
     a_routine_ptr  dtor = nds->dynamic_init != NULL ?
                           nds->dynamic_init->destructor : NULL;
     uint32_t       tg = ecil_type_id(frame, obj);
+
+    if (dtor == NULL && (it->a & ECIL_DELETE_DESTROYING) != 0 &&
+        is_immediate_class_type(skip_typerefs(obj))) {
+      /* The front end records no destructor call for a destroying delete,
+         but D0 of a virtual destructor is what runs. */
+      dtor = class_destructor_of(obj);
+    }  /* if */
     uint32_t       gd = ecil_function_id(frame, del);
     uint32_t       gdt = 0;
 
     if (dtor != NULL && dtor->is_virtual) {
-      ecil_note_unsupported("the delete of an object with a virtual "
-                            "destructor");
-    } else if (dtor != NULL) {
+      /* D0 of the dynamic type, through the vtable (spec 12.6): with the
+         operator delete that the destructor's class chose, so not a
+         ::delete that bypasses it, and not an array. */
+      a_type_ptr  dcls = parent_class_of(dtor);
+
+      if (nds->array_delete) {
+        /* The elements are destroyed through the static type's destructor,
+           not through the vtable. */
+        gdt = ecil_function_id(frame, dtor);
+      } else if (del == NULL) {
+        ecil_note_unsupported("a delete without an operator delete");
+      } else {
+        ecil_class_vtable_facts(frame, dcls);
+        gdt = ecil_function_id(frame, dtor);
+        it->a = (it->a & ~ECIL_DELETE_DESTROYING) | ECIL_DELETE_VIRTUAL;
+        if (nds->global_new_or_delete ||
+            del != class_type_supp(dcls)->assoc_operator_delete_routine) {
+          /* ::delete bypasses the class's operator delete, which D0 calls:
+             D1 through the vtable, then the operator delete that the front
+             end chose, on the complete object (spec 12.6). */
+          it->a |= ECIL_DELETE_GLOBAL;
+        }  /* if */
+      }  /* if */
+    } else if (dtor != NULL && (it->a & ECIL_DELETE_DESTROYING) == 0) {
       gdt = ecil_function_id(frame, dtor);
     }  /* if */
     if (ecil_unsupported_reason == NULL && tg != 0 && gd != 0) {
@@ -4002,6 +5600,52 @@ flags) (null check, destructor and operator delete are the consumer's).
 }  /* do_delete */
 
 
+static void note_master_dest(a_dynamic_init_ptr master, uint32_t dest)
+/*
+Remember where the arms of a class ?: that initializes the temporary of the
+master entry build their value.
+*/
+{
+  if (num_master_dests == master_dests_capacity) {
+    size_t         new_capacity = master_dests_capacity == 0 ?
+                                  8 : master_dests_capacity * 2;
+    a_master_dest  *new_list = (a_master_dest *)realloc(master_dests,
+                                    new_capacity * sizeof(a_master_dest));
+
+    if (new_list == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+    } else {
+      master_dests = new_list;
+      master_dests_capacity = new_capacity;
+    }  /* if */
+  }  /* if */
+  if (num_master_dests < master_dests_capacity) {
+    master_dests[num_master_dests].master = master;
+    master_dests[num_master_dests].dest = dest;
+    num_master_dests++;
+  }  /* if */
+}  /* note_master_dest */
+
+
+static a_boolean master_dest_of(a_dynamic_init_ptr master, uint32_t *dest)
+/*
+The destination noted for a master entry (0 is the return slot): FALSE if
+there is none.
+*/
+{
+  a_boolean  found = FALSE;
+  size_t     i;
+
+  for (i = num_master_dests; i > 0 && !found; i--) {
+    if (master_dests[i - 1].master == master) {
+      *dest = master_dests[i - 1].dest;
+      found = TRUE;
+    }  /* if */
+  }  /* for */
+  return found;
+}  /* master_dest_of */
+
+
 static void new_push_count(an_ecil_frame *frame, a_code_item *it)
 /*
 Push the element count of a new[] (size_t): the local that holds it, or the
@@ -4017,6 +5661,438 @@ constant bound.
     ecil_rec2(frame, eop_const_int, sizet, it->b);
   }  /* if */
 }  /* new_push_count */
+
+
+static a_boolean new_array_size_throws(a_code_item *it)
+/*
+Return TRUE if the size of a new[] with a run-time count is computed by
+NEW_ARRAY_SIZE_THROW: from C++11 on, for an allocation that is not a nothrow
+one (a negative or overflowing count throws std::bad_array_new_length).
+*/
+{
+  return (it->c & NEW_DYNAMIC) != 0 && (it->c & NEW_NOTHROW) == 0 &&
+         std_version >= 201103L;
+}  /* new_array_size_throws */
+
+
+static a_boolean new_one_byte_elements(an_ecil_frame             *frame,
+                                       a_new_delete_supplement_ptr nds,
+                                       a_code_item                 *it)
+/*
+Return TRUE if every element of the new[] is one byte (the inner bounds of
+a multi-dimensional array are in it->b).
+*/
+{
+  uint32_t  eg = ecil_type_id(frame, innermost_element_type(nds->type, NULL));
+
+  return eg != 0 && ecil_gid_info(eg)->size * it->b == 1u;
+}  /* new_one_byte_elements */
+
+
+static void emit_throw_bad_array_new_length(an_ecil_frame *frame)
+/*
+The bool on the stack says that the count of a new[] is bad:
+__cxa_throw_bad_array_new_length is called if it is true.  It is a void
+conditional, not an IF, because the new expression may be inside a FULLEXPR.
+*/
+{
+  uint32_t  fg = ecil_throw_bad_array_new_length_function(frame);
+  uint32_t  ft = fg != 0 ? ecil_gid_info(fg)->decl_type : 0;
+
+  if (fg != 0 && ft != 0) {
+    ecil_rec_begin(frame, eop_tern_begin);
+    ecil_arg_nil(frame);
+    ecil_rec_end(frame);
+    ecil_rec_begin(frame, eop_call);
+    ecil_arg_uint(frame, fg);
+    ecil_arg_uint(frame, ft);
+    ecil_arg_uint(frame, 0);
+    ecil_arg_uint(frame, ECIL_CALL_NORETURN | ECIL_CALL_RESULT_UNUSED);
+    ecil_rec_end(frame);
+    ecil_rec0(frame, eop_tern_else);
+    ecil_rec0(frame, eop_tern_end);
+  } else {
+    ecil_rec0(frame, eop_drop);
+  }  /* if */
+}  /* emit_throw_bad_array_new_length */
+
+
+static void emit_zero_new_array_loop(an_ecil_frame *frame, a_code_item *it,
+                                     uint32_t elem_gid, uint32_t elem_ptr,
+                                     uint64_t skip)
+/*
+The new[] pointer is on the stack and stays: every one of its elements (the
+run-time count in it) is zero-initialized.  A record element is in an
+ARRAY_CTOR_BEGIN/END loop of INIT_ZERO (which writes the null constants of a
+data member pointer, spec 12.7); another element (cir.array.ctor takes only
+records) is in a WHILE loop over a counter and a local pointer.  elem_ptr is
+the pointer to the innermost element, for a multi-dimensional array, else 0.
+The first skip elements are left alone (the list of a new[] initialized them).
+*/
+{
+  uint32_t  sizet = ecil_target_uintptr_type(frame);
+
+  if (info_of(elem_gid)->kind == egk_record) {
+    ecil_rec0(frame, eop_dup);
+    if (elem_ptr != 0) emit_cast(frame, (unsigned int)eck_bitcast, elem_ptr);
+    if (skip != 0) {
+      ecil_rec2(frame, eop_const_int, sizet, skip);
+      ecil_rec1(frame, eop_ptr_stride,
+                (unsigned int)ECIL_PTR_STRIDE_INDEX_UNSIGNED);
+    }  /* if */
+    new_push_count(frame, it);
+    if (skip != 0) {
+      ecil_rec2(frame, eop_const_int, sizet, skip);
+      ecil_rec1(frame, eop_sub, 0);
+    }  /* if */
+    ecil_rec2(frame, eop_array_ctor_begin, elem_gid, 0);
+    ecil_rec0(frame, eop_deref);
+    ecil_rec0(frame, eop_init_zero);
+    ecil_rec0(frame, eop_array_ctor_end);
+  } else {
+    uint32_t  pt = ecil_ptr_type(frame, elem_gid);
+    uint32_t  lp = new_lid();
+    uint32_t  li = new_lid();
+
+    emit_local(frame, li, sizet, 0, 0);
+    ecil_rec0(frame, eop_dup);
+    if (elem_ptr != 0) emit_cast(frame, (unsigned int)eck_bitcast, elem_ptr);
+    if (skip != 0) {
+      ecil_rec2(frame, eop_const_int, sizet, skip);
+      ecil_rec1(frame, eop_ptr_stride,
+                (unsigned int)ECIL_PTR_STRIDE_INDEX_UNSIGNED);
+    }  /* if */
+    emit_materialize_temp(frame, lp, pt);     /* Introduces lp. */
+    ecil_rec0(frame, eop_drop);
+    ecil_rec1(frame, eop_lref, li);
+    ecil_rec2(frame, eop_const_int, sizet, 0);
+    ecil_rec_begin(frame, eop_store);
+    ecil_arg_uint(frame, ECIL_STORE_INIT);
+    ecil_arg_uint(frame, (unsigned int)esr_none);
+    ecil_rec_end(frame);
+    ecil_rec0(frame, eop_while_begin);
+    ecil_rec1(frame, eop_lref, li);
+    ecil_rec1(frame, eop_load, 0);
+    new_push_count(frame, it);
+    if (skip != 0) {
+      ecil_rec2(frame, eop_const_int, sizet, skip);
+      ecil_rec1(frame, eop_sub, 0);
+    }  /* if */
+    ecil_rec1(frame, eop_cmp, (unsigned int)ecmp_lt);
+    ecil_rec0(frame, eop_while_body);
+    ecil_rec1(frame, eop_lref, lp);
+    ecil_rec1(frame, eop_load, 0);
+    ecil_rec1(frame, eop_lref, li);
+    ecil_rec1(frame, eop_load, 0);
+    ecil_rec1(frame, eop_ptr_stride,
+              (unsigned int)ECIL_PTR_STRIDE_INDEX_UNSIGNED);
+    ecil_rec0(frame, eop_deref);
+    ecil_rec0(frame, eop_init_zero);
+    ecil_rec1(frame, eop_lref, li);
+    ecil_rec_begin(frame, eop_inc_dec);
+    ecil_arg_uint(frame, (unsigned int)eidk_pre_inc);
+    ecil_arg_uint(frame, 0);
+    ecil_rec_end(frame);
+    ecil_rec0(frame, eop_drop);
+    ecil_rec0(frame, eop_while_end);
+  }  /* if */
+}  /* emit_zero_new_array_loop */
+
+
+static a_boolean new_has_throwing_initializer(a_new_delete_supplement_ptr nds)
+/*
+Return TRUE if the initialization of a new expression may throw: anything
+but no initialization, zero and a constant, and a constructor that cannot
+throw (and takes no arguments, which could).
+*/
+{
+  a_dynamic_init_ptr  di = nds->dynamic_init;
+  a_boolean           may_throw = FALSE;
+
+  if (di != NULL) {
+    switch (di->kind) {
+      case dik_none:
+      case dik_zero:
+      case dik_constant:
+        break;
+      case dik_constructor:
+        may_throw = di->variant.constructor.args != NULL ||
+                    di->variant.constructor.ptr == NULL ||
+                    !is_non_throwing_routine(di->variant.constructor.ptr);
+        break;
+      case dik_expression:
+        may_throw = skip_parens(di->variant.expression)->kind !=
+                                              (an_expr_node_kind)enk_constant;
+        break;
+      default:
+        may_throw = TRUE;
+        break;
+    }  /* switch */
+  }  /* if */
+  return may_throw;
+}  /* new_has_throwing_initializer */
+
+
+static a_new_cleanup *new_cleanup_of(a_code_item *it)
+/*
+The entry of the new expression item, or NULL (it has no free cleanup).
+*/
+{
+  return it->object == NULL ? NULL :
+         &new_cleanups[(size_t)(uintptr_t)it->object - 1];
+}  /* new_cleanup_of */
+
+
+static a_boolean push_new_cleanup(a_code_item *it,
+                                  a_routine_ptr del,
+                                  unsigned int  num_new_args)
+/*
+Make the entry of a new expression with a free cleanup; FALSE (reason noted)
+if the delete function does not match the operands of the allocation.
+*/
+{
+  a_boolean         ok = TRUE;
+  a_param_type_ptr  p;
+  unsigned int      nparams = 0;
+  a_new_cleanup     *entry;
+  a_boolean         sized_dummy = FALSE;
+  a_boolean         aligned_dummy = FALSE;
+  a_boolean         destroying_dummy = FALSE;
+
+  if (num_new_cleanups == new_cleanups_capacity) {
+    size_t         new_capacity = new_cleanups_capacity == 0 ?
+                                  8 : new_cleanups_capacity * 2;
+    a_new_cleanup  *new_list = (a_new_cleanup *)realloc(new_cleanups,
+                                    new_capacity * sizeof(a_new_cleanup));
+
+    if (new_list == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+      ok = FALSE;
+    } else {
+      new_cleanups = new_list;
+      new_cleanups_capacity = new_capacity;
+    }  /* if */
+  }  /* if */
+  if (ok) {
+    for (p = rout_type_supp(skip_typerefs(del->type))->param_type_list;
+         p != NULL; p = p->next) {
+      nparams++;
+    }  /* for */
+    if (num_new_args > NEW_MAX_ARGS) {
+      ecil_note_unsupported("a new expression with many placement operands "
+                            "and an operator delete");
+      ok = FALSE;
+    } else if (is_default_operator_delete(del, &sized_dummy, &aligned_dummy,
+                                          &destroying_dummy) &&
+               destroying_dummy) {
+      ecil_note_unsupported("a destroying operator delete that frees the "
+                            "storage of a new expression");
+      ok = FALSE;
+    } else if (nparams != 1 + num_new_args && nparams != 2 + num_new_args) {
+      ecil_note_unsupported("a new expression whose operator delete does "
+                            "not match the allocation function");
+      ok = FALSE;
+    }  /* if */
+  }  /* if */
+  if (ok) {
+    entry = &new_cleanups[num_new_cleanups++];
+    memset(entry, 0, sizeof(*entry));
+    entry->del = del;
+    entry->sized = nparams == 2 + num_new_args;
+    it->object = (void *)(uintptr_t)num_new_cleanups;
+  }  /* if */
+  return ok;
+}  /* push_new_cleanup */
+
+
+static a_routine_ptr class_destructor_of(a_type_ptr type)
+/*
+The destructor of a class (declared or implicit), or NULL.
+*/
+{
+  a_routine_ptr  result = NULL;
+
+  type = skip_typerefs(type);
+  if (is_immediate_class_type(type) &&
+      class_type_supp(type)->assoc_scope != NULL) {
+    a_routine_ptr  r;
+
+    for (r = class_type_supp(type)->assoc_scope->routines;
+         r != NULL && result == NULL; r = r->next) {
+      if (r->special_kind == (a_special_function_kind)sfk_destructor) {
+        result = r;
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return result;
+}  /* class_destructor_of */
+
+
+static void emit_array_partial_dtor(an_ecil_frame *frame,
+                                    a_type_ptr    elem_type,
+                                    a_routine_ptr dtor)
+/*
+ARRAY_PARTIAL_DTOR, directly after an ARRAY_CTOR_BEGIN with exceptions: the
+elements already constructed are destroyed (by the element's D1) if a later
+constructor throws (spec 12.4).  A class without a non-trivial destructor
+needs none.
+*/
+{
+  if (ecil_has_exceptions() && ecil_class_has_nontrivial_dtor(elem_type)) {
+    if (dtor == NULL) dtor = class_destructor_of(elem_type);
+    if (dtor == NULL) {
+      ecil_note_unsupported("an array of objects whose destructor is not "
+                            "known");
+    } else {
+      uint32_t  g = ecil_function_id(frame, dtor);
+
+      if (g != 0) ecil_rec1(frame, eop_array_partial_dtor, g);
+    }  /* if */
+  }  /* if */
+}  /* emit_array_partial_dtor */
+
+
+static a_type_ptr innermost_destructible_class(a_type_ptr type);
+
+static a_type_ptr new_list_type(a_new_delete_supplement_ptr nds)
+/*
+The type of the initializer list of a new[] (the array of the elements it
+lists, whatever the run-time count), or NULL if there is no list.
+*/
+{
+  a_dynamic_init_ptr  di = nds->dynamic_init;
+  a_type_ptr          type = NULL;
+
+  if (di != NULL && (di->kind == (a_dynamic_init_kind)dik_constant ||
+                     di->kind == (a_dynamic_init_kind)
+                                              dik_nonconstant_aggregate) &&
+      di->variant.constant.ptr != NULL &&
+      di->variant.constant.ptr->kind == (a_constant_repr_kind)ck_aggregate &&
+      di->variant.constant.ptr->variant.aggregate.first_constant != NULL) {
+    a_type_ptr  t = skip_typerefs(di->variant.constant.ptr->type);
+
+    if (t->kind == tk_array && !t->incomplete) type = t;
+  }  /* if */
+  return type;
+}  /* new_list_type */
+
+
+static a_routine_ptr class_default_constructor_of(a_type_ptr type)
+/*
+The constructor of a class that takes no parameters, or NULL.
+*/
+{
+  a_routine_ptr  result = NULL;
+
+  type = skip_typerefs(type);
+  if (is_immediate_class_type(type) &&
+      class_type_supp(type)->assoc_scope != NULL) {
+    a_routine_ptr  r;
+
+    for (r = class_type_supp(type)->assoc_scope->routines;
+         r != NULL && result == NULL; r = r->next) {
+      if (r->special_kind == (a_special_function_kind)sfk_constructor &&
+          rout_type_supp(skip_typerefs(r->type))->param_type_list == NULL &&
+          !r->is_deleted) {
+        result = r;
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return result;
+}  /* class_default_constructor_of */
+
+
+static void new_list_rest(an_ecil_frame *frame, a_code_item *it,
+                          a_new_delete_supplement_ptr nds)
+/*
+After the first k elements of new T[n]{...} are initialized (the pointer to
+them is in the local it->d): the destruction of those if a later element
+throws, the value-initialization of the other n - k elements (a call of the
+default constructor, or zeros), then the end of that cleanup.
+*/
+{
+  a_type_ptr     lt = new_list_type(nds);
+  uint64_t       k = (uint64_t)lt->variant.array.variant.number_of_elements;
+  a_type_ptr     elem = innermost_element_type(nds->type, NULL);
+  uint32_t       eg = ecil_type_id(frame, elem);
+  uint32_t       at = ecil_type_id(frame, lt);
+  uint32_t       sizet = ecil_target_uintptr_type(frame);
+  a_type_ptr     cls = innermost_destructible_class(elem);
+  a_routine_ptr  dtor = cls != NULL ? class_destructor_of(cls) : NULL;
+  a_routine_ptr  ctor = class_default_constructor_of(elem);
+  a_boolean      begun = FALSE;
+
+  if (eg == 0 || at == 0) {
+    ecil_note_unsupported("a new[] with a list and an unsupported element");
+  } else if (dtor != NULL && ecil_has_exceptions()) {
+    uint32_t  g = ecil_function_id(frame, dtor);
+
+    ecil_rec_begin(frame, eop_cleanup_begin);
+    ecil_arg_uint(frame, (unsigned int)ecl_eh);
+    ecil_arg_nil(frame);
+    ecil_arg_uint(frame, ECIL_CLEANUP_DEACTIVATABLE);
+    ecil_rec_end(frame);
+    ecil_rec1(frame, eop_lref, it->d);
+    ecil_rec1(frame, eop_load, 0);
+    emit_cast(frame, (unsigned int)eck_bitcast, ecil_ptr_type(frame, at));
+    ecil_rec0(frame, eop_deref);
+    ecil_rec2(frame, eop_array_dtor_begin, eg, ECIL_ARRAY_LOOP_FIXED);
+    emit_call_record(frame, g, dtor, 1);
+    ecil_rec0(frame, eop_array_dtor_end);
+    ecil_rec0(frame, eop_cleanup_body);
+    begun = TRUE;
+  }  /* if */
+  if (ecil_unsupported_reason == NULL && ctor != NULL) {
+    uint32_t  gc = ecil_function_id(frame, ctor);
+
+    ecil_rec1(frame, eop_lref, it->d);
+    ecil_rec1(frame, eop_load, 0);
+    ecil_rec2(frame, eop_const_int, sizet, k);
+    ecil_rec1(frame, eop_ptr_stride,
+              (unsigned int)ECIL_PTR_STRIDE_INDEX_UNSIGNED);
+    ecil_rec1(frame, eop_lref, it->a);
+    ecil_rec1(frame, eop_load, 0);
+    ecil_rec2(frame, eop_const_int, sizet, k);
+    ecil_rec1(frame, eop_sub, 0);
+    ecil_rec2(frame, eop_array_ctor_begin, eg, 0);
+    emit_array_partial_dtor(frame, elem, dtor);
+    emit_call_record(frame, gc, ctor, 1);
+    ecil_rec0(frame, eop_array_ctor_end);
+  } else if (ecil_unsupported_reason == NULL) {
+    ecil_rec1(frame, eop_lref, it->d);
+    ecil_rec1(frame, eop_load, 0);
+    emit_zero_new_array_loop(frame, it, eg, 0, k);
+    ecil_rec0(frame, eop_drop);
+  }  /* if */
+  if (begun) ecil_rec0(frame, eop_cleanup_end);
+}  /* new_list_rest */
+
+
+static a_boolean emit_ctor_loop(an_ecil_frame *frame, a_dynamic_init_ptr cdi,
+                                uint32_t elem_gid, unsigned int flags,
+                                a_type_ptr elem_type, a_routine_ptr dtor,
+                                size_t self_idx);
+
+static void new_null_test_begin(an_ecil_frame *frame, an_expr_node_ptr node,
+                                uint32_t ptr_lid, a_boolean push_pointer)
+/*
+A new whose allocation function can return null: the construction is in the
+arm of a test of the result (kept in the local ptr_lid): TERN_BEGIN of the
+pointer type, then (push_pointer) the pointer for the code that follows (the
+null arm is added when the initialization is complete).
+*/
+{
+  uint32_t  rt = ecil_type_id(frame, node->type);
+
+  ecil_rec1(frame, eop_lref, ptr_lid);
+  ecil_rec1(frame, eop_load, 0);
+  ecil_rec0(frame, eop_to_bool);
+  if (rt != 0) emit_tern_begin(frame, rt);
+  if (push_pointer) {
+    ecil_rec1(frame, eop_lref, ptr_lid);
+    ecil_rec1(frame, eop_load, 0);
+  }  /* if */
+}  /* new_null_test_begin */
 
 
 static void do_new_delete(an_ecil_frame *frame, size_t idx)
@@ -4044,15 +6120,6 @@ is duplicated for the constructor or the initializer (spec 11.8).
 
     if (routine == NULL || elem == NULL) {
       ecil_note_unsupported("a new without an allocation function");
-    } else if (routine->never_throws &&
-               !(!routine->source_corresp.is_class_member &&
-                 skip_typerefs(routine->type)->variant.routine.extra_info->
-                                               param_type_list->next != NULL &&
-                 is_void_star_type(skip_typerefs(routine->type)->variant.
-                          routine.extra_info->param_type_list->next->type))) {
-      /* The allocation can fail by returning null: the construction is
-         skipped then (not supported). */
-      ecil_note_unsupported("a new with a non-throwing allocation function");
     } else {
       uint32_t  cookie = 0;
 
@@ -4075,6 +6142,16 @@ is duplicated for the constructor or the initializer (spec 11.8).
       }  /* if */
       it->c = 0;
       if (array) it->c |= NEW_ARRAY;
+      if (routine->never_throws &&
+          !(!routine->source_corresp.is_class_member &&
+            skip_typerefs(routine->type)->variant.routine.extra_info->
+                                               param_type_list->next != NULL &&
+            is_void_star_type(skip_typerefs(routine->type)->variant.
+                          routine.extra_info->param_type_list->next->type))) {
+        /* The allocation can fail by returning null: the construction is
+           skipped then, and the value is null. */
+        it->c |= NEW_NOTHROW;
+      }  /* if */
       it->b = (uint32_t)total;
       if (total > (uint64_t)0xFFFFFFFFu) {
         ecil_note_unsupported("a new[] with 2^32 or more elements");
@@ -4092,6 +6169,9 @@ is duplicated for the constructor or the initializer (spec 11.8).
           it->c |= NEW_DYNAMIC;
           it->a = lid;
           it->b = (uint32_t)inner;      /* The inner bounds' product. */
+          if (inner == 1 && new_list_type(nds) != NULL) {
+            it->c |= NEW_LIST;
+          }  /* if */
           it->phase = 1;
           emit_local(frame, lid, sizet, 0, 0);
           ecil_rec1(frame, eop_lref, lid);
@@ -4107,6 +6187,16 @@ is duplicated for the constructor or the initializer (spec 11.8).
     /* The count expression is on the stack: size_t, then the local. */
     uint32_t  src = ecil_type_id(frame, nds->number_of_elements->type);
 
+    if (src != 0 && new_array_size_throws(it) && info_of(src)->is_signed &&
+        info_of(src)->kind == egk_int &&
+        new_one_byte_elements(frame, nds, it)) {
+      /* The elements are one byte each: a negative count does not overflow
+         the size of the allocation, so it is tested here. */
+      ecil_rec0(frame, eop_dup);
+      ecil_rec2(frame, eop_const_int, src, 0);
+      ecil_rec1(frame, eop_cmp, (unsigned int)ecmp_lt);
+      emit_throw_bad_array_new_length(frame);
+    }  /* if */
     if (src != 0) emit_convert(frame, src, ecil_target_uintptr_type(frame));
     ecil_rec_begin(frame, eop_store);
     ecil_arg_uint(frame, ECIL_STORE_INIT);
@@ -4135,17 +6225,59 @@ is duplicated for the constructor or the initializer (spec 11.8).
       ecil_arg_uint(frame, (unsigned int)esr_none);
       ecil_rec_end(frame);
     }  /* if */
+    if ((it->c & NEW_LIST) != 0) {
+      /* More initializers than elements: std::bad_array_new_length, before
+         anything is allocated. */
+      uint32_t  sizet = ecil_target_uintptr_type(frame);
+
+      ecil_rec1(frame, eop_lref, it->a);
+      ecil_rec1(frame, eop_load, 0);
+      ecil_rec2(frame, eop_const_int, sizet, (uint64_t)new_list_type(nds)->
+                                variant.array.variant.number_of_elements);
+      ecil_rec1(frame, eop_cmp, (unsigned int)ecmp_lt);
+      emit_throw_bad_array_new_length(frame);
+    }  /* if */
     it->phase = 2;
   } else if (it->phase == 2) {
     a_type_ptr  type = nds->type;
     a_boolean   array = (it->c & NEW_ARRAY) != 0;
     uint32_t    sizet = ecil_target_uintptr_type(frame);
+    a_routine_ptr  del = nds->freeing_of_storage_on_exception != NULL ?
+                         nds->freeing_of_storage_on_exception->destructor :
+                         NULL;
+    a_new_cleanup  *entry = NULL;
+    an_expr_node_ptr  a;
+    unsigned int   num_new_args = 0;
 
+    for (a = nds->arg; a != NULL; a = a->next) num_new_args++;
+    if (ecil_has_exceptions() && del != NULL &&
+        new_has_throwing_initializer(nds) &&
+        !(!del->source_corresp.is_class_member && num_new_args == 1 &&
+          is_void_star_type(nds->arg->type) &&
+          seq_is_in_system_header(del->source_corresp.decl_position.seq))) {
+      /* Free the storage if the initialization throws (spec 12.6), except
+         for the standard global placement operator (nothing to free); one
+         that the program declares itself is called. */
+      if (push_new_cleanup(it, del, num_new_args)) {
+        entry = new_cleanup_of(it);
+        if ((it->c & NEW_NOTHROW) != 0 && fullexpr_depth == 0) {
+          /* The free cleanup is in the arm of the null test: a conditional
+             region needs a FULLEXPR around it. */
+          emit_fullexpr_begin(frame);
+          it->c |= NEW_FULLEXPR;
+        }  /* if */
+        entry->size_lid = new_lid();
+        emit_local(frame, entry->size_lid, sizet, 0, 0);
+        ecil_rec1(frame, eop_lref, entry->size_lid);
+      }  /* if */
+    }  /* if */
     if (array) {
       uint32_t  elem = ecil_type_id(frame, innermost_element_type(type, NULL));
 
       new_push_count(frame, it);
-      ecil_rec2(frame, eop_new_array_size, elem, it->c >> 8);
+      ecil_rec2(frame, new_array_size_throws(it) ? eop_new_array_size_throw :
+                                                   eop_new_array_size,
+                elem, (it->c >> 8) & 0xFFFFu);
     } else {
       uint32_t  t = ecil_type_id(frame, type);
 
@@ -4153,15 +6285,48 @@ is duplicated for the constructor or the initializer (spec 11.8).
         ecil_rec2(frame, eop_const_int, sizet, ecil_gid_info(t)->size);
       }  /* if */
     }  /* if */
+    if (entry != NULL) {
+      ecil_rec_begin(frame, eop_store);
+      ecil_arg_uint(frame, ECIL_STORE_INIT);
+      ecil_arg_uint(frame, (unsigned int)esr_none);
+      ecil_rec_end(frame);
+    }  /* if */
     it->cursor = nds->arg;
     it->phase = 3;
     it->c &= ~NEW_NARGS_MASK;
+  } else if (it->phase == 6) {
+    /* A placement operand is on the stack above its local: store it. */
+    ecil_rec_begin(frame, eop_store);
+    ecil_arg_uint(frame, ECIL_STORE_INIT);
+    ecil_arg_uint(frame, (unsigned int)esr_none);
+    ecil_rec_end(frame);
+    it->phase = 3;
   } else if (it->phase == 3) {
+    a_new_cleanup  *entry = new_cleanup_of(it);
+
     if (it->cursor != NULL) {
       an_expr_node_ptr  arg = (an_expr_node_ptr)it->cursor;
 
       it->cursor = arg->next;
       it->c += NEW_NARGS_ONE;
+      if (entry != NULL) {
+        /* The operand is kept in a local: the delete function takes it
+           again. */
+        uint32_t  at = ecil_type_id(frame, arg->type);
+
+        if (at == 0 || info_of(at)->kind == egk_record ||
+            info_of(at)->kind == egk_array) {
+          ecil_note_unsupported("a placement operand of a class type with "
+                                "an operator delete");
+        } else {
+          uint32_t  lid = new_lid();
+
+          entry->arg_lids[entry->num_args++] = lid;
+          emit_local(frame, lid, at, 0, 0);
+          ecil_rec1(frame, eop_lref, lid);
+          it->phase = 6;
+        }  /* if */
+      }  /* if */
       push_expr(arg, 0);
     } else {
       a_routine_ptr  routine = new_routine_of(nds,
@@ -4169,14 +6334,87 @@ is duplicated for the constructor or the initializer (spec 11.8).
       uint32_t       gid = ecil_function_id(frame, routine);
       unsigned int   nargs = 1 + ((it->c & NEW_NARGS_MASK) >> NEW_NARGS_SHIFT);
 
-      emit_call_record(frame, gid, routine, nargs);
+      if (entry != NULL) {
+        /* <local> <size> <operands> CALL, stored; the free cleanup follows
+           the allocation (spec 12.6, worked encoding 10). */
+        uint32_t      sizet = ecil_target_uintptr_type(frame);
+        uint32_t      gdel = ecil_function_id(frame, entry->del);
+        unsigned int  k;
+        unsigned int  ndel = 1 + (entry->sized ? 1u : 0u) + entry->num_args;
+
+        entry->ptr_lid = new_lid();
+        emit_local(frame, entry->ptr_lid, ecil_ptr_type(frame,
+                                          ecil_void_type(frame)), 0, 0);
+        ecil_rec1(frame, eop_lref, entry->ptr_lid);
+        ecil_rec1(frame, eop_lref, entry->size_lid);
+        ecil_rec1(frame, eop_load, 0);
+        for (k = 0; k < entry->num_args; k++) {
+          ecil_rec1(frame, eop_lref, entry->arg_lids[k]);
+          ecil_rec1(frame, eop_load, 0);
+        }  /* for */
+        emit_call_record(frame, gid, routine, nargs);
+        ecil_rec_begin(frame, eop_store);
+        ecil_arg_uint(frame, ECIL_STORE_INIT);
+        ecil_arg_uint(frame, (unsigned int)esr_none);
+        ecil_rec_end(frame);
+        if ((it->c & NEW_NOTHROW) != 0) {
+          new_null_test_begin(frame, node, entry->ptr_lid, FALSE);
+        }  /* if */
+        ecil_rec_begin(frame, eop_cleanup_begin);
+        ecil_arg_uint(frame, (unsigned int)ecl_eh);
+        ecil_arg_nil(frame);
+        ecil_arg_uint(frame, ECIL_CLEANUP_DEACTIVATABLE);
+        ecil_rec_end(frame);
+        ecil_rec1(frame, eop_lref, entry->ptr_lid);
+        ecil_rec1(frame, eop_load, 0);
+        if (entry->sized) {
+          ecil_rec1(frame, eop_lref, entry->size_lid);
+          ecil_rec1(frame, eop_load, 0);
+        }  /* if */
+        for (k = 0; k < entry->num_args; k++) {
+          ecil_rec1(frame, eop_lref, entry->arg_lids[k]);
+          ecil_rec1(frame, eop_load, 0);
+        }  /* for */
+        emit_call_record(frame, gdel, entry->del, ndel);
+        ecil_rec0(frame, eop_cleanup_body);
+        ecil_rec1(frame, eop_lref, entry->ptr_lid);
+        ecil_rec1(frame, eop_load, 0);
+        (void)sizet;
+      } else {
+        emit_call_record(frame, gid, routine, nargs);
+        if ((it->c & NEW_NOTHROW) != 0) {
+          uint32_t  nl = new_lid();
+
+          emit_materialize_temp(frame, nl, ecil_ptr_type(frame,
+                                                  ecil_void_type(frame)));
+          ecil_rec0(frame, eop_drop);
+          new_null_test_begin(frame, node, nl, TRUE);
+        }  /* if */
+      }  /* if */
       it->phase = 4;
     }  /* if */
+  } else if (it->phase == 5) {
+    /* The initialization is complete: the object belongs to the program. */
+    if ((it->c & NEW_LIST) != 0) new_list_rest(frame, it, nds);
+    if (it->object != NULL) {
+      ecil_rec0(frame, eop_cleanup_end);
+      if (num_new_cleanups > 0) num_new_cleanups--;
+    }  /* if */
+    if ((it->c & NEW_NOTHROW) != 0) {
+      /* The null case: the allocation function failed. */
+      uint32_t  rt = ecil_type_id(frame, node->type);
+
+      ecil_rec0(frame, eop_tern_else);
+      if (rt != 0) ecil_rec1(frame, eop_const_null, rt);
+      ecil_rec0(frame, eop_tern_end);
+    }  /* if */
+    if ((it->c & NEW_FULLEXPR) != 0) emit_fullexpr_end(frame);
+    code_stack_size--;
   } else {
     /* The storage is allocated (void *): the object pointer, then the
        initialization. */
     a_boolean         array = (it->c & NEW_ARRAY) != 0;
-    uint32_t          cookie = it->c >> 8;
+    uint32_t          cookie = (it->c >> 8) & 0xFFFFu;
     a_dynamic_init_ptr di = nds->dynamic_init;
     uint32_t          elem_gid = ecil_type_id(frame, array ?
                           innermost_element_type(nds->type, NULL) : nds->type);
@@ -4203,28 +6441,38 @@ is duplicated for the constructor or the initializer (spec 11.8).
     if (multi && result_gid != 0) {
       emit_cast(frame, (unsigned int)eck_bitcast, result_gid);
     }  /* if */
-    code_stack_size--;                    /* The initialization follows. */
+    if (it->object != NULL || (it->c & (NEW_NOTHROW | NEW_LIST)) != 0) {
+      it->phase = 5;       /* The initialization follows; then CLEANUP_END. */
+    } else {
+      code_stack_size--;                  /* The initialization follows. */
+    }  /* if */
     if (ecil_unsupported_reason != NULL || di == NULL ||
         di->kind == (a_dynamic_init_kind)dik_none) {
       /* No initialization. */
     } else if (loop_ctor != NULL) {
-      uint32_t  gid = ecil_function_id(frame, loop_ctor);
-
       if (loop_di != NULL && ctor_needs_zeroing(loop_di)) {
         /* new A[n](): the storage of members that need it is zeroed first
            (the front end's need_zeroing_for_value_initialization). */
         if ((it->c & NEW_DYNAMIC) != 0) {
-          ecil_note_unsupported("a value-initialized new[] with a run-time "
-                                "count");
+          emit_zero_new_array_loop(frame, it, elem_gid,
+                                   multi ? elem_ptr : 0, 0);
         } else {
           ecil_rec0(frame, eop_dup);
-          if (multi && elem_ptr != 0) {
-            emit_cast(frame, (unsigned int)eck_bitcast, elem_ptr);
+          if (ecil_gid_has_data_member_pointer(elem_gid)) {
+            /* Not zero-initializable: INIT_ZERO of the array of the
+               elements writes the null constants (spec 12.7). */
+            emit_cast(frame, (unsigned int)eck_bitcast, ecil_ptr_type(
+                      frame, ecil_array_of(frame, elem_gid, it->b)));
+            ecil_rec0(frame, eop_deref);
+            ecil_rec0(frame, eop_init_zero);
+          } else {
+            if (multi && elem_ptr != 0) {
+              emit_cast(frame, (unsigned int)eck_bitcast, elem_ptr);
+            }  /* if */
+            ecil_rec0(frame, eop_deref);
+            ecil_rec1(frame, eop_zero_bytes,
+                      (uint64_t)it->b * ecil_gid_info(elem_gid)->size);
           }  /* if */
-          ecil_rec0(frame, eop_deref);
-          (void)ecil_note_zero_init_of_dmp(elem_gid);
-          ecil_rec1(frame, eop_zero_bytes,
-                    (uint64_t)it->b * ecil_gid_info(elem_gid)->size);
         }  /* if */
       }  /* if */
       ecil_rec0(frame, eop_dup);
@@ -4232,9 +6480,44 @@ is duplicated for the constructor or the initializer (spec 11.8).
         emit_cast(frame, (unsigned int)eck_bitcast, elem_ptr);
       }  /* if */
       new_push_count(frame, it);
-      ecil_rec2(frame, eop_array_ctor_begin, elem_gid, 0);
-      emit_call_record(frame, gid, loop_ctor, 1);
-      ecil_rec0(frame, eop_array_ctor_end);
+      if (!emit_ctor_loop(frame, loop_di, elem_gid, 0u,
+                          innermost_element_type(nds->type, NULL),
+                          di->destructor != NULL ? di->destructor :
+                          nds->dynamic_init->destructor, NO_SELF)) {
+        ecil_rec0(frame, eop_array_ctor_end);
+      }  /* if */
+    } else if (array && (it->c & NEW_DYNAMIC) != 0 &&
+               (di->kind == (a_dynamic_init_kind)dik_zero ||
+                (di->kind == (a_dynamic_init_kind)dik_constant &&
+                 di->variant.constant.ptr->kind ==
+                                      (a_constant_repr_kind)ck_aggregate &&
+                 di->variant.constant.ptr->variant.aggregate.
+                                                   first_constant == NULL))) {
+      /* new T[n]() and new T[n]{}: every element is value-initialized to
+         zero. */
+      emit_zero_new_array_loop(frame, it, elem_gid, multi ? elem_ptr : 0, 0);
+    } else if ((it->c & NEW_LIST) != 0) {
+      /* The first k elements from the list, then the rest in phase 5. */
+      a_type_ptr  lt = new_list_type(nds);
+      uint32_t    at = ecil_type_id(frame, lt);
+      uint32_t    lp = new_lid();
+
+      if (at != 0 && result_gid != 0) {
+        it->d = lp;
+        ecil_rec0(frame, eop_dup);
+        emit_materialize_temp(frame, lp, result_gid);
+        ecil_rec0(frame, eop_drop);
+        ecil_rec0(frame, eop_dup);
+        emit_cast(frame, (unsigned int)eck_bitcast, ecil_ptr_type(frame, at));
+        ecil_rec0(frame, eop_deref);
+        { a_code_item *init = push_item(cik_init, di, 0);
+
+          if (init != NULL) {
+            init->a = DEST_ON_STACK;
+            init->b = at;
+          }  /* if */
+        }
+      }  /* if */
     } else if (array && (it->c & NEW_DYNAMIC) != 0) {
       ecil_note_unsupported("an initializer of a new[] with a run-time count");
     } else if (!array && di->kind == (a_dynamic_init_kind)dik_constructor) {
@@ -4266,6 +6549,222 @@ is duplicated for the constructor or the initializer (spec 11.8).
     }  /* if */
   }  /* if */
 }  /* do_new_delete */
+
+
+static void do_throw(an_ecil_frame *frame, size_t idx)
+/*
+enk_throw: a rethrow (no object) is RETHROW; otherwise THROW_BEGIN(type)
+pushes the glvalue of the exception object, the initialization consumes it
+(the same shapes as any other initialization with the destination on the
+stack), and THROW_END(typeinfo, destructor) throws (spec 12.5).  THROW_BEGIN is
+not a region: the temporaries of the operand belong to the enclosing full
+expression.  A throw in a conditional region needs a FULLEXPR around the
+region (conditional_needs_fullexpr).
+*/
+{
+  a_code_item                *it = &code_stack[idx];
+  an_expr_node_ptr           node = (an_expr_node_ptr)it->entry;
+  a_throw_supplement_ptr     info = node->variant.throw_info;
+
+  if (!ecil_has_exceptions()) {
+    ecil_note_unsupported("a throw expression");
+    code_stack_size--;
+  } else if (info == NULL) {
+    ecil_rec0(frame, eop_rethrow);
+    code_stack_size--;
+  } else if (it->phase == 0) {
+    uint32_t  t = ecil_type_id(frame, info->type);
+    uint32_t  ti = t != 0 ? ecil_typeinfo_id(frame, info->type) : 0;
+    uint32_t  dtor = (t != 0 && ti != 0 && info->destructor != NULL) ?
+                     ecil_function_id(frame, info->destructor) : 0;
+
+    if (t == 0 || ti == 0 || ecil_unsupported_reason != NULL) {
+      code_stack_size--;
+    } else {
+      a_dynamic_init_ptr  di = info->dynamic_init;
+
+      ecil_rec1(frame, eop_throw_begin, t);
+      it->a = ti;
+      it->b = dtor;
+      it->phase = 1;
+      if (di == NULL || di->kind == (a_dynamic_init_kind)dik_none) {
+        ecil_rec0(frame, eop_drop);       /* Nothing to construct. */
+      } else {
+        a_code_item  *init = push_item(cik_init, di, 0);
+
+        if (init != NULL) {
+          init->a = DEST_ON_STACK;
+          init->b = t;
+        }  /* if */
+      }  /* if */
+    }  /* if */
+  } else {
+    ecil_rec_begin(frame, eop_throw_end);
+    ecil_arg_uint(frame, it->a);
+    if (it->b != 0) {
+      ecil_arg_uint(frame, it->b);
+    } else {
+      ecil_arg_nil(frame);
+    }  /* if */
+    ecil_rec_end(frame);
+    code_stack_size--;
+  }  /* if */
+}  /* do_throw */
+
+
+/* Builtins on pointers to data members (is_corresponding_member and
+   is_pointer_interconvertible_with_class, run-time operands). */
+
+#define PMB_STATIC_FALSE 0x01u  /* The answer is false whatever the values. */
+#define PMB_TWO          0x02u  /* Two pointer operands (corresponding). */
+
+static a_boolean is_pm_builtin(an_expr_node_ptr node)
+/*
+Return TRUE for a builtin operation on pointers to members that the front
+end could not fold.
+*/
+{
+  a_builtin_operation_kind  k = node->variant.builtin_operation.kind;
+
+  return k == bok_is_corresponding_member ||
+         k == bok_builtin_is_corresponding_member ||
+         k == bok_is_pointer_interconvertible_with_class ||
+         k == bok_builtin_is_pointer_interconvertible_with_class;
+}  /* is_pm_builtin */
+
+
+static void emit_pm_to_int(an_ecil_frame *frame, uint32_t pm_gid)
+/*
+A data member pointer prvalue becomes the integer that holds its offset (the
+null value is the integer -1): its storage is read as a pointer-sized
+integer.
+*/
+{
+  uint32_t  wide = ecil_target_uintptr_type(frame);
+  uint32_t  pw = ecil_ptr_type(frame, wide);
+
+  emit_materialize_temp(frame, new_lid(), pm_gid);
+  ecil_rec0(frame, eop_addr);
+  if (pw != 0) emit_cast(frame, (unsigned int)eck_bitcast, pw);
+  ecil_rec0(frame, eop_deref);
+  ecil_rec1(frame, eop_load, 0);
+}  /* emit_pm_to_int */
+
+
+static void do_pm_builtin(an_ecil_frame *frame, size_t idx)
+/*
+__builtin_is_pointer_interconvertible_with_class (the member's offset is 0)
+and __builtin_is_corresponding_member (the offsets are equal and below the
+limit of the common initial sequence, which also rejects the null value), on
+operands that are not constants (the front end's own lowering).  A pointer to
+a member function or a class that is not standard-layout gives false.
+Phases: 0 first operand pushed, 1 its integer kept (two operands: second
+pushed), 2 compare.
+*/
+{
+  a_code_item       *it = &code_stack[idx];
+  an_expr_node_ptr  node = (an_expr_node_ptr)it->entry;
+  an_expr_node_ptr  arg = node->variant.builtin_operation.operands;
+  a_builtin_operation_kind
+                    op = node->variant.builtin_operation.kind;
+  a_boolean         ms_form = op == bok_is_corresponding_member ||
+                              op == bok_is_pointer_interconvertible_with_class;
+  a_boolean         two = op == bok_is_corresponding_member ||
+                          op == bok_builtin_is_corresponding_member;
+  an_expr_node_ptr  pm1;
+  an_expr_node_ptr  pm2 = NULL;
+  a_type_ptr        class1 = NULL;
+  a_type_ptr        class2 = NULL;
+
+  if (ms_form) {
+    class1 = skip_typerefs(arg->variant.type_operand.type);
+    arg = arg->next;
+    if (two) {
+      class2 = skip_typerefs(arg->variant.type_operand.type);
+      arg = arg->next;
+    }  /* if */
+  }  /* if */
+  pm1 = arg;
+  if (two) pm2 = arg->next;
+  if (it->phase == 0) {
+    a_type_ptr  t1 = skip_typerefs(pm1->type);
+    a_boolean   static_false;
+
+    if (class1 == NULL) class1 = pm_class_type(t1);
+    static_false = skip_typerefs(pm_member_type(t1))->kind == tk_routine ||
+                   (!is_union_type(class1) && !two &&
+                    !class_symbol_supp(symbol_for(class1))->standard_layout) ||
+                   (two &&
+                    !class_symbol_supp(symbol_for(class1))->standard_layout);
+    if (two) {
+      a_type_ptr  t2 = skip_typerefs(pm2->type);
+
+      if (class2 == NULL) class2 = pm_class_type(t2);
+      static_false = static_false ||
+                     skip_typerefs(pm_member_type(t2))->kind == tk_routine ||
+                     !class_symbol_supp(symbol_for(class2))->standard_layout;
+      it->b = (uint32_t)common_initial_sequence_limit(class1, class2);
+    }  /* if */
+    it->c = (static_false ? PMB_STATIC_FALSE : 0u) | (two ? PMB_TWO : 0u);
+    it->phase = 1;
+    if (!static_false && two) {
+      it->a = new_lid();
+      emit_local(frame, it->a, ecil_target_uintptr_type(frame), 0, 0);
+      ecil_rec1(frame, eop_lref, it->a);
+    }  /* if */
+    push_expr(pm1, 0);
+  } else if (it->phase == 1) {
+    uint32_t  g1 = ecil_type_id(frame, pm1->type);
+
+    if ((it->c & PMB_STATIC_FALSE) != 0) {
+      if (value_is_pushed(pm1, TRUE)) ecil_rec0(frame, eop_drop);
+      if (two) {
+        it->phase = 2;
+        push_expr(pm2, 0);
+      } else {
+        ecil_rec2(frame, eop_const_int, ecil_type_id(frame, node->type), 0);
+        finish_bool_result(frame, node, it->flags | CIF_COND);
+        code_stack_size--;
+      }  /* if */
+    } else if (!two) {
+      emit_pm_to_int(frame, g1);
+      ecil_rec2(frame, eop_const_int, ecil_target_uintptr_type(frame), 0);
+      ecil_rec1(frame, eop_cmp, (unsigned int)ecmp_eq);
+      finish_bool_result(frame, node, it->flags);
+      code_stack_size--;
+    } else {
+      emit_pm_to_int(frame, g1);
+      ecil_rec_begin(frame, eop_store);
+      ecil_arg_uint(frame, ECIL_STORE_INIT);
+      ecil_arg_uint(frame, (unsigned int)esr_none);
+      ecil_rec_end(frame);
+      it->phase = 2;
+      push_expr(pm2, 0);
+    }  /* if */
+  } else {
+    uint32_t  wide = ecil_target_uintptr_type(frame);
+
+    if ((it->c & PMB_STATIC_FALSE) != 0) {
+      if (value_is_pushed(pm2, TRUE)) ecil_rec0(frame, eop_drop);
+      ecil_rec2(frame, eop_const_int, ecil_type_id(frame, node->type), 0);
+      finish_bool_result(frame, node, it->flags | CIF_COND);
+    } else {
+      /* a == b && a < limit, a the first offset (null is all ones). */
+      emit_pm_to_int(frame, ecil_type_id(frame, pm2->type));
+      ecil_rec1(frame, eop_lref, it->a);
+      ecil_rec1(frame, eop_load, 0);
+      ecil_rec1(frame, eop_cmp, (unsigned int)ecmp_eq);
+      ecil_rec0(frame, eop_land_begin);
+      ecil_rec1(frame, eop_lref, it->a);
+      ecil_rec1(frame, eop_load, 0);
+      ecil_rec2(frame, eop_const_int, wide, (uint64_t)it->b);
+      ecil_rec1(frame, eop_cmp, (unsigned int)ecmp_lt);
+      ecil_rec0(frame, eop_land_end);
+      finish_bool_result(frame, node, it->flags);
+    }  /* if */
+    code_stack_size--;
+  }  /* if */
+}  /* do_pm_builtin */
 
 
 static void do_expr(an_ecil_frame *frame, size_t idx)
@@ -4334,6 +6833,12 @@ Visit an expression item.
         do_operation(frame, idx);
       }  /* if */
       break;
+    case enk_typeid:
+      do_typeid(frame, idx);
+      break;
+    case enk_throw:
+      do_throw(frame, idx);
+      break;
     case enk_c11_generic:
       it->entry = node->variant.c11_generic.result;
       break;
@@ -4344,18 +6849,33 @@ Visit an expression item.
         uint32_t            t = ecil_type_id(frame, node->type);
         uint32_t            lid;
 
-        if (di != NULL && di->master_entry != NULL) {
+        if (is_discarded_conditional_temp(node,
+                                          (it->flags & CIF_UNUSED) != 0)) {
+          /* The temporary that holds the discarded value of a class
+             conditional: its arms are the objects, each destroyed with its
+             own temporaries, so the conditional is translated as a discarded
+             one. */
+          it->entry = skip_parens(di->variant.expression);
+          it->flags |= CIF_UNUSED;
+        } else if (di != NULL && di->master_entry != NULL) {
           /* One arm of a class ?: that initializes a variable: the value
              is built in the variable (the master entry's). */
           a_variable_ptr  mv = di->master_entry->variable;
           uint32_t        dest = 0;
+          a_boolean       have_dest = FALSE;
 
           if (mv != NULL && variable_is_automatic(mv)) {
             dest = ecil_lid_of(mv);
+            have_dest = dest != 0;
           } else if (mv != NULL && ecil_gid_of(mv) != 0) {
             dest = DEST_GLOBAL_FLAG | ecil_gid_of(mv);  /* A static. */
+            have_dest = TRUE;
+          } else if (mv == NULL) {
+            /* A temporary (or the return slot). */
+            have_dest = master_dest_of(di->master_entry, &dest) &&
+                        dest != DEST_ON_STACK;
           }  /* if */
-          if (dest == 0 || t == 0) {
+          if (!have_dest || t == 0) {
             ecil_note_unsupported("a class conditional that does not "
                                   "initialize a variable");
           } else {
@@ -4464,14 +6984,14 @@ Visit an expression item.
         if (!wrap) {
           it->entry = child;           /* Nothing to destroy: pass through. */
         } else if (it->phase == 0) {
-          ecil_rec0(frame, eop_fullexpr_begin);
+          emit_fullexpr_begin(frame);
           it->phase = 1;
           push_expr(child, it->flags & ~CIF_DROP);
         } else {
           if ((it->flags & CIF_DROP) != 0 && value_is_pushed(child, TRUE)) {
             ecil_rec0(frame, eop_drop);
           }  /* if */
-          ecil_rec0(frame, eop_fullexpr_end);
+          emit_fullexpr_end(frame);
           code_stack_size--;
         }  /* if */
       }
@@ -4496,8 +7016,10 @@ Visit an expression item.
       /* __builtin_offsetof with a run-time subscript: the address of the
          designated member of a null object, as an integer.  (Constant
          offsets are folded by the front end.) */
-      if (node->variant.builtin_operation.kind == (a_builtin_operation_kind)
-                                                              bok_offsetof &&
+      if (is_pm_builtin(node)) {
+        do_pm_builtin(frame, idx);
+      } else if (node->variant.builtin_operation.kind ==
+                                  (a_builtin_operation_kind)bok_offsetof &&
           node->variant.builtin_operation.operands != NULL &&
           node->variant.builtin_operation.operands->next != NULL) {
         an_expr_node_ptr  member =
@@ -4654,6 +7176,9 @@ FALSE if memory ran out.
 }  /* push_agg_level */
 
 
+static a_boolean agg_needs_partial_cleanups(an_ecil_frame *frame,
+                                            an_init_level *level);
+
 static void begin_dynamic_aggregate(an_ecil_frame *frame, a_constant_ptr c,
                                     a_constant_ptr *sources, size_t n,
                                     a_boolean skip_constants)
@@ -4670,9 +7195,6 @@ neither zero-filled nor stored (see an_init_level).
                           c->is_partially_initialized) &&
                          !skip_constants) ? ECIL_AGG_INIT_ZERO_FILL : 0u;
 
-  if (t != 0 && (flags & ECIL_AGG_INIT_ZERO_FILL) != 0) {
-    (void)ecil_note_zero_init_of_dmp(t);
-  }  /* if */
   if (t != 0 && ecil_gid_info(t)->kind != egk_record &&
       ecil_gid_info(t)->kind != egk_array) {
     ecil_note_unsupported_type(t, "an aggregate initializer of an opaque "
@@ -4680,6 +7202,17 @@ neither zero-filled nor stored (see an_init_level).
   } else if (t != 0 && push_agg_level(sources != NULL ? sources : &c,
                                       sources != NULL ? n : 1)) {
     agg_levels[num_agg_levels - 1].skip_constants = skip_constants;
+    if (agg_needs_partial_cleanups(frame, &agg_levels[num_agg_levels - 1])) {
+      /* The destruction of the elements already built (if a later one
+         throws) finds the aggregate through a local with its address. */
+      uint32_t  la = new_lid();
+
+      ecil_rec0(frame, eop_dup);
+      ecil_rec0(frame, eop_addr);
+      emit_materialize_temp(frame, la, ecil_ptr_type(frame, t));
+      ecil_rec0(frame, eop_drop);
+      agg_levels[num_agg_levels - 1].addr_lid = la;
+    }  /* if */
     ecil_rec_begin(frame, eop_agg_init_begin);
     ecil_arg_uint(frame, t);
     ecil_arg_uint(frame, flags);
@@ -4722,6 +7255,7 @@ the base variant (C2), a base subobject.
 
 
 #define CTOR_ARG_LOAD_PENDING 0x01u
+#define CTOR_CALL_VTT         0x100u    /* (it->flags) CALL VTT. */
 
 static an_expr_node_ptr forwarded_parameter(an_expr_node_ptr arg)
 /*
@@ -4809,22 +7343,82 @@ storage), then CALL.  b counts the operands, the object's address included.
     }  /* if */
     push_expr(pushed, 0);
   } else {
-    emit_call_record(frame, it->a, di->variant.constructor.ptr, it->b);
+    emit_call_flags(frame, it->a, di->variant.constructor.ptr, it->b,
+                    (it->flags & CTOR_CALL_VTT) != 0 ? ECIL_CALL_VTT : 0u);
     code_stack_size--;
   }  /* if */
 }  /* do_ctor_call */
 
 
-static a_boolean array_default_construct(an_ecil_frame     *frame,
-                                         a_dynamic_init_ptr di)
+static a_boolean emit_ctor_loop(an_ecil_frame *frame, a_dynamic_init_ptr cdi,
+                                uint32_t elem_gid, unsigned int flags,
+                                a_type_ptr elem_type, a_routine_ptr dtor,
+                                size_t self_idx)
+/*
+The loop that default-constructs the elements of an array (the glvalue of
+the array, or the element pointer and the count, is on the stack):
+ARRAY_CTOR_BEGIN, the partial destruction, the constructor call and
+ARRAY_CTOR_END.  A call with arguments (default arguments, which may have
+temporaries) keeps the element pointer in a local and is built by items: its
+FULLEXPR and the ARRAY_CTOR_END follow it; when self_idx is that of the item
+that asked, that item becomes the ARRAY_CTOR_END.  Return TRUE if items were
+pushed (the caller emits no end).
+*/
+{
+  uint32_t       gid = ecil_function_id(frame, cdi->variant.constructor.ptr);
+  a_boolean      pushed = FALSE;
+
+  ecil_rec2(frame, eop_array_ctor_begin, elem_gid, flags);
+  emit_array_partial_dtor(frame, elem_type, dtor);
+  if (cdi->variant.constructor.args == NULL) {
+    emit_call_record(frame, gid, cdi->variant.constructor.ptr, 1);
+  } else if (ecil_unsupported_reason == NULL) {
+    uint32_t     lp = new_lid();
+    a_boolean    wrap = lifetime_needs_cleanups(cdi->init_expr_lifetime);
+    a_code_item  *item;
+
+    /* The body consumes the element pointer: keep it in a local, so that the
+       default arguments can have their own FULLEXPR around the call. */
+    emit_materialize_temp(frame, lp, ecil_ptr_type(frame, elem_gid));
+    ecil_rec0(frame, eop_drop);
+    if (wrap) emit_fullexpr_begin(frame);
+    ecil_rec1(frame, eop_lref, lp);
+    ecil_rec1(frame, eop_load, 0);
+    if (self_idx == NO_SELF) {
+      item = push_item(cik_emit, NULL, 0);
+      if (item != NULL) item->a = (uint32_t)eop_array_ctor_end;
+    }  /* if */
+    if (wrap) {
+      item = push_item(cik_emit, NULL, 0);
+      if (item != NULL) item->a = (uint32_t)eop_fullexpr_end;
+    }  /* if */
+    item = push_item(cik_ctor_call, NULL, 0);
+    if (item != NULL) {
+      setup_ctor_call(frame, item, cdi, ECIL_VARIANT_COMPLETE, 0);
+    }  /* if */
+    if (self_idx != NO_SELF) {
+      code_stack[self_idx].kind = cik_emit;
+      code_stack[self_idx].a = (uint32_t)eop_array_ctor_end;
+    }  /* if */
+    pushed = TRUE;
+  }  /* if */
+  return pushed;
+}  /* emit_ctor_loop */
+
+
+static int array_default_construct(an_ecil_frame     *frame,
+                                     a_dynamic_init_ptr di,
+                                     size_t             self_idx)
 /*
 An array of class objects that are all default-constructed (one repeated
 constructor call over the whole array): ARRAY_CTOR_BEGIN(fixed) over the
 array glvalue already on the stack, the constructor call on the element
-pointer, ARRAY_CTOR_END (spec 11.8).  Return TRUE if it was emitted.
+pointer, ARRAY_CTOR_END (spec 11.8).  A constructor with default arguments is
+built by items (emit_ctor_loop; self_idx is the item that asks).  Return 0 if
+it does not apply, 1 if it was emitted, 2 if items were pushed.
 */
 {
-  a_boolean       handled = FALSE;
+  int             handled = 0;
   a_constant_ptr  agg = di->variant.constant.ptr;
 
   if (agg != NULL && agg->kind == (a_constant_repr_kind)ck_aggregate &&
@@ -4845,24 +7439,24 @@ pointer, ARRAY_CTOR_END (spec 11.8).  Return TRUE if it was emitted.
     if (rc->kind == (a_constant_repr_kind)ck_dynamic_init &&
         rc->variant.dynamic_init.ptr->kind ==
                                 (a_dynamic_init_kind)dik_constructor &&
-        rc->variant.dynamic_init.ptr->variant.constructor.args == NULL &&
         rc->variant.dynamic_init.ptr->variant.constructor.ptr != NULL &&
         rep->variant.init_repeat.count == total) {
-      a_routine_ptr ctor = rc->variant.dynamic_init.ptr->variant.constructor.
-                                                                       ptr;
+      a_dynamic_init_ptr  cdi = rc->variant.dynamic_init.ptr;
+      uint32_t            elem = ecil_type_id(frame, t);
 
-      if (ctor_needs_zeroing(rc->variant.dynamic_init.ptr)) {
+      if (ctor_needs_zeroing(cdi)) {
         ecil_note_unsupported("the value-initialization of an array of "
                               "objects");
       }  /* if */
-      uint32_t      elem = ecil_type_id(frame, t);
-      uint32_t      gid = ecil_function_id(frame, ctor);
+      if (elem != 0 && ecil_unsupported_reason == NULL) {
+        a_boolean  pushed = emit_ctor_loop(frame, cdi, elem,
+                                           ECIL_ARRAY_LOOP_FIXED, t,
+                                           di->destructor, self_idx);
 
-      if (elem != 0 && gid != 0 && ecil_unsupported_reason == NULL) {
-        ecil_rec2(frame, eop_array_ctor_begin, elem, ECIL_ARRAY_LOOP_FIXED);
-        emit_call_record(frame, gid, ctor, 1);
-        ecil_rec0(frame, eop_array_ctor_end);
-        handled = TRUE;
+        if (ecil_unsupported_reason == NULL && !pushed) {
+          ecil_rec0(frame, eop_array_ctor_end);
+        }  /* if */
+        handled = pushed ? 2 : 1;
       }  /* if */
     }  /* if */
   }  /* if */
@@ -4875,15 +7469,13 @@ pointer, ARRAY_CTOR_END (spec 11.8).  Return TRUE if it was emitted.
 
 static a_boolean type_is_empty_class(an_ecil_frame *frame, a_type_ptr type)
 /*
-Return TRUE for a class with no members, bases or vptr (an object of it has
-no value: copying one does not read or write it).
+Return TRUE for a class without data (see gid_is_empty_class): copying one
+does not read or write it.
 */
 {
   uint32_t  gid = C_mode() ? 0 : ecil_type_id(frame, type);
 
-  return gid != 0 && info_of(gid)->kind == egk_record &&
-         (info_of(gid)->flags & ECIL_GF_COMPLETE) != 0 &&
-         info_of(gid)->count == 0 &&
+  return gid_is_empty_class(gid) &&
          is_immediate_class_type(skip_typerefs(type));
 }  /* type_is_empty_class */
 
@@ -4903,6 +7495,28 @@ return slot (lid 0), or nothing (DEST_ON_STACK: already pushed).
     ecil_rec1(frame, eop_lref, lid);
   }  /* if */
 }  /* emit_init_destination */
+
+
+static a_boolean constant_is_local_address(a_constant_ptr c)
+/*
+Return TRUE if the constant is the address of an automatic variable of the
+function being translated (plus an offset): a reference bound to a base
+subobject of a local, which the front end folds into an address constant.
+*/
+{
+  a_boolean  result = FALSE;
+
+  if (!C_mode() && c != NULL && c->kind == (a_constant_repr_kind)ck_address &&
+      c->variant.address.kind == abk_variable) {
+    a_variable_ptr  var = c->variant.address.variant.variable;
+
+    result = var->source_corresp.is_local_to_function &&
+             var->storage_class != (a_storage_class)sc_static &&
+             var->storage_class != (a_storage_class)sc_extern &&
+             ecil_lid_of(var) != 0;
+  }  /* if */
+  return result;
+}  /* constant_is_local_address */
 
 
 static void do_init(an_ecil_frame *frame, size_t idx)
@@ -4946,15 +7560,53 @@ of ECIL type it->b, from the dynamic init in it->entry.
         break;
       case dik_constant:
         emit_init_destination(frame, lid);
-        if (ecil_emit_constant_typed(frame, di->variant.constant.ptr,
-                                     it->b)) {
+        if (constant_is_local_address(di->variant.constant.ptr)) {
+          /* The address of an automatic variable (a reference bound to a
+             base subobject of a local): not a constant, but the address of
+             the local at the byte offset (spec 11.6). */
+          a_constant_ptr  ac = di->variant.constant.ptr;
+          uint32_t        pt = ecil_type_id(frame, ac->type);
+
+          if (pt != 0 && ecil_unsupported_reason == NULL) {
+            ecil_rec1(frame, eop_lref,
+                      ecil_lid_of(ac->variant.address.variant.variable));
+            ecil_rec0(frame, eop_addr);
+            ecil_rec2(frame, eop_addr_offset, pt,
+                      (uint64_t)ac->variant.address.offset);
+            ecil_rec_begin(frame, eop_store);
+            ecil_arg_uint(frame, ECIL_STORE_INIT);
+            ecil_arg_uint(frame, (unsigned int)esr_none);
+            ecil_rec_end(frame);
+          }  /* if */
+        } else if (di->variant.constant.ptr->kind ==
+                       (a_constant_repr_kind)ck_ptr_to_member &&
+                   di->variant.constant.ptr->variant.ptr_to_member.
+                                                       is_function_ptr) {
+          /* A pointer to a member function that may need a this adjustment:
+             CONST_METHOD and a STORE (a C_METHOD with an adjustment is only
+             valid in a VAR_INIT, spec 12.4). */
+          if (ecil_emit_ptr_to_member_constant(frame,
+                                               di->variant.constant.ptr,
+                                               FALSE)) {
+            ecil_rec_begin(frame, eop_store);
+            ecil_arg_uint(frame, ECIL_STORE_INIT);
+            ecil_arg_uint(frame, (unsigned int)esr_none);
+            ecil_rec_end(frame);
+          }  /* if */
+        } else if (gid_is_empty_class(it->b)) {
+          /* An empty class: its byte may belong to another object. */
+          ecil_rec0(frame, eop_drop);
+        } else if (ecil_emit_constant_typed(frame, di->variant.constant.ptr,
+                                            it->b)) {
           ecil_rec0(frame, eop_init_const);
         }  /* if */
         code_stack_size--;
         break;
       case dik_expression:
         if (di->class_rvalue_initialized_through_master_entry) {
-          /* A class ?: whose arms build the value in the variable. */
+          /* A class ?: whose arms build the value in the variable (or in the
+             temporary that this initializes). */
+          note_master_dest(di, it->a);
           code_stack_size--;
           push_expr(di->variant.expression, 0);
           break;
@@ -4982,6 +7634,10 @@ of ECIL type it->b, from the dynamic init in it->entry.
       case dik_bitwise_copy:
         if (di->variant.bitwise_copy.source == NULL) {
           ecil_note_unsupported("a bitwise copy without a source");
+        } else if (ecil_class_is_dynamic(di->variant.bitwise_copy.source->
+                                                                      type)) {
+          ecil_note_unsupported("a bitwise copy of a class with virtual "
+                                "functions");
         } else {
           an_expr_node_ptr  src = di->variant.bitwise_copy.source;
 
@@ -5007,10 +7663,11 @@ of ECIL type it->b, from the dynamic init in it->entry.
           agg_lambda = di->variant.constant.lambda;
         }  /* if */
         emit_init_destination(frame, lid);
-        if (di->kind == (a_dynamic_init_kind)dik_nonconstant_aggregate &&
-            array_default_construct(frame, di)) {
-          code_stack_size--;
-          break;
+        if (di->kind == (a_dynamic_init_kind)dik_nonconstant_aggregate) {
+          int  built = array_default_construct(frame, di, idx);
+
+          if (built == 1) code_stack_size--;
+          if (built != 0) break;
         }  /* if */
         it->kind = cik_agg;
         it->phase = 0;
@@ -5141,6 +7798,156 @@ member), else NULL.
 }  /* agg_nua_member */
 
 
+static a_type_ptr innermost_destructible_class(a_type_ptr type)
+/*
+The class whose destructor destroys an object (an element of an array of any
+depth) of the type, or NULL if the type needs no destruction.
+*/
+{
+  type = skip_typerefs(type);
+  while (type->kind == tk_array) {
+    type = skip_typerefs(type->variant.array.element_type);
+  }  /* while */
+  return ecil_class_has_nontrivial_dtor(type) ? type : NULL;
+}  /* innermost_destructible_class */
+
+
+static a_type_ptr agg_entry_type(an_ecil_frame *frame, an_init_level *level,
+                                 uint64_t index)
+/*
+The front end's type of the member or element "index" of the aggregate of
+level; NULL for a base class entry or when it cannot be found.
+*/
+{
+  a_type_ptr  type = NULL;
+
+  if (level->is_array) {
+    type = skip_typerefs(level->type->variant.array.element_type);
+  } else if (index >= level->lead) {
+    (void)ecil_member_type_gid(frame, level, index);
+    if (level->members != NULL && index - level->lead < level->num_members) {
+      type = skip_typerefs(level->members[index - level->lead]->type);
+    }  /* if */
+  }  /* if */
+  return type;
+}  /* agg_entry_type */
+
+
+static a_boolean agg_needs_partial_cleanups(an_ecil_frame *frame,
+                                            an_init_level *level)
+/*
+Return TRUE if, with exceptions, some member or element of the aggregate has a
+class type with a non-trivial destructor (it must be destroyed when a later
+one throws).
+*/
+{
+  a_boolean  needed = FALSE;
+
+  if (ecil_has_exceptions() && !C_mode()) {
+    if (level->is_array) {
+      needed = innermost_destructible_class(
+                      level->type->variant.array.element_type) != NULL;
+    } else {
+      a_field_ptr  f;
+
+      for (f = level->type->variant.class_struct_union.field_list;
+           f != NULL && !needed; f = f->next) {
+        needed = innermost_destructible_class(f->type) != NULL;
+      }  /* for */
+    }  /* if */
+  }  /* if */
+  return needed;
+}  /* agg_needs_partial_cleanups */
+
+
+static void agg_note_initialized(an_ecil_frame *frame, an_init_level *level,
+                                 uint64_t index, uint64_t count)
+/*
+The entry of the aggregate (count elements from "index") was initialized, by
+a construction, a constant or an empty list: if its type has a destructor its
+cleanup follows (at the next visit of the level, when the entry is complete).
+*/
+{
+  a_type_ptr  et = agg_entry_type(frame, level, index);
+
+  if (level->addr_lid != 0 && !level->is_union && et != NULL &&
+      innermost_destructible_class(et) != NULL) {
+    level->partial_pending = TRUE;
+    level->partial_index = index;
+    level->partial_count = count;
+    level->partial_type = et;
+  }  /* if */
+}  /* agg_note_initialized */
+
+
+static void agg_emit_partial_cleanup(an_ecil_frame *frame,
+                                     an_init_level *level)
+/*
+CLEANUP_BEGIN(eh, DEACTIVATABLE) of each element that was just initialized:
+its destructor (an array member's elements in an ARRAY_DTOR loop), on the
+element found through the local that holds the aggregate's address (spec
+12.6).
+*/
+{
+  a_type_ptr     cls = innermost_destructible_class(level->partial_type);
+  a_routine_ptr  dtor = cls != NULL ? class_destructor_of(cls) : NULL;
+  uint32_t       g = dtor != NULL ? ecil_function_id(frame, dtor) : 0;
+  uint32_t       agg_gid = ecil_type_id(frame, level->type);
+  uint32_t       eg = ecil_type_id(frame, level->partial_type);
+  a_boolean      elem_is_array = skip_typerefs(level->partial_type)->kind ==
+                                 tk_array;
+  uint64_t       count = level->partial_count == 0 ? 1 : level->partial_count;
+  uint64_t       first = level->partial_index;
+  uint64_t       k;
+
+  level->partial_pending = FALSE;
+  if (g == 0 || agg_gid == 0 || eg == 0) {
+    ecil_note_unsupported("a partially constructed aggregate whose "
+                          "destructor is not known");
+  } else if (elem_is_array && level->is_array) {
+    ecil_note_unsupported("a partially constructed array of arrays of "
+                          "objects");
+  }  /* if */
+  for (k = 0; k < count && ecil_unsupported_reason == NULL; k++) {
+    level->partial_index = first + k;
+    ecil_rec_begin(frame, eop_cleanup_begin);
+    ecil_arg_uint(frame, (unsigned int)ecl_eh);
+    ecil_arg_nil(frame);
+    ecil_arg_uint(frame, ECIL_CLEANUP_DEACTIVATABLE);
+    ecil_rec_end(frame);
+    ecil_rec1(frame, eop_lref, level->addr_lid);
+    ecil_rec1(frame, eop_load, 0);
+    ecil_rec0(frame, eop_deref);
+    if (level->is_array) {
+      uint32_t  sizet = ecil_target_uintptr_type(frame);
+
+      ecil_rec0(frame, eop_addr);
+      emit_cast(frame, (unsigned int)eck_array_to_ptrdecay,
+                ecil_ptr_type(frame, eg));
+      ecil_rec2(frame, eop_const_int, sizet, level->partial_index);
+      ecil_rec1(frame, eop_ptr_stride,
+                (unsigned int)ECIL_PTR_STRIDE_INDEX_UNSIGNED);
+    } else {
+      ecil_rec2(frame, eop_field, agg_gid,
+                level->partial_index + level->vptr_shift);
+      if (!elem_is_array) ecil_rec0(frame, eop_addr);
+    }  /* if */
+    if (elem_is_array) {
+      ecil_rec2(frame, eop_array_dtor_begin,
+                array_element_gid(frame, level->partial_type),
+                ECIL_ARRAY_LOOP_FIXED);
+      emit_call_record(frame, g, dtor, 1);
+      ecil_rec0(frame, eop_array_dtor_end);
+    } else {
+      emit_call_record(frame, g, dtor, 1);
+    }  /* if */
+    ecil_rec0(frame, eop_cleanup_body);
+    level->num_partial++;
+  }  /* for */
+  level->partial_index = first;
+}  /* agg_emit_partial_cleanup */
+
+
 static void do_agg(an_ecil_frame *frame, size_t idx)
 /*
 cik_agg: walk the entries of a dynamic aggregate.  it->cursor holds the
@@ -5156,10 +7963,20 @@ cursor-stack depth at which this aggregate started.
     uint64_t        index = 0;
     a_constant_ptr  value = NULL;
     a_field_ptr     nua = NULL;
-    a_boolean       more = ecil_init_level_next(level, &index, &value);
+    a_boolean       more;
+    size_t          my_level = num_agg_levels - 1;
+    uint64_t        entry_n = 1;
+    a_boolean       initialized = FALSE;
 
+    if (level->partial_pending) agg_emit_partial_cleanup(frame, level);
+    more = ecil_init_level_next(level, &index, &value);
     if (more && !C_mode()) nua = agg_nua_member(frame, level, index);
     if (!more) {
+      while (level->num_partial > 0) {
+        /* The aggregate is complete: its elements are the program's. */
+        ecil_rec0(frame, eop_cleanup_end);
+        level->num_partial--;
+      }  /* while */
       ecil_rec0(frame, eop_agg_init_end);
       ecil_init_level_end(level);
       num_agg_levels--;
@@ -5175,10 +7992,8 @@ cursor-stack depth at which this aggregate started.
       } else if (value->kind == (a_constant_repr_kind)ck_dynamic_init &&
                  value->variant.dynamic_init.ptr->kind ==
                                         (a_dynamic_init_kind)dik_zero) {
-        ecil_rec1(frame, eop_agg_sel, index);
-        (void)ecil_note_zero_init_of_dmp(ecil_type_id(frame, nua->type));
-        ecil_rec1(frame, eop_zero_bytes, (uint64_t)ecil_data_size_of_type(
-                                              skip_typerefs(nua->type)));
+        ecil_rec1(frame, eop_agg_sel, index + level->vptr_shift);
+        emit_zero_data_size(frame, nua->type);
       } else {
         ecil_note_unsupported("an initialization of a [[no_unique_address]] "
                               "member other than by a constructor");
@@ -5188,13 +8003,15 @@ cursor-stack depth at which this aggregate started.
                 !entry_has_dynamic_part(level, value))) {
       /* A constant element: the VAR_INIT has it. */
     } else if (level->entry_is_char) {
-      ecil_rec1(frame, eop_agg_sel, index);
+      ecil_rec1(frame, eop_agg_sel, index + level->vptr_shift);
       ecil_emit_string_char(frame, level, value, index);
       ecil_rec0(frame, eop_init_const);
     } else if (value->kind == (a_constant_repr_kind)ck_init_repeat) {
       uint64_t  count = level->entry_count;
       uint64_t  i;
 
+      initialized = TRUE;
+      entry_n = count;
       a_constant_ptr  rc = value->variant.init_repeat.constant;
 
       if (rc->kind == (a_constant_repr_kind)ck_dynamic_init &&
@@ -5210,7 +8027,7 @@ cursor-stack depth at which this aggregate started.
                                      rdi->variant.constructor.ptr);
 
         for (i = 0; i < count && ecil_unsupported_reason == NULL; i++) {
-          ecil_rec1(frame, eop_agg_sel, index + i);
+          ecil_rec1(frame, eop_agg_sel, index + i + level->vptr_shift);
           ecil_rec0(frame, eop_addr);
           emit_call_record(frame, gid, rdi->variant.constructor.ptr, 1);
         }  /* for */
@@ -5219,7 +8036,7 @@ cursor-stack depth at which this aggregate started.
         ecil_note_unsupported("a large or aggregate repeated initializer");
       } else {
         for (i = 0; i < count && ecil_unsupported_reason == NULL; i++) {
-          ecil_rec1(frame, eop_agg_sel, index + i);
+          ecil_rec1(frame, eop_agg_sel, index + i + level->vptr_shift);
           if (ecil_emit_constant_typed(frame,
                           value->variant.init_repeat.constant,
                           ecil_member_type_gid(frame, level, index))) {
@@ -5230,7 +8047,8 @@ cursor-stack depth at which this aggregate started.
     } else if (value->kind == (a_constant_repr_kind)ck_dynamic_init) {
       a_dynamic_init_ptr  di = value->variant.dynamic_init.ptr;
 
-      ecil_rec1(frame, eop_agg_sel, index);
+      initialized = TRUE;
+      ecil_rec1(frame, eop_agg_sel, index + level->vptr_shift);
       if (di->kind == dik_expression) {
         (void)push_item(cik_store, NULL, 0);
         push_expr(di->variant.expression, 0);
@@ -5250,9 +8068,7 @@ cursor-stack depth at which this aggregate started.
         } else if (ctor_needs_zeroing(di) && !nua->is_optimized_empty_class) {
           /* Only the data size: the tail padding may hold a later member. */
           ecil_rec0(frame, eop_dup);
-          (void)ecil_note_zero_init_of_dmp(ecil_type_id(frame, nua->type));
-          ecil_rec1(frame, eop_zero_bytes, (uint64_t)ecil_data_size_of_type(
-                                                skip_typerefs(nua->type)));
+          emit_zero_data_size(frame, nua->type);
         }  /* if */
         ecil_rec0(frame, eop_addr);
         if (di->variant.constructor.is_copy_constructor_with_implied_source) {
@@ -5365,22 +8181,69 @@ cursor-stack depth at which this aggregate started.
       a_constant_ptr  *srcs = level->entry_sources;
       size_t          num_srcs = level->entry_num_sources;
 
-      ecil_rec1(frame, eop_agg_sel, index);
+      initialized = TRUE;
+      ecil_rec1(frame, eop_agg_sel, index + level->vptr_shift);
       begin_dynamic_aggregate(frame, value, srcs, num_srcs,
                               level->skip_constants);
     } else {
-      ecil_rec1(frame, eop_agg_sel, index);
+      initialized = TRUE;
+      ecil_rec1(frame, eop_agg_sel, index + level->vptr_shift);
       if (ecil_emit_constant_sources(frame, value, level->entry_sources,
                            level->entry_num_sources,
                            ecil_member_type_gid(frame, level, index))) {
         ecil_rec0(frame, eop_init_const);
       }  /* if */
     }  /* if */
+    if (initialized && ecil_unsupported_reason == NULL &&
+        my_level < num_agg_levels) {
+      agg_note_initialized(frame, &agg_levels[my_level], index, entry_n);
+    }  /* if */
   }  /* if */
 }  /* do_agg */
 
 
 /* Constructor bodies: member initializers. */
+
+static void emit_this_field(an_ecil_frame *frame,
+                            uint32_t      lid,
+                            a_field_ptr   field)
+/*
+Push the glvalue of a data member of the object pointer variable lid (this
+or a copy constructor's parameter) points to, in the class being constructed:
+a member of an anonymous union or struct is selected through the unnamed
+members that hold it.
+*/
+{
+  a_field_ptr   path[MAX_ANON_DEPTH];
+  a_type_ptr    owners[MAX_ANON_DEPTH];
+  unsigned int  depth = 0;
+  a_boolean     ok = TRUE;
+  uint32_t      rec;
+  uint32_t      index;
+
+  ecil_rec1(frame, eop_lref, lid);
+  ecil_rec1(frame, eop_load, 0);
+  ecil_rec0(frame, eop_deref);
+  if (parent_class_of(field) != function_class) {
+    ok = anonymous_member_path(function_class, field, path, owners, &depth);
+  }  /* if */
+  while (ok && depth > 0) {
+    uint32_t  orec = ecil_type_id(frame, owners[depth - 1]);
+
+    depth--;
+    if (orec == 0 || ecil_gid_of(path[depth]) == 0) {
+      ecil_note_unsupported("a member of an incomplete type");
+      ok = FALSE;
+    } else {
+      ecil_rec2(frame, eop_field, orec, ecil_gid_of(path[depth]) - 1);
+    }  /* if */
+  }  /* while */
+  if (ok && field_index(frame, skip_typerefs(parent_class_of(field)), field,
+                        &rec, &index)) {
+    ecil_rec2(frame, eop_field, rec, index);
+  }  /* if */
+}  /* emit_this_field */
+
 
 static void meminit_first_operands(an_ecil_frame *frame,
                                    a_code_item   *it,
@@ -5395,8 +8258,11 @@ meminit cursor, whose pointer is not valid after a push).
 {
   a_boolean     is_delegation = ci->kind ==
                                 (a_constructor_init_kind)cik_delegation;
+  a_boolean     is_vbase = ci->kind ==
+                           (a_constructor_init_kind)cik_virtual_base_class;
   a_boolean     is_base = ci->kind ==
-                          (a_constructor_init_kind)cik_direct_base_class;
+                          (a_constructor_init_kind)cik_direct_base_class ||
+                          is_vbase;
   uint32_t      src_lid = 0;
   uint32_t      index = 0;
   uint32_t      bg = 0;
@@ -5447,32 +8313,44 @@ meminit cursor, whose pointer is not valid after a push).
     if (ci->variant.field->is_optimized_empty_class) {
       /* Nothing to write. */
     } else if (di->kind == (a_dynamic_init_kind)dik_zero) {
-      emit_this_member(frame, this_lid, rec, index);
-      (void)ecil_note_zero_init_of_dmp(ecil_type_id(frame, type));
-      ecil_rec1(frame, eop_zero_bytes, (uint64_t)ecil_data_size_of_type(
-                                            skip_typerefs(type)));
+      emit_this_field(frame, this_lid, ci->variant.field);
+      emit_zero_data_size(frame, type);
     } else {
       ecil_note_unsupported("a constant initialization of a "
                             "[[no_unique_address]] member");
     }  /* if */
   } else if (di->kind == (a_dynamic_init_kind)dik_constructor) {
     unsigned int  extra = 0;
+    a_boolean     vtt = FALSE;
 
     if (is_delegation) {
       ecil_rec1(frame, eop_lref, this_lid);
       ecil_rec1(frame, eop_load, 0);
+      if (walk_variant == ECIL_VARIANT_BASE) {
+        /* C2 of a class with virtual bases delegates to C2 with its own VTT
+           (spec 12.3). */
+        emit_vtt_addr(frame, (unsigned int)evak_self, 0);
+        vtt = TRUE;
+      }  /* if */
     } else if (is_base) {
-      emit_this_base(frame, this_lid, rec, bg, offset);
+      emit_this_subobject(frame, this_lid, rec, bg, offset, is_vbase, index);
       if (ctor_needs_zeroing(di) &&
           !ci->variant.base_class->is_optimized_empty_base) {
         emit_zero_pointee(frame, type, TRUE);
       }  /* if */
+      if (class_has_vbases(type)) {
+        /* The base variant of a class with virtual bases takes the VTT of
+           the class being constructed (spec 12.3). */
+        emit_vtt_addr(frame, is_vbase ? (unsigned int)evak_vbase :
+                                        (unsigned int)evak_base, index);
+        vtt = TRUE;
+      }  /* if */
       if (di->variant.constructor.is_copy_constructor_with_implied_source) {
-        emit_this_base(frame, src_lid, rec, bg, offset);
+        emit_this_subobject(frame, src_lid, rec, bg, offset, is_vbase, index);
         extra = 1;
       }  /* if */
     } else {
-      emit_this_member(frame, this_lid, rec, index);
+      emit_this_field(frame, this_lid, ci->variant.field);
       if (ctor_needs_zeroing(di)) {
         if (!ci->variant.field->has_no_unique_address_attribute) {
           ecil_rec0(frame, eop_dup);
@@ -5480,14 +8358,12 @@ meminit cursor, whose pointer is not valid after a push).
         } else if (!ci->variant.field->is_optimized_empty_class) {
           /* Only the data size: the tail padding may hold a later member. */
           ecil_rec0(frame, eop_dup);
-          (void)ecil_note_zero_init_of_dmp(ecil_type_id(frame, type));
-          ecil_rec1(frame, eop_zero_bytes, (uint64_t)ecil_data_size_of_type(
-                                                skip_typerefs(type)));
+          emit_zero_data_size(frame, type);
         }  /* if */
       }  /* if */
       ecil_rec0(frame, eop_addr);
       if (di->variant.constructor.is_copy_constructor_with_implied_source) {
-        emit_this_member(frame, src_lid, rec, index);
+        emit_this_field(frame, src_lid, ci->variant.field);
         ecil_rec0(frame, eop_addr);
         extra = 1;
       }  /* if */
@@ -5495,21 +8371,29 @@ meminit cursor, whose pointer is not valid after a push).
     { a_code_item *call = push_item(cik_ctor_call, NULL, 0);
 
       if (call != NULL) {
-        setup_ctor_call(frame, call, di, is_base ? ECIL_VARIANT_BASE :
-                        ECIL_VARIANT_COMPLETE, extra);
+        setup_ctor_call(frame, call, di,
+                        (is_base || (is_delegation &&
+                                     walk_variant == ECIL_VARIANT_BASE)) ?
+                        ECIL_VARIANT_BASE : ECIL_VARIANT_COMPLETE, extra);
+        if (vtt) call->flags |= CTOR_CALL_VTT;
       }  /* if */
     }
+  } else if (di->kind == (a_dynamic_init_kind)dik_bitwise_copy &&
+             di->variant.bitwise_copy.source == NULL && !is_delegation &&
+             ecil_class_is_dynamic(type)) {
+    ecil_note_unsupported("a bitwise copy of a class with virtual "
+                          "functions");
   } else if (di->kind == (a_dynamic_init_kind)dik_bitwise_copy &&
              di->variant.bitwise_copy.source == NULL && !is_delegation) {
     /* The same member or base of the source object, copied bitwise. */
     if (is_base) {
-      emit_this_base(frame, this_lid, rec, bg, offset);
+      emit_this_subobject(frame, this_lid, rec, bg, offset, is_vbase, index);
       ecil_rec0(frame, eop_deref);
-      emit_this_base(frame, src_lid, rec, bg, offset);
+      emit_this_subobject(frame, src_lid, rec, bg, offset, is_vbase, index);
       ecil_rec0(frame, eop_deref);
     } else {
-      emit_this_member(frame, this_lid, rec, index);
-      emit_this_member(frame, src_lid, rec, index);
+      emit_this_field(frame, this_lid, ci->variant.field);
+      emit_this_field(frame, src_lid, ci->variant.field);
     }  /* if */
     ecil_rec1(frame, eop_load, 0);
     ecil_rec_begin(frame, eop_store);
@@ -5521,29 +8405,25 @@ meminit cursor, whose pointer is not valid after a push).
     /* An empty base occupies no storage: nothing to zero (the byte at its
        address belongs to another subobject). */
   } else if (is_base && di->kind == (a_dynamic_init_kind)dik_zero) {
-    /* Only the data size of a base subobject is zeroed: its tail padding may
-       hold members of the derived class (spec 11.6). */
-    emit_this_base(frame, this_lid, rec, bg, offset);
+    /* Only the base's nvsize bytes are zeroed: its tail padding may hold
+       members of the derived class (spec 12.7). */
+    emit_this_subobject(frame, this_lid, rec, bg, offset, is_vbase, index);
     ecil_rec0(frame, eop_deref);
-    (void)ecil_note_zero_init_of_dmp(bg);
-    ecil_rec1(frame, eop_zero_bytes, (uint64_t)ecil_data_size_of_type(
-                                          skip_typerefs(type)));
+    ecil_rec0(frame, eop_init_zero_base);
   } else if (is_delegation && di->kind == (a_dynamic_init_kind)dik_zero) {
     /* The delegated constructor is trivial: its value initialization zeroes
        the object. */
     ecil_rec1(frame, eop_lref, this_lid);
     ecil_rec1(frame, eop_load, 0);
     ecil_rec0(frame, eop_deref);
-    (void)ecil_note_zero_init_of_dmp(ecil_type_id(frame, function_class));
-    ecil_rec1(frame, eop_zero_bytes, (uint64_t)ecil_data_size_of_type(
-                                          skip_typerefs(function_class)));
+    emit_zero_data_size(frame, function_class);
   } else if (!is_delegation) {
     /* A value, zero or aggregate initialization of the member. */
     if (is_base) {
-      emit_this_base(frame, this_lid, rec, bg, offset);
+      emit_this_subobject(frame, this_lid, rec, bg, offset, is_vbase, index);
       ecil_rec0(frame, eop_deref);
     } else {
-      emit_this_member(frame, this_lid, rec, index);
+      emit_this_field(frame, this_lid, ci->variant.field);
     }  /* if */
     { a_code_item *init = push_item(cik_init, di, 0);
 
@@ -5559,6 +8439,77 @@ meminit cursor, whose pointer is not valid after a push).
 }  /* meminit_first_operands */
 
 
+static a_boolean anon_member_holder(an_ecil_frame          *frame,
+                                     a_constructor_init_ptr ci,
+                                     uint32_t               *holder)
+/*
+Return TRUE if the entry initializes a member of an anonymous union or struct
+of the class being constructed; *holder is the position of the outermost
+unnamed member that holds it (what the MEMINIT group is numbered by).
+*/
+{
+  a_boolean  anon = FALSE;
+
+  if (ci != NULL && ci->kind == (a_constructor_init_kind)cik_field &&
+      parent_class_of(ci->variant.field) != function_class) {
+    a_field_ptr   path[MAX_ANON_DEPTH];
+    a_type_ptr    owners[MAX_ANON_DEPTH];
+    unsigned int  depth = 0;
+
+    (void)frame;
+    if (anonymous_member_path(function_class, ci->variant.field, path,
+                              owners, &depth) && depth > 0 &&
+        ecil_gid_of(path[depth - 1]) != 0) {
+      *holder = ecil_gid_of(path[depth - 1]) - 1;
+      anon = TRUE;
+    }  /* if */
+  }  /* if */
+  return anon;
+}  /* anon_member_holder */
+
+
+static a_boolean merge_anon_meminit(an_ecil_frame          *frame,
+                                    a_code_item            *it,
+                                    a_constructor_init_ptr ci,
+                                    uint32_t               rec)
+/*
+The entry ci (a member of an anonymous union or struct) is complete: if the
+next entry initializes a member held by the same unnamed member, it joins the
+same MEMINIT group (the groups are numbered by the REC_FIELD index, which
+strictly increases).  Return TRUE if it was started (the item stays in phase
+1).
+*/
+{
+  uint32_t                holder = 0;
+  uint32_t                next_holder = 0;
+  a_constructor_init_ptr  n = ci->next;
+  a_boolean               merged = FALSE;
+
+  if (anon_member_holder(frame, ci, &holder) &&
+      anon_member_holder(frame, n, &next_holder) && holder == next_holder &&
+      ecil_unsupported_reason == NULL) {
+    a_dynamic_init_ptr  ndi = n->use_field_initializer ?
+                              n->variant.field->initializer : n->initializer;
+
+    if (ndi != NULL && ndi->destructor != NULL) {
+      ecil_note_unsupported("the initializer of a member of an anonymous "
+                            "union or struct that has a destructor");
+    } else {
+      it->entry = n;
+      it->phase = 1;
+      in_field_initializer = n->use_field_initializer;
+      if (ndi != NULL && lifetime_needs_cleanups(ndi->init_expr_lifetime)) {
+        emit_fullexpr_begin(frame);
+        it->c |= 1u;
+      }  /* if */
+      meminit_first_operands(frame, it, n, ndi, rec);
+      merged = TRUE;
+    }  /* if */
+  }  /* if */
+  return merged;
+}  /* merge_anon_meminit */
+
+
 static void do_meminit(an_ecil_frame *frame, size_t idx)
 /*
 cik_meminit: one constructor-initializer entry per round.  Phase 0:
@@ -5571,11 +8522,24 @@ and the body: spec 11.1).
   a_code_item             *it = &code_stack[idx];
   a_constructor_init_ptr  ci = (a_constructor_init_ptr)it->entry;
 
-  if (ci == NULL) {
+  if (ci != NULL &&
+      ci->kind == (a_constructor_init_kind)cik_virtual_base_class &&
+      walk_variant != ECIL_VARIANT_COMPLETE) {
+    /* Only the complete variant constructs the virtual bases (spec 12.3). */
+    it->entry = ci->next;
+    it->phase = 0;
+  } else if (ci == NULL) {
+    if (vptr_init_pending) {
+      /* No member initializer: after the bases (spec 12.4). */
+      vptr_init_pending = FALSE;
+      emit_vptr_init(frame);
+    }  /* if */
     code_stack_size--;
   } else {
     a_boolean         is_delegation = ci->kind ==
                                       (a_constructor_init_kind)cik_delegation;
+    a_boolean         is_vbase = ci->kind ==
+                              (a_constructor_init_kind)cik_virtual_base_class;
     a_boolean         is_base = ci->kind ==
                                 (a_constructor_init_kind)cik_direct_base_class;
     a_dynamic_init_ptr
@@ -5588,8 +8552,9 @@ and the body: spec 11.1).
       it->phase = 0;
       it->entry = ci->next;
       in_field_initializer = FALSE;
-      if ((it->c & 1u) != 0) ecil_rec0(frame, eop_fullexpr_end);
+      if ((it->c & 1u) != 0) emit_fullexpr_end(frame);
       it->c = 0;
+      if (merge_anon_meminit(frame, it, ci, rec)) return;
       ecil_rec0(frame, eop_meminit_end);
       if (di != NULL && di->destructor != NULL) {
         a_destroy_target  tgt;
@@ -5599,12 +8564,14 @@ and the body: spec 11.1).
         tgt.rec = rec;
         if (is_delegation) {
           tgt.kind = DT_THIS;
-        } else if (is_base) {
+        } else if (is_base || is_vbase) {
           a_base_class_ptr  base = ci->variant.base_class;
 
-          tgt.kind = DT_BASE;
+          tgt.kind = is_vbase ? DT_VBASE : DT_BASE;
           tgt.base_gid = ecil_type_id(frame, base->type);
           tgt.offset = (uint64_t)base->offset;
+          tgt.index = ecil_gid_of(base) - 1;
+          tgt.base_type = base->type;
         } else {
           uint32_t  r;
 
@@ -5615,25 +8582,35 @@ and the body: spec 11.1).
                                              ci->variant.field->type);
         }  /* if */
         emit_cleanup(frame, (unsigned int)ecl_eh, &tgt, di->destructor,
-                     is_base ? ECIL_VARIANT_BASE : ECIL_VARIANT_COMPLETE);
+                     (is_base || is_vbase ||
+                      (is_delegation && walk_variant == ECIL_VARIANT_BASE)) ?
+                     ECIL_VARIANT_BASE : ECIL_VARIANT_COMPLETE);
       }  /* if */
-    } else if (ci->kind == (a_constructor_init_kind)cik_virtual_base_class) {
-      ecil_note_unsupported("a virtual base class initializer");
-    } else if (!is_base && !is_delegation &&
-               parent_class_of(ci->variant.field) != function_class) {
-      /* A member of an anonymous union or struct is initialized through the
-         member that holds it. */
+    } else if (!is_base && !is_vbase && !is_delegation &&
+               parent_class_of(ci->variant.field) != function_class &&
+               di != NULL && di->destructor != NULL) {
+      /* Its cleanup would have to follow a group that holds several. */
       ecil_note_unsupported("the initializer of a member of an anonymous "
-                            "union or struct");
+                            "union or struct that has a destructor");
     } else {
       unsigned int  kind = is_delegation ? (unsigned int)emk_delegation :
+                           is_vbase ? (unsigned int)emk_vbase :
                            is_base ? (unsigned int)emk_base :
                                      (unsigned int)emk_field;
       unsigned int  flags = 0;
       uint32_t      index = 0;
 
-      if (is_base) {
+      if (kind == (unsigned int)emk_field && vptr_init_pending) {
+        /* After the base groups and their cleanups, before the first
+           member (spec 12.4). */
+        vptr_init_pending = FALSE;
+        emit_vptr_init(frame);
+      }  /* if */
+
+      if (is_base || is_vbase) {
         index = ecil_gid_of(ci->variant.base_class) - 1;
+      } else if (!is_delegation && anon_member_holder(frame, ci, &index)) {
+        /* The group of the member that holds it. */
       } else if (!is_delegation) {
         uint32_t  r;
 
@@ -5653,7 +8630,7 @@ and the body: spec 11.1).
         if (di != NULL && lifetime_needs_cleanups(di->init_expr_lifetime)) {
           /* The temporaries of the initializer are destroyed at the end of
              the initialization. */
-          ecil_rec0(frame, eop_fullexpr_begin);
+          emit_fullexpr_begin(frame);
           it->c |= 1u;
         }  /* if */
         meminit_first_operands(frame, it, ci, di, rec);
@@ -5723,13 +8700,14 @@ front end's list is in destruction order: walk it from its end.
         tgt.kind = DT_BASE;
         tgt.lid = this_lid;
         tgt.rec = rec;
-        tgt.index = 0;
+        tgt.index = ecil_gid_of(base) - 1;
+        tgt.base_type = base->type;
         tgt.base_gid = ecil_type_id(frame, base->type);
         tgt.offset = (uint64_t)base->offset;
         emit_cleanup(frame, (unsigned int)ecl_all, &tgt, di->destructor,
                      ECIL_VARIANT_BASE);
       } else {
-        ecil_note_unsupported("a virtual base class destructor");
+        /* A virtual base: D2 does not destroy it (D1 does, spec 12.3). */
       }  /* if */
     }  /* for */
   }  /* if */
@@ -6009,7 +8987,7 @@ STATIC_INIT_BEGIN and STATIC_INIT_END, followed by the exit cleanup.
   uint32_t            gid = ecil_gid_of(var);
 
   if (it->phase == 1) {
-    if ((it->c & 1u) != 0) ecil_rec0(frame, eop_fullexpr_end);
+    if ((it->c & 1u) != 0) emit_fullexpr_end(frame);
     if (di->destructor != NULL) {
       a_destroy_target  tgt;
 
@@ -6047,7 +9025,7 @@ STATIC_INIT_BEGIN and STATIC_INIT_END, followed by the exit cleanup.
     it->phase = 1;
     if (!constant) {
       if (lifetime_needs_cleanups(di->init_expr_lifetime)) {
-        ecil_rec0(frame, eop_fullexpr_begin);
+        emit_fullexpr_begin(frame);
         it->c |= 1u;
       }  /* if */
       { a_code_item *init = push_item(cik_init, di, 0);
@@ -6080,7 +9058,7 @@ guards it with an nrvo flag (spec 11.6).
   if (var != NULL && !variable_is_automatic(var) && !C_mode()) {
     do_static_var_init(frame, idx);
   } else if (it->phase == 1) {
-    if ((it->c & 1u) != 0) ecil_rec0(frame, eop_fullexpr_end);
+    if ((it->c & 1u) != 0) emit_fullexpr_end(frame);
     flush_pending_cleanups(frame, it->b);
     if (di->destructor != NULL && var != NULL && ecil_lid_of(var) != 0) {
       emit_local_cleanup(frame, ecil_lid_of(var), var->type, di->destructor);
@@ -6111,7 +9089,7 @@ guards it with an nrvo flag (spec 11.6).
       it->phase = 1;
       it->b = (uint32_t)num_pending_cleanups;
       if (lifetime_needs_cleanups(di->init_expr_lifetime)) {
-        ecil_rec0(frame, eop_fullexpr_begin);
+        emit_fullexpr_begin(frame);
         it->c |= 1u;
       }  /* if */
       { a_code_item *init = push_item(cik_init, di, 0);
@@ -6184,7 +9162,6 @@ uses an explicit stack that is kept between the calls.
       case stmk_assigned_goto:
       case stmk_coroutine:
       case stmk_coroutine_return:
-      case stmk_try_block:
       case stmk_if_consteval:
       case stmk_if_not_consteval:
 #if MICROSOFT_EXTENSIONS_ALLOWED
@@ -6203,6 +9180,18 @@ uses an explicit stack that is kept between the calls.
                                    FALSE) ||
                 !push_label_search(&size, st->variant.if_stmt.else_statement,
                                    FALSE);
+        break;
+      case stmk_try_block:
+        { a_handler_ptr  h;
+
+          found = found ||
+                  !push_label_search(&size, st->variant.try_block->statement,
+                                     FALSE);
+          for (h = st->variant.try_block->handlers; h != NULL && !found;
+               h = h->next) {
+            found = !push_label_search(&size, h->statement, FALSE);
+          }  /* for */
+        }
         break;
       case stmk_constexpr_if:
         found = found ||
@@ -6291,6 +9280,143 @@ end folded it; its truth is in *value.
   }  /* if */
   return known;
 }  /* condition_is_constant */
+
+
+static unsigned int catch_param_kind(an_ecil_frame   *frame,
+                                     a_handler_ptr    h,
+                                     uint32_t         *copy_gid)
+/*
+The kind of CATCH_PARAM of a handler's parameter (spec 12.5), chosen from its
+type: a reference to a pointer to a record 7, a reference to another pointer
+6, any other reference 0, a pointer 1, a scalar (arithmetic, enum, bool,
+nullptr_t, a pointer to a member) 2, a class initialized bitwise 4 or by a
+copy constructor 5 (*copy_gid its C1).  0xFF if it cannot be expressed.
+*/
+{
+  a_type_ptr    t = skip_typerefs(h->parameter->type);
+  unsigned int  kind = 0xFFu;
+
+  *copy_gid = 0;
+  if (t->kind == tk_pointer && is_reference_type(t)) {
+    a_type_ptr  referent = skip_typerefs(type_pointed_to(t));
+
+    if (referent->kind == tk_pointer && !is_nullptr_type(referent) &&
+        !is_reference_type(referent)) {
+      a_type_ptr  pointee = skip_typerefs(referent->variant.pointer.type);
+
+      kind = is_immediate_class_type(pointee) ?
+             (unsigned int)ecat_reference_to_record_pointer :
+             (unsigned int)ecat_reference_to_pointer;
+    } else {
+      kind = (unsigned int)ecat_reference;
+    }  /* if */
+  } else if (t->kind == tk_pointer && !is_nullptr_type(t)) {
+    kind = (unsigned int)ecat_pointer;
+  } else if (is_immediate_class_type(t)) {
+    a_dynamic_init_ptr  di = h->dynamic_init;
+
+    if (di != NULL && di->kind == (a_dynamic_init_kind)dik_constructor &&
+        di->variant.constructor.ptr != NULL) {
+      if (di->variant.constructor.args != NULL ||
+          lifetime_needs_cleanups(di->init_expr_lifetime)) {
+        ecil_note_unsupported("a catch parameter copy with default "
+                              "arguments or temporaries");
+      } else {
+        *copy_gid = ecil_function_id(frame, di->variant.constructor.ptr);
+        kind = (unsigned int)ecat_non_trivial_copy;
+      }  /* if */
+    } else {
+      kind = (unsigned int)ecat_trivial_copy;
+    }  /* if */
+  } else if (t->kind == tk_integer || t->kind == tk_float ||
+             t->kind == tk_ptr_to_member || is_nullptr_type(t) ||
+             is_enum_type(t)) {
+    kind = (unsigned int)ecat_scalar;
+  }  /* if */
+  return kind;
+}  /* catch_param_kind */
+
+
+static void do_try_block(an_ecil_frame *frame, size_t idx)
+/*
+stmk_try_block: TRY_BEGIN, the body, then each handler as CATCH_BEGIN(typeinfo
+or nil), LOCAL and CATCH_PARAM for its parameter (an unnamed one too), the
+cleanup of a destructible parameter (inside the handler), the handler's block,
+and TRY_END (spec 12.5).  The try block of a constructor's or destructor's
+function-try-block was begun with the header (function_try_open): the
+initializers and the destruction prologue are inside it.
+*/
+{
+  a_code_item         *it = &code_stack[idx];
+  a_statement_ptr     s = (a_statement_ptr)it->entry;
+  a_try_supplement_ptr  tb = s->variant.try_block;
+
+  if (!ecil_has_exceptions()) {
+    ecil_note_unsupported("a try statement");
+    code_stack_size--;
+  } else if (it->phase == 0) {
+    if (function_try_open && function_scope != NULL &&
+        s == function_scope->assoc_block) {
+      function_try_open = FALSE;       /* Begun with the header. */
+    } else {
+      ecil_rec1(frame, eop_try_begin, 0);
+    }  /* if */
+    it->phase = 1;
+    it->cursor = tb->handlers;
+    push_stmt(tb->statement);
+  } else if (it->cursor == NULL) {
+    ecil_rec0(frame, eop_try_end);
+    code_stack_size--;
+  } else {
+    a_handler_ptr  h = (a_handler_ptr)it->cursor;
+    uint32_t       gti = 0;
+
+    it->cursor = h->next;
+    if (h->parameter != NULL) {
+      gti = ecil_typeinfo_id(frame, h->parameter->type);
+    }  /* if */
+    if (ecil_unsupported_reason == NULL) {
+      ecil_rec_begin(frame, eop_catch_begin);
+      if (h->parameter != NULL) {
+        ecil_arg_uint(frame, gti);
+      } else {
+        ecil_arg_nil(frame);
+      }  /* if */
+      ecil_rec_end(frame);
+    }  /* if */
+    if (ecil_unsupported_reason == NULL && h->parameter != NULL) {
+      uint32_t      copy = 0;
+      unsigned int  kind = catch_param_kind(frame, h, &copy);
+
+      if (ecil_unsupported_reason == NULL && kind == 0xFFu) {
+        ecil_note_unsupported("a catch parameter of this type");
+      }  /* if */
+      if (ecil_unsupported_reason == NULL) {
+        declare_variable(frame, h->parameter);
+        if (ecil_lid_of(h->parameter) == 0) {
+          ecil_note_unsupported("a catch parameter that is not a local");
+        }  /* if */
+      }  /* if */
+      if (ecil_unsupported_reason == NULL) {
+        ecil_rec_begin(frame, eop_catch_param);
+        ecil_arg_uint(frame, ecil_lid_of(h->parameter));
+        ecil_arg_uint(frame, kind);
+        if (copy != 0) {
+          ecil_arg_uint(frame, copy);
+        } else {
+          ecil_arg_nil(frame);
+        }  /* if */
+        ecil_rec_end(frame);
+        if (h->dynamic_init != NULL && h->dynamic_init->destructor != NULL) {
+          emit_local_cleanup(frame, ecil_lid_of(h->parameter),
+                             h->parameter->type,
+                             h->dynamic_init->destructor);
+        }  /* if */
+      }  /* if */
+    }  /* if */
+    if (ecil_unsupported_reason == NULL) push_stmt(h->statement);
+  }  /* if */
+}  /* do_try_block */
 
 
 static void do_stmt(an_ecil_frame *frame, size_t idx)
@@ -6569,6 +9695,10 @@ Visit a statement item.
         }  /* if */
       }
       break;
+    case stmk_try_block:
+      do_try_block(frame, idx);
+      done = FALSE;                   /* do_try_block pops its own item. */
+      break;
     case stmk_constexpr_if:
       /* Only the branch the front end selected exists in the program. */
       { a_constexpr_if_ptr  cip = s->variant.constexpr_if;
@@ -6578,6 +9708,29 @@ Visit a statement item.
         if (!cip->value_known || condition_of(s->expr) != NULL) {
           ecil_note_unsupported("an if constexpr that is not resolved or "
                                 "has an init-statement");
+        } else if (live != NULL) {
+          it->entry = live;            /* Visit it in place of this one. */
+          it->phase = 0;
+          done = FALSE;
+        }  /* if */
+      }
+      break;
+    case stmk_if_consteval:
+    case stmk_if_not_consteval:
+      /* Code that runs is not being evaluated as a constant expression (as
+         for __builtin_is_constant_evaluated): "if consteval" takes its else
+         arm, "if !consteval" its then arm.  The other arm must have no label
+         that a goto or a switch can reach. */
+      { a_boolean         negated = s->kind ==
+                                    (a_statement_kind)stmk_if_not_consteval;
+        a_statement_ptr   live = negated ? s->variant.if_stmt.then_statement :
+                                           s->variant.if_stmt.else_statement;
+        a_statement_ptr   dead = negated ? s->variant.if_stmt.else_statement :
+                                           s->variant.if_stmt.then_statement;
+
+        if (statement_may_have_label(dead, FALSE)) {
+          ecil_note_unsupported("an if consteval whose constant-evaluated "
+                                "arm has a label");
         } else if (live != NULL) {
           it->entry = live;            /* Visit it in place of this one. */
           it->phase = 0;
@@ -6781,7 +9934,7 @@ Visit a statement item.
                full expression. */
             it->phase = 2;
             if (lifetime_needs_cleanups(rdi->init_expr_lifetime)) {
-              ecil_rec0(frame, eop_fullexpr_begin);
+              emit_fullexpr_begin(frame);
               it->c |= 1u;
             }  /* if */
             { a_code_item *init = push_item(cik_init, rdi, 0);
@@ -6799,7 +9952,7 @@ Visit a statement item.
                constructs the result in the return slot. */
             it->phase = 2;
             if (lifetime_needs_cleanups(rdi->init_expr_lifetime)) {
-              ecil_rec0(frame, eop_fullexpr_begin);
+              emit_fullexpr_begin(frame);
               it->c |= 1u;
             }  /* if */
             ecil_rec0(frame, eop_return_slot);
@@ -6838,7 +9991,7 @@ Visit a statement item.
         }  /* if */
         rec_bool(frame, eop_return_stmt, FALSE);
       } else if (it->phase == 2) {
-        if ((it->c & 1u) != 0) ecil_rec0(frame, eop_fullexpr_end);
+        if ((it->c & 1u) != 0) emit_fullexpr_end(frame);
         ecil_rec0(frame, eop_return_from_slot);
       } else {
         rec_bool(frame, eop_return_stmt, TRUE);
@@ -6899,6 +10052,9 @@ static void run_code_stack(an_ecil_frame *frame)
 Process items until the stack is empty or something is unsupported.
 */
 {
+  cond_depth = 0;
+  fullexpr_depth = 0;
+  num_new_cleanups = 0;
   suppress_load_node = NULL;
   load_suppressed = FALSE;
   while (code_stack_size > 0 && ecil_unsupported_reason == NULL) {
@@ -6914,6 +10070,14 @@ Process items until the stack is empty or something is unsupported.
       case cik_var_init:  do_var_init(frame, idx); break;
       case cik_new:       do_new_delete(frame, idx); break;
       case cik_meminit:   do_meminit(frame, idx); break;
+      case cik_emit:
+        if (code_stack[idx].a == (uint32_t)eop_fullexpr_end) {
+          emit_fullexpr_end(frame);
+        } else {
+          ecil_rec0(frame, code_stack[idx].a);
+        }  /* if */
+        code_stack_size--;
+        break;
       case cik_store:
         ecil_rec_begin(frame, eop_store);
         ecil_arg_uint(frame, code_stack[idx].a);
@@ -6924,6 +10088,10 @@ Process items until the stack is empty or something is unsupported.
     }  /* switch */
   }  /* while */
   code_stack_size = 0;
+  cond_depth = 0;
+  fullexpr_depth = 0;
+  num_new_cleanups = 0;
+  num_master_dests = 0;
   reset_agg_levels();
   /* No suppressed load outlives the code that set it (a construct that was
      diagnosed may have left one pending). */
@@ -6969,22 +10137,12 @@ check goes when its feature is implemented.
 */
 {
   if (!C_mode()) {
-    if (rout->is_virtual) {
-      ecil_note_unsupported("a virtual function");
-    } else if (rout->special_kind ==
-                               (a_special_function_kind)sfk_constructor ||
-               rout->special_kind ==
-                               (a_special_function_kind)sfk_destructor) {
+    if (rout->special_kind == (a_special_function_kind)sfk_constructor ||
+        rout->special_kind == (a_special_function_kind)sfk_destructor) {
       a_type_ptr  cls = function_class;
 
       if (cls == NULL || !is_immediate_class_type(cls)) {
         ecil_note_unsupported("a constructor or destructor without a class");
-      } else if (cls->variant.class_struct_union.
-                          any_virtual_functions_including_in_base_classes ||
-                 cls->variant.class_struct_union.any_virtual_base_classes) {
-        /* The constructor must set the vptr and construct virtual bases. */
-        ecil_note_unsupported("a constructor or destructor of a class with "
-                              "virtual functions or virtual bases");
       }  /* if */
     }  /* if */
   }  /* if */
@@ -7056,45 +10214,203 @@ translation unit's own).
 }  /* definition_must_exist */
 
 
-static void emit_function(an_ecil_frame *frame, a_scope_ptr scope)
+static void emit_func_eh_spec(an_ecil_frame *frame, a_routine_ptr rout)
 /*
-Translate one function scope: re-issue its DECL_FUNC if the definition's
-facts differ, then FUNC_BEGIN, PARAMs, the body and FUNC_END.  If the body
-uses a construct v0 cannot express, discard the body records (spec 8.11:
-the declaration section is kept), re-issue the declaration as unsupported
-and warn.
+FUNC_EH_SPEC of a definition (after the parameters, before any body record:
+spec 12.4): noexcept for "noexcept", "noexcept(true)" and an instance with a
+true argument (the implicit destructor and deallocation function with their
+compiler-generated specification included), and for "throw()" in C++17 and
+later; dynamic with the typeinfo of each listed type otherwise.  An
+attribute's nothrow and a trivial member are NOTHROW only, with no terminate
+scope.
 */
 {
-  a_routine_ptr rout = scope->variant.routine.ptr;
-  uint32_t      gid;
-  an_ecil_mark  mark;
-  a_boolean     dropped = FALSE;
+  if (ecil_has_exceptions()) {
+    a_type_ptr                      t = skip_typerefs(rout->type);
+    a_routine_type_supplement_ptr   rtsp = t->variant.routine.extra_info;
+    an_exception_specification_ptr  esp;
 
-  /* A reason noted while introducing the declaration (an unsupported
-     parameter type) is reported with the dropped body below. */
-  ecil_unsupported_reason = NULL;
-  /* Records declared incomplete in an earlier frame and completed since get
-     their bodies before anything here can need them complete. */
-  ecil_complete_pending_records(frame);
-#if BACK_END_TYPE == BACK_END_TYPE_CIR
-  ecil_jump_check_enabled = !C_mode() && cfront_2_1_mode;
-#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
-  ecil_symbol_clash = FALSE;
-  gid = ecil_function_id(frame, rout);
-  if (gid != 0 && ecil_unsupported_reason == NULL) {
-    ecil_gid_info(gid)->entity = rout;
-    if (ecil_gid_info(gid)->partner != 0) {
-      ecil_gid_info(ecil_gid_info(gid)->partner)->entity = rout;
+    /* Resolves an indeterminate specification (a defaulted function's). */
+    (void)is_non_throwing_routine(rout);
+    esp = rtsp->exception_specification;
+    if (esp != NULL && !esp->indeterminate && !esp->arg_cached &&
+        !esp->throw_any && !esp->from_attribute) {
+      if (esp->is_noexcept ||
+          (cpp17_mode &&
+           esp->variant.exception_specification_type_list == NULL)) {
+        ecil_rec_begin(frame, eop_func_eh_spec);
+        ecil_arg_uint(frame, (unsigned int)eesk_noexcept);
+        ecil_arg_array(frame, NULL, 0);
+        ecil_rec_end(frame);
+      } else {
+        an_exception_specification_type_ptr  e;
+        uint32_t                             *words = NULL;
+        size_t                               n = 0;
+        size_t                               count = 0;
+
+        for (e = esp->variant.exception_specification_type_list; e != NULL;
+             e = e->next) {
+          if (!e->redundant) count++;
+        }  /* for */
+        if (count != 0) {
+          words = (uint32_t *)malloc(count * sizeof(uint32_t));
+          if (words == NULL) {
+            ecil_note_unsupported("out of memory in the ECIL writer");
+          }  /* if */
+        }  /* if */
+        for (e = esp->variant.exception_specification_type_list;
+             e != NULL && ecil_unsupported_reason == NULL &&
+             (count == 0 || words != NULL); e = e->next) {
+          if (e->is_pack_expansion) {
+            ecil_note_unsupported("a dynamic exception specification with "
+                                  "a pack expansion");
+          } else if (!e->redundant) {
+            uint32_t  ti = ecil_typeinfo_id(frame, e->type);
+
+            if (ti != 0 && n < count) words[n++] = ti;
+          }  /* if */
+        }  /* for */
+        if (ecil_unsupported_reason == NULL) {
+          ecil_rec_begin(frame, eop_func_eh_spec);
+          ecil_arg_uint(frame, (unsigned int)eesk_dynamic);
+          ecil_arg_array(frame, words, n);
+          ecil_rec_end(frame);
+        }  /* if */
+        free(words);
+      }  /* if */
     }  /* if */
-    ecil_reissue_function(frame, gid, TRUE, FALSE);
   }  /* if */
-  ecil_frame_begin_body(frame);
-  mark = ecil_frame_mark(frame);
+}  /* emit_func_eh_spec */
+
+
+static void emit_synthesized_d1(an_ecil_frame *frame,
+                                a_scope_ptr   scope,
+                                a_routine_ptr rout,
+                                uint32_t      gid)
+/*
+The complete destructor D1 of a class with virtual bases (spec 12.3): a body
+the writer makes, as the front end has none for it.  A CLEANUP_BEGIN(all) for
+each virtual base with a non-trivial destructor, in the order of C1's
+MEMINIT(vbase) groups (so they run in reverse construction order: the front
+end's destruction list walked from its end), each calling the base's D2 on
+VBASE_CAST COMPLETE; then the call of D2 with VTT_ADDR(self).  No VPTR_INIT.
+*/
+{
+  a_variable_ptr          this_var =
+                                   scope->variant.routine.this_param_variable;
+  uint32_t                this_type = this_var != NULL ?
+                                      ecil_type_id(frame, this_var->type) : 0;
+  a_constructor_init_ptr  ci;
+  a_constructor_init_ptr  *entries = NULL;
+  size_t                  count = 0;
+  size_t                  i;
+
+  function_scope = scope;
+  function_class = NULL;
+  if (this_var != NULL &&
+      skip_typerefs(this_var->type)->kind == tk_pointer) {
+    function_class = skip_typerefs(skip_typerefs(this_var->type)->
+                                                         variant.pointer.type);
+  }  /* if */
+  next_lid = 0;
+  this_lid = 0;
+  num_pending_cleanups = 0;
+  if (this_type == 0 || function_class == NULL) {
+    ecil_note_unsupported("a destructor without a this parameter");
+  } else {
+    uint32_t  rec = ecil_type_id(frame, function_class);
+    uint32_t  this_name = ecil_intern_cstring(frame, "this");
+
+    this_lid = new_lid();
+    ecil_rec2(frame, eop_func_begin, gid, 0);
+    ecil_rec_begin(frame, eop_param);
+    ecil_arg_uint(frame, this_lid);
+    ecil_arg_uint(frame, this_type);
+    ecil_arg_uint(frame, this_type);
+    ecil_arg_uint(frame, this_name);
+    ecil_arg_uint(frame, ECIL_PARAM_THIS);
+    ecil_rec_end(frame);
+    emit_func_eh_spec(frame, rout);
+    for (ci = scope->variant.routine.constructor_inits; ci != NULL;
+         ci = ci->next) {
+      count++;
+    }  /* for */
+    entries = count == 0 ? NULL : (a_constructor_init_ptr *)malloc(
+                                    count * sizeof(a_constructor_init_ptr));
+    if (count != 0 && entries == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+    } else {
+      i = 0;
+      for (ci = scope->variant.routine.constructor_inits; ci != NULL;
+           ci = ci->next) {
+        entries[i++] = ci;
+      }  /* for */
+      for (i = count; i > 0 && ecil_unsupported_reason == NULL; i--) {
+        a_dynamic_init_ptr  di;
+
+        ci = entries[i - 1];
+        di = ci->initializer;
+        if (ci->kind == (a_constructor_init_kind)cik_virtual_base_class &&
+            di != NULL && di->destructor != NULL) {
+          a_base_class_ptr  base = ci->variant.base_class;
+          a_destroy_target  tgt;
+
+          memset(&tgt, 0, sizeof(tgt));
+          tgt.kind = DT_VBASE;
+          tgt.lid = this_lid;
+          tgt.rec = rec;
+          tgt.index = ecil_gid_of(base) - 1;
+          tgt.base_type = base->type;
+          tgt.base_gid = ecil_type_id(frame, base->type);
+          emit_cleanup(frame, (unsigned int)ecl_all, &tgt, di->destructor,
+                       ECIL_VARIANT_BASE);
+        }  /* if */
+      }  /* for */
+    }  /* if */
+    free(entries);
+    if (ecil_unsupported_reason == NULL) {
+      ecil_rec1(frame, eop_lref, this_lid);
+      ecil_rec1(frame, eop_load, 0);
+      emit_vtt_addr(frame, (unsigned int)evak_self, 0);
+      emit_call_flags(frame, ecil_gid_info(gid)->partner, rout, 1,
+                      ECIL_CALL_VTT);
+    }  /* if */
+    if (ecil_unsupported_reason == NULL) {
+#if CHECKING
+      ecil_check_function_lids(next_lid);
+#endif /* CHECKING */
+      ecil_rec1(frame, eop_func_end, ECIL_FUNC_END_REACHABLE);
+    }  /* if */
+  }  /* if */
+  ecil_end_lid_epoch(next_lid);
+  this_lid = 0;
+  num_pending_cleanups = 0;
+}  /* emit_synthesized_d1 */
+
+
+static void emit_function_walk(an_ecil_frame *frame,
+                               a_scope_ptr   scope,
+                               a_routine_ptr rout,
+                               uint32_t      stream_gid,
+                               unsigned int  variant)
+/*
+One walk of a function scope: FUNC_BEGIN of stream_gid, the PARAMs, the body
+and FUNC_END (nothing if stream_gid is 0 or something is unsupported: the
+caller drops the records).  A constructor of a class with virtual bases is
+walked twice, once for each variant (variant: ECIL_VARIANT_COMPLETE for C1,
+with the mem-initializers of the virtual bases; ECIL_VARIANT_BASE for C2); a
+destructor's body is walked once, as D2 (spec 12.3); ECIL_VARIANT_NONE for any
+other function.  The state of the walk is reset at its end.
+*/
+{
+  walk_variant = variant;
+  function_try_open = FALSE;
   static_init_var = NULL;
   static_temp_count = 0;
   agg_lambda = NULL;
   next_lid = 0;
   this_lid = 0;
+  vptr_init_pending = FALSE;
   function_scope = scope;
   function_class = NULL;
   num_pending_cleanups = 0;
@@ -7114,7 +10430,7 @@ and warn.
   return_is_record = !C_mode() &&
                      (is_immediate_class_type(skip_typerefs(return_type)) ||
                       skip_typerefs(return_type)->kind == tk_array);
-  if (gid != 0 && ecil_unsupported_reason == NULL) {
+  if (stream_gid != 0 && ecil_unsupported_reason == NULL) {
     a_variable_ptr  param;
     a_boolean       prototyped = rout_type_supp(
                                    skip_typerefs(rout->type))->prototyped;
@@ -7123,7 +10439,7 @@ and warn.
     check_definition_return_type(frame, rout);
     check_cxx_function(rout, scope);
     if (ecil_unsupported_reason == NULL) {
-      ecil_rec2(frame, eop_func_begin, ecil_function_body_id(gid), 0);
+      ecil_rec2(frame, eop_func_begin, stream_gid, 0);
     }  /* if */
     if (ecil_unsupported_reason == NULL &&
         scope->variant.routine.this_param_variable != NULL) {
@@ -7181,6 +10497,18 @@ and warn.
         ecil_rec_end(frame);
       }  /* if */
     }  /* for */
+    if (ecil_unsupported_reason == NULL) emit_func_eh_spec(frame, rout);
+    if (ecil_unsupported_reason == NULL && ecil_has_exceptions() &&
+        scope->assoc_block != NULL &&
+        scope->assoc_block->kind == (a_statement_kind)stmk_try_block &&
+        scope->assoc_block->variant.try_block->is_function_try_block &&
+        (rout->special_kind == (a_special_function_kind)sfk_constructor ||
+         rout->special_kind == (a_special_function_kind)sfk_destructor)) {
+      /* The initializers and a destructor's cleanup prologue are inside the
+         function-try-block (spec 12.5). */
+      ecil_rec1(frame, eop_try_begin, ECIL_TRY_FUNCTION_TRY);
+      function_try_open = TRUE;
+    }  /* if */
     if (scope->assoc_block != NULL &&
         scope->assoc_block->kind == (a_statement_kind)stmk_block &&
         scope->assoc_block->variant.block.extra_info != NULL) {
@@ -7190,6 +10518,26 @@ and warn.
     if (ecil_unsupported_reason == NULL && !C_mode() &&
         rout->special_kind == (a_special_function_kind)sfk_destructor) {
       emit_dtor_prologue(frame, scope);
+      if (ecil_unsupported_reason == NULL &&
+          ecil_class_is_dynamic(function_class)) {
+        /* After the cleanup prologue (spec 12.4). */
+        emit_vptr_init(frame);
+      }  /* if */
+    }  /* if */
+    if (ecil_unsupported_reason == NULL && !C_mode() &&
+        rout->special_kind == (a_special_function_kind)sfk_constructor &&
+        ecil_class_is_dynamic(function_class) &&
+        !(scope->variant.routine.constructor_inits != NULL &&
+          scope->variant.routine.constructor_inits->kind ==
+                              (a_constructor_init_kind)cik_delegation)) {
+      /* The initializers of the bases come first, then VPTR_INIT, then
+         those of the members (do_meminit); with no initializer at all,
+         now. */
+      if (scope->variant.routine.constructor_inits == NULL) {
+        emit_vptr_init(frame);
+      } else {
+        vptr_init_pending = TRUE;
+      }  /* if */
     }  /* if */
     if (ecil_unsupported_reason == NULL && scope->assoc_block != NULL) {
       push_stmt(scope->assoc_block);
@@ -7215,6 +10563,103 @@ and warn.
       ecil_rec1(frame, eop_func_end, reachable ? ECIL_FUNC_END_REACHABLE : 0u);
     }  /* if */
   }  /* if */
+  walk_variant = ECIL_VARIANT_NONE;
+  function_try_open = FALSE;
+  vptr_init_pending = FALSE;
+  code_stack_size = 0;
+  reset_agg_levels();
+  static_init_var = NULL;
+  static_temp_count = 0;
+  agg_lambda = NULL;
+  num_pending_cleanups = 0;
+  in_field_initializer = FALSE;
+}  /* emit_function_walk */
+
+
+static void emit_function(an_ecil_frame *frame, a_scope_ptr scope)
+/*
+Translate one function scope: re-issue its DECL_FUNC if the definition's
+facts differ, then FUNC_BEGIN, PARAMs, the body and FUNC_END.  If the body
+uses a construct v0 cannot express, discard the body records (spec 8.11:
+the declaration section is kept), re-issue the declaration as unsupported
+and warn.
+*/
+{
+  a_routine_ptr rout = scope->variant.routine.ptr;
+  uint32_t      gid;
+  an_ecil_mark  mark;
+  size_t        use_mark;
+  a_boolean     dropped = FALSE;
+  a_boolean     vbases = FALSE;
+  uint32_t      walk_gid;
+
+  /* A reason noted while introducing the declaration (an unsupported
+     parameter type) is reported with the dropped body below. */
+  ecil_unsupported_reason = NULL;
+  /* Records declared incomplete in an earlier frame and completed since get
+     their bodies before anything here can need them complete. */
+  ecil_complete_pending_records(frame);
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  ecil_jump_check_enabled = !C_mode() && cfront_2_1_mode;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+  ecil_symbol_clash = FALSE;
+  gid = ecil_function_id(frame, rout);
+  if (gid != 0 && ecil_unsupported_reason == NULL) {
+    ecil_gid_info(gid)->entity = rout;
+    if (ecil_gid_info(gid)->partner != 0) {
+      ecil_gid_info(ecil_gid_info(gid)->partner)->entity = rout;
+    }  /* if */
+    ecil_reissue_function(frame, gid, TRUE, FALSE);
+  }  /* if */
+  if (!C_mode() && rout->is_virtual && gid != 0 &&
+      ecil_unsupported_reason == NULL &&
+      is_immediate_class_type(parent_class_of(rout))) {
+    /* The definition of a virtual function of a dynamic class needs the facts
+       of its class, so that the library emits the thunks to it (another
+       translation unit's vtable refers to them).  The vtable is not used.  A
+       failure does not drop the function. */
+    an_ecil_saved_reason  saved;
+
+    ecil_save_reason(&saved);
+    ecil_class_vtable_facts(frame, parent_class_of(rout));
+    ecil_unsupported_reason = NULL;
+    ecil_restore_reason(&saved);
+  }  /* if */
+  ecil_frame_begin_body(frame);
+  mark = ecil_frame_mark(frame);
+  use_mark = ecil_vtable_use_mark();
+  num_static_temps = 0;
+  vbases = gid != 0 && (ecil_gid_info(gid)->flags &
+                        ECIL_GF_STRUCTOR_VBASES) != 0 &&
+           ecil_unsupported_reason == NULL;
+  walk_gid = gid != 0 ? (vbases && rout->special_kind ==
+                                  (a_special_function_kind)sfk_constructor ?
+                         gid : ecil_function_body_id(gid)) : 0;
+  emit_function_walk(frame, scope, rout, walk_gid,
+                     !vbases ? ECIL_VARIANT_NONE :
+                     rout->special_kind ==
+                          (a_special_function_kind)sfk_constructor ?
+                     ECIL_VARIANT_COMPLETE : ECIL_VARIANT_BASE);
+  if (vbases && ecil_unsupported_reason == NULL && walk_gid != 0) {
+    if (rout->special_kind == (a_special_function_kind)sfk_constructor) {
+      /* The base variant: the same walk without the virtual bases. */
+      uint32_t  before;
+
+      ecil_end_lid_epoch(next_lid);
+      before = ecil_num_gids();
+      emit_function_walk(frame, scope, rout, ecil_gid_info(gid)->partner,
+                         ECIL_VARIANT_BASE);
+#if CHECKING
+      /* Everything the second walk needs was introduced by the first. */
+      check_assertion(ecil_unsupported_reason != NULL ||
+                      ecil_num_gids() == before);
+#endif /* CHECKING */
+      (void)before;
+    } else {
+      /* The complete destructor is synthesized from the front end's list. */
+      emit_synthesized_d1(frame, scope, rout, gid);
+    }  /* if */
+  }  /* if */
   /* The static locals met on the way were introduced (DECL_VAR) where they
      were first used; their initializers are built now, whether or not the
      body survives.  A failure among them makes the function unsupported. */
@@ -7224,6 +10669,7 @@ and warn.
 
     dropped = TRUE;
     ecil_frame_truncate(frame, mark);
+    ecil_vtable_use_rollback(use_mark);
     (void)snprintf(message, sizeof(message),
                    "the body of \"%.200s\" uses %.*s, which the CIR back "
                    "end does not support; the function is dropped",
@@ -7245,6 +10691,8 @@ and warn.
       cir_be_warning(message);
     }  /* if */
   }  /* if */
+  if (!dropped) ecil_vtable_use_commit(use_mark);
+  vptr_init_pending = FALSE;
   ecil_jump_check_enabled = FALSE;
   code_stack_size = 0;
   reset_agg_levels();
@@ -7358,6 +10806,7 @@ variadic lambda has no invoker that forwards its arguments.
       ecil_arg_uint(frame, 0);
       ecil_rec_end(frame);
     }  /* for */
+    emit_func_eh_spec(frame, ep);
     if (by_slot) ecil_rec0(frame, eop_return_slot);
     ecil_rec1(frame, eop_const_null, closure_ptr);
     for (ptp = rout_type_supp(ft)->param_type_list, n_params = 0;
@@ -7520,7 +10969,13 @@ and its lambdas share the region).
     }  /* if */
   }  /* for */
   ecil_drain_invokers(frame);
+  if (!C_mode()) {
+    /* The vtables and typeinfo of the classes local to the function: their
+       entities are alive now (spec 12.8). */
+    ecil_emit_class_abi_data(frame, TRUE);
+  }  /* if */
   ecil_forget_local_pending_records();
+  ecil_forget_local_signatures();
   innermost_function_scope = saved_function_scope;
   curr_il_region_number = saved_region;
 }  /* ecil_stream_function_region */

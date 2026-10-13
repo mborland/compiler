@@ -1,6 +1,10 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
-"Test_name.c", line 21: error: CIR back end: the body of "foo" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
+"Test_name.c", line 40: warning: CIR back end: the body of "~A" uses inline assembly, which the CIR back end does not support; the function is dropped
   }
   ^
 
-1 error detected in the compilation of "Test_name.c".
+Error: CIR back end: the definition of '_ZN1AD1Ev' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN1AD2Ev' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
+
+2 errors detected in the compilation of "Test_name.c".

@@ -15,6 +15,8 @@ library is linked statically into the test; the shared library exports only
 edg_cir_*).
 */
 
+#include <chrono>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -23,6 +25,9 @@ edg_cir_*).
 #include <string>
 #include <thread>
 #include <vector>
+
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "ecil_text.h"
 #include "edg_cir/edg_cir.h"
@@ -423,6 +428,126 @@ afterwards.
 }  /* test_crash_recovery */
 #endif
 
+/* Exit paths.  The front end (cpfe-cir) calls exit() after errors, after
+   F_ABORT, or without ever finishing the session; the library's worker thread
+   must not keep the process alive or block it (a handoff deadlock of the
+   persistent worker once made cpfe-cir sleep forever after "Compilation
+   terminated.", ignoring SIGTERM).  Each case runs in a child process with a
+   deadline; the parent kills it when it is late. */
+
+enum a_exit_mode { exit_after_full, exit_after_bytes, exit_after_abort,
+                   exit_after_fatal, wait_for_signal };
+
+int child_body(a_exit_mode mode, const std::vector<uint8_t> &stream,
+               const std::vector<uint8_t> &abort_stream)
+/*
+Open a session, feed it as the mode says and leave the process through exit()
+(or wait to be killed): never finish or close the session.
+*/
+{
+  a_capture capture;
+  an_edg_cir_options options;
+  an_edg_cir_session *session = nullptr;
+
+  capture.caller = std::this_thread::get_id();
+  edg_cir_options_init(&options);
+  options.output_kind = EDG_CIR_OUTPUT_OBJECT;
+  options.write_callback = write_cb;
+  options.write_user_data = &capture;
+  options.diagnostic_callback = diag_cb;
+  options.diagnostic_user_data = &capture;
+  options.target_triple_override = "x86_64-unknown-linux-gnu";
+  if (edg_cir_session_open(&options, &session) != EDG_CIR_OK)
+    return 99;
+  switch (mode) {
+  case exit_after_full:
+    edg_cir_session_consume(session, stream.data(), stream.size());
+    break;
+  case exit_after_bytes:
+    for (size_t k = 0; k < stream.size(); ++k)
+      edg_cir_session_consume(session, &stream[k], 1);
+    break;
+  case exit_after_abort:
+    edg_cir_session_consume(session, abort_stream.data(),
+                            abort_stream.size());
+    break;
+  case exit_after_fatal:
+#if EDG_CIR_TEST_HOOKS
+    setenv("EDG_CIR_TEST_CONSUME_CRASH", "fatal", 1);
+    edg_cir_session_consume(session, stream.data(), stream.size());
+#endif
+    break;
+  case wait_for_signal:
+    edg_cir_session_consume(session, stream.data(), stream.size() / 2);
+    for (;;)
+      pause();
+  }
+  std::exit(7);
+}  /* child_body */
+
+int run_child(a_exit_mode mode, const std::vector<uint8_t> &stream,
+              const std::vector<uint8_t> &abort_stream, int signal_number,
+              double seconds)
+/*
+Fork a child for the mode; after a short wait send it signal_number (when
+nonzero).  Returns its exit status, 128 + the signal that killed it, or -1 when
+it was still alive after the deadline (then it is killed with SIGKILL).
+*/
+{
+  pid_t pid = fork();
+  int result = -1;
+
+  if (pid == 0)
+    std::_Exit(child_body(mode, stream, abort_stream));
+  if (pid > 0) {
+    auto start = std::chrono::steady_clock::now();
+    bool signalled = signal_number == 0;
+    int status = 0;
+
+    for (;;) {
+      double elapsed = std::chrono::duration<double>(
+          std::chrono::steady_clock::now() - start).count();
+
+      if (waitpid(pid, &status, WNOHANG) == pid) {
+        result = WIFEXITED(status) ? WEXITSTATUS(status)
+                                   : 128 + WTERMSIG(status);
+        break;
+      }
+      if (!signalled && elapsed > 0.5) {
+        kill(pid, signal_number);
+        signalled = true;
+      }
+      if (elapsed > seconds) {
+        kill(pid, SIGKILL);
+        waitpid(pid, &status, 0);
+        break;
+      }
+      usleep(20000);
+    }
+  }
+  return result;
+}  /* run_child */
+
+void test_exit_paths(const std::vector<uint8_t> &stream,
+                     const char *abort_hex)
+{
+  std::vector<uint8_t> abort_stream = parse_hex_file(abort_hex);
+
+  CHECK(run_child(exit_after_full, stream, abort_stream, 0, 10) == 7,
+        "exit() after a consumed stream, no finish");
+  CHECK(run_child(exit_after_bytes, stream, abort_stream, 0, 10) == 7,
+        "exit() after one consume call per byte, no finish");
+  CHECK(run_child(exit_after_abort, stream, abort_stream, 0, 10) == 7,
+        "exit() after F_ABORT");
+#if EDG_CIR_TEST_HOOKS
+  CHECK(run_child(exit_after_fatal, stream, abort_stream, 0, 10) == 7,
+        "exit() after a fatal error in a guarded section");
+#endif
+  CHECK(run_child(wait_for_signal, stream, abort_stream, SIGTERM, 10) ==
+            128 + SIGTERM,
+        "SIGTERM stops a process whose session is open");
+}  /* test_exit_paths */
+
 void test_misc(const std::vector<uint8_t> &stream, const char *tool)
 /*
 Output path, process_file, version and status strings, the edg-cir tool.
@@ -497,6 +622,13 @@ Run the driver tests; return 0 when all pass.
     std::vector<uint8_t> stream = empty_stream();
     std::vector<uint8_t> golden = parse_hex_file(argv[1]);
 
+    /* First, before any session ran in this process: a hang here would
+       otherwise stall every later test. */
+    test_exit_paths(stream, argv[2]);
+    if (failures != 0) {
+      std::printf("capi_tests: %d failures (exit paths)\n", failures);
+      return 1;
+    }
     test_output_kinds(stream);
     if (golden.empty()) {
       CHECK(false, "cannot read %s", argv[1]);

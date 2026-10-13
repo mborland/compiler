@@ -1,0 +1,113 @@
+; C++ (ECIL 1.2, slice S1): INIT_ZERO_BASE zeroes the first nvsize bytes of a
+; base subobject (its data size here: Q has no CLASS_INFO), so a field the
+; derived class placed in the base's tail padding is not overwritten (clang's
+; EmitNullBaseClassInitialization), and nothing at all for an empty base.
+;   struct Q { int a; char c; };  struct R : Q { char r; };  struct E {};
+;   struct F : E { int f; };     // E is an empty base: nothing to zero
+;   void zero(R *p) { value-initialize the Q base of *p }
+; The program fills an R with 0xFF, sets r, zeroes the base and reads back.
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil > %t.cir
+; RUN: %FileCheck %s < %t.cir
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK-LABEL: cir.func {{.*}}@_Z4zeroP1R
+; CHECK: cir.libc.memset {{.*}}
+; CHECK-NOT: cir.libc.memset
+; CHECK-LABEL: cir.func {{.*}}@_Z5zeroEP1F
+; CHECK-NOT: cir.libc.memset
+
+frame DECLS
+  STR 11 "Q"
+  STR 12 "R"
+  STR 13 "E"
+  STR 14 "F"
+  STR 20 "_Z4zeroP1R"
+  STR 21 "_Z5zeroEP1F"
+  STR 22 "main"
+  TY_RECORD_DECL 61 0 11
+  TY_RECORD_BODY 61 8 5 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 4 4 nil nil nil 0
+  TY_RECORD_DECL 62 0 12
+  TY_RECORD_BODY 62 8 6 4 0 2
+  REC_FIELD 61 0 nil nil nil 16
+  REC_FIELD 4 5 nil nil nil 0
+  TY_RECORD_DECL 63 0 13
+  TY_RECORD_BODY 63 1 0 1 0 0
+  TY_RECORD_DECL 64 0 14
+  TY_RECORD_BODY 64 4 4 4 0 2
+  REC_FIELD 63 0 nil nil nil 18
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 65 62
+  TY_PTR 66 64
+  TY_FUNC 70 11 0 [65]
+  TY_FUNC 71 11 0 [66]
+  TY_FUNC 72 1 0 []
+  DECL_FUNC 100 70 0 1 20
+  DECL_FUNC 101 71 0 1 21
+  DECL_FUNC 102 72 0 9 22
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 65 65 nil 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 62 61 0 1
+  DEREF
+  INIT_ZERO_BASE
+  FUNC_END 1
+  FUNC_BEGIN 101 0
+  PARAM 1 66 66 nil 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 64 63 0 1
+  DEREF
+  INIT_ZERO_BASE
+  FUNC_END 1
+  FUNC_BEGIN 102 0
+  LOCAL 1 62 nil 4 0
+  LOCAL 2 64 nil 4 0
+  LREF 1
+  FIELD 62 0
+  FIELD 61 0
+  CONST_INT 1 123
+  STORE 0 0
+  LREF 1
+  FIELD 62 0
+  FIELD 61 1
+  CONST_INT 4 99
+  STORE 0 0
+  LREF 1
+  FIELD 62 1
+  CONST_INT 4 7
+  STORE 0 0
+  LREF 1
+  ADDR
+  CALL 100 70 1 0
+  LREF 2
+  ADDR
+  CALL 101 71 1 0
+  LREF 1
+  FIELD 62 0
+  FIELD 61 0
+  LOAD 0
+  LREF 1
+  FIELD 62 0
+  FIELD 61 1
+  LOAD 0
+  CAST 0 1
+  ADD 1
+  LREF 1
+  FIELD 62 1
+  LOAD 0
+  CAST 0 1
+  CONST_INT 1 7
+  SUB 1
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

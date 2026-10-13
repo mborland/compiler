@@ -1,0 +1,169 @@
+ecil 1.2 features=0x0000000a
+; C++ (ECIL 1.2, slice S1 review): a covariant result whose class D2 : R1, R2 is
+; dynamic but whose vtable facts are not needed here (its constructor and
+; destructor are in the other unit): X::get, in a secondary base position of
+; X : P, Q, overrides Q::get and returns D2* for R2*, so its thunk adjusts
+; both this and the result (_ZTchn16_h16_N1X3getEv: this -16, result +16).
+;   struct X : P, Q { D2 *get() override; };  struct D2 : R1, R2 { D2(); ~D2(); };
+; RUN: %ecil-asm %s -o %t.ecil
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -c %S/Inputs/s1_cov2_host.cpp -o %t.host.o
+; RUN: g++ %t.host.o %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %clang -x c++ -std=c++17 -fno-exceptions -c %S/Inputs/s1_cov2_host.cpp -o %t.hostclang.o
+; RUN: g++ %t.hostclang.o %t.o -o %t.clang.exe
+; RUN: %t.clang.exe
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
+
+; SYMS-DAG: T _ZTchn16_h16_N1X3getEv
+
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "k2_lib.cpp"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  STR 5 "D2"
+  TY_RECORD_DECL 4 0 5
+  TY_PTR 5 4
+  STR 6 "X"
+  TY_RECORD_DECL 6 0 6
+  TY_PTR 7 6
+  TY_FUNC 8 5 0 [7]
+  STR 7 "R1"
+  TY_RECORD_DECL 9 0 7
+  TY_VPTR 10
+  STR 8 "a"
+  TY_RECORD_BODY 9 16 12 8 12 2
+  REC_FIELD 10 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 8 0
+  STR 9 "2R1"
+  CLASS_MANGLE 9 9
+  CLASS_INFO 9 12 8 nil 2
+  CLASS_BASES 9 []
+  STR 10 "R2"
+  TY_RECORD_DECL 11 0 10
+  STR 11 "b"
+  TY_RECORD_BODY 11 16 12 8 12 2
+  REC_FIELD 10 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 11 0
+  STR 12 "2R2"
+  CLASS_MANGLE 11 12
+  CLASS_INFO 11 12 8 nil 2
+  CLASS_BASES 11 []
+  STR 13 "d"
+  TY_RECORD_BODY 4 32 32 8 12 3
+  REC_FIELD 9 0 nil nil nil 17
+  REC_FIELD 11 16 nil nil nil 17
+  REC_FIELD 1 28 nil nil 13 0
+  STR 14 "2D2"
+  CLASS_MANGLE 4 14
+  CLASS_INFO 4 32 8 0 2
+  CLASS_BASES 4 [0, 1, 1, 1]
+  STR 15 "P"
+  TY_RECORD_DECL 12 0 15
+  STR 16 "pp"
+  TY_RECORD_BODY 12 16 12 8 12 2
+  REC_FIELD 10 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 16 0
+  STR 17 "1P"
+  CLASS_MANGLE 12 17
+  CLASS_INFO 12 12 8 nil 3
+  CLASS_BASES 12 []
+  STR 18 "Q"
+  TY_RECORD_DECL 13 0 18
+  STR 19 "qq"
+  TY_RECORD_BODY 13 16 12 8 12 2
+  REC_FIELD 10 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 19 0
+  STR 20 "1Q"
+  CLASS_MANGLE 13 20
+  CLASS_INFO 13 12 8 nil 3
+  CLASS_BASES 13 []
+  STR 21 "obj"
+  TY_RECORD_BODY 6 64 64 8 12 3
+  REC_FIELD 12 0 nil nil nil 17
+  REC_FIELD 13 16 nil nil nil 17
+  REC_FIELD 4 32 nil nil 21 0
+  STR 22 "1X"
+  CLASS_MANGLE 6 22
+  CLASS_INFO 6 64 8 0 4
+  CLASS_BASES 6 [0, 1, 1, 1]
+  STR 23 "_ZN1X3getEv"
+  DECL_FUNC 14 8 0 0 23
+  DECL_FUNC 14 8 0 1 23
+  TY_PTR 15 12
+  TY_FUNC 16 1 0 [15]
+  STR 24 "_ZN1P1pEv"
+  DECL_FUNC 17 16 0 0 24
+  TY_VOID 18
+  TY_FUNC 19 18 0 [15]
+  STR 25 "_ZN1PD1Ev"
+  DECL_FUNC 20 19 0 0 25
+  STR 26 "_ZN1PD2Ev"
+  DECL_FUNC 21 19 0 0 26
+  STRUCTOR 20 21 1
+  TY_PTR 22 18
+  TY_FUNC 23 18 0 [22, 2]
+  STR 27 "_ZdlPvm"
+  DECL_FUNC 24 23 0 0 27
+  STR 28 "_ZN1PD0Ev"
+  DECL_FUNC 25 19 0 0 28
+  STRUCTOR_DELETING 25 20 24 1
+  CLASS_VFUNCS 12 [17, 0, 0, 1, 20, 1, 0, 0]
+  CLASS_OVERRIDES 12 []
+  TY_PTR 26 11
+  TY_PTR 27 13
+  TY_FUNC 28 26 0 [27]
+  STR 29 "_ZN1Q3getEv"
+  DECL_FUNC 29 28 0 0 29
+  TY_FUNC 30 18 0 [27]
+  STR 30 "_ZN1QD1Ev"
+  DECL_FUNC 31 30 0 0 30
+  STR 31 "_ZN1QD2Ev"
+  DECL_FUNC 32 30 0 0 31
+  STRUCTOR 31 32 1
+  STR 32 "_ZN1QD0Ev"
+  DECL_FUNC 33 30 0 0 32
+  STRUCTOR_DELETING 33 31 24 1
+  CLASS_VFUNCS 13 [29, 0, 0, 2, 31, 1, 0, 0]
+  CLASS_OVERRIDES 13 []
+  TY_FUNC 34 18 0 [7]
+  STR 33 "_ZN1XD1Ev"
+  DECL_FUNC 35 34 0 0 33
+  STR 34 "_ZN1XD2Ev"
+  DECL_FUNC 36 34 0 0 34
+  STRUCTOR 35 36 1
+  STR 35 "_ZN1XD0Ev"
+  DECL_FUNC 37 34 0 0 35
+  STRUCTOR_DELETING 37 35 24 1
+  TY_FUNC 38 1 0 [7]
+  STR 36 "_ZN1X1pEv"
+  DECL_FUNC 39 38 0 0 36
+  CLASS_VFUNCS 6 [35, 1, 0, 0, 39, 0, 0, 1, 14, 3, 0, 2]
+  CLASS_OVERRIDES 6 [17, 0, 39, 0, 20, 0, 35, 0, 29, 16, 14, 0, 31, 16, 35, 0]
+  STR 37 "this"
+  FUNC_BEGIN 14 0
+  PARAM 1 7 7 37 1
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 6 2
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 4 0

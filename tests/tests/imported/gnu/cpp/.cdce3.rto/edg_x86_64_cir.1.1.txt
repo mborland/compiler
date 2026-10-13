@@ -55,7 +55,3 @@ Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE13signa
 
 Warning: CIR back end: the unused definition of '_ZNSt14numeric_limitsIgE10denorm_minEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
 
-Warning: CIR back end: the unused definition of '_ZNSt8__detail16__hyperg_reflectIfEET_S1_S1_S1_S1_' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Warning: CIR back end: the unused definition of '_ZNSt8__detail16__hyperg_reflectIeEET_S1_S1_S1_S1_' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-

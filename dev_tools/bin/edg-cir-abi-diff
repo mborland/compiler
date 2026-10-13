@@ -50,6 +50,36 @@ unless --keep-original-map is given.  clang does not dump VTTs or typeinfo
 with these options: those are compared by edg-cir-symbols and, as IR, by the
 two-TU tests.
 
+`batch` runs the comparison over many files, for the classes without virtual
+bases (S1; with --vbases for all classes, S2): for each source it takes
+clang's layouts, drops every class that has a virtual base (and the
+construction vtables and vbase offsets, which only classes with virtual bases
+have; not with --vbases), compiles the file with cpfe-cir to an
+ECIL stream (`--ecil_output`), reads the library's side with
+`ecil-dump --vtable-layouts` and compares block by block.  A block that
+differs is attributed:
+
+  FE      the front end's layout facts of its class disagree with clang's
+          (edg-cir-fe-facts, run on the same file: size, offsets, primary
+          base, slot numbers, overriders), or ecil-dump's record layout of
+          the class differs from clang's if it prints one;
+  ours    the front end agrees with clang: the vtable (entries, thunks,
+          offsets) was computed by the writer or the library;
+  ?       edg-cir-fe-facts could not be run.
+
+The record layouts (-fdump-record-layouts blocks) are not compared unless
+ecil-dump prints them: a record block that ours lacks is not a difference
+(they are checked by edg-cir-fe-facts instead).  ecil-dump's spelling of a
+function's return type is approximate (an ECIL type does not tell long from
+long long, signed char from char, or a reference from a pointer), so the
+return types of the vtable entries and thunk headings are normalized on both
+sides before the comparison (long long -> long, signed char -> char, & and &&
+-> *); the number of blocks that were equal only after that is reported.
+
+  edg-cir-abi-diff batch FILES... [--vbases] [--ecil-dump BIN]
+  edg-cir-abi-diff batch dev_tools/cir-abi-cases/s1
+  edg-cir-abi-diff batch --clang-tests DIR   # vtable-layout*.cpp, thunks.cpp
+
 `compare` takes the library's side either as text (--ours) or as a stream
 (--ecil FILE.ecil [--ecil-dump BINARY]: it runs `ecil-dump --vtable-layouts`).
 It never reports a layout as equal that was not compared: an ecil-dump whose
@@ -78,6 +108,8 @@ from typing import Dict, List, Optional, Tuple
 
 DEFAULT_TRIPLE = 'x86_64-linux-gnu'
 EXIT_SKIP = 3
+# The time limit of a compiler run (seconds); a run that hangs is a failure.
+COMPILE_TIMEOUT = 600
 
 # clang's test/CodeGenCXX files that are about the Itanium vtable layout,
 # thunks, virtual bases and RTTI (the M4 inputs); `gather` copies them.  Files
@@ -332,12 +364,16 @@ def run_clang_dump(source: Path, clang: str, triple: str, std: str,
     command.append('-fdump-vtable-layouts')
   if records:
     command.append('-fdump-record-layouts')
-  command += [*extra, '-emit-llvm-only', str(source)]
+  command += ['-w', *extra, '-emit-llvm-only', str(source)]
   # The vtable dump is on stdout and the record layouts are on stderr (with
   # the diagnostics): read both, one after the other, so that a diagnostic
   # never falls inside a layout (the canonical form sorts the blocks).
-  proc = subprocess.run(command, stdout = subprocess.PIPE,
-                        stderr = subprocess.PIPE, text = True)
+  try:
+    proc = subprocess.run(command, stdout = subprocess.PIPE,
+                          stderr = subprocess.PIPE, text = True,
+                          timeout = COMPILE_TIMEOUT)
+  except subprocess.TimeoutExpired:
+    return 124, f"clang did not finish in {COMPILE_TIMEOUT} s"
   return proc.returncode, proc.stdout + proc.stderr
 
 
@@ -386,6 +422,444 @@ def compare_result(clang_text: str, ours_text: str,
                        'was compared)']
   report = diff_text(clang_text, ours_text, 'clang', ours_name)
   return (1 if report else 0), (report or ['layouts identical'])
+
+
+# The clang tests whose layouts `batch --clang-tests` compares (the vtable
+# layout, thunk and covariant return tests; a name that is not in the
+# directory is skipped, the list says which).
+BATCH_TESTS = ('vtable-layout.cpp', 'vtable-layout-abi-examples.cpp',
+               'vtable-layout-extreme.cpp', 'thunks.cpp', 'vtt-layout.cpp')
+
+
+_FUNCTION_LINE = re.compile(r'^(?P<head>(?:## thunks |\d+ \| ))(?P<rest>.*)$')
+
+
+def normalize_return_type(line: str) -> str:
+  '''A vtable entry or thunk heading with the spelling of the return type
+  that ecil-dump cannot know normalized: long long -> long, signed char ->
+  char, a reference -> a pointer (the parameters are left alone).'''
+  match = _FUNCTION_LINE.match(line)
+  if not match or '(' not in match.group('rest'):
+    return line
+  rest = match.group('rest')
+  head = rest.split('(')[0]
+  depth = 0
+  cut = -1
+  for index, char in enumerate(head):
+    depth += char == '<'
+    depth -= char == '>'
+    if char == ' ' and depth == 0:
+      cut = index
+  if cut < 0:
+    return line
+  # The "*" or "&" that clang prints against the function name belongs to
+  # the return type.
+  start = cut + len(re.match(r'^[\s*&]*', rest[cut:]).group(0))
+  returns, name = rest[:start], rest[start:]
+  returns = re.sub(r'\blong long\b', 'long', returns)
+  returns = re.sub(r'\bsigned char\b', 'char', returns)
+  returns = re.sub(r'&&|&', '*', returns)
+  return match.group('head') + returns + name
+
+
+_DEMANGLED: Dict[str, str] = {}
+
+
+def demangle(name: str) -> str:
+  '''c++filt of a mangled name (the name itself if there is no c++filt).'''
+  if name not in _DEMANGLED:
+    try:
+      proc = subprocess.run(['c++filt', name], stdout = subprocess.PIPE,
+                            text = True)
+      _DEMANGLED[name] = proc.stdout.strip() or name
+    except OSError:
+      _DEMANGLED[name] = name
+  return _DEMANGLED[name]
+
+
+def _loose_function(rest: str) -> str:
+  '''The function part of a vtable entry in the loose form: mangled names
+  demangled, the return type and the namespace qualifiers dropped.'''
+  rest = re.sub(r'_Z\w+', lambda m: demangle(m.group(0)), rest)
+  paren = rest.find('(')
+  if paren >= 0:
+    head, tail = rest[:paren], rest[paren:]
+    cut = -1
+    depth = 0
+    for index, char in enumerate(head):
+      depth += char == '<'
+      depth -= char == '>'
+      if char == ' ' and depth == 0:
+        cut = index
+    rest = head[cut + 1:].lstrip('*& ') + tail
+  return rest
+
+
+def _loose_text(rest: str) -> str:
+  rest = re.sub(r'\b(?:[A-Za-z_]\w*::)+(?=[A-Za-z_~])', '', rest)
+  # clang prints the template name without its arguments.
+  while re.search(r'<[^<>]*>', rest):
+    rest = re.sub(r'<[^<>]*>', '', rest)
+  rest = re.sub(r'(\w+) _Complex', r'_Complex \1', rest)
+  rest = re.sub(r'(\w+) const\b', r'const \1', rest)
+  return re.sub(r'\s+([&*])', r'\1', rest)
+
+
+def _demangled_type(text: str) -> str:
+  '''A class name that ecil-dump prints mangled (3BoxIiE) as c++filt
+  spells it (Box<int>).'''
+  def fix(match: 're.Match[str]') -> str:
+    name = demangle('_ZTS' + match.group(0))
+    return name[len('typeinfo name for '):] \
+      if name.startswith('typeinfo name for ') else match.group(0)
+  return re.sub(r'(?<![\w:])(?:N?\d+\w+E?)(?![\w:(])', fix, text)
+
+
+def loose_line(line: str) -> str:
+  '''A vtable entry or thunk heading in a form that ecil-dump's approximate
+  spelling and clang's agree on: mangled names demangled, the return type
+  left out (it is not part of the layout; the return adjustment line stays),
+  namespace qualifiers and template arguments dropped, spaces around * and
+  &, and the position of const unified.'''
+  match = _FUNCTION_LINE.match(line)
+  if match and match.group('rest').endswith(' RTTI'):
+    return match.group('head') + _loose_text(_demangled_type(
+      match.group('rest')[:-5])) + ' RTTI'
+  if match and match.group('head') == '## thunks ':
+    # The function is the key of the block: keep its class, drop the return
+    # type and the template arguments.
+    text = _loose_function(match.group('rest'))
+    while re.search(r'<[^<>]*>', text):
+      text = re.sub(r'<[^<>]*>', '', text)
+    paren = text.find('(')
+    if paren >= 0:
+      # The parameter types are spelled with and without their namespaces.
+      text = text[:paren] + re.sub(
+        r'\b(?:[A-Za-z_]\w*::)+(?=[A-Za-z_~])', '', text[paren:])
+    text = re.sub(r'(\w+) _Complex', r'_Complex \1', text)
+    text = re.sub(r'(\w+) const\b', r'const \1', text)
+    return match.group('head') + re.sub(r'\s+([&*])', r'\1', text)
+  if match:
+    return match.group('head') + _loose_text(_loose_function(
+      match.group('rest')))
+  continuation = re.match(r'^(\s+\[.*\] method: )(.*)$', line)
+  if continuation:
+    return continuation.group(1) + _loose_text(_loose_function(
+      continuation.group(2)))
+  address = re.match(r'^(\s+-- \()(.*?)(, \d+\) vtable address --)$', line)
+  if address:
+    return address.group(1) + _loose_text(_demangled_type(
+      address.group(2))) + address.group(3)
+  heading = re.match(
+    r'^(## (?:vtable|vtable-indices|vbase-offset-offsets) )(.*?)'
+    r'( \(\d+ entr(?:y|ies)\))$', line)
+  if heading:
+    # The class name is the key of the block: keep its namespaces, drop the
+    # template arguments that clang does not print.
+    name = _demangled_type(heading.group(2))
+    while re.search(r'<[^<>]*>', name):
+      name = re.sub(r'<[^<>]*>', '', name)
+    return heading.group(1) + name + heading.group(3)
+  return line
+
+
+def split_blocks(text: str, normalize: bool = False,
+                 raw: Optional[Dict[Tuple[str, str], List[str]]] = None,
+                 loose: bool = False
+                 ) -> Dict[Tuple[str, str], Tuple[str, List[str]]]:
+  '''The blocks of a canonical text by (kind, name): (heading, lines).  With
+  normalize the return types are normalized (see normalize_return_type); with
+  loose the lines are put in the form of loose_line; raw, if given, receives
+  the lines as they were, by the same keys.'''
+  blocks: Dict[Tuple[str, str], Tuple[str, List[str]]] = {}
+  key: Optional[Tuple[str, str]] = None
+  for original in text.splitlines():
+    line = normalize_return_type(original) if normalize else original
+    if loose:
+      line = loose_line(line)
+    if line.startswith('## '):
+      heading = line[3:]
+      kind, _, rest = heading.partition(' ')
+      name = re.sub(r' \(\d+ entr(?:y|ies)\)$', '', rest)
+      key = (kind, name)
+      blocks[key] = (heading, [])
+      if raw is not None:
+        raw[key] = [original]
+    elif key is not None:
+      blocks[key][1].append(line)
+      if raw is not None:
+        raw[key].append(original)
+  return blocks
+
+
+def class_name(kind: str, name: str) -> str:
+  '''The class a block is about: the record's class (without struct/class),
+  the vtable's, the one a thunk block's function belongs to.'''
+  if kind == 'record':
+    return re.sub(r'^(struct|class|union) ', '', name)
+  if kind == 'construction-vtable':
+    return name.rsplit(' in ', 1)[-1]
+  if kind == 'thunks':
+    head = name.split('(')[0]
+    qualified = head.rsplit('::', 1)[0] if '::' in head else head
+    depth = 0
+    start = 0
+    for index, char in enumerate(qualified):
+      depth += char == '<'
+      depth -= char == '>'
+      if char == ' ' and depth == 0:
+        start = index + 1
+    return qualified[start:].lstrip('*& ')
+  return name
+
+
+def vbase_classes(blocks: Dict[Tuple[str, str], Tuple[str, List[str]]]
+                  ) -> set:
+  '''The classes whose record layout shows a virtual base (their own or an
+  inherited one).'''
+  return {class_name(kind, name) for (kind, name), (_, lines)
+          in blocks.items()
+          if kind == 'record' and any('(virtual base)' in l for l in lines)}
+
+
+def batch_compare(clang_text: str, ours_text: str,
+                  fe_classes: Optional[set] = None, vbases: bool = False
+                  ) -> Tuple[Dict[str, int], List[str]]:
+  '''Compare the layouts of the classes without virtual bases.
+
+  fe_classes is the set of classes whose front end facts disagree with
+  clang's (edg-cir-fe-facts), or None if that is not known.  With vbases the
+  classes with virtual bases are compared too (S2: construction vtables and
+  virtual base offset blocks included).  Returns
+  (counts, report): the counts of blocks that are "identical" (of which
+  "normalized" were equal only after the return types were normalized),
+  blocks equal only in the loose form ("spelling": mangled names demangled,
+  return types and namespace qualifiers dropped),
+  differ because of the front end ("fe"), because of the library ("ours"),
+  for unknown reasons ("unknown"), are "missing" from ours, clang blocks left
+  out for virtual bases ("vbase") and clang record blocks that ours does not
+  print ("norecord": not a difference); and the report lines.'''
+  clang_raw: Dict[Tuple[str, str], List[str]] = {}
+  ours_raw: Dict[Tuple[str, str], List[str]] = {}
+  clang = split_blocks(clang_text, True, clang_raw)
+  ours = split_blocks(ours_text, True, ours_raw)
+  skip = set() if vbases else vbase_classes(clang)
+  has_records = any(kind == 'record' for kind, _ in ours)
+  # The second look: the same blocks in the loose form (see loose_line).
+  def loose_block(block: Tuple[str, List[str]]
+                  ) -> Tuple[Tuple[str, str], Tuple[str, List[str]]]:
+    heading = loose_line('## ' + block[0])[3:]
+    kind, _, rest = heading.partition(' ')
+    name = re.sub(r' \(\d+ entr(?:y|ies)\)$', '', rest)
+    lines = [loose_line(l) for l in block[1]]
+    # The vtable address lines of the classes that share an address are
+    # listed in another order (not part of the layout).
+    ordered: List[str] = []
+    run: List[str] = []
+    for line in lines + ['']:
+      if line.lstrip().startswith('-- (') and \
+          line.endswith('vtable address --'):
+        run.append(line)
+      else:
+        ordered.extend(sorted(run))
+        run = []
+        ordered.append(line)
+    return (kind, name), (heading, ordered[:-1])
+  ours_by_loose = dict(loose_block(b) for b in ours.values())
+  counts = {'identical': 0, 'normalized': 0, 'spelling': 0, 'fe': 0,
+            'ours': 0, 'unknown': 0, 'missing': 0, 'vbase': 0,
+            'norecord': 0}
+  report: List[str] = []
+  def differs(key: Tuple[str, str]) -> bool:
+    return key not in ours or clang[key] != ours[key]
+  for key in sorted(clang):
+    kind, name = key
+    klass = class_name(kind, name)
+    if not vbases and (kind in ('construction-vtable',
+                               'vbase-offset-offsets') or klass in skip):
+      counts['vbase'] += 1
+      continue
+    if key not in ours or differs(key):
+      loose_key, loose_content = loose_block(clang[key])
+      if kind != 'record' and ours_by_loose.get(loose_key) == loose_content:
+        # Equal but for the spelling of names that ecil-dump cannot know.
+        counts['spelling'] += 1
+        continue
+    if key not in ours:
+      if kind == 'record' and not has_records:
+        counts['norecord'] += 1
+        continue
+      counts['missing'] += 1
+      report.append(f"MISSING {clang[key][0]}")
+      continue
+    if not differs(key):
+      counts['identical'] += 1
+      if clang_raw[key] != ours_raw.get(key):
+        counts['normalized'] += 1
+      continue
+    record = ('record', next((n for k, n in clang
+                              if k == 'record' and class_name(k, n) == klass),
+                             ''))
+    if kind == 'record':
+      who = 'fe'
+    elif has_records and record in clang and record in ours:
+      who = 'fe' if differs(record) else 'ours'
+    elif fe_classes is not None:
+      who = 'fe' if klass in fe_classes else 'ours'
+    else:
+      who = 'unknown'
+    counts[who] += 1
+    diff = list(difflib.unified_diff(
+      [clang[key][0], *clang[key][1]], [ours[key][0], *ours[key][1]],
+      'clang', 'ours', lineterm = '', n = 0))
+    report.append(f"DIFFERS ({who.upper()}) {clang[key][0]}")
+    report.extend('    ' + line for line in diff[:14])
+  return counts, report
+
+
+def fe_disagreeing_classes(source: Path, root: Path, fe_build: str,
+                           std: str) -> Optional[set]:
+  '''The classes whose layout facts of the front end disagree with clang's
+  (edg-cir-fe-facts check), or None if it cannot be run.'''
+  tool = Path(__file__).resolve().parent / 'edg-cir-fe-facts'
+  try:
+    proc = subprocess.run(
+      [sys.executable, str(tool), 'check', '--std', std, str(source)],
+      cwd = root, stdout = subprocess.PIPE, stderr = subprocess.STDOUT,
+      text = True, timeout = 2 * COMPILE_TIMEOUT)
+  except (OSError, subprocess.TimeoutExpired):
+    return None
+  if 'agreements' not in proc.stdout:
+    return None
+  return {m.group(1)
+          for m in re.finditer(r'^DISAGREE \S+ (.+?): ', proc.stdout, re.M)}
+
+
+def compile_ecil(source: Path, work: Path, root: Path, fe_build: str,
+                 std: str, extra: List[str]) -> Tuple[Optional[Path], str]:
+  '''Compile a file with cpfe-cir like the edg_x86_64_cir configuration
+  and keep the ECIL stream: (the stream or None, the compiler's output).
+  A wrapper for CPFE adds --ecil_output; the stream is there even if the
+  writer diagnosed constructs.'''
+  exports: Dict[str, str] = {}
+  env_file = root / fe_build / 'environment.sh'
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  if 'CPFE_CIR' not in exports:
+    raise RuntimeError(f"{env_file} has no CPFE_CIR (build cpfe-cir)")
+  stream = work / (source.stem + '.ecil')
+  wrapper = work / 'cpfe-wrapper.sh'
+  wrapper.write_text(f"#!/bin/sh\nexec {exports['CPFE_CIR']} "
+                     f"--ecil_output={stream} \"$@\"\n")
+  wrapper.chmod(0o755)
+  env = dict(os.environ)
+  env.update(exports)
+  env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+  env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+  env['CPFE'] = str(wrapper)
+  env['EDG_USE_SYSTEM_HEADERS'] = '1'
+  local = work / source.name
+  shutil.copy2(source, local)
+  try:
+    proc = subprocess.run(
+      [str(root / 'util/eccp.sh'), '-c', '-tused', f"--{std}", *extra,
+       local.name], cwd = work, env = env, stdout = subprocess.PIPE,
+      stderr = subprocess.STDOUT, text = True, timeout = COMPILE_TIMEOUT)
+  except subprocess.TimeoutExpired:
+    return None, f"cpfe-cir did not finish in {COMPILE_TIMEOUT} s"
+  return (stream if stream.exists() and stream.stat().st_size else None,
+          proc.stdout)
+
+
+def find_ecil_dump(option: str, root: Path) -> str:
+  '''The ecil-dump to run: the option if it is not the plain name, else the
+  one on PATH, else the one of the build/cir tree.'''
+  if option != 'ecil-dump':
+    return option
+  found = shutil.which('ecil-dump')
+  if found:
+    return found
+  for build in ('cir', 'cir-release', 'cir-asan'):
+    candidate = root / 'build' / build / 'tools/ecil-dump/ecil-dump'
+    if candidate.exists():
+      return str(candidate)
+  return option
+
+
+def run_batch(sources: List[Path], args: argparse.Namespace) -> int:
+  '''The `batch` command; returns the exit status.'''
+  clang = clang_binary(args.clang)
+  root = Path(args.root).resolve()
+  args.ecil_dump = find_ecil_dump(args.ecil_dump, root)
+  has_option = ecil_dump_has_option(args.ecil_dump, '--vtable-layouts')
+  if has_option is None:
+    print(f"edg-cir-abi-diff: cannot run {args.ecil_dump}", file = sys.stderr)
+    return 2
+  if not has_option:
+    print(f"SKIP: {args.ecil_dump} has no --vtable-layouts option yet")
+    return EXIT_SKIP
+  totals = {'identical': 0, 'normalized': 0, 'spelling': 0, 'fe': 0,
+            'ours': 0, 'unknown': 0, 'missing': 0, 'vbase': 0,
+            'norecord': 0}
+  results: List[Tuple[str, str]] = []
+  for source in sources:
+    with tempfile.TemporaryDirectory(prefix = 'edg-cir-abi.') as tmp:
+      work = Path(tmp)
+      rc, dump = run_clang_dump(source, clang, args.triple, args.std,
+                                args.extra)
+      if rc != 0:
+        results.append((source.name, 'CLANG-FAIL'))
+        print(f"==== {source}\nclang failed with status {rc}\n", flush = True)
+        continue
+      try:
+        stream, output = compile_ecil(source, work, root, args.fe_build,
+                                      args.std, [])
+      except RuntimeError as error:
+        print(f"edg-cir-abi-diff: {error}", file = sys.stderr)
+        return 2
+      if stream is None:
+        kind = 'SKIP' if re.search(
+          r'CIR back end:.*(cannot express|not supported yet)', output,
+          re.S) else 'FE-REJECT'
+        results.append((source.name, kind))
+        print(f"==== {source}\n{kind}: no stream: "
+              f"{output.strip().splitlines()[-1:]}\n", flush = True)
+        continue
+      state, ours_raw = ecil_dump_layouts(args.ecil_dump, str(stream))
+      if state == 'skip':
+        print(f"SKIP: {ours_raw}")
+        return EXIT_SKIP
+      if state == 'error':
+        results.append((source.name, 'DUMP-FAIL'))
+        print(f"==== {source}\n{ours_raw}\n", flush = True)
+        continue
+      fe_classes = fe_disagreeing_classes(source, root, args.fe_build,
+                                          args.std)
+      counts, report = batch_compare(canonical(dump), canonical(ours_raw),
+                                     fe_classes, args.vbases)
+      for key in totals:
+        totals[key] += counts[key]
+      status = 'PASS' if not (counts['fe'] or counts['ours'] or
+                              counts['unknown'] or counts['missing']) \
+        else 'DIFF'
+      results.append((source.name, status))
+      print(f"==== {source}: {status} " + ', '.join(
+        f"{k} {v}" for k, v in counts.items()), flush = True)
+      print('\n'.join(report) + ('\n' if report else ''), flush = True)
+  print(f"{'file':<44}result")
+  for name, result in results:
+    print(f"{name:<44}{result}")
+  print('blocks: ' + ', '.join(f"{k} {v}" for k, v in totals.items()))
+  print(f"({totals['normalized']} of the identical blocks needed the "
+        f"return type spelling normalized; {totals['spelling']} more blocks "
+        f"are equal only in the loose form: demangled names, no return "
+        f"types, no namespace qualifiers)")
+  bad = any(r not in ('PASS', 'SKIP', 'FE-REJECT') for _, r in results) or \
+    totals['fe'] or totals['ours'] or totals['unknown'] or totals['missing']
+  return 1 if bad else 0
 
 
 def gather(source_dir: Path, out_dir: Path) -> List[str]:
@@ -529,6 +1003,153 @@ class SelfTest(unittest.TestCase):
       self.assertEqual(ecil_dump_layouts(str(Path(tmp) / 'none'),
                                          'x.ecil')[0], 'error')
 
+  def test_batch_filters_virtual_bases_and_attributes(self) -> None:
+    text = canonical(SAMPLE)    # B has a virtual base A
+    counts, report = batch_compare(text, text)
+    # Everything about B (record, vtable, indices, thunks, vbase offsets) is
+    # skipped as a class with a virtual base.
+    self.assertEqual(counts['identical'], 0)
+    self.assertEqual(counts['vbase'], 5)
+    # A class without virtual bases: compared block by block.
+    plain = canonical('''
+*** Dumping AST Record Layout
+         0 | struct P
+         0 |   (P vtable pointer)
+         8 |   int p
+           | [sizeof=16, dsize=12, align=8,
+           |  nvsize=12, nvalign=8]
+
+Vtable for 'P' (3 entries).
+   0 | offset_to_top (0)
+   1 | P RTTI
+       -- (P, 0) vtable address --
+   2 | void P::f()
+
+Thunks for 'void Q::f()' (1 entry).
+   0 | this adjustment: -16 non-virtual
+''')
+    counts, report = batch_compare(plain, plain)
+    self.assertEqual(counts['identical'], 3)
+    self.assertEqual(report, [])
+    # The record agrees and the vtable differs: ours.
+    changed = plain.replace('void P::f()', 'void P::g()')
+    counts, report = batch_compare(plain, changed)
+    self.assertEqual((counts['ours'], counts['fe']), (1, 0))
+    self.assertTrue(report[0].startswith('DIFFERS (OURS) vtable P'))
+    # The record differs too: the front end's layout.
+    other = plain.replace('8 |   int p', '4 |   int p').replace(
+      'void P::f()', 'void P::g()')
+    counts, report = batch_compare(plain, other)
+    self.assertEqual(counts['fe'], 2)
+    # No record layout on our side: unknown.
+    counts, report = batch_compare(plain, '## ' + '## '.join(
+      b for b in plain.split('## ')[1:] if not b.startswith('record')
+    ).replace('void P::f()', 'void P::g()'))
+    self.assertEqual(counts['unknown'], 1)
+    # Our side has no record block: not a difference.
+    self.assertEqual((counts['missing'], counts['norecord']), (0, 1))
+
+  def test_return_type_normalization_and_missing_records(self) -> None:
+    clang = canonical('''
+*** Dumping AST Record Layout
+         0 | struct P
+         0 |   (P vtable pointer)
+         8 |   int p
+           | [sizeof=16, dsize=12, align=8,
+           |  nvsize=12, nvalign=8]
+
+Vtable for 'P' (4 entries).
+   0 | offset_to_top (0)
+   1 | P RTTI
+       -- (P, 0) vtable address --
+   2 | long long P::f()
+   3 | signed char P::g(int)
+   4 | Q &P::h()
+
+Thunks for 'long long P::f()' (1 entry).
+   0 | this adjustment: -16 non-virtual
+''')
+    ours = canonical('''
+Vtable for 'P' (4 entries).
+   0 | offset_to_top (0)
+   1 | P RTTI
+       -- (P, 0) vtable address --
+   2 | long P::f()
+   3 | char P::g(int)
+   4 | Q *P::h()
+
+Thunks for 'long P::f()' (1 entry).
+   0 | this adjustment: -16 non-virtual
+''')
+    # No record block on our side is not a difference; the vtable and the
+    # thunk heading are equal after normalization (2 blocks needed it).
+    counts, report = batch_compare(clang, ours)
+    self.assertEqual(report, [])
+    self.assertEqual((counts['identical'], counts['normalized'],
+                      counts['norecord']), (2, 2, 1))
+    # A parameter is not normalized: that is a difference, attributed to
+    # ours when the front end facts of the class agree, to the FE if not.
+    other = ours.replace('P::g(int)', 'P::g(long)')
+    counts, report = batch_compare(clang, other, set())
+    self.assertEqual((counts['ours'], counts['fe']), (1, 0))
+    counts, report = batch_compare(clang, other, {'P'})
+    self.assertEqual((counts['ours'], counts['fe']), (0, 1))
+    counts, report = batch_compare(clang, other)
+    self.assertEqual(counts['unknown'], 1)
+    self.assertEqual(normalize_return_type('3 | unsigned char X::f()'),
+                     '3 | unsigned char X::f()')
+    self.assertEqual(normalize_return_type('2 | unsigned long long X::f()'),
+                     '2 | unsigned long X::f()')
+
+  def test_batch_with_vbases(self) -> None:
+    text = canonical(SAMPLE)    # B has a virtual base A
+    counts, report = batch_compare(text, text, None, True)
+    self.assertEqual(counts['vbase'], 0)
+    self.assertEqual(counts['identical'], 5 - counts['norecord'])
+    changed = text.replace('(B, 0) vtable address', '(B, 8) vtable address')
+    counts, report = batch_compare(text, changed, set(), True)
+    self.assertEqual(counts['ours'], 1)
+    self.assertEqual(class_name('construction-vtable', "'B', 16 in D"), 'D')
+
+  def test_loose_spelling(self) -> None:
+    clang = canonical('''
+Vtable for 'Test2::A' (4 entries).
+   0 | offset_to_top (0)
+   1 | Test2::A RTTI
+       -- (Test2::A, 0) vtable address --
+   2 | A *Test2::A::g(int)
+   3 | A *Test2::A::operator=(const A &)
+
+VTable indices for 'Test2::A' (2 entries).
+   0 | A *Test2::A::g(int)
+   1 | A *Test2::A::operator=(const A &)
+''')
+    ours = canonical('''
+Vtable for 'Test2::A' (4 entries).
+   0 | offset_to_top (0)
+   1 | Test2::A RTTI
+       -- (Test2::A, 0) vtable address --
+   2 | Test2::A *Test2::A::g(int)
+   3 | ? *_ZN5Test21AaSERKS0_
+
+VTable indices for 'Test2::A' (2 entries).
+   0 | Test2::A *Test2::A::g(int)
+   1 | ? *_ZN5Test21AaSERKS0_
+''')
+    counts, report = batch_compare(clang, ours, set())
+    self.assertEqual(report, [])
+    self.assertEqual(counts['spelling'] + counts['normalized'], 2)
+    # A different entry is still a difference.
+    other = ours.replace('Test2::A::g(int)', 'Test2::A::h(int)')
+    counts, report = batch_compare(clang, other, set())
+    self.assertEqual(counts['ours'], 2)
+
+  def test_class_name(self) -> None:
+    self.assertEqual(class_name('record', 'struct A'), 'A')
+    self.assertEqual(class_name('vtable', 'N::A<int>'), 'N::A<int>')
+    self.assertEqual(class_name('thunks', 'int B::f()'), 'B')
+    self.assertEqual(class_name('thunks', 'A<int> *N::D::g(int)'), 'N::D')
+
   def test_clang_if_present(self) -> None:
     clang = clang_binary()
     if not shutil.which(clang) and not Path(clang).exists():
@@ -557,7 +1178,7 @@ def main() -> None:
   )
   parser.add_argument('command', nargs = '?',
                       choices = ('dump', 'normalize', 'diff', 'compare',
-                                 'gather'))
+                                 'gather', 'batch'))
   parser.add_argument('args', nargs = '*')
   parser.add_argument('--clang', default = '')
   parser.add_argument('--triple', default = DEFAULT_TRIPLE)
@@ -569,6 +1190,14 @@ def main() -> None:
                              'output of ecil-dump --vtable-layouts')
   parser.add_argument('--ecil-dump', default = 'ecil-dump',
                       help = 'the ecil-dump to run for --ecil')
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir')
+  parser.add_argument('--vbases', action = 'store_true',
+                      help = 'batch: compare the classes with virtual bases '
+                             'too (S2)')
+  parser.add_argument('--clang-tests', default = '',
+                      help = 'batch: the clang test directory '
+                             '(CodeGenCXX); runs its BATCH_TESTS')
   parser.add_argument('--no-records', action = 'store_true')
   parser.add_argument('--no-vtables', action = 'store_true')
   parser.add_argument('--keep-original-map', action = 'store_true')
@@ -591,6 +1220,17 @@ def main() -> None:
     else:
       sys.stdout.write(text)
 
+  if args.command == 'batch':
+    sources: List[Path] = []
+    for item in args.args:
+      path = Path(item)
+      sources.extend(sorted(path.glob('*.cpp')) if path.is_dir() else [path])
+    if args.clang_tests:
+      sources += [Path(args.clang_tests) / n for n in BATCH_TESTS
+                  if (Path(args.clang_tests) / n).exists()]
+    if not sources:
+      parser.error('batch needs files, directories or --clang-tests')
+    sys.exit(run_batch(sources, args))
   if args.command == 'gather':
     if len(args.args) != 1:
       parser.error('gather DIR: the directory to copy to')

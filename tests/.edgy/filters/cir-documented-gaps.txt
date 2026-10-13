@@ -1,0 +1,16 @@
+# Status changes of the CIR configurations that are documented gaps, for
+# `edg-cir-rto-diff --auto`: a change that matches a line here is attributed
+# to its reason instead of being reported as unattributed.  One line per case:
+#
+#   <suite>/<path> | <variant> | <status now> | reason
+#
+# <suite>/<path> is the test as in the status logs (suite directory first),
+# <variant> the option list of the case exactly as in the log (compared
+# option by option), and <status now> the status the case has now: another
+# status of the same case (a crash, say) is not covered.  An entry is removed
+# when the gap is closed.
+edg/rma/init33.sft.cpp | -DTEST_NUMBER=2 | FAIL(COMPILE) | diagnosed gap: the destructor of an array element that may throw (noexcept(false)) run as a cleanup (S3 destroys S s3[5]); it passed at M4a only because exceptions were off
+edg/rma/eh40.sft.cpp | -DTEST_NUMBER=1 --strict | FAIL | documented clang-consistent difference (writer.md 9.19, clang 21.1.8 evidence)
+imported/gnu/cpp/eh/ref-temp1.sft.cpp | -DTEST_NUMBER=1 --c++11 | FAIL | documented clang-consistent difference (writer.md 9.19, clang 21.1.8 evidence)
+imported/gnu/cpp/eh/ref-temp2.sft.cpp | -DTEST_NUMBER=1 --c++11 | FAIL | documented clang-consistent difference (writer.md 9.19, clang 21.1.8 evidence)
+edg/daveed/g26766a.sft.cpp | -DTEST_NUMBER=1 --microsoft_bugs | REQUIREMENTS NOT MET | needs --microsoft_bugs (Microsoft extensions are off in cpfe-cir): REQUIREMENTS NOT MET like 46 other edg tests; taken out of cir-cpp-smoke.txt

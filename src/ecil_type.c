@@ -41,6 +41,8 @@ are visited, which breaks cycles.
 
 #if ECIL_WRITER_ENABLED
 
+#include "class_decl.h"
+
 /* Conditionally open the "edg" namespace. */
 BEGIN_EDG_NAMESPACE
 
@@ -96,6 +98,70 @@ STATIC_THREAD a_boolean
                                            for the order, since the pending
                                            records were last scanned. */
 
+/* The classes whose facts (layout, vtable) are being sent, innermost last
+   (explicit: the inheritance depth scales with the input). */
+STATIC_THREAD a_type_ptr
+                *class_stack;
+STATIC_THREAD size_t
+                class_stack_size;
+STATIC_THREAD size_t
+                class_stack_capacity;
+
+/* The types whose typeinfo is being introduced, innermost last (explicit: a
+   pointer chain scales with the input). */
+STATIC_THREAD a_type_ptr
+                *typeinfo_stack;
+STATIC_THREAD size_t
+                typeinfo_stack_size;
+STATIC_THREAD size_t
+                typeinfo_stack_capacity;
+
+STATIC_THREAD uint32_t
+                bad_array_function_gid;   /* __cxa_throw_bad_array_new_length,
+                                             once introduced. */
+
+/* The signatures of virtual functions (CLASS_VFUNCS sig): the interned
+   routines, in order, with the next entry of the same hash chain, and the
+   chain heads by hash. */
+typedef struct a_sig_entry {
+  a_routine_ptr rout;             /* NULL for a dead entry (below). */
+  uint32_t      next;             /* Index + 1 of the next entry, or 0. */
+  a_boolean     local;            /* The routine is in a function's region:
+                                     its IL is freed with it, and the entry
+                                     is dead from then on (ecil_forget_local_
+                                     signatures); the id stays taken. */
+} a_sig_entry;
+
+STATIC_THREAD a_sig_entry
+                *sig_entries;
+STATIC_THREAD size_t
+                num_sig_entries;
+STATIC_THREAD size_t
+                sig_entries_capacity;
+STATIC_THREAD uint32_t
+                *sig_heads;
+STATIC_THREAD size_t
+                sig_heads_size;
+
+/* The classes whose vtable was marked used since the log was last
+   committed (so that a dropped body or constant can take the mark back). */
+STATIC_THREAD uint32_t
+                *used_log;
+STATIC_THREAD size_t
+                used_log_size;
+STATIC_THREAD size_t
+                used_log_capacity;
+
+/* The dynamic classes whose records were sent, in order (their vtables are
+   decided at the end: ecil_emit_class_abi_data), and the function-local ones
+   (decided when their function's region ends). */
+STATIC_THREAD uint32_t
+                *dynamic_classes;
+STATIC_THREAD size_t
+                num_dynamic_classes;
+STATIC_THREAD size_t
+                dynamic_classes_capacity;
+
 /* A name bound at the end (NAME_BIND). */
 typedef struct a_late_binding {
   uint32_t      gid;
@@ -135,6 +201,24 @@ Forget the writer's type state at the end of a compilation.
 {
   free(type_stack);
   free(pending_records);
+  free(class_stack);
+  free(typeinfo_stack);
+  typeinfo_stack = NULL;
+  bad_array_function_gid = 0;
+  typeinfo_stack_size = typeinfo_stack_capacity = 0;
+  free(used_log);
+  used_log = NULL;
+  used_log_size = used_log_capacity = 0;
+  free(dynamic_classes);
+  free(sig_entries);
+  free(sig_heads);
+  sig_entries = NULL;
+  sig_heads = NULL;
+  num_sig_entries = sig_entries_capacity = sig_heads_size = 0;
+  class_stack = NULL;
+  dynamic_classes = NULL;
+  class_stack_size = class_stack_capacity = 0;
+  num_dynamic_classes = dynamic_classes_capacity = 0;
   free(late_bindings);
   late_bindings = NULL;
   num_late_bindings = late_bindings_capacity = 0;
@@ -261,24 +345,6 @@ array element, a member or a base, at any depth).
 }  /* ecil_gid_has_data_member_pointer */
 
 
-a_boolean ecil_note_zero_init_of_dmp(uint32_t gid)
-/*
-The object of the type with G-id gid is zero-initialized (explicitly or by the
-rules of static storage and value-initialization).  If the type has a pointer
-to a data member that would be wrong (the null value is -1), so it is
-unsupported for now.  Return TRUE if it was noted.
-*/
-{
-  a_boolean  noted = ecil_gid_has_data_member_pointer(gid);
-
-  if (noted) {
-    ecil_note_unsupported("the zero-initialization of a pointer to a data "
-                          "member (its null value is -1)");
-  }  /* if */
-  return noted;
-}  /* ecil_note_zero_init_of_dmp */
-
-
 static void remember_one_drop_reason(uint32_t gid, const char *text)
 /*
 Keep text as the reason for the dropped declaration of G-id gid, replacing an
@@ -332,6 +398,10 @@ constructor or destructor the reason is kept for both variants.
 
     remember_one_drop_reason(gid, text);
     if (partner != 0) remember_one_drop_reason(partner, text);
+    if (ecil_gid_info(gid)->variant == ECIL_VARIANT_COMPLETE &&
+        ecil_gid_info(gid)->aux != 0) {
+      remember_one_drop_reason(ecil_gid_info(gid)->aux, text);   /* D0. */
+    }  /* if */
   }  /* if */
 }  /* ecil_remember_drop_reason */
 
@@ -611,11 +681,6 @@ layout.  One G-id per IL type entry.
     if (type->kind == tk_complex || type->kind == tk_imaginary) {
       info->flags |= ECIL_GF_COMPLEX;
     }  /* if */
-    if (type->kind == tk_ptr_to_member &&
-        skip_typerefs(type->variant.ptr_to_member.type)->kind !=
-                                                            tk_routine) {
-      info->flags |= ECIL_GF_HAS_DMP;
-    }  /* if */
     info->size = (uint64_t)type->size;
     info->align = (uint32_t)(type->alignment == 0 ? 1 : type->alignment);
     saved = ecil_frame_enter_decl(frame);
@@ -825,6 +890,51 @@ types in progress (ecil_type_id).
   }  /* if */
   return known;
 }  /* need_pointee */
+
+
+static uint32_t finish_member_pointer(an_ecil_frame *frame, a_type_ptr t)
+/*
+Make TY_DATA_MEMBER(member type, class) or TY_METHOD(function type with the
+object pointer first, class) of a pointer to a member whose member type and
+class have ids (spec 12.2).  Its null is -1 for a data member, which makes
+every type that contains one not zero-initializable (ECIL_GF_HAS_DMP,
+spec 12.7).
+*/
+{
+  uint32_t    mem = known_type_id(pm_member_type(t));
+  uint32_t    cls = known_type_id(pm_class_type(t));
+  a_boolean   is_method = skip_typerefs(pm_member_type(t))->kind ==
+                          tk_routine;
+  uint32_t    key[3];
+  uint32_t    gid;
+
+  key[0] = (uint32_t)(is_method ? egk_method : egk_data_member);
+  key[1] = mem;
+  key[2] = cls;
+  gid = ecil_word_lookup(key, 3);
+  if (gid == 0) {
+    gid = ecil_new_gid(is_method ? egk_method : egk_data_member);
+    if (gid != 0) {
+      an_ecil_gid_info  *info = ecil_gid_info(gid);
+      an_ecil_buffer    *saved;
+
+      info->ref = mem;
+      info->aux = cls;
+      info->size = (uint64_t)t->size;
+      info->align = (uint32_t)(t->alignment == 0 ? 1 : t->alignment);
+      if (!is_method) info->flags |= ECIL_GF_HAS_DMP;
+      ecil_word_register(key, 3, gid);
+      saved = ecil_frame_enter_decl(frame);
+      ecil_rec_begin(frame, is_method ? eop_ty_method : eop_ty_data_member);
+      ecil_arg_uint(frame, gid);
+      ecil_arg_uint(frame, mem);
+      ecil_arg_uint(frame, cls);
+      ecil_rec_end(frame);
+      ecil_frame_leave_decl(frame, saved);
+    }  /* if */
+  }  /* if */
+  return gid;
+}  /* finish_member_pointer */
 
 
 static uint32_t finish_pointer(an_ecil_frame *frame, a_type_ptr t)
@@ -1070,15 +1180,68 @@ has the indirect ones: follow next_direct from here.
 }  /* record_direct_bases */
 
 
+a_boolean ecil_class_is_dynamic(a_type_ptr type)
+/*
+Return TRUE for a dynamic class (spec 12.2): a C++ class with a virtual
+function of its own or in a base class, or with a virtual base class.  Its
+record then has a TY_VPTR field, a VIRTUAL_BASE field or a BASE field of a
+dynamic class.  (needs_virtual_function_table is not this: it looks at the
+class's own virtual functions only.)
+*/
+{
+  a_type_ptr  t = skip_typerefs(type);
+
+  return !C_mode() && is_immediate_class_type(t) &&
+         class_type_supp(t) != NULL &&
+         (t->variant.class_struct_union.
+                      any_virtual_functions_including_in_base_classes ||
+          t->variant.class_struct_union.any_virtual_base_classes);
+}  /* ecil_class_is_dynamic */
+
+
+a_boolean ecil_class_has_own_vptr(a_type_ptr type)
+/*
+Return TRUE for a dynamic class that has a vptr of its own (a TY_VPTR field at
+offset 0): one without a primary base.  A class whose primary base is dynamic
+(a non-virtual base, or a virtual one) shares that base's vptr.
+*/
+{
+  a_type_ptr  t = skip_typerefs(type);
+
+  return ecil_class_is_dynamic(t) &&
+         class_type_supp(t)->primary_base_class == NULL;
+}  /* ecil_class_has_own_vptr */
+
+
+static a_targ_size_t base_layout_size(a_type_ptr type)
+/*
+Where a base class subobject ends from its offset (spec 12.2): the nvsize of
+its class if its CLASS_INFO was sent, else its data size (a class without
+CLASS_INFO is laid out with nvsize = data_size), else its size.
+*/
+{
+  uint32_t       bg = known_type_id(type);
+  a_targ_size_t  size = size_of_type(type);
+
+  if (bg != 0 && (ecil_gid_info(bg)->flags & ECIL_GF_COMPLETE) != 0) {
+    size = (ecil_gid_info(bg)->flags & ECIL_GF_LAYOUT_FACTS) != 0 ?
+           ecil_gid_info(bg)->nvsize : ecil_gid_info(bg)->data_size;
+  }  /* if */
+  return size;
+}  /* base_layout_size */
+
+
 a_targ_size_t ecil_data_size_of_type(a_type_ptr type)
 /*
 The Itanium C++ ABI data size of a type (dsize): the size, except for a class
 that is not POD for the purpose of layout, where it is the end of the last
-non-empty subobject: the vptr, a direct non-virtual base (by its own data
-size), or a data member (by its size, or by its data size for a
-[[no_unique_address]] member).  The front end's data_size_of_type recurses
-into every class-type member, which gives a short value for a member of a POD
-class type.  The data sizes of the subobject types are those sent already.
+non-empty subobject: the vptr, a direct non-virtual base or a virtual base
+(by its nvsize: spec 12.2), or a data member (by its size, or by its data size
+for a [[no_unique_address]] member).  A class with virtual bases has as its
+data size the largest end of any of them.  The front end's data_size_of_type
+recurses into every class-type member, which gives a short value for a member
+of a POD class type.  The data sizes of the subobject types are those sent
+already.
 */
 {
   a_type_ptr    t = skip_typerefs(type);
@@ -1092,19 +1255,14 @@ class type.  The data sizes of the subobject types are those sent already.
     a_field_ptr                  field;
 
     result = 0;
-    if (t->variant.class_struct_union.any_virtual_functions &&
-        ctsp->virtual_function_info_base_class == NULL) {
+    if (ecil_class_has_own_vptr(t)) {
       result = (a_targ_size_t)ctsp->virtual_function_info_offset +
                targ_sizeof_pointer;
     }  /* if */
     for (base = record_direct_bases(t); base != NULL;
          base = base->next_direct) {
       if (!base->is_virtual && !base->is_optimized_empty_base) {
-        uint32_t       bg = known_type_id(base->type);
-        a_targ_size_t  bsize = (bg != 0 && (ecil_gid_info(bg)->flags &
-                                            ECIL_GF_COMPLETE) != 0) ?
-                               ecil_gid_info(bg)->data_size :
-                               size_of_type(base->type);
+        a_targ_size_t  bsize = base_layout_size(base->type);
         a_targ_size_t  end = (a_targ_size_t)base->offset + bsize;
 
         if (bsize != 0 && end > result) result = end;
@@ -1134,6 +1292,18 @@ class type.  The data sizes of the subobject types are those sent already.
          (Itanium; spec 11.3). */
       if ((size != 0 || field->is_bit_field) && end > result) result = end;
     }  /* for */
+    if (t->variant.class_struct_union.any_virtual_base_classes) {
+      /* The virtual bases (direct and indirect) end at their offset in the
+         complete object plus their nvsize, if they are not empty. */
+      for (base = ctsp->base_classes; base != NULL; base = base->next) {
+        if (base->is_virtual && !is_empty_class_type(base->type)) {
+          a_targ_size_t  bsize = base_layout_size(base->type);
+          a_targ_size_t  end = (a_targ_size_t)base->offset + bsize;
+
+          if (bsize != 0 && end > result) result = end;
+        }  /* if */
+      }  /* for */
+    }  /* if */
   }  /* if */
   return result;
 }  /* ecil_data_size_of_type */
@@ -1141,32 +1311,27 @@ class type.  The data sizes of the subobject types are those sent already.
 
 static uint32_t ecil_vptr_type(an_ecil_frame *frame)
 /*
-The G-id of the opaque pointer-sized type that stands for a vptr field.
+The G-id of TY_VPTR (spec 12.2): the type of the vptr field, as big and as
+aligned as a pointer.
 */
 {
-  uint32_t  key[3];
+  uint32_t  key[2];
   uint32_t  gid;
 
-  key[0] = (uint32_t)egk_opaque;
+  key[0] = (uint32_t)egk_vptr;
   key[1] = (uint32_t)targ_sizeof_pointer;
-  key[2] = 0x76707472u;                 /* "vptr". */
-  gid = ecil_word_lookup(key, 3);
+  gid = ecil_word_lookup(key, 2);
   if (gid == 0) {
-    gid = ecil_new_gid(egk_opaque);
+    gid = ecil_new_gid(egk_vptr);
     if (gid != 0) {
       an_ecil_gid_info  *info = ecil_gid_info(gid);
       an_ecil_buffer    *saved;
 
-      info->flags = ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE;
       info->size = (uint32_t)targ_sizeof_pointer;
       info->align = (uint32_t)targ_sizeof_pointer;
-      ecil_word_register(key, 3, gid);
+      ecil_word_register(key, 2, gid);
       saved = ecil_frame_enter_decl(frame);
-      ecil_rec_begin(frame, eop_ty_opaque);
-      ecil_arg_uint(frame, gid);
-      ecil_arg_uint(frame, info->size);
-      ecil_arg_uint(frame, info->align);
-      ecil_rec_end(frame);
+      ecil_rec1(frame, eop_ty_vptr, gid);
       ecil_frame_leave_decl(frame, saved);
     }  /* if */
   }  /* if */
@@ -1174,12 +1339,271 @@ The G-id of the opaque pointer-sized type that stands for a vptr field.
 }  /* ecil_vptr_type */
 
 
+/* Class facts (spec 12.2). */
+
+static a_boolean type_is_function_local(a_type_ptr type);
+
+static a_boolean push_class(a_type_ptr t)
+/*
+Push a class on the class work stack; FALSE if memory ran out (the reason is
+noted).
+*/
+{
+  a_boolean  ok = TRUE;
+
+  if (class_stack_size == class_stack_capacity) {
+    size_t      new_capacity = (class_stack_capacity == 0) ?
+                               32 : class_stack_capacity * 2;
+    a_type_ptr  *new_stack = (a_type_ptr *)realloc(class_stack,
+                                      new_capacity * sizeof(a_type_ptr));
+
+    if (new_stack == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+      ok = FALSE;
+    } else {
+      class_stack = new_stack;
+      class_stack_capacity = new_capacity;
+    }  /* if */
+  }  /* if */
+  if (ok) class_stack[class_stack_size++] = t;
+  return ok;
+}  /* push_class */
+
+
+static void note_dynamic_class(uint32_t gid)
+/*
+Remember a dynamic class whose record was sent: its vtable is decided later
+(at the end of its function's region for a local class, else at the end of
+the translation unit).
+*/
+{
+  if (num_dynamic_classes == dynamic_classes_capacity) {
+    size_t    new_capacity = (dynamic_classes_capacity == 0) ?
+                             64 : dynamic_classes_capacity * 2;
+    uint32_t  *new_list = (uint32_t *)realloc(dynamic_classes,
+                                      new_capacity * sizeof(uint32_t));
+
+    if (new_list != NULL) {
+      dynamic_classes = new_list;
+      dynamic_classes_capacity = new_capacity;
+    }  /* if */
+  }  /* if */
+  if (num_dynamic_classes < dynamic_classes_capacity) {
+    dynamic_classes[num_dynamic_classes++] = gid;
+  } else {
+    ecil_note_unsupported("out of memory in the ECIL writer");
+  }  /* if */
+}  /* note_dynamic_class */
+
+
+static uint32_t intern_class_mangle(an_ecil_frame *frame, a_type_ptr t)
+/*
+The sid of the Itanium <type> mangling of a class (what follows _ZTV).
+*/
+{
+  uint32_t  sid = 0;
+
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  const char  *text = mangled_typeinfo_string(t);
+
+  if (text != NULL) sid = ecil_intern_cstring(frame, text);
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
+  (void)frame;
+  (void)t;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+  return sid;
+}  /* intern_class_mangle */
+
+
+static void emit_class_mangle(an_ecil_frame *frame, uint32_t gid,
+                              uint32_t sid)
+/*
+CLASS_MANGLE(t, sid) (introduction or re-issue).
+*/
+{
+  an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
+
+  ecil_rec2(frame, eop_class_mangle, gid, sid);
+  ecil_frame_leave_decl(frame, saved);
+  ecil_gid_info(gid)->decl_name = sid;
+}  /* emit_class_mangle */
+
+
+static void send_layout_facts(an_ecil_frame *frame, a_type_ptr t,
+                              uint32_t gid)
+/*
+Send CLASS_MANGLE, CLASS_INFO and CLASS_BASES of a class whose record body was
+sent: the layout facts (spec 12.2).  The facts of a dynamic base were sent with
+its body; a plain base's are only sent when something needs them.
+*/
+{
+  an_ecil_gid_info             *info = ecil_gid_info(gid);
+  a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+  uint32_t                     sid;
+  uint32_t                     *bases;
+  size_t                       nbases = 0;
+  size_t                       i = 0;
+  a_base_class_ptr             base;
+  a_boolean                    ok = TRUE;
+  a_boolean                    has_primary = ctsp->primary_base_class != NULL;
+  uint64_t                     primary_idx = 0;
+  uint64_t                     nslots = 0;
+  an_ecil_buffer               *saved;
+
+  if ((info->flags & ECIL_GF_LAYOUT_FACTS) == 0) {
+    for (base = record_direct_bases(t); base != NULL;
+         base = base->next_direct) {
+      nbases++;
+    }  /* for */
+    bases = (uint32_t *)malloc((2 * nbases + 1) * sizeof(uint32_t));
+    sid = intern_class_mangle(frame, t);
+    if (bases == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+      ok = FALSE;
+    } else if (sid == 0) {
+      ecil_note_unsupported("a class without a mangled name");
+      ok = FALSE;
+    } else {
+      for (base = record_direct_bases(t); base != NULL;
+           base = base->next_direct) {
+        uint32_t  bg = known_type_id(base->type);
+
+        if (ecil_gid_of(base) == 0 || bg == 0 ||
+            (ecil_gid_info(bg)->flags & ECIL_GF_COMPLETE) == 0 ||
+            ((ecil_gid_info(bg)->flags & ECIL_GF_DYNAMIC) != 0 &&
+             (ecil_gid_info(bg)->flags & ECIL_GF_LAYOUT_FACTS) == 0)) {
+          ecil_note_unsupported("a base class without a record body");
+          ok = FALSE;
+        } else {
+          bases[i++] = ecil_gid_of(base) - 1u;
+          bases[i++] = base->derivation != NULL &&
+                       base->derivation->access ==
+                                         (an_access_specifier)as_public ?
+                       ECIL_CLASS_BASE_PUBLIC : 0u;
+        }  /* if */
+      }  /* for */
+    }  /* if */
+    if (ok && has_primary) {
+      uint32_t  pidx = ecil_gid_of(ctsp->primary_base_class);
+
+      if (pidx == 0) {
+        ecil_note_unsupported("a primary base class that is not a direct "
+                              "base");
+        ok = FALSE;
+      } else {
+        primary_idx = pidx - 1u;
+      }  /* if */
+    }  /* if */
+#if CHECKING
+    /* The data size sent with the body is at most nvsize (without virtual
+       bases), which is at most the size (spec 12.2: a displaced empty base
+       makes nvsize larger). */
+    check_assertion(!ok ||
+                    ((t->variant.class_struct_union.any_virtual_base_classes ||
+                      (uint64_t)ctsp->size_without_virtual_base_classes >=
+                           (uint64_t)info->data_size) &&
+                     (uint64_t)ctsp->size_without_virtual_base_classes <=
+                           (uint64_t)t->size));
+#endif /* CHECKING */
+    if (ok && ecil_class_is_dynamic(t) &&
+        ctsp->highest_virtual_function_number !=
+                             (a_virtual_function_number)
+                                       VIRTUAL_FUNCTION_NUMBER_NONE) {
+      nslots = (uint64_t)ctsp->highest_virtual_function_number + 1u;
+    }  /* if */
+    if (ok) {
+      saved = ecil_frame_enter_decl(frame);
+      ecil_rec2(frame, eop_class_mangle, gid, sid);
+      ecil_rec_begin(frame, eop_class_info);
+      ecil_arg_uint(frame, gid);
+      ecil_arg_uint(frame, (uint64_t)ctsp->size_without_virtual_base_classes);
+      ecil_arg_uint(frame, (uint64_t)
+                           ctsp->alignment_without_virtual_base_classes);
+      if (has_primary) {
+        ecil_arg_uint(frame, primary_idx);
+      } else {
+        ecil_arg_nil(frame);
+      }  /* if */
+      ecil_arg_uint(frame, nslots);
+      ecil_rec_end(frame);
+      ecil_rec_begin(frame, eop_class_bases);
+      ecil_arg_uint(frame, gid);
+      ecil_arg_array(frame, bases, i);
+      ecil_rec_end(frame);
+      ecil_frame_leave_decl(frame, saved);
+      info = ecil_gid_info(gid);
+      info->flags |= ECIL_GF_LAYOUT_FACTS;
+      info->decl_name = sid;
+      info->nvsize = (uint32_t)ctsp->size_without_virtual_base_classes;
+    }  /* if */
+    free(bases);
+  }  /* if */
+}  /* send_layout_facts */
+
+
+
+static a_boolean vbase_is_primary_of_a_base(a_type_ptr t,
+                                           a_base_class_ptr vbase)
+/*
+Return TRUE if the virtual base class vbase of the class t has no storage of
+its own because it is the primary virtual base of t or of one of t's bases,
+direct or indirect (clang's hasOwnStorage; spec 12.2): it lives inside the
+storage of that base.  CHECKING asserts that the field then has the offset of
+that base.
+*/
+{
+  a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+  a_base_class_ptr             b;
+  a_boolean                    primary = FALSE;
+  a_type_ptr                   vt = skip_typerefs(vbase->type);
+
+  if (ctsp->primary_base_class != NULL &&
+      ctsp->primary_base_class->is_virtual &&
+      skip_typerefs(ctsp->primary_base_class->type) == vt) {
+    primary = TRUE;
+#if CHECKING
+    check_assertion(vbase->offset == 0);
+#endif /* CHECKING */
+  }  /* if */
+  for (b = ctsp->base_classes; b != NULL && !primary; b = b->next) {
+    a_class_type_supplement_ptr  bsup =
+                                   class_type_supp(skip_typerefs(b->type));
+
+    if (bsup != NULL && bsup->primary_base_class != NULL &&
+        bsup->primary_base_class->is_virtual &&
+        skip_typerefs(bsup->primary_base_class->type) == vt) {
+      primary = TRUE;
+#if CHECKING
+      /* It sits at the offset of the base it is the primary base of (the
+         first such base in the layout). */
+      {
+        a_boolean         found = FALSE;
+        a_base_class_ptr  c;
+
+        for (c = ctsp->base_classes; c != NULL && !found; c = c->next) {
+          a_class_type_supplement_ptr  csup =
+                                      class_type_supp(skip_typerefs(c->type));
+
+          found = csup != NULL && csup->primary_base_class != NULL &&
+                  csup->primary_base_class->is_virtual &&
+                  skip_typerefs(csup->primary_base_class->type) == vt &&
+                  c->offset == vbase->offset;
+        }  /* for */
+        check_assertion(found);
+      }
+#endif /* CHECKING */
+    }  /* if */
+  }  /* for */
+  return primary;
+}  /* vbase_is_primary_of_a_base */
+
+
 static void emit_record_fields(an_ecil_frame *frame, a_type_ptr t,
                                uint32_t gid)
 /*
 Emit TY_RECORD_BODY and the REC_FIELD records of a complete record whose
 field types all have ids; assign each field its member index.  A C++ class
-lists its vptr (an opaque pointer-sized field) when it owns one, then its
+lists its vptr (a TY_VPTR field) when it owns one, then its
 direct bases in declaration order, then its data members (spec 11.3); the
 members' indexes count the bases.
 */
@@ -1200,11 +1624,14 @@ members' indexes count the bases.
     n++;
   }  /* for */
   if (!C_mode() && is_immediate_class_type(t) && class_type_supp(t) != NULL) {
-    a_class_type_supplement_ptr  ctsp = class_type_supp(t);
-
-    for (base = bases; base != NULL; base = base->next_direct) n++;
-    if (t->variant.class_struct_union.any_virtual_functions &&
-        ctsp->virtual_function_info_base_class == NULL) {
+    for (base = bases; base != NULL; base = base->next_direct) {
+      if (!base->is_virtual) n++;
+    }  /* for */
+    for (base = class_type_supp(t)->base_classes; base != NULL;
+         base = base->next) {
+      if (base->is_virtual) n++;           /* A VIRTUAL_BASE field. */
+    }  /* for */
+    if (ecil_class_has_own_vptr(t)) {
       vptr_gid = ecil_vptr_type(frame);
       n++;
     }  /* if */
@@ -1225,7 +1652,27 @@ members' indexes count the bases.
   info = ecil_gid_info(gid);
   info->count = n;
   info->data_size = (uint32_t)data_size;
-  if (vptr_gid != 0) info->flags |= ECIL_GF_ABI_OPAQUE;
+  /* A record declared while incomplete had no size or alignment yet. */
+  info->size = (uint64_t)t->size;
+  info->align = (uint32_t)t->alignment;
+  if (ecil_class_is_dynamic(t)) info->flags |= ECIL_GF_DYNAMIC;
+#if CHECKING
+  if (!C_mode() && is_immediate_class_type(t)) {
+    /* The class is dynamic iff its record has a TY_VPTR field, a VIRTUAL_BASE
+       field or a BASE field of a dynamic class (spec 12.2). */
+    a_boolean  stream_dynamic = vptr_gid != 0 ||
+                    t->variant.class_struct_union.any_virtual_base_classes;
+
+    for (base = bases; base != NULL && !stream_dynamic;
+         base = base->next_direct) {
+      uint32_t  bg = known_type_id(base->type);
+
+      stream_dynamic = bg != 0 &&
+                       (ecil_gid_info(bg)->flags & ECIL_GF_DYNAMIC) != 0;
+    }  /* for */
+    check_assertion(stream_dynamic == (ecil_class_is_dynamic(t) != 0));
+  }  /* if */
+#endif /* CHECKING */
   /* Intern the names first: a STR must not fall between the body record and
      its REC_FIELD records. */
   for (field = t->variant.class_struct_union.field_list; field != NULL;
@@ -1245,8 +1692,7 @@ members' indexes count the bases.
   ecil_arg_uint(frame, n);
   ecil_rec_end(frame);
   if (vptr_gid != 0) {
-    /* The vptr: an unnamed opaque field at the offset of the virtual
-       function information. */
+    /* The vptr: an unnamed TY_VPTR field at offset 0 (spec 12.2). */
     ecil_rec_begin(frame, eop_rec_field);
     ecil_arg_uint(frame, vptr_gid);
     ecil_arg_uint(frame, (uint64_t)class_type_supp(t)->
@@ -1262,6 +1708,7 @@ members' indexes count the bases.
     uint32_t      bg = known_type_id(base->type);
     unsigned int  flags = ECIL_FIELD_BASE | ECIL_FIELD_UNNAMED;
 
+    if (base->is_virtual) continue;      /* After the data members. */
     ecil_set_gid(base, (uint32_t)(idx + 1));
     idx++;
     if (bg != 0 && (ecil_gid_info(bg)->flags &
@@ -1343,26 +1790,68 @@ members' indexes count the bases.
     ecil_arg_uint(frame, flags);
     ecil_rec_end(frame);
   }  /* for */
+  if (!C_mode() && is_immediate_class_type(t) && class_type_supp(t) != NULL) {
+    /* The virtual bases, direct and indirect, in the order the front end
+       constructs them (its postorder base list: also the order of the
+       MEMINIT(vbase) groups of C1), after the data members, at their offsets
+       in the complete object (spec 12.2). */
+    for (base = class_type_supp(t)->base_classes; base != NULL;
+         base = base->next) {
+      if (base->is_virtual) {
+        uint32_t      bg = known_type_id(base->type);
+        unsigned int  flags = ECIL_FIELD_VIRTUAL_BASE | ECIL_FIELD_UNNAMED;
+
+        ecil_set_gid(base, (uint32_t)(idx + 1));
+        idx++;
+        if (bg != 0 && (ecil_gid_info(bg)->flags &
+                        (ECIL_GF_OPAQUE | ECIL_GF_ABI_OPAQUE)) != 0) {
+          ecil_gid_info(gid)->flags |= ECIL_GF_ABI_OPAQUE;
+        }  /* if */
+        if (bg != 0) {
+          ecil_gid_info(gid)->flags |= ecil_gid_info(bg)->flags &
+                                       ECIL_GF_HAS_DMP;
+        }  /* if */
+        if (is_empty_class_type(base->type) ||
+            vbase_is_primary_of_a_base(t, base)) {
+          /* No storage of its own (spec 12.2). */
+          flags |= ECIL_FIELD_EMPTY_FOR_ABI;
+        }  /* if */
+        ecil_rec_begin(frame, eop_rec_field);
+        ecil_arg_uint(frame, bg);
+        ecil_arg_uint(frame, (uint64_t)base->offset);
+        ecil_arg_nil(frame);
+        ecil_arg_nil(frame);
+        ecil_arg_nil(frame);
+        ecil_arg_uint(frame, flags);
+        ecil_rec_end(frame);
+      }  /* if */
+    }  /* for */
+  }  /* if */
   ecil_frame_leave_decl(frame, saved);
   ecil_gid_info(gid)->flags |= ECIL_GF_COMPLETE;
+  if (ecil_gid_info(gid)->flags & ECIL_GF_DYNAMIC) {
+    /* The layout facts of a dynamic class follow its body directly (the
+       library needs them to build the record, spec 12.2). */
+    note_dynamic_class(gid);
+    send_layout_facts(frame, t, gid);
+  }  /* if */
 }  /* emit_record_fields */
 
 
 static void emit_record_body(an_ecil_frame *frame, a_type_ptr t, uint32_t gid)
 /*
 Emit the body of a complete record whose field types all have ids, unless
-a member or base is a record that failed, or the class has a virtual base
-(M4): then this record fails too (it keeps its declaration only, and uses
-that need it complete are unsupported).
+a member or base is a record that failed: then this record fails too (it keeps
+its declaration only, and uses that need it complete are unsupported).
 */
 {
   a_field_ptr       field;
   a_base_class_ptr  base;
   a_boolean         failed = FALSE;
 
-  if (!C_mode() && is_immediate_class_type(t) &&
-      t->variant.class_struct_union.any_virtual_base_classes) {
-    failed = TRUE;
+  if (ecil_class_has_own_vptr(t) &&
+      class_type_supp(t)->virtual_function_info_offset != 0) {
+    failed = TRUE;                /* (never seen: the vptr is at 0.) */
   }  /* if */
   for (base = record_direct_bases(t); base != NULL && !failed;
        base = base->next_direct) {
@@ -1484,6 +1973,11 @@ Process the work stack down to depth base.
           type_stack[idx].param_cursor =
                                       rout_type_supp(t)->param_type_list;
           break;
+        case tk_ptr_to_member:
+          /* TY_DATA_MEMBER or TY_METHOD of the member's type and the class
+             (both only declared, spec 12.2). */
+          type_stack[idx].phase = tph_children;
+          break;
         case tk_struct:
         case tk_union:
         case tk_class:
@@ -1507,6 +2001,10 @@ Process the work stack down to depth base.
             info->entity = t;
             info->size = (uint64_t)t->size;
             info->align = (uint32_t)t->alignment;
+            if (type_is_function_local(t)) {
+              /* Its IL entry is gone when the file scope is complete. */
+              info->flags |= ECIL_GF_FUNCTION_LOCAL;
+            }  /* if */
             ecil_set_gid(t, gid);
             if (t->source_corresp.name != NULL) {
               name_sid = ecil_intern_cstring(frame, t->source_corresp.name);
@@ -1558,6 +2056,15 @@ Process the work stack down to depth base.
           idx = type_stack_size - 1;
           ecil_set_gid(t, finish_array(frame, t));
           type_stack_size--;
+        }  /* if */
+      } else if (t->kind == tk_ptr_to_member) {
+        if (need_pointee(pm_member_type(t))) {
+          idx = type_stack_size - 1;
+          if (need_pointee(pm_class_type(t))) {
+            idx = type_stack_size - 1;
+            ecil_set_gid(t, finish_member_pointer(frame, t));
+            type_stack_size--;
+          }  /* if */
         }  /* if */
       } else {
         /* A function type: the return type, then each parameter. */
@@ -2147,6 +2654,8 @@ it at once.
     /* (The special members of a closure type have no source name.) */
     if (variant == ECIL_VARIANT_BASE) {
       name = cir_structor_name(rout, cdk_subobject);
+    } else if (variant == ECIL_VARIANT_DELETING) {
+      name = cir_structor_name(rout, cdk_deleting);
     } else {
       name = get_mangled_function_name_full(rout, /*force_primary_name=*/FALSE,
                                       /*externalize_if_necessary=*/FALSE);
@@ -2409,6 +2918,15 @@ entities may be gone, and a C++ name does not change after it is sent).
     state->flags |= ECIL_DECL_FUNC_INLINE_ONLY;
   }  /* if */
   if (unsupported) state->flags |= ECIL_DECL_FUNC_UNSUPPORTED;
+  if (ecil_has_exceptions()) {
+    /* NOTHROW only from the front end's own answer, and never taken back by
+       a re-issue (a wrong NOTHROW skips cleanups: spec 12.6). */
+    if ((gid != 0 && (ecil_gid_info(gid)->decl_flags &
+                                      ECIL_DECL_FUNC_NOTHROW) != 0) ||
+        is_non_throwing_routine(rout)) {
+      state->flags |= ECIL_DECL_FUNC_NOTHROW;
+    }  /* if */
+  }  /* if */
   if (gid != 0 && !C_mode()) {
     an_ecil_gid_info  *info = ecil_gid_info(gid);
 
@@ -2430,14 +2948,20 @@ entities may be gone, and a C++ name does not change after it is sent).
 
 static void emit_func_decl_if_changed(an_ecil_frame     *frame,
                                       uint32_t          gid,
-                                      const a_func_state *state)
+                                      const a_func_state *new_state)
 /*
 Emit DECL_FUNC if this is the first one or any fact differs from the last
 one emitted (spec 8.2: a re-issue updates the entity).
 */
 {
   an_ecil_gid_info  *info = ecil_gid_info(gid);
+  a_func_state      sticky = *new_state;
+  const a_func_state *state = &sticky;
 
+  if (info->decl_emitted) {
+    /* A re-issue never takes NOTHROW back (spec 12.6). */
+    sticky.flags |= info->decl_flags & ECIL_DECL_FUNC_NOTHROW;
+  }  /* if */
   if (!info->decl_emitted || info->decl_type != state->type ||
       info->decl_linkage != state->linkage ||
       info->decl_flags != state->flags || info->decl_name != state->name) {
@@ -2479,6 +3003,62 @@ one emitted (spec 8.2: a re-issue updates the entity).
 }  /* emit_func_decl_if_changed */
 
 
+uint32_t ecil_throw_bad_array_new_length_function(an_ecil_frame *frame)
+/*
+The G-id of the runtime function that throws std::bad_array_new_length
+(__cxa_throw_bad_array_new_length: no parameters, no return), declared on
+first use: a new[] whose run-time count is less than the number of its
+initializers calls it (spec 12.5).
+*/
+{
+  if (bad_array_function_gid == 0) {
+    uint32_t  ret = ecil_void_type(frame);
+    uint32_t  key[3];
+    uint32_t  ft;
+    uint32_t  gid;
+
+    key[0] = (uint32_t)egk_func_type;
+    key[1] = ret;
+    key[2] = 0;
+    ft = ecil_word_lookup(key, 3);
+    if (ft == 0) {
+      ft = ecil_new_gid(egk_func_type);
+      if (ft != 0) {
+        an_ecil_buffer  *saved;
+
+        ecil_gid_info(ft)->ref = ret;
+        ecil_gid_info(ft)->count = 0;
+        ecil_word_register(key, 3, ft);
+        saved = ecil_frame_enter_decl(frame);
+        ecil_rec_begin(frame, eop_ty_func);
+        ecil_arg_uint(frame, ft);
+        ecil_arg_uint(frame, ret);
+        ecil_arg_uint(frame, 0);
+        ecil_arg_array(frame, NULL, 0);
+        ecil_rec_end(frame);
+        ecil_frame_leave_decl(frame, saved);
+      }  /* if */
+    }  /* if */
+    gid = ft != 0 ? ecil_new_gid(egk_func) : 0;
+    if (gid != 0) {
+      a_func_state  state;
+
+      state.type = ft;
+      state.linkage = (unsigned int)elk_external;
+      state.flags = ECIL_DECL_FUNC_NORETURN;
+      state.name = ecil_intern_cstring(frame,
+                                       "__cxa_throw_bad_array_new_length");
+      state.late = FALSE;
+      ecil_mark_symbol_name(state.name);
+      emit_func_decl_if_changed(frame, gid, &state);
+      symbol_binding_register(state.name, gid);
+      bad_array_function_gid = gid;
+    }  /* if */
+  }  /* if */
+  return bad_array_function_gid;
+}  /* ecil_throw_bad_array_new_length_function */
+
+
 static a_boolean routine_is_structor(a_routine_ptr rout)
 /*
 Return TRUE for a C++ constructor or destructor: it has a complete and a
@@ -2502,7 +3082,23 @@ and pair the two with STRUCTOR (declaration section).
 {
   a_func_state  state;
   uint32_t      base_gid;
+  a_boolean     has_vbases = FALSE;
 
+  if (!C_mode() && rout->source_corresp.is_class_member) {
+    /* STRUCTOR has_vbases is set iff the class has VIRTUAL_BASE fields, and
+       the record body comes before it (spec 12.3). */
+    a_type_ptr  cls = parent_class_of(rout);
+
+    has_vbases = is_immediate_class_type(cls) &&
+                 cls->variant.class_struct_union.any_virtual_base_classes;
+    if (has_vbases) {
+      uint32_t  cg = ecil_type_id(frame, cls);
+
+      /* (A record that failed has no body to match.) */
+      has_vbases = cg != 0 && (ecil_gid_info(cg)->flags &
+                               ECIL_GF_COMPLETE) != 0;
+    }  /* if */
+  }  /* if */
   compute_func_state(frame, rout, 0, ECIL_VARIANT_BASE, FALSE, FALSE, &state);
   if (ecil_unsupported_reason == NULL) {
     base_gid = ecil_new_gid(egk_func);
@@ -2513,6 +3109,10 @@ and pair the two with STRUCTOR (declaration section).
       info->entity = rout;
       info->variant = ECIL_VARIANT_BASE;
       info->partner = complete_gid;
+      if (has_vbases) {
+        info->flags |= ECIL_GF_STRUCTOR_VBASES;
+        ecil_gid_info(complete_gid)->flags |= ECIL_GF_STRUCTOR_VBASES;
+      }  /* if */
       info->flags |= ecil_gid_info(complete_gid)->flags &
                      ECIL_GF_FUNCTION_LOCAL;
       if (state.late) info->flags |= ECIL_GF_LATE_NAME;
@@ -2525,9 +3125,10 @@ and pair the two with STRUCTOR (declaration section).
       ecil_rec_begin(frame, eop_structor);
       ecil_arg_uint(frame, complete_gid);
       ecil_arg_uint(frame, base_gid);
-      ecil_arg_uint(frame, rout->special_kind ==
-                    (a_special_function_kind)sfk_destructor ?
-                    ECIL_STRUCTOR_DTOR : 0u);
+      ecil_arg_uint(frame, (rout->special_kind ==
+                            (a_special_function_kind)sfk_destructor ?
+                            ECIL_STRUCTOR_DTOR : 0u) |
+                           (has_vbases ? ECIL_STRUCTOR_HAS_VBASES : 0u));
       ecil_rec_end(frame);
       ecil_frame_leave_decl(frame, saved);
     }  /* if */
@@ -2659,13 +3260,15 @@ Re-issue DECL_FUNC of one G-id (see ecil_reissue_function).
   a_func_state  state;
   a_routine_ptr rout = (a_routine_ptr)ecil_gid_info(gid)->entity;
 
-  compute_func_state(frame, rout, gid, ecil_gid_info(gid)->variant, defining,
-                     unsupported, &state);
-  if (ecil_gid_info(gid)->flags & ECIL_GF_LATE_NAME) {
-    /* Keep the (nil or bound) name; NAME_BIND supplies it. */
-    state.name = ecil_gid_info(gid)->decl_name;
+  if (rout != NULL) {            /* (A runtime function has no routine.) */
+    compute_func_state(frame, rout, gid, ecil_gid_info(gid)->variant,
+                       defining, unsupported, &state);
+    if (ecil_gid_info(gid)->flags & ECIL_GF_LATE_NAME) {
+      /* Keep the (nil or bound) name; NAME_BIND supplies it. */
+      state.name = ecil_gid_info(gid)->decl_name;
+    }  /* if */
   }  /* if */
-  if (ecil_unsupported_reason == NULL) {
+  if (rout != NULL && ecil_unsupported_reason == NULL) {
     if ((ecil_gid_info(gid)->flags & ECIL_GF_DEFINED) && !unsupported) {
       /* Once the body has been streamed its type must not change (a K&R
          definition later redeclared with a prototype keeps the type of
@@ -2694,12 +3297,1755 @@ complete variant is defined through the base one: spec 11.4).
 */
 {
   uint32_t  partner = ecil_gid_info(gid)->partner;
+  uint32_t  deleting = ecil_gid_info(gid)->variant == ECIL_VARIANT_COMPLETE ?
+                       ecil_gid_info(gid)->aux : 0;
 
   reissue_one_function(frame, gid, defining, unsupported);
   if (partner != 0) {
     reissue_one_function(frame, partner, defining, unsupported);
   }  /* if */
+  if (deleting != 0) {
+    /* D0 is defined iff D1 is (spec 12.3). */
+    reissue_one_function(frame, deleting, defining, unsupported);
+  }  /* if */
 }  /* ecil_reissue_function */
+
+
+/* Virtual functions and the vtable facts (spec 12.2, 12.3). */
+
+/* A growable array of 32-bit words (the elements of a record's array). */
+typedef struct a_word_vec {
+  uint32_t      *words;
+  size_t        size;
+  size_t        capacity;
+} a_word_vec;
+
+static void word_vec_push(a_word_vec *vec, uint32_t word)
+/*
+Append a word; out of memory is noted as unsupported.
+*/
+{
+  if (vec->size == vec->capacity) {
+    size_t    new_capacity = (vec->capacity == 0) ? 64 : vec->capacity * 2;
+    uint32_t  *new_words = (uint32_t *)realloc(vec->words,
+                                         new_capacity * sizeof(uint32_t));
+
+    if (new_words == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+    } else {
+      vec->words = new_words;
+      vec->capacity = new_capacity;
+    }  /* if */
+  }  /* if */
+  if (vec->size < vec->capacity) vec->words[vec->size++] = word;
+}  /* word_vec_push */
+
+
+/* One virtual function of a class, for CLASS_VFUNCS. */
+typedef struct a_vfunc {
+  a_routine_ptr rout;
+  uint32_t      gid;
+  uint32_t      slot;
+  unsigned int  flags;
+  uint32_t      sig;
+  a_boolean     implicit;
+  size_t        order;            /* Declaration order. */
+} a_vfunc;
+
+static a_boolean same_virtual_signature(a_routine_ptr a, a_routine_ptr b)
+/*
+Return TRUE if two virtual functions have the same signature as clang's
+HasSameVirtualSignature compares them (spec 12.2): the same name, identical
+parameter types as the front end compares them (the top-level cv-qualifiers
+are removed, arrays and functions decayed) and the same cv-qualifiers of
+this.  The ref-qualifiers are not compared.  The return type is not part of
+it, except for a conversion function, whose name is its return type.
+*/
+{
+  a_type_ptr                     ta = skip_typerefs(a->type);
+  a_type_ptr                     tb = skip_typerefs(b->type);
+  a_routine_type_supplement_ptr  sa = rout_type_supp(ta);
+  a_routine_type_supplement_ptr  sb = rout_type_supp(tb);
+  a_param_type_ptr               pa = sa->param_type_list;
+  a_param_type_ptr               pb = sb->param_type_list;
+  a_boolean                      same = a->special_kind == b->special_kind &&
+                                        sa->qualifiers == sb->qualifiers &&
+                                        sa->this_qualifiers ==
+                                                         sb->this_qualifiers;
+
+  if (same) {
+    const char  *na = a->source_corresp.name;
+    const char  *nb = b->source_corresp.name;
+
+    same = (na == NULL || nb == NULL) ? na == nb : strcmp(na, nb) == 0;
+  }  /* if */
+  if (same && a->special_kind == (a_special_function_kind)sfk_conversion) {
+    same = identical_types(ta->variant.routine.return_type,
+                           tb->variant.routine.return_type);
+  }  /* if */
+  while (same && pa != NULL && pb != NULL) {
+    same = identical_types(pa->type, pb->type);
+    pa = pa->next;
+    pb = pb->next;
+  }  /* while */
+  return same && pa == NULL && pb == NULL;
+}  /* same_virtual_signature */
+
+
+static a_boolean vfunc_returns_reference(a_routine_ptr rout)
+/*
+Return TRUE if the return type of a virtual function is a reference (a
+covariant reference result is adjusted without a null check).
+*/
+{
+  a_type_ptr  rt = skip_typerefs(rout->type)->variant.routine.return_type;
+
+  return rt != NULL && is_reference_type(skip_typerefs(rt));
+}  /* vfunc_returns_reference */
+
+
+static uint32_t virtual_signature_id(a_routine_ptr rout)
+/*
+The sig of a virtual function (not a destructor): a non-zero id that two
+functions share iff same_virtual_signature holds.  The ids are the
+positions of the first function of each signature in the table of the
+interned ones (1, 2, ... in order of first encounter: deterministic, no
+pointers in the stream).  Out of memory is noted as unsupported (and 0 is
+returned).
+*/
+{
+  const char  *name = rout->source_corresp.name;
+  uint32_t    hash = hash_name(name != NULL ? name : "");
+  uint32_t    sig = 0;
+
+  if (sig_heads == NULL || num_sig_entries >= 2 * sig_heads_size) {
+    size_t    new_size = sig_heads_size == 0 ? 256 : sig_heads_size * 2;
+    uint32_t  *new_heads = (uint32_t *)calloc(new_size, sizeof(uint32_t));
+    size_t    i;
+
+    if (new_heads == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+    } else {
+      /* Rehash the entries (their chains are rebuilt). */
+      for (i = 0; i < num_sig_entries; i++) {
+        if (sig_entries[i].rout != NULL) {
+          const char  *en = sig_entries[i].rout->source_corresp.name;
+          size_t      slot = hash_name(en != NULL ? en : "") &
+                                                  (uint32_t)(new_size - 1);
+
+          sig_entries[i].next = new_heads[slot];
+          new_heads[slot] = (uint32_t)(i + 1);
+        }  /* if */
+      }  /* for */
+      free(sig_heads);
+      sig_heads = new_heads;
+      sig_heads_size = new_size;
+    }  /* if */
+  }  /* if */
+  if (ecil_unsupported_reason == NULL) {
+    size_t    slot = hash & (uint32_t)(sig_heads_size - 1);
+    uint32_t  e;
+
+    for (e = sig_heads[slot]; e != 0 && sig == 0;
+         e = sig_entries[e - 1].next) {
+      if (sig_entries[e - 1].rout != NULL &&
+          same_virtual_signature(sig_entries[e - 1].rout, rout)) {
+        sig = e;
+      }  /* if */
+    }  /* for */
+    if (sig == 0) {
+      if (num_sig_entries == sig_entries_capacity) {
+        size_t        new_capacity = sig_entries_capacity == 0 ?
+                                     256 : sig_entries_capacity * 2;
+        a_sig_entry   *new_entries = (a_sig_entry *)realloc(sig_entries,
+                                       new_capacity * sizeof(a_sig_entry));
+
+        if (new_entries == NULL) {
+          ecil_note_unsupported("out of memory in the ECIL writer");
+        } else {
+          sig_entries = new_entries;
+          sig_entries_capacity = new_capacity;
+        }  /* if */
+      }  /* if */
+      if (num_sig_entries < sig_entries_capacity) {
+        sig_entries[num_sig_entries].rout = rout;
+        sig_entries[num_sig_entries].local = routine_is_function_local(rout);
+        sig_entries[num_sig_entries].next = sig_heads[slot];
+        num_sig_entries++;
+        sig = (uint32_t)num_sig_entries;
+        sig_heads[slot] = sig;
+      }  /* if */
+    }  /* if */
+  }  /* if */
+  return sig;
+}  /* virtual_signature_id */
+
+
+void ecil_forget_local_signatures(void)
+/*
+A function's memory region is about to be freed: the signatures whose first
+function is one of its (local classes') routines can no longer be compared, so
+the entries die (they keep their ids; a later function of that signature gets
+a new one, which is harmless: a local class's functions are only related to
+the functions of classes of the same region).
+*/
+{
+  size_t  i;
+
+  for (i = 0; i < num_sig_entries; i++) {
+    if (sig_entries[i].local) sig_entries[i].rout = NULL;
+  }  /* for */
+}  /* ecil_forget_local_signatures */
+
+
+static uint32_t deleting_destructor_id(an_ecil_frame *frame,
+                                       a_routine_ptr rout,
+                                       uint32_t      d1)
+/*
+The G-id of the deleting destructor D0 of a virtual destructor whose complete
+variant has G-id d1: its own DECL_FUNC (D1's type, linkage and flags, the D0
+name), then STRUCTOR_DELETING with the operator delete the front end chose
+for the class (spec 12.3).  0 with the reason noted if it cannot be sent.
+*/
+{
+  an_ecil_gid_info  *info = ecil_gid_info(d1);
+  uint32_t          d0 = info->aux;
+
+  if (d0 == 0 && ecil_unsupported_reason == NULL) {
+    a_type_ptr     cls = parent_class_of(rout);
+    a_routine_ptr  del;
+    a_boolean      sized = FALSE;
+    a_boolean      aligned = FALSE;
+    a_boolean      destroying = FALSE;
+
+    if (class_type_supp(cls)->assoc_operator_delete_routine == NULL) {
+      /* The lookup walks the scope stack down to the file scope: at the end
+         of the translation unit the stack is empty (NO_SCOPE_DEPTH), and
+         the file scope is the one the lookup needs. */
+      a_scope_depth  saved_depth = depth_scope_stack;
+
+      if (depth_scope_stack < DEPTH_OF_FILE_SCOPE) {
+        depth_scope_stack = DEPTH_OF_FILE_SCOPE;
+      }  /* if */
+      set_class_assoc_operator_delete_routine(cls);
+      depth_scope_stack = saved_depth;
+    }  /* if */
+    del = class_type_supp(cls)->assoc_operator_delete_routine;
+    if (del == NULL) {
+      ecil_note_unsupported("a virtual destructor in a class without a "
+                            "usable operator delete");
+    } else if (!is_default_operator_delete(del, &sized, &aligned,
+                                           &destroying)) {
+      ecil_note_unsupported("a virtual destructor whose operator delete is "
+                            "not a usual deallocation function");
+    } else {
+      uint32_t  gdel = ecil_function_id(frame, del);
+
+      if (gdel != 0 && ecil_unsupported_reason == NULL) {
+        a_func_state  state;
+
+#if CHECKING
+        {
+          /* The flags must agree with the number of parameters (1 + SIZED
+             + ALIGNED, + 1 for the empty tag of a destroying one): ECIL
+             cannot tell size_t from align_val_t. */
+          size_t            n = 0;
+          a_param_type_ptr  p;
+
+          for (p = rout_type_supp(skip_typerefs(del->type))->param_type_list;
+               p != NULL; p = p->next) {
+            n++;
+          }  /* for */
+          check_assertion(n == 1 + (sized ? 1u : 0u) + (aligned ? 1u : 0u) +
+                               (destroying ? 1u : 0u));
+        }
+#endif /* CHECKING */
+        compute_func_state(frame, rout, 0, ECIL_VARIANT_DELETING, FALSE,
+                           FALSE, &state);
+        /* D1's type, linkage and flags as they are now (spec 12.3). */
+        info = ecil_gid_info(d1);
+        state.type = info->decl_type;
+        state.linkage = info->decl_linkage;
+        state.flags = info->decl_flags;
+        if (ecil_unsupported_reason == NULL) {
+          d0 = ecil_new_gid(egk_func);
+          if (d0 != 0) {
+            an_ecil_buffer  *saved;
+
+            info = ecil_gid_info(d0);
+            info->entity = rout;
+            info->variant = ECIL_VARIANT_DELETING;
+            info->partner = 0;
+            info->flags |= ecil_gid_info(d1)->flags & ECIL_GF_FUNCTION_LOCAL;
+            if (state.late) info->flags |= ECIL_GF_LATE_NAME;
+            ecil_gid_info(d1)->aux = d0;
+            emit_func_decl_if_changed(frame, d0, &state);
+            if (state.name != 0 &&
+                state.linkage != (unsigned int)elk_internal) {
+              symbol_binding_register(state.name, d0);
+            }  /* if */
+            saved = ecil_frame_enter_decl(frame);
+            ecil_rec_begin(frame, eop_structor_deleting);
+            ecil_arg_uint(frame, d0);
+            ecil_arg_uint(frame, d1);
+            ecil_arg_uint(frame, gdel);
+            ecil_arg_uint(frame, (sized ? ECIL_STRUCTOR_DELETING_SIZED : 0u) |
+                                 (aligned ? ECIL_STRUCTOR_DELETING_ALIGNED :
+                                            0u) |
+                                 (destroying ?
+                                    ECIL_STRUCTOR_DELETING_DESTROYING : 0u));
+            ecil_rec_end(frame);
+            ecil_frame_leave_decl(frame, saved);
+          }  /* if */
+        }  /* if */
+      }  /* if */
+    }  /* if */
+  }  /* if */
+  return d0;
+}  /* deleting_destructor_id */
+
+
+static int compare_vfuncs(const void *left, const void *right)
+/*
+Order the functions of CLASS_VFUNCS: the ones declared in the class in
+declaration order, then the implicit ones in slot order.
+*/
+{
+  const a_vfunc  *a = (const a_vfunc *)left;
+  const a_vfunc  *b = (const a_vfunc *)right;
+  int            result;
+
+  if (a->implicit != b->implicit) {
+    result = a->implicit ? 1 : -1;
+  } else if (a->implicit && a->slot != b->slot) {
+    result = a->slot < b->slot ? -1 : 1;
+  } else {
+    result = a->order < b->order ? -1 : (a->order > b->order ? 1 : 0);
+  }  /* if */
+  return result;
+}  /* compare_vfuncs */
+
+
+static a_type_ptr return_class_of(a_routine_ptr rout)
+/*
+The class that a function returns a pointer or a reference to, else NULL.
+*/
+{
+  a_type_ptr  rt = skip_typerefs(skip_typerefs(rout->type)->variant.routine.
+                                                              return_type);
+  a_type_ptr  result = NULL;
+
+  if (rt->kind == tk_pointer) {
+    rt = skip_typerefs(rt->variant.pointer.type);
+    if (is_immediate_class_type(rt) && !rt->incomplete) result = rt;
+  }  /* if */
+  return result;
+}  /* return_class_of */
+
+
+static a_boolean push_covariant_return_class(an_ecil_frame *frame,
+                                             a_type_ptr    t)
+/*
+For each override of the class with a covariant return type (a class derived
+from the overridden function's return class): the layout facts of the returned
+class, and its vtable facts when the path from it to the overridden function's
+return class goes through a virtual base (the library derives the adjustment
+thunk from them; spec 12.2).  The class whose vtable facts are wanted and not
+sent is pushed on the class stack (the caller handles it first, so that the
+depth of the walk is not that of the C stack) and TRUE is returned.
+*/
+{
+  a_base_class_ptr  bcp;
+  a_boolean         pushed = FALSE;
+
+  for (bcp = class_type_supp(t)->base_classes;
+       bcp != NULL && !pushed && ecil_unsupported_reason == NULL;
+       bcp = bcp->next) {
+    an_overriding_virtual_function_ptr  ovr;
+
+    if (bcp->is_pack_expansion) continue;
+    for (ovr = bcp->variant.overriding_virtual_functions;
+         ovr != NULL && !pushed && ecil_unsupported_reason == NULL;
+         ovr = ovr->next) {
+      a_type_ptr  c = ovr->overriding_function->is_consteval ||
+                      ovr->primary_function->is_consteval ? NULL :
+                      return_class_of(ovr->overriding_function);
+      a_type_ptr  b = c == NULL ? NULL :
+                      return_class_of(ovr->primary_function);
+
+      if (c != NULL && b != NULL && c != b) {
+        a_base_class_ptr  path;
+
+        ecil_class_layout_facts(frame, c);
+        for (path = class_type_supp(c)->base_classes; path != NULL;
+             path = path->next) {
+          if (skip_typerefs(path->type) == b) break;
+        }  /* for */
+        if (ecil_unsupported_reason == NULL && path != NULL &&
+            path->derivation != NULL &&
+            (path->is_virtual || any_virtual_steps_in_derivation(path)) &&
+            ecil_class_is_dynamic(c) && c != t) {
+          uint32_t  cg = ecil_gid_of(c);
+
+          if (cg != 0 && (ecil_gid_info(cg)->flags & (ECIL_GF_FACTS_BUSY |
+                                          ECIL_GF_VTABLE_FACTS)) == 0 &&
+              push_class(c)) {
+            ecil_gid_info(cg)->flags |= ECIL_GF_FACTS_BUSY;
+            pushed = TRUE;
+          }  /* if */
+        }  /* if */
+      }  /* if */
+    }  /* for */
+  }  /* for */
+  return pushed;
+}  /* push_covariant_return_class */
+
+
+static void send_vtable_facts(an_ecil_frame *frame, a_type_ptr t,
+                              uint32_t gid)
+/*
+Send the vtable facts of a dynamic class whose bases' have been sent: a
+DECL_FUNC for every virtual function (and D0 with STRUCTOR_DELETING for a
+virtual destructor), CLASS_VFUNCS and CLASS_OVERRIDES (spec 12.2).
+*/
+{
+  a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+  a_routine_ptr                rout;
+  a_vfunc                      *funcs = NULL;
+  size_t                       count = 0;
+  size_t                       n = 0;
+  size_t                       i;
+  a_word_vec                   words = { NULL, 0, 0 };
+  a_base_class_ptr             bcp;
+  an_ecil_buffer               *saved;
+
+  if (ctsp->assoc_scope != NULL) {
+    for (rout = ctsp->assoc_scope->routines; rout != NULL;
+         rout = rout->next) {
+      if (rout->is_virtual && !rout->is_consteval) count++;
+    }  /* for */
+  }  /* if */
+  if (count != 0) {
+    funcs = (a_vfunc *)malloc(count * sizeof(a_vfunc));
+    if (funcs == NULL) ecil_note_unsupported("out of memory in the ECIL "
+                                             "writer");
+  }  /* if */
+  for (rout = ctsp->assoc_scope != NULL ? ctsp->assoc_scope->routines : NULL;
+       rout != NULL && funcs != NULL && ecil_unsupported_reason == NULL;
+       rout = rout->next) {
+    if (rout->is_virtual && !rout->is_consteval && n < count) {
+      a_vfunc  *f = &funcs[n];
+      uint32_t g = ecil_function_id(frame, rout);
+
+      f->rout = rout;
+      f->gid = g;
+      f->slot = (uint32_t)rout->number.virtual_function;
+      f->flags = (rout->pure_virtual ? ECIL_VFUNC_PURE : 0u) |
+                 (rout->is_deleted ? ECIL_VFUNC_DELETED : 0u) |
+                 (rout->compiler_generated ? ECIL_VFUNC_IMPLICIT : 0u) |
+                 (vfunc_returns_reference(rout) ? ECIL_VFUNC_REF_RESULT : 0u);
+      f->implicit = rout->compiler_generated != 0;
+      f->order = n;
+      if (g != 0 && ecil_unsupported_reason == NULL) {
+        if (rout->special_kind == (a_special_function_kind)sfk_destructor) {
+          f->sig = 0;
+          (void)deleting_destructor_id(frame, rout, g);
+        } else {
+          f->sig = virtual_signature_id(rout);
+        }  /* if */
+      }  /* if */
+      n++;
+    }  /* if */
+  }  /* for */
+  if (ecil_unsupported_reason == NULL) {
+    if (n > 1) qsort(funcs, n, sizeof(a_vfunc), compare_vfuncs);
+    for (i = 0; i < n; i++) {
+      word_vec_push(&words, funcs[i].gid);
+      word_vec_push(&words, funcs[i].slot);
+      word_vec_push(&words, funcs[i].flags);
+      word_vec_push(&words, funcs[i].sig);
+    }  /* for */
+  }  /* if */
+  if (ecil_unsupported_reason == NULL) {
+    saved = ecil_frame_enter_decl(frame);
+    ecil_rec_begin(frame, eop_class_vfuncs);
+    ecil_arg_uint(frame, gid);
+    ecil_arg_array(frame, words.words, words.size);
+    ecil_rec_end(frame);
+    ecil_frame_leave_decl(frame, saved);
+  }  /* if */
+  free(funcs);
+  /* CLASS_OVERRIDES: for every base entry (direct and indirect, repeated
+     non-virtual bases once per subobject), its own list. */
+  words.size = 0;
+  for (bcp = ctsp->base_classes;
+       bcp != NULL && ecil_unsupported_reason == NULL; bcp = bcp->next) {
+    an_overriding_virtual_function_ptr  ovr;
+
+    if (!bcp->is_pack_expansion) {
+      for (ovr = bcp->variant.overriding_virtual_functions;
+           ovr != NULL && ecil_unsupported_reason == NULL; ovr = ovr->next) {
+        if (!ovr->primary_function->is_consteval &&
+            !ovr->overriding_function->is_consteval) {
+          uint32_t  g_fn = ecil_function_id(frame, ovr->primary_function);
+          uint32_t  g_ovr = ecil_function_id(frame, ovr->overriding_function);
+
+          if (g_fn != 0 && g_ovr != 0 && ecil_unsupported_reason == NULL) {
+            word_vec_push(&words, g_fn);
+            word_vec_push(&words, (uint32_t)bcp->offset);
+            word_vec_push(&words, g_ovr);
+            word_vec_push(&words, ovr->base_class != NULL ?
+                                  (uint32_t)ovr->base_class->offset : 0u);
+          }  /* if */
+        }  /* if */
+      }  /* for */
+    }  /* if */
+  }  /* for */
+  if (ecil_unsupported_reason == NULL) {
+    saved = ecil_frame_enter_decl(frame);
+    ecil_rec_begin(frame, eop_class_overrides);
+    ecil_arg_uint(frame, gid);
+    ecil_arg_array(frame, words.words, words.size);
+    ecil_rec_end(frame);
+    ecil_frame_leave_decl(frame, saved);
+    ecil_gid_info(gid)->flags |= ECIL_GF_VTABLE_FACTS;
+  }  /* if */
+  free(words.words);
+}  /* send_vtable_facts */
+
+
+void ecil_class_layout_facts(an_ecil_frame *frame, a_type_ptr type)
+/*
+Make sure the layout facts of a class are sent (spec 12.2): a dynamic
+class's follow its record body; a plain class's are sent here, at the first
+need (a typeinfo, a catch parameter), after those of its bases (explicit
+stack).  Unsupported if the record has no body.
+*/
+{
+  size_t  base = class_stack_size;
+
+  if (push_class(skip_typerefs(type))) {
+    while (class_stack_size > base && ecil_unsupported_reason == NULL) {
+      a_type_ptr         c = class_stack[class_stack_size - 1];
+      uint32_t           gid = ecil_type_id(frame, c);
+      a_base_class_ptr   bp;
+      a_boolean          pushed = FALSE;
+
+      if (gid == 0 || ecil_unsupported_reason != NULL) {
+        /* (The reason is noted.) */
+      } else if ((ecil_gid_info(gid)->flags & (ECIL_GF_FAILED |
+                                               ECIL_GF_COMPLETE)) !=
+                 ECIL_GF_COMPLETE) {
+        ecil_note_unsupported_type(gid, "a class without a record body");
+      } else if ((ecil_gid_info(gid)->flags & ECIL_GF_LAYOUT_FACTS) != 0) {
+        class_stack_size--;
+      } else {
+        for (bp = record_direct_bases(c); bp != NULL && !pushed &&
+                                         ecil_unsupported_reason == NULL;
+             bp = bp->next_direct) {
+          uint32_t  bg = ecil_type_id(frame, bp->type);
+
+          if (bg != 0 && ecil_unsupported_reason == NULL &&
+              (ecil_gid_info(bg)->flags & ECIL_GF_LAYOUT_FACTS) == 0) {
+            pushed = push_class(skip_typerefs(bp->type));
+          }  /* if */
+        }  /* for */
+        if (!pushed && ecil_unsupported_reason == NULL) {
+          send_layout_facts(frame, c, gid);
+          class_stack_size--;
+        }  /* if */
+      }  /* if */
+    }  /* while */
+  }  /* if */
+  class_stack_size = base;
+}  /* ecil_class_layout_facts */
+
+
+void ecil_class_vtable_facts(an_ecil_frame *frame, a_type_ptr type)
+/*
+Make sure the vtable facts of a dynamic class are sent (spec 12.2): at its
+first need, after those of its dynamic bases (explicit stack).
+*/
+{
+  size_t  base = class_stack_size;
+
+  if (!ecil_class_is_dynamic(type)) {
+    ecil_note_unsupported("the vtable of a class that has no virtual "
+                          "function");
+  } else if (push_class(skip_typerefs(type))) {
+    while (class_stack_size > base && ecil_unsupported_reason == NULL) {
+      a_type_ptr         c = class_stack[class_stack_size - 1];
+      uint32_t           gid = ecil_type_id(frame, c);
+      a_base_class_ptr   bp;
+      a_boolean          pushed = FALSE;
+
+      if (gid == 0 || ecil_unsupported_reason != NULL) {
+        /* (The reason is noted.) */
+      } else if ((ecil_gid_info(gid)->flags & (ECIL_GF_FAILED |
+                                               ECIL_GF_COMPLETE)) !=
+                 ECIL_GF_COMPLETE) {
+        ecil_note_unsupported_type(gid, "a class without a record body");
+      } else if ((ecil_gid_info(gid)->flags & ECIL_GF_VTABLE_FACTS) != 0) {
+        class_stack_size--;
+      } else {
+        for (bp = record_direct_bases(c); bp != NULL && !pushed &&
+                                         ecil_unsupported_reason == NULL;
+             bp = bp->next_direct) {
+          uint32_t  bg = ecil_type_id(frame, bp->type);
+
+          if (bg != 0 && ecil_unsupported_reason == NULL &&
+              ecil_class_is_dynamic(bp->type) &&
+              (ecil_gid_info(bg)->flags & ECIL_GF_VTABLE_FACTS) == 0) {
+            pushed = push_class(skip_typerefs(bp->type));
+          }  /* if */
+        }  /* for */
+        if (!pushed && ecil_unsupported_reason == NULL) {
+          /* The covariant return classes whose facts the library needs come
+             first. */
+          pushed = push_covariant_return_class(frame, c);
+        }  /* if */
+        if (!pushed && ecil_unsupported_reason == NULL) {
+          send_vtable_facts(frame, c, gid);
+          ecil_gid_info(gid)->flags &= ~ECIL_GF_FACTS_BUSY;
+          class_stack_size--;
+        }  /* if */
+      }  /* if */
+    }  /* while */
+  }  /* if */
+  class_stack_size = base;
+}  /* ecil_class_vtable_facts */
+
+
+static void emit_class_abi_data(an_ecil_frame *frame, uint32_t gid);
+
+void ecil_note_vtable_used(an_ecil_frame *frame, a_type_ptr type)
+/*
+A kept record uses the vtable of a dynamic class (a VPTR_INIT, a constant of
+it): send its vtable facts, if they are not, and mark the vtable used, so that
+the end of the translation unit defines it (spec 12.8).  The mark is logged
+so that a dropped body can take it back (ecil_vtable_use_rollback).
+*/
+{
+  a_type_ptr  t = skip_typerefs(type);
+
+  ecil_class_vtable_facts(frame, t);
+  if (ecil_unsupported_reason == NULL) {
+    uint32_t  gid = ecil_gid_of(t);
+
+    if (gid != 0 && (ecil_gid_info(gid)->flags & ECIL_GF_VTABLE_USED) == 0) {
+      if (used_log_size == used_log_capacity) {
+        size_t    new_capacity = used_log_capacity == 0 ?
+                                 32 : used_log_capacity * 2;
+        uint32_t  *new_log = (uint32_t *)realloc(used_log,
+                                       new_capacity * sizeof(uint32_t));
+
+        if (new_log == NULL) {
+          ecil_note_unsupported("out of memory in the ECIL writer");
+        } else {
+          used_log = new_log;
+          used_log_capacity = new_capacity;
+        }  /* if */
+      }  /* if */
+      if (used_log_size < used_log_capacity) {
+        used_log[used_log_size++] = gid;
+        ecil_gid_info(gid)->flags |= ECIL_GF_VTABLE_USED;
+        if ((ecil_gid_info(gid)->flags & ECIL_GF_ABI_DONE) != 0 &&
+            ecil_gid_info(gid)->aux == 0) {
+          /* A local class whose function's region ended before anything used
+             its vtable (a constructor instantiated later, by make_unique<L>):
+             the vtable is decided now, in this frame; the class's IL is alive
+             since something of it is being translated. */
+          an_ecil_saved_reason  saved;
+
+          ecil_save_reason(&saved);
+          emit_class_abi_data(frame, gid);
+          ecil_unsupported_reason = NULL;
+          ecil_restore_reason(&saved);
+        }  /* if */
+      }  /* if */
+    }  /* if */
+  }  /* if */
+}  /* ecil_note_vtable_used */
+
+
+size_t ecil_vtable_use_mark(void)
+/*
+The position in the log of vtable uses, taken before a body or constant.
+*/
+{
+  return used_log_size;
+}  /* ecil_vtable_use_mark */
+
+
+void ecil_vtable_use_rollback(size_t mark)
+/*
+The body or constant after the mark was dropped: the vtables it marked used
+are not (unless another kept one did, which the earlier mark records).
+*/
+{
+  while (used_log_size > mark) {
+    ecil_gid_info(used_log[--used_log_size])->flags &= ~ECIL_GF_VTABLE_USED;
+  }  /* while */
+}  /* ecil_vtable_use_rollback */
+
+
+void ecil_vtable_use_commit(size_t mark)
+/*
+The body or constant after the mark was kept: its uses are final.
+*/
+{
+  if (used_log_size > mark) used_log_size = mark;
+}  /* ecil_vtable_use_commit */
+
+
+/* Vtables and class typeinfo (spec 12.3, 12.8). */
+
+/* What decides the linkage of a class's vtable and typeinfo. */
+typedef enum a_vtable_key {
+  vk_none,            /* No key function. */
+  vk_here,            /* The key function is defined here. */
+  vk_elsewhere,       /* The key function is not defined here. */
+  vk_explicit,        /* An explicit instantiation definition. */
+  vk_extern_template  /* extern template: defined elsewhere. */
+} a_vtable_key;
+
+/* The decision for a class: its vtable and typeinfo. */
+typedef struct a_class_abi_plan {
+  unsigned int  linkage;          /* An an_ecil_linkage value. */
+  a_boolean     comdat;
+  unsigned int  vtable_linkage;   /* The vtable's: the same, except for a
+                                     vtable that cannot be defined here. */
+  a_boolean     vtable_comdat;
+  a_boolean     tu_local;
+  a_boolean     vtable_dropped;   /* It would be defined here, but refers to
+                                     a function that was dropped. */
+  a_boolean     vtable_defined;   /* The vtable is defined here. */
+  a_boolean     vtable_declared;  /* ... or declared (it is used). */
+  a_boolean     typeinfo_defined; /* The typeinfo is defined here. */
+} a_class_abi_plan;
+
+static a_vtable_key vtable_key_of(a_type_ptr t)
+/*
+Classify a class by clang's key function rule (spec 12.8, decided at the end
+of the translation unit): the first virtual function declared in the class, in
+declaration order, that is not pure, not compiler-generated, not declared
+inline or constexpr and not defined inside the class definition; there is
+none if that function is later defined inline, and none for an implicit
+instance of a class template (an explicit specialization is an ordinary
+class).
+*/
+{
+  a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+  a_vtable_key                 key = vk_none;
+  a_routine_ptr                rout;
+
+  if (t->variant.class_struct_union.is_template_class &&
+      !t->variant.class_struct_union.is_specialized) {
+    if (t->variant.class_struct_union.explicitly_instantiated &&
+        !t->variant.class_struct_union.do_not_instantiate) {
+      key = vk_explicit;
+    } else if (t->variant.class_struct_union.do_not_instantiate) {
+      key = vk_extern_template;
+    }  /* if */
+  } else if (ctsp->assoc_scope != NULL) {
+    a_boolean  found = FALSE;
+
+    for (rout = ctsp->assoc_scope->routines; rout != NULL && !found;
+         rout = rout->next) {
+      if (rout->is_virtual && !rout->is_consteval && !rout->pure_virtual &&
+          !rout->compiler_generated && !rout->inline_in_class_definition) {
+        found = TRUE;
+        if (!rout->is_inline) {
+          uint32_t  g = ecil_gid_of(rout);
+
+          key = (g != 0 && (ecil_gid_info(g)->flags & ECIL_GF_DEFINED) != 0) ?
+                vk_here : vk_elsewhere;
+        }  /* if */
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return key;
+}  /* vtable_key_of */
+
+
+static a_boolean class_has_dropped_virtual_function(a_type_ptr c)
+/*
+Return TRUE if a virtual function of the class (not pure, not deleted) had its
+definition dropped as unsupported.
+*/
+{
+  a_class_type_supplement_ptr  ctsp = class_type_supp(c);
+  a_routine_ptr                rout;
+  a_boolean                    dropped = FALSE;
+
+  if (ctsp->assoc_scope != NULL) {
+    for (rout = ctsp->assoc_scope->routines; rout != NULL && !dropped;
+         rout = rout->next) {
+      uint32_t  g = ecil_gid_of(rout);
+
+      if (rout->is_virtual && !rout->is_consteval &&
+          !rout->pure_virtual && !rout->is_deleted && g != 0 &&
+          (ecil_gid_info(g)->decl_flags & ECIL_DECL_FUNC_UNSUPPORTED) != 0) {
+        dropped = TRUE;
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return dropped;
+}  /* class_has_dropped_virtual_function */
+
+
+static a_boolean vtable_would_refer_to_dropped_function(a_type_ptr t)
+/*
+Return TRUE if a function of the class or of a dynamic base (not pure, not
+deleted) had its definition dropped as unsupported: a vtable with vague
+linkage that referred to it cannot be defined here (spec 12.8).  The check
+is a superset of the functions the vtable refers to (an overridden function of
+a base is counted too).  The bases are the entries of the base class list
+(every class once per entry), and a class is looked at once (ECIL_GF_VISITED,
+cleared again), however many paths lead to it.
+*/
+{
+  a_boolean         dropped = class_has_dropped_virtual_function(t);
+  a_base_class_ptr  bcp;
+  a_word_vec        visited = { NULL, 0, 0 };
+  size_t            i;
+
+  for (bcp = class_type_supp(t)->base_classes; bcp != NULL && !dropped;
+       bcp = bcp->next) {
+    uint32_t  bg = ecil_gid_of(skip_typerefs(bcp->type));
+
+    if (bg != 0 && ecil_class_is_dynamic(bcp->type) &&
+        (ecil_gid_info(bg)->flags & ECIL_GF_VISITED) == 0) {
+      ecil_gid_info(bg)->flags |= ECIL_GF_VISITED;
+      word_vec_push(&visited, bg);
+      dropped = class_has_dropped_virtual_function(skip_typerefs(bcp->type));
+    }  /* if */
+  }  /* for */
+  for (i = 0; i < visited.size; i++) {
+    ecil_gid_info(visited.words[i])->flags &= ~ECIL_GF_VISITED;
+  }  /* for */
+  free(visited.words);
+  return dropped;
+}  /* vtable_would_refer_to_dropped_function */
+
+
+static void plan_class_abi(a_type_ptr t, uint32_t gid, a_class_abi_plan *plan)
+/*
+Decide the linkage of a class's vtable and typeinfo and whether the vtable and
+typeinfo are defined or declared here (spec 12.8).  The vtable is defined for
+a key function defined here, an explicit instantiation, and (with vague
+linkage) when it is used; declared when it is used and its key function is
+elsewhere.  The typeinfo has the linkage the vtable would have, whether or not
+the vtable is used.
+*/
+{
+  unsigned int  flags = ecil_gid_info(gid)->flags;
+  a_boolean     used = (flags & ECIL_GF_VTABLE_USED) != 0;
+  a_vtable_key  key = ecil_class_is_dynamic(t) ? vtable_key_of(t) : vk_none;
+  a_boolean     local = FALSE;
+
+  memset(plan, 0, sizeof(*plan));
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  plan->tu_local = cir_entity_is_tu_local(iek_type, t);
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+  local = type_is_function_local(t);
+  plan->linkage = (unsigned int)elk_external;
+  if (local) {
+    /* The linkage of the statics of the enclosing function (clang). */
+    a_routine_ptr  fn = enclosing_routine_for_local_type_or_null(t);
+
+    plan->linkage = (unsigned int)elk_internal;
+    if (fn != NULL && !plan->tu_local &&
+        (fn->storage_class == (a_storage_class)sc_unspecified) &&
+        routine_might_exist_in_multiple_copies(fn)) {
+      plan->linkage = (unsigned int)elk_linkonce_odr;
+      plan->comdat = TRUE;
+    }  /* if */
+    /* Internal: not unique across translation units, which the name string
+       of the typeinfo shows with a "*" as g++ writes it. */
+    if (plan->linkage == (unsigned int)elk_internal) plan->tu_local = TRUE;
+    plan->vtable_defined = used;
+    plan->typeinfo_defined = TRUE;
+  } else if (plan->tu_local) {
+    plan->linkage = (unsigned int)elk_internal;
+    plan->vtable_defined = used || key == vk_here;
+    plan->typeinfo_defined = TRUE;
+  } else {
+    switch (key) {
+      case vk_here:
+        plan->vtable_defined = TRUE;
+        plan->typeinfo_defined = TRUE;
+        break;
+      case vk_elsewhere:
+        plan->vtable_declared = used;
+        break;
+      case vk_extern_template:
+        plan->vtable_declared = used;
+        break;
+      case vk_explicit:
+        plan->linkage = (unsigned int)elk_weak_odr;
+        plan->comdat = TRUE;
+        plan->vtable_defined = TRUE;
+        plan->typeinfo_defined = TRUE;
+        break;
+      default:
+        plan->linkage = (unsigned int)elk_linkonce_odr;
+        plan->comdat = TRUE;
+        plan->vtable_defined = used;
+        plan->typeinfo_defined = TRUE;
+        break;
+    }  /* switch */
+  }  /* if */
+  plan->vtable_linkage = plan->linkage;
+  plan->vtable_comdat = plan->comdat;
+  if (plan->vtable_defined && plan->linkage != (unsigned int)elk_external &&
+      plan->linkage != (unsigned int)elk_internal &&
+      vtable_would_refer_to_dropped_function(t)) {
+    /* The vtable is an external declaration instead; the typeinfo, which
+       refers to no function, is unchanged (spec 12.8, a dropped function). */
+    plan->vtable_defined = FALSE;
+    plan->vtable_dropped = TRUE;
+    plan->vtable_declared = TRUE;
+    plan->vtable_linkage = (unsigned int)elk_external;
+    plan->vtable_comdat = FALSE;
+  }  /* if */
+}  /* plan_class_abi */
+
+
+static uint32_t emit_abi_data(an_ecil_frame *frame, unsigned int kind,
+                              uint32_t class_gid, unsigned int linkage,
+                              unsigned int flags)
+/*
+Introduce DECL_ABI_DATA (a vtable or a class typeinfo: the name is derived
+from CLASS_MANGLE) and return its G-id.
+*/
+{
+  uint32_t  gid = ecil_new_gid(egk_abi_data);
+
+  if (gid != 0) {
+    an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
+
+    ecil_gid_info(gid)->ref = class_gid;
+    ecil_gid_info(gid)->decl_linkage = linkage;
+    ecil_gid_info(gid)->decl_flags = flags;
+    ecil_gid_info(gid)->decl_emitted = TRUE;
+    ecil_rec_begin(frame, eop_decl_abi_data);
+    ecil_arg_uint(frame, gid);
+    ecil_arg_uint(frame, kind);
+    ecil_arg_uint(frame, class_gid);
+    ecil_arg_uint(frame, linkage);
+    ecil_arg_uint(frame, flags);
+    ecil_arg_nil(frame);
+    ecil_rec_end(frame);
+    ecil_frame_leave_decl(frame, saved);
+  }  /* if */
+  return gid;
+}  /* emit_abi_data */
+
+
+static unsigned int abi_flags_of(const a_class_abi_plan *plan,
+                                 a_boolean defined, a_boolean typeinfo)
+/*
+The DECL_ABI_DATA flags of a class's vtable or typeinfo: TU_LOCAL (the
+typeinfo name's "*" prefix, spec 12.3) is the typeinfo's only.
+*/
+{
+  return (defined ? ECIL_ABI_DATA_DEFINED_HERE : 0u) |
+         ((typeinfo ? plan->comdat : plan->vtable_comdat) ?
+                                           ECIL_ABI_DATA_COMDAT : 0u) |
+         (typeinfo && plan->tu_local ? ECIL_ABI_DATA_TU_LOCAL : 0u);
+}  /* abi_flags_of */
+
+
+static void reissue_abi_data(an_ecil_frame *frame, unsigned int kind,
+                             uint32_t gid, unsigned int linkage,
+                             unsigned int flags)
+/*
+Re-issue the DECL_ABI_DATA of gid (a vtable or class typeinfo that was
+introduced earlier) if the final linkage or flags differ from the last issue;
+the latest wins (spec 12.3).
+*/
+{
+  an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+  if (info->decl_linkage != linkage || info->decl_flags != flags) {
+    an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
+
+    ecil_rec_begin(frame, eop_decl_abi_data);
+    ecil_arg_uint(frame, gid);
+    ecil_arg_uint(frame, kind);
+    ecil_arg_uint(frame, info->ref);
+    ecil_arg_uint(frame, linkage);
+    ecil_arg_uint(frame, flags);
+    ecil_arg_nil(frame);
+    ecil_rec_end(frame);
+    ecil_frame_leave_decl(frame, saved);
+    info = ecil_gid_info(gid);
+    info->decl_linkage = linkage;
+    info->decl_flags = flags;
+  }  /* if */
+}  /* reissue_abi_data */
+
+
+static void reissue_class_typeinfos(an_ecil_frame *frame)
+/*
+At the end of the translation unit: the class typeinfo that a function's
+region introduced earlier may have a different final linkage (the key
+function of the class was defined later) or TU-locality: re-issue it.
+*/
+{
+  uint32_t  gid;
+  uint32_t  last = ecil_num_gids();
+
+  for (gid = 1; gid <= last; gid++) {
+    an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+    if (info->kind == egk_record && info->aux2 != 0 &&
+        (info->flags & (ECIL_GF_FUNCTION_LOCAL |
+                        ECIL_GF_TI_INCOMPLETE)) == 0 &&
+        info->entity != NULL) {
+      a_class_abi_plan  plan;
+
+      plan_class_abi((a_type_ptr)info->entity, gid, &plan);
+      reissue_abi_data(frame, 2u, info->aux2, plan.linkage,
+                       abi_flags_of(&plan, plan.typeinfo_defined, TRUE));
+    }  /* if */
+  }  /* for */
+}  /* reissue_class_typeinfos */
+
+
+static void issue_class_typeinfo(an_ecil_frame *frame, a_type_ptr t)
+/*
+Introduce the typeinfo DECL_ABI_DATA of a class and, first, those of its
+direct bases (a DEFINED_HERE class typeinfo needs the typeinfo of each direct
+base introduced first, spec 12.3).  A class's typeinfo is defined here unless
+its key function is elsewhere (an external declaration).  Needs the layout
+facts of every class it introduces (plain bases get theirs here).
+*/
+{
+  size_t  base = class_stack_size;
+
+  if (push_class(skip_typerefs(t))) {
+    while (class_stack_size > base && ecil_unsupported_reason == NULL) {
+      a_type_ptr        c = class_stack[class_stack_size - 1];
+      uint32_t          gid = ecil_type_id(frame, c);
+      a_base_class_ptr  bp;
+      a_boolean         pushed = FALSE;
+
+      if (gid == 0 || ecil_unsupported_reason != NULL) {
+        /* (The reason is noted.) */
+      } else if (ecil_gid_info(gid)->aux2 != 0) {
+        class_stack_size--;
+      } else {
+        for (bp = record_direct_bases(c); bp != NULL && !pushed &&
+                                         ecil_unsupported_reason == NULL;
+             bp = bp->next_direct) {
+          uint32_t  bg = ecil_type_id(frame, bp->type);
+
+          if (bg != 0 && ecil_unsupported_reason == NULL &&
+              ecil_gid_info(bg)->aux2 == 0) {
+            pushed = push_class(skip_typerefs(bp->type));
+          }  /* if */
+        }  /* for */
+        if (!pushed && ecil_unsupported_reason == NULL) {
+          a_class_abi_plan  plan;
+
+          ecil_class_layout_facts(frame, c);
+          if (ecil_unsupported_reason == NULL && ecil_class_is_dynamic(c)) {
+            /* A dynamic class's DECL_ABI_DATA needs its vtable facts too. */
+            ecil_class_vtable_facts(frame, c);
+          }  /* if */
+          plan_class_abi(c, gid, &plan);
+          if (ecil_unsupported_reason == NULL) {
+            uint32_t  ti = emit_abi_data(frame, 2u, gid, plan.linkage,
+                                         abi_flags_of(&plan,
+                                                     plan.typeinfo_defined,
+                                                     TRUE));
+
+            if (ti != 0) ecil_gid_info(gid)->aux2 = ti;
+          }  /* if */
+          class_stack_size--;
+        }  /* if */
+      }  /* if */
+    }  /* while */
+  }  /* if */
+  class_stack_size = base;
+}  /* issue_class_typeinfo */
+
+
+/* Typeinfo of types that are not complete classes (spec 12.3, 12.8). */
+
+typedef enum a_typeinfo_kind {
+  eti_class,
+  eti_incomplete_class,
+  eti_fundamental,
+  eti_pointer,
+  eti_member_pointer,
+  eti_function,
+  eti_array,
+  eti_enum,
+  eti_unsupported
+} a_typeinfo_kind;
+
+static a_type_ptr typeinfo_normalize(a_type_ptr type)
+/*
+The type whose typeinfo describes the type: a reference is its referent, and
+the top-level cv-qualifiers (and typedefs) are gone.
+*/
+{
+  type = skip_typerefs(type);
+  if (type->kind == tk_pointer && is_reference_type(type)) {
+    type = skip_typerefs(type_pointed_to(type));
+  }  /* if */
+  return type;
+}  /* typeinfo_normalize */
+
+
+static a_typeinfo_kind typeinfo_kind_of(a_type_ptr t)
+/*
+Classify a normalized type by the std::type_info class that describes it.
+*/
+{
+  a_typeinfo_kind  kind = eti_unsupported;
+
+  if (is_immediate_class_type(t)) {
+    kind = t->incomplete ? eti_incomplete_class : eti_class;
+  } else if (is_enum_type(t)) {
+    kind = eti_enum;
+  } else if (is_nullptr_type(t) || t->kind == tk_void) {
+    kind = eti_fundamental;
+  } else {
+    switch (t->kind) {
+      case tk_integer:
+        if (t->variant.integer.int_kind != ik_bit_precise &&
+            t->variant.integer.int_kind != ik_unsigned_bit_precise) {
+          kind = eti_fundamental;
+        }  /* if */
+        break;
+      case tk_float:
+        kind = eti_fundamental;
+        break;
+      case tk_pointer:
+        kind = eti_pointer;
+        break;
+      case tk_ptr_to_member:
+        kind = eti_member_pointer;
+        break;
+      case tk_routine:
+        kind = eti_function;
+        break;
+      case tk_array:
+        kind = eti_array;
+        break;
+      default:
+        break;
+    }  /* switch */
+  }  /* if */
+  return kind;
+}  /* typeinfo_kind_of */
+
+
+static a_type_ptr typeinfo_pointee(a_type_ptr t, a_type_ptr *raw)
+/*
+The type that the typeinfo of a pointer or member pointer refers to as its
+pointee, normalized (a noexcept function type loses its exception
+specification, which the mask records instead); *raw is the type as written,
+for its qualifiers.
+*/
+{
+  a_type_ptr  pointee = t->kind == tk_ptr_to_member ?
+                        pm_member_type(t) : t->variant.pointer.type;
+  a_type_ptr  result = skip_typerefs(pointee);
+
+  *raw = pointee;
+  if (result->kind == tk_routine && is_nothrow_type(result)) {
+    result = function_type_without_noexcept_exception_spec(result);
+  }  /* if */
+  return result;
+}  /* typeinfo_pointee */
+
+
+static a_boolean typeinfo_contains_incomplete_class(a_type_ptr t)
+/*
+Clang's ContainsIncompleteClassType: an incomplete class, or a pointer or
+member pointer that has one in its chain (also as the class of a member
+pointer).
+*/
+{
+  a_boolean  found = FALSE;
+  a_boolean  done = FALSE;
+
+  t = skip_typerefs(t);
+  while (!done) {
+    if (is_immediate_class_type(t)) {
+      found = t->incomplete;
+      done = TRUE;
+    } else if (t->kind == tk_pointer && !is_nullptr_type(t) &&
+               !is_reference_type(t)) {
+      t = skip_typerefs(t->variant.pointer.type);
+    } else if (t->kind == tk_ptr_to_member) {
+      if (skip_typerefs(pm_class_type(t))->incomplete) {
+        found = TRUE;
+        done = TRUE;
+      } else {
+        t = skip_typerefs(pm_member_type(t));
+      }  /* if */
+    } else {
+      done = TRUE;
+    }  /* if */
+  }  /* while */
+  return found;
+}  /* typeinfo_contains_incomplete_class */
+
+
+static a_boolean typeinfo_has_internal_local_class(an_ecil_frame *frame,
+                                                   a_type_ptr    t)
+/*
+Return TRUE if a class of the pointer chain of the type is local to a function
+whose statics are internal (its typeinfo has internal linkage: spec 12.8).
+*/
+{
+  a_boolean  found = FALSE;
+  a_boolean  done = FALSE;
+
+  t = skip_typerefs(t);
+  while (!done) {
+    if (is_immediate_class_type(t)) {
+      if (!t->incomplete && type_is_function_local(t)) {
+        uint32_t          gid = ecil_type_id(frame, t);
+        a_class_abi_plan  plan;
+
+        if (gid != 0) {
+          plan_class_abi(t, gid, &plan);
+          found = plan.linkage == (unsigned int)elk_internal;
+        }  /* if */
+      }  /* if */
+      done = TRUE;
+    } else if (t->kind == tk_pointer && !is_nullptr_type(t) &&
+               !is_reference_type(t)) {
+      t = skip_typerefs(t->variant.pointer.type);
+    } else if (t->kind == tk_ptr_to_member) {
+      a_type_ptr  cls = skip_typerefs(pm_class_type(t));
+
+      if (typeinfo_has_internal_local_class(frame, cls)) {
+        found = TRUE;
+        done = TRUE;
+      } else {
+        t = skip_typerefs(pm_member_type(t));
+      }  /* if */
+    } else {
+      done = TRUE;
+    }  /* if */
+  }  /* while */
+  return found;
+}  /* typeinfo_has_internal_local_class */
+
+
+static uint32_t typeinfo_name_sid(an_ecil_frame *frame, a_type_ptr t)
+/*
+The sid of the name (_ZTI...) of the typeinfo of a type that is not a class.
+*/
+{
+  uint32_t  sid = 0;
+
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  const char  *text = mangled_typeinfo_name(t);
+
+  if (text != NULL) sid = ecil_intern_cstring(frame, text);
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
+  (void)frame;
+  (void)t;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+  return sid;
+}  /* typeinfo_name_sid */
+
+
+static uint32_t typeinfo_find(an_ecil_frame *frame, a_type_ptr t)
+/*
+The G-id of the typeinfo of a normalized type if it has been introduced, or
+0.
+*/
+{
+  uint32_t         gid = 0;
+  a_typeinfo_kind  kind = typeinfo_kind_of(t);
+
+  if (kind == eti_class || kind == eti_incomplete_class) {
+    uint32_t  rec = ecil_gid_of(t);
+
+    if (rec != 0) gid = ecil_gid_info(rec)->aux2;
+  } else if (kind != eti_unsupported) {
+    uint32_t  key[2];
+    uint32_t  sid = typeinfo_name_sid(frame, t);
+
+    if (sid != 0) {
+      key[0] = (uint32_t)egk_abi_data;
+      key[1] = sid;
+      gid = ecil_word_lookup(key, 2);
+    }  /* if */
+  }  /* if */
+  return gid;
+}  /* typeinfo_find */
+
+
+static void issue_incomplete_class_typeinfo(an_ecil_frame *frame,
+                                            a_type_ptr    t)
+/*
+The typeinfo of an incomplete class: a plain __class_type_info without bases
+or CLASS_INFO, internal (spec 12.3).  The decision is sticky: it stays when
+the class is completed later (as in clang).
+*/
+{
+  uint32_t  gid = ecil_type_id(frame, t);
+
+  if (gid != 0 && ecil_unsupported_reason == NULL) {
+    uint32_t  sid = intern_class_mangle(frame, t);
+
+    if (sid == 0) {
+      ecil_note_unsupported("the mangled name of an incomplete class");
+    } else {
+      uint32_t  ti;
+
+      emit_class_mangle(frame, gid, sid);
+      ti = emit_abi_data(frame, 2u, gid, (unsigned int)elk_internal,
+                         ECIL_ABI_DATA_DEFINED_HERE);
+      if (ti != 0) {
+        ecil_gid_info(gid)->aux2 = ti;
+        ecil_gid_info(gid)->flags |= ECIL_GF_TI_INCOMPLETE;
+      }  /* if */
+    }  /* if */
+  }  /* if */
+}  /* issue_incomplete_class_typeinfo */
+
+
+static a_boolean typeinfo_is_stdlib_fundamental(a_type_ptr t)
+/*
+Return TRUE for a fundamental type whose typeinfo the C++ runtime library
+defines (an external declaration here).
+*/
+{
+  return typeinfo_kind_of(t) == eti_fundamental;
+}  /* typeinfo_is_stdlib_fundamental */
+
+
+static uint32_t emit_non_class_typeinfo(an_ecil_frame *frame, a_type_ptr t,
+                                        a_typeinfo_kind kind,
+                                        uint32_t ga, uint32_t gb)
+/*
+Introduce DECL_ABI_DATA and TYPEINFO_DEF of the typeinfo of a type that is
+not a class, whose parts (the typeinfo of a pointee, of the class of a member
+pointer) have been introduced (spec 12.3, 12.8).  Linkage: a fundamental
+type and a pointer to a cv-unqualified or const one are external declarations
+(the runtime library has them), the typeinfo of a type that is TU-local, or
+whose pointer chain has an incomplete class, is internal, and any other is
+linkonce_odr in a COMDAT group.  The masks come from the pointee's
+qualifiers; an incomplete chain has INCOMPLETE at each level of the chain.
+Return the G-id.
+*/
+{
+  uint32_t       sid = typeinfo_name_sid(frame, t);
+  uint32_t       et = ecil_type_id(frame, t);
+  uint32_t       gid = 0;
+  unsigned int   masks = 0;
+  unsigned int   linkage = (unsigned int)elk_linkonce_odr;
+  unsigned int   abi_flags = ECIL_ABI_DATA_DEFINED_HERE | ECIL_ABI_DATA_COMDAT;
+  a_boolean      defined = TRUE;
+  a_type_ptr     pointee = NULL;
+  a_type_ptr     raw = NULL;
+
+  if (kind == eti_pointer || kind == eti_member_pointer) {
+    a_type_qualifier_set  quals;
+
+    pointee = typeinfo_pointee(t, &raw);
+    /* The qualifiers of an array are those of its element (also through
+       arrays of arrays), as clang's extractPBaseFlags looks. */
+    quals = f_get_type_qualifiers(raw, FALSE);
+    if (quals & TQ_CONST) masks |= ECIL_TYPEINFO_CONST;
+    if (quals & TQ_VOLATILE) masks |= ECIL_TYPEINFO_VOLATILE;
+    if (quals & TQ_RESTRICT) masks |= ECIL_TYPEINFO_RESTRICT;
+    if (typeinfo_contains_incomplete_class(pointee)) {
+      masks |= ECIL_TYPEINFO_INCOMPLETE;
+    }  /* if */
+    if (kind == eti_member_pointer &&
+        skip_typerefs(pm_class_type(t))->incomplete) {
+      masks |= ECIL_TYPEINFO_INCOMPLETE_CLASS;
+    }  /* if */
+    if (skip_typerefs(raw)->kind == tk_routine &&
+        is_nothrow_type(skip_typerefs(raw))) {
+      masks |= ECIL_TYPEINFO_NOEXCEPT;
+    }  /* if */
+  }  /* if */
+  if (kind == eti_fundamental ||
+      (kind == eti_pointer && (masks & ~ECIL_TYPEINFO_CONST) == 0 &&
+       typeinfo_is_stdlib_fundamental(pointee))) {
+    linkage = (unsigned int)elk_external;
+    abi_flags = 0;
+    defined = FALSE;
+  } else {
+    a_boolean  tu_local = FALSE;
+    a_boolean  internal;
+
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+    tu_local = cir_entity_is_tu_local(iek_type, t);
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+    if (!tu_local && typeinfo_has_internal_local_class(frame, t)) {
+      tu_local = TRUE;
+    }  /* if */
+    internal = tu_local || typeinfo_contains_incomplete_class(t);
+    if (internal) {
+      linkage = (unsigned int)elk_internal;
+      abi_flags = ECIL_ABI_DATA_DEFINED_HERE |
+                  (tu_local ? ECIL_ABI_DATA_TU_LOCAL : 0u);
+    }  /* if */
+  }  /* if */
+  if (sid == 0) {
+    ecil_note_unsupported("the mangled name of a type's typeinfo");
+  } else if (et != 0 && ecil_unsupported_reason == NULL) {
+    uint32_t  key[2];
+
+    gid = ecil_new_gid(egk_abi_data);
+    if (gid != 0) {
+      an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
+
+      key[0] = (uint32_t)egk_abi_data;
+      key[1] = sid;
+      ecil_word_register(key, 2, gid);
+      ecil_gid_info(gid)->ref = et;
+      ecil_gid_info(gid)->decl_linkage = linkage;
+      ecil_gid_info(gid)->decl_flags = abi_flags;
+      ecil_gid_info(gid)->decl_emitted = TRUE;
+      ecil_rec_begin(frame, eop_decl_abi_data);
+      ecil_arg_uint(frame, gid);
+      ecil_arg_uint(frame, 2u);
+      ecil_arg_uint(frame, et);
+      ecil_arg_uint(frame, linkage);
+      ecil_arg_uint(frame, abi_flags);
+      ecil_arg_uint(frame, sid);
+      ecil_rec_end(frame);
+      ecil_rec_begin(frame, eop_typeinfo_def);
+      ecil_arg_uint(frame, gid);
+      ecil_arg_uint(frame, kind == eti_fundamental ?
+                           (unsigned int)etik_fundamental :
+                           kind == eti_pointer ? (unsigned int)etik_pointer :
+                           kind == eti_member_pointer ?
+                                       (unsigned int)etik_member_pointer :
+                           kind == eti_function ?
+                                       (unsigned int)etik_function :
+                           kind == eti_array ? (unsigned int)etik_array :
+                                               (unsigned int)etik_enum);
+      ecil_arg_uint(frame, masks);
+      if (ga != 0) {
+        ecil_arg_uint(frame, ga);
+      } else {
+        ecil_arg_nil(frame);
+      }  /* if */
+      if (gb != 0) {
+        ecil_arg_uint(frame, gb);
+      } else {
+        ecil_arg_nil(frame);
+      }  /* if */
+      ecil_rec_end(frame);
+      ecil_frame_leave_decl(frame, saved);
+    }  /* if */
+  }  /* if */
+  (void)defined;
+  return gid;
+}  /* emit_non_class_typeinfo */
+
+
+static a_boolean push_typeinfo_type(a_type_ptr t)
+/*
+Push a type on the typeinfo work stack; FALSE if memory ran out (the reason
+is noted).
+*/
+{
+  a_boolean  ok = TRUE;
+
+  if (typeinfo_stack_size == typeinfo_stack_capacity) {
+    size_t      new_capacity = (typeinfo_stack_capacity == 0) ?
+                               32 : typeinfo_stack_capacity * 2;
+    a_type_ptr  *new_stack = (a_type_ptr *)realloc(typeinfo_stack,
+                                      new_capacity * sizeof(a_type_ptr));
+
+    if (new_stack == NULL) {
+      ecil_note_unsupported("out of memory in the ECIL writer");
+      ok = FALSE;
+    } else {
+      typeinfo_stack = new_stack;
+      typeinfo_stack_capacity = new_capacity;
+    }  /* if */
+  }  /* if */
+  if (ok) typeinfo_stack[typeinfo_stack_size++] = t;
+  return ok;
+}  /* push_typeinfo_type */
+
+
+uint32_t ecil_typeinfo_id(an_ecil_frame *frame, a_type_ptr type)
+/*
+The G-id of the typeinfo (DECL_ABI_DATA) of a type, a class or not.  Its
+parts are introduced first: the typeinfo of the pointee of a pointer and of
+the member type and class of a member pointer, and of a class's bases
+(issue_class_typeinfo).  The work is a stack of types, not a recursion.
+Return 0, having noted why, if it is not expressible.
+*/
+{
+  size_t      base = typeinfo_stack_size;
+  a_type_ptr  root = typeinfo_normalize(type);
+  uint32_t    result = 0;
+
+  if (push_typeinfo_type(root)) {
+    while (typeinfo_stack_size > base && ecil_unsupported_reason == NULL) {
+      a_type_ptr       t = typeinfo_stack[typeinfo_stack_size - 1];
+      a_typeinfo_kind  kind = typeinfo_kind_of(t);
+      uint32_t         gid = 0;
+
+      if (kind == eti_unsupported) {
+        ecil_note_unsupported("the typeinfo of a type that is not "
+                              "supported");
+      } else if (typeinfo_find(frame, t) != 0) {
+        typeinfo_stack_size--;
+      } else if (kind == eti_class) {
+        issue_class_typeinfo(frame, t);
+        typeinfo_stack_size--;
+      } else if (kind == eti_incomplete_class) {
+        issue_incomplete_class_typeinfo(frame, t);
+        typeinfo_stack_size--;
+      } else {
+        a_type_ptr  child_a = NULL;
+        a_type_ptr  child_b = NULL;
+        a_type_ptr  raw;
+        uint32_t    ga = 0;
+        uint32_t    gb = 0;
+        a_boolean   pushed = FALSE;
+
+        if (kind == eti_pointer || kind == eti_member_pointer) {
+          child_a = typeinfo_pointee(t, &raw);
+        }  /* if */
+        if (kind == eti_member_pointer) {
+          child_b = skip_typerefs(pm_class_type(t));
+        }  /* if */
+        if (child_a != NULL) {
+          ga = typeinfo_find(frame, child_a);
+          if (ga == 0) pushed = push_typeinfo_type(child_a);
+        }  /* if */
+        if (child_b != NULL && !pushed) {
+          gb = typeinfo_find(frame, child_b);
+          if (gb == 0) pushed = push_typeinfo_type(child_b);
+        }  /* if */
+        if (!pushed && ecil_unsupported_reason == NULL) {
+          gid = emit_non_class_typeinfo(frame, t, kind, ga, gb);
+          typeinfo_stack_size--;
+          if (gid == 0 && ecil_unsupported_reason == NULL) {
+            ecil_note_unsupported("a typeinfo that could not be "
+                                  "introduced");
+          }  /* if */
+        }  /* if */
+      }  /* if */
+    }  /* while */
+    if (ecil_unsupported_reason == NULL) result = typeinfo_find(frame, root);
+  }  /* if */
+  typeinfo_stack_size = base;
+  return result;
+}  /* ecil_typeinfo_id */
+
+
+#if CHECKING
+static void check_virtual_function_available(a_routine_ptr rout)
+/*
+A virtual function that a vtable defined here refers to (not pure or
+deleted) is defined here, or declared with external linkage (another
+translation unit defines it), or was dropped as unsupported (the library then
+decides, spec 12.8), or has internal linkage and no definition: the program
+declared it in an unnamed namespace or a local class and never defined it (the
+front end warns "used but never defined"), which is no error for the vtable
+until the function is called.
+*/
+{
+  if (rout->is_virtual && !rout->is_consteval && !rout->pure_virtual &&
+      !rout->is_deleted) {
+    uint32_t  g = ecil_gid_of(rout);
+
+    check_assertion(g != 0 &&
+                    ((ecil_gid_info(g)->flags & ECIL_GF_DEFINED) != 0 ||
+                     ecil_gid_info(g)->decl_linkage ==
+                                           (unsigned int)elk_external ||
+                     (ecil_gid_info(g)->decl_linkage ==
+                                           (unsigned int)elk_internal &&
+                      !rout->defined) ||
+                     (ecil_gid_info(g)->decl_flags &
+                                ECIL_DECL_FUNC_UNSUPPORTED) != 0));
+  }  /* if */
+}  /* check_virtual_function_available */
+
+
+static void check_vtable_members_available(a_type_ptr t)
+/*
+A vtable defined here refers to every function in it that is not pure or
+deleted: the class's own virtual functions and, for each base class, the final
+overrider of each of its virtual functions (a base's function that no class
+overrides is its own).  Each is available (check_virtual_function_available).
+(The front end's virtual_functions_marked_as_required is not an invariant of a
+used vtable: a class whose vtable a derived class's constructor uses can lack
+it, so it is not checked.)
+*/
+{
+  a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+  a_routine_ptr                rout;
+  a_base_class_ptr             bcp;
+
+  if (ctsp->assoc_scope != NULL) {
+    for (rout = ctsp->assoc_scope->routines; rout != NULL;
+         rout = rout->next) {
+      check_virtual_function_available(rout);
+    }  /* for */
+  }  /* if */
+  for (bcp = ctsp->base_classes; bcp != NULL; bcp = bcp->next) {
+    a_type_ptr  b = skip_typerefs(bcp->type);
+
+    if (!bcp->is_pack_expansion && is_immediate_class_type(b) &&
+        class_type_supp(b)->assoc_scope != NULL) {
+      for (rout = class_type_supp(b)->assoc_scope->routines; rout != NULL;
+           rout = rout->next) {
+        if (rout->is_virtual) {
+          an_overriding_virtual_function_ptr  ovr;
+          a_routine_ptr                       final = rout;
+
+          for (ovr = bcp->variant.overriding_virtual_functions;
+               ovr != NULL; ovr = ovr->next) {
+            if (ovr->primary_function == rout) {
+              final = ovr->overriding_function;
+              break;
+            }  /* if */
+          }  /* for */
+          check_virtual_function_available(final);
+        }  /* if */
+      }  /* for */
+    }  /* if */
+  }  /* for */
+}  /* check_vtable_members_available */
+#endif /* CHECKING */
+
+
+static void emit_class_abi_data(an_ecil_frame *frame, uint32_t gid)
+/*
+Decide and send the vtable and class typeinfo of a dynamic class (spec 12.8).
+The failure of one class (a function that cannot be declared) drops that
+class's vtable only: its own reason is not the caller's.
+*/
+{
+  a_type_ptr        t = (a_type_ptr)ecil_gid_info(gid)->entity;
+  a_class_abi_plan  plan;
+  an_ecil_saved_reason  caller_reason;
+
+  ecil_save_reason(&caller_reason);
+  plan_class_abi(t, gid, &plan);
+  if (plan.vtable_defined || plan.vtable_declared) {
+    ecil_class_vtable_facts(frame, t);
+  }  /* if */
+  if (ecil_unsupported_reason == NULL && rtti_enabled &&
+      (plan.vtable_defined || plan.vtable_declared)) {
+    /* The vtable of a class, even one that is only declared, refers to the
+       typeinfo of its class (declared when the key function is elsewhere).
+       With rtti = 0 the RTTI slot is null and there is no typeinfo for a
+       vtable (spec 12.6). */
+    issue_class_typeinfo(frame, t);
+    if (plan.vtable_defined && t->variant.class_struct_union.
+                                              any_virtual_base_classes) {
+      /* The construction vtables (_ZTC) of a class with virtual bases have
+         the typeinfo of their base in the RTTI slot: every dynamic base,
+         indirect ones included (spec 12.8). */
+      a_base_class_ptr  bcp;
+
+      for (bcp = class_type_supp(t)->base_classes; bcp != NULL &&
+                                       ecil_unsupported_reason == NULL;
+           bcp = bcp->next) {
+        if (ecil_class_is_dynamic(bcp->type)) {
+          issue_class_typeinfo(frame, skip_typerefs(bcp->type));
+        }  /* if */
+      }  /* for */
+    }  /* if */
+  }  /* if */
+#if CHECKING
+  if (ecil_unsupported_reason == NULL && plan.vtable_defined) {
+    check_vtable_members_available(t);
+  }  /* if */
+#endif /* CHECKING */
+  if (ecil_unsupported_reason == NULL &&
+      (plan.vtable_defined || plan.vtable_declared)) {
+    uint32_t  tv = emit_abi_data(frame, 0u, gid, plan.vtable_linkage,
+                                 abi_flags_of(&plan, plan.vtable_defined,
+                                              FALSE));
+
+    if (tv != 0) ecil_gid_info(gid)->aux = tv;
+    if (tv != 0 && t->variant.class_struct_union.any_virtual_base_classes) {
+      /* The VTT follows the vtable, with its linkage (spec 12.3). */
+      (void)emit_abi_data(frame, 1u, gid, plan.vtable_linkage,
+                          abi_flags_of(&plan, plan.vtable_defined, FALSE));
+    }  /* if */
+  }  /* if */
+  if (plan.vtable_dropped) {
+    char  message[ECIL_DIAGNOSTIC_MAX];
+
+    (void)snprintf(message, sizeof(message),
+                   "the virtual table of \"%.200s\" refers to a function "
+                   "whose definition was dropped; it is not defined here",
+                   ecil_entity_name(&t->source_corresp) != NULL ?
+                          ecil_entity_name(&t->source_corresp) : "?");
+    cir_be_warning(message);
+  }  /* if */
+  if (ecil_unsupported_reason != NULL) {
+    char  message[ECIL_DIAGNOSTIC_MAX];
+
+    (void)snprintf(message, sizeof(message),
+                   "the vtable of \"%.200s\" uses %.*s, which the CIR back "
+                   "end does not support; the class's virtual table is "
+                   "dropped",
+                   ecil_entity_name(&t->source_corresp) != NULL ?
+                          ecil_entity_name(&t->source_corresp) : "?",
+                   ECIL_REASON_MAX - 1, ecil_unsupported_reason);
+    cir_be_warning(message);
+  }  /* if */
+  ecil_restore_reason(&caller_reason);
+}  /* emit_class_abi_data */
+
+
+void ecil_emit_class_abi_data(an_ecil_frame *frame, a_boolean local_classes)
+/*
+Send the vtable and class typeinfo DECL_ABI_DATA of the dynamic classes
+recorded since the last call: at the end of a function's region for the
+classes local to it (their entities are alive), at the end of the translation
+unit for the others (key functions and "used" are final).
+*/
+{
+  size_t  i;
+
+  /* At the end of the translation unit every name is final: a function
+     declared now gets its name at once. */
+  if (!local_classes) resolving_late_names = TRUE;
+  for (i = 0; i < num_dynamic_classes; i++) {
+    uint32_t  gid = dynamic_classes[i];
+    unsigned int  flags = ecil_gid_info(gid)->flags;
+
+    if ((flags & ECIL_GF_ABI_DONE) == 0 &&
+        ((flags & ECIL_GF_FUNCTION_LOCAL) != 0) == local_classes) {
+      ecil_gid_info(gid)->flags |= ECIL_GF_ABI_DONE;
+      emit_class_abi_data(frame, gid);
+    }  /* if */
+  }  /* for */
+  if (!local_classes) reissue_class_typeinfos(frame);
+  resolving_late_names = FALSE;
+  if (local_classes) {
+    /* The local classes are done: forget them. */
+    size_t  kept = 0;
+
+    for (i = 0; i < num_dynamic_classes; i++) {
+      if ((ecil_gid_info(dynamic_classes[i])->flags &
+                                           ECIL_GF_FUNCTION_LOCAL) == 0) {
+        dynamic_classes[kept++] = dynamic_classes[i];
+      }  /* if */
+    }  /* for */
+    num_dynamic_classes = kept;
+  }  /* if */
+}  /* ecil_emit_class_abi_data */
 
 
 static a_boolean routine_instance_is_not_needed(a_routine_ptr rout)
@@ -2747,6 +5093,7 @@ pair the base variant is named.
       if (info->kind == egk_func && info->entity != NULL &&
           (info->flags & ECIL_GF_FUNCTION_LOCAL) == 0 &&
           info->variant != ECIL_VARIANT_COMPLETE &&
+          info->variant != ECIL_VARIANT_DELETING &&
           ((info->flags & ECIL_GF_DEFINED) != 0 ||
            (info->decl_flags & ECIL_DECL_FUNC_UNSUPPORTED) != 0)) {
         a_routine_ptr  rout = (a_routine_ptr)info->entity;
@@ -2846,6 +5193,25 @@ named when it was sent and assert that the name did not change.
       }  /* if */
     }  /* for */
     resolving_late_names = FALSE;
+    /* The mangled name of a class may have changed since CLASS_MANGLE was sent
+       (a typedef name for linkage came after the class was needed): the
+       latest CLASS_MANGLE wins (spec 12.2).  A class local to a function is
+       gone by now; its name was final when its region ended. */
+    for (gid = 1; gid <= last; gid++) {
+      an_ecil_gid_info  *info = ecil_gid_info(gid);
+
+      if (info->kind == egk_record &&
+          (info->flags & ECIL_GF_LAYOUT_FACTS) != 0 &&
+          (info->flags & ECIL_GF_FUNCTION_LOCAL) == 0 &&
+          info->entity != NULL) {
+        uint32_t  sid = intern_class_mangle(frame, (a_type_ptr)info->entity);
+
+        info = ecil_gid_info(gid);
+        if (sid != 0 && sid != info->decl_name) {
+          emit_class_mangle(frame, gid, sid);
+        }  /* if */
+      }  /* if */
+    }  /* for */
     /* A #pragma redefine_extname (and the alias fixups) is applied at the end
        of the translation unit: a function whose name was sent before gets
        its asm name now.  The name of the entity is updated (spec 7). */
@@ -3136,11 +5502,16 @@ own alignment attribute, or that of a typedef with an alignment attribute.
 */
 {
   a_targ_alignment  result = var->alignment;
-  a_targ_alignment  declared = var->type->alignment;
+  a_targ_alignment  natural = skip_typerefs(var->type)->alignment;
+  a_type_ptr        t = var->type;
 
-  if (declared > result && declared > skip_typerefs(var->type)->alignment) {
-    result = declared;
-  }  /* if */
+  /* The typedef may sit under a cv-qualified type (volatile t_align). */
+  while (t->kind == tk_typeref) {
+    if (t->alignment > result && t->alignment > natural) {
+      result = t->alignment;
+    }  /* if */
+    t = t->variant.typeref.type;
+  }  /* while */
   return result;
 }  /* ecil_variable_alignment */
 

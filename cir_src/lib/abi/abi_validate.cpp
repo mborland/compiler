@@ -213,6 +213,13 @@ The consistency checks of the class facts.
                            cf.primary != no_id || !cf.vbases.empty()))
       problem = "class " + cf.name + " has virtual functions, a primary base "
                 "or virtual bases but no vptr";
+    /* A virtual base may start at or after the end of the non-virtual data
+       (the largest end of the non-empty non-virtual fields), not only after
+       nvsize: an empty base at the end counts a byte in nvsize and a virtual
+       base is placed over it (empty10: nvsize 13, virtual base at 12). */
+    const int64_t data_end = cf.nv_data_end >= 0 ? cf.nv_data_end
+                                                 : cf.nvsize;
+
     for (size_t k = 0; problem.empty() && k < cf.bases.size(); ++k) {
       const a_base_fact &b = cf.bases[k];
       const a_class_fact &bf = classes[b.cls];
@@ -224,7 +231,8 @@ The consistency checks of the class facts.
       if (b.offset < 0 || b.offset + bf.nvsize > cf.size)
         problem = "class " + cf.name + ": base " + bf.name + " at offset " +
                   number(b.offset) + " does not fit";
-      else if (b.is_virtual && b.offset < cf.nvsize && bf.nvsize != 0 &&
+      else if (b.is_virtual && b.offset < data_end &&
+               bf.nvsize != 0 &&
                has_own_storage(*this, static_cast<a_class_id>(c), b.cls))
         problem = "class " + cf.name + ": virtual base " + bf.name +
                   " is inside the non-virtual part";

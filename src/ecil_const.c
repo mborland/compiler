@@ -112,13 +112,17 @@ Position the streaming cursor at the start of one aggregate constant.
   level->done = FALSE;
   level->cur = 0;
   level->lead = 0;
+  level->vptr_shift = 0;
   if (!level->is_array) {
     a_field_ptr  first = t->variant.class_struct_union.field_list;
 
-    /* The base classes come first in the record (and have the first
-       indexes): the data members start at the index of the first one. */
+    /* The vptr (field 0 of a class with one of its own: the front end's
+       constants list none) and the base classes come first in the record: the
+       data members start at the index of the first one.  The entries are
+       numbered without the vptr, the records with it (spec 12.7). */
+    if (!C_mode() && ecil_class_has_own_vptr(t)) level->vptr_shift = 1;
     if (first != NULL && !C_mode() && ecil_gid_of(first) != 0) {
-      level->lead = (uint64_t)ecil_gid_of(first) - 1;
+      level->lead = (uint64_t)ecil_gid_of(first) - 1 - level->vptr_shift;
     }  /* if */
   }  /* if */
   level->cur_field = (level->is_array || level->lead != 0) ? NULL :
@@ -169,6 +173,30 @@ Designators are consumed.  Return FALSE when the list is exhausted.
       *index = level->cur;
       *value = c;
       found = TRUE;
+      if (!level->is_array && !level->is_union && level->lead != 0 &&
+          level->cur >= level->lead && level->cur_field == NULL &&
+          c->kind == (a_constant_repr_kind)ck_aggregate &&
+          !C_mode() && class_type_supp(level->type) != NULL) {
+        /* A base class initializer after the data members (the front end
+           lists the base last in C++17 for "{ .x = 1 }"): it is the entry
+           of that base. */
+        a_base_class_ptr  base;
+        uint64_t          n = 0;
+
+        for (base = class_type_supp(level->type)->direct_base_classes;
+             base != NULL; base = base->next) {
+          if (base->direct) {
+            if (n < level->lead &&
+                skip_typerefs(base->type) == skip_typerefs(c->type)) {
+              *index = n;
+              level->cur = n;
+              level->cur_field = NULL;
+              break;
+            }  /* if */
+            n++;
+          }  /* if */
+        }  /* for */
+      }  /* if */
       if (c->kind == (a_constant_repr_kind)ck_init_repeat &&
           c->variant.init_repeat.multidimensional_aggr_tail_not_repeated) {
         /* GCC's layout of "[0 ... 5].a[1 ... 2].b = 4, 5": the tail goes to
@@ -498,6 +526,12 @@ Start walking the entries of an aggregate (see ecil_write.h).
   level->entry_sources = NULL;
   level->entry_num_sources = 0;
   level->skip_constants = FALSE;
+  level->addr_lid = 0;
+  level->num_partial = 0;
+  level->partial_pending = FALSE;
+  level->partial_index = 0;
+  level->partial_count = 0;
+  level->partial_type = NULL;
   level->entry_count = 1;
   level->entry_is_char = FALSE;
   for (s = 0; s < num_sources - 1 &&
@@ -908,6 +942,10 @@ having noted why, if the address is not expressible.
       g = ecil_function_id(frame, c->variant.address.variant.routine);
       *is_function = TRUE;
       break;
+    case abk_typeid:
+      /* &typeid(T): the address of the typeinfo object (constexpr). */
+      g = ecil_typeinfo_id(frame, c->variant.address.variant.type);
+      break;
     case abk_constant:
       if (c->variant.address.variant.constant->kind ==
               (a_constant_repr_kind)ck_string) {
@@ -923,6 +961,160 @@ having noted why, if the address is not expressible.
   }  /* switch */
   return g;
 }  /* ecil_address_constant_gid */
+
+
+static a_boolean in_var_init = FALSE;
+/* TRUE while the constant of a VAR_INIT is built: a C_METHOD with a non-zero
+   adjustment is valid only there (spec 12.4). */
+
+static a_boolean pm_data_member_offset(a_constant_ptr c, uint64_t *offset)
+/*
+Set *offset to the byte offset, in the complete class of the type of the
+pointer to a data member constant c, of the member it designates: the
+member's own offset (plus those of the anonymous unions that contain it) and
+the offset of the base subobject that the pointer was converted through
+(spec 12.4).  Return FALSE, having noted why, if it is not expressible.
+*/
+{
+  a_field_ptr       field = c->variant.ptr_to_member.variant.field;
+  a_base_class_ptr  bcp = c->variant.ptr_to_member.casting_base_class;
+  a_targ_ptrdiff_t  total = 0;
+  a_boolean         ok = TRUE;
+
+  if (field->is_bit_field) {
+    ok = FALSE;
+    ecil_note_unsupported("a pointer to a bit-field");
+  } else if (bcp != NULL && bcp->is_virtual) {
+    ok = FALSE;
+    ecil_note_unsupported("a pointer to a member converted through a "
+                          "virtual base class");
+  }  /* if */
+  while (ok && field != NULL) {
+    a_type_ptr                   field_class = parent_class_of(field);
+    a_class_type_supplement_ptr  ctsp = class_type_supp(field_class);
+
+    total += (a_targ_ptrdiff_t)field->offset;
+    if (field_class->variant.class_struct_union.
+                                       is_nonstd_anonymous_union_type) {
+      /* A non-standard anonymous union or struct: go to its parent. */
+      a_symbol_ptr  field_sym = symbol_for(field);
+
+      field_sym = field_sym == NULL ? NULL :
+                  field_sym->variant.field.anonymous_parent_object;
+      if (field_sym == NULL || field_sym->kind != (a_symbol_kind)sk_field) {
+        ok = FALSE;
+        ecil_note_unsupported("a pointer to a member of an anonymous "
+                              "union");
+      } else {
+        field = field_sym->variant.field.ptr;
+      }  /* if */
+    } else if (ctsp->anonymous_union_kind == (an_anonymous_union_kind)
+                                                                auk_field) {
+      field = ctsp->anonymous_union_field;
+    } else {
+      field = NULL;
+    }  /* if */
+  }  /* while */
+  if (ok && bcp != NULL) {
+    if (c->variant.ptr_to_member.cast_to_base) {
+      total -= (a_targ_ptrdiff_t)bcp->offset;
+    } else {
+      total += (a_targ_ptrdiff_t)bcp->offset;
+    }  /* if */
+  }  /* if */
+  if (ok && total < 0) {
+    ok = FALSE;
+    ecil_note_unsupported("a pointer to a data member with a negative "
+                          "offset");
+  }  /* if */
+  *offset = (uint64_t)total;
+  return ok;
+}  /* pm_data_member_offset */
+
+
+a_boolean ecil_emit_ptr_to_member_constant(an_ecil_frame *frame,
+                                           a_constant_ptr c,
+                                           a_boolean      as_constant)
+/*
+CONST_DATA_MEMBER or CONST_METHOD (C_DATA_MEMBER or C_METHOD with
+as_constant) of a pointer-to-member constant (spec 12.4).  A C_METHOD with a
+non-zero adjustment is valid only in a VAR_INIT: in a body it is not
+expressible (an expression constant uses CONST_METHOD and a STORE).  Return
+FALSE, having noted why, if it is not expressible.
+*/
+{
+  uint32_t  t = ecil_type_id(frame, c->type);
+  a_boolean ok = (t != 0);
+
+  if (ok && c->variant.ptr_to_member.is_function_ptr) {
+    a_routine_ptr  routine = c->variant.ptr_to_member.variant.routine;
+    a_targ_ptrdiff_t  adj = 0;
+    uint32_t       g = 0;
+    unsigned int   flags = 0;
+
+    if (routine != NULL) {
+      a_base_class_ptr  bcp = c->variant.ptr_to_member.casting_base_class;
+
+      if (bcp != NULL) {
+        adj = (a_targ_ptrdiff_t)bcp->offset;
+        if (c->variant.ptr_to_member.cast_to_base) adj = -adj;
+        if (bcp->is_virtual) {
+          ok = FALSE;
+          ecil_note_unsupported("a pointer to a member function converted "
+                                "through a virtual base class");
+        }  /* if */
+      }  /* if */
+      if (ok && adj < 0) {
+        ok = FALSE;
+        ecil_note_unsupported("a pointer to a member function with a "
+                              "negative this adjustment");
+      }  /* if */
+      if (ok && as_constant && adj != 0 && !in_var_init) {
+        ok = FALSE;
+        ecil_note_unsupported("a constant pointer to a member function "
+                              "with a this adjustment in a function body");
+      }  /* if */
+      if (ok) {
+        g = ecil_function_id(frame, routine);
+        ok = (g != 0);
+      }  /* if */
+      if (ok && routine->is_virtual) {
+        flags |= ECIL_METHOD_VIRTUAL;
+        ecil_class_vtable_facts(frame, parent_class_of(routine));
+      }  /* if */
+    }  /* if */
+    if (ok) {
+      ecil_rec_begin(frame, as_constant ? eop_c_method : eop_const_method);
+      ecil_arg_uint(frame, t);
+      if (g != 0) {
+        ecil_arg_uint(frame, g);
+      } else {
+        ecil_arg_nil(frame);
+      }  /* if */
+      ecil_arg_uint(frame, (uint64_t)adj);
+      ecil_arg_uint(frame, flags);
+      ecil_rec_end(frame);
+    }  /* if */
+  } else if (ok) {
+    uint64_t  offset = 0;
+
+    if (c->variant.ptr_to_member.variant.field != NULL) {
+      ok = pm_data_member_offset(c, &offset);
+    }  /* if */
+    if (ok) {
+      ecil_rec_begin(frame, as_constant ? eop_c_data_member :
+                                          eop_const_data_member);
+      ecil_arg_uint(frame, t);
+      if (c->variant.ptr_to_member.variant.field != NULL) {
+        ecil_arg_uint(frame, offset);
+      } else {
+        ecil_arg_nil(frame);
+      }  /* if */
+      ecil_rec_end(frame);
+    }  /* if */
+  }  /* if */
+  return ok;
+}  /* ecil_emit_ptr_to_member_constant */
 
 
 static a_boolean emit_leaf(an_ecil_frame *frame, a_constant_ptr c,
@@ -944,7 +1136,18 @@ char[5]).
     switch (c->kind) {
       case ck_integer:
       case ck_float:
-        ok = ecil_emit_scalar_constant(frame, c, t, TRUE);
+        if (c->kind == ck_integer && target != 0 && target != t &&
+            (ecil_gid_info(target)->kind == egk_bool ||
+             ecil_gid_info(target)->kind == egk_int) &&
+            (ecil_gid_info(t)->kind == egk_bool ||
+             ecil_gid_info(t)->kind == egk_int)) {
+          /* The constant of an object of another integer type (a bool
+             variable initialized by a constant of a narrow type): it has the
+             type of the object. */
+          ok = ecil_emit_scalar_constant(frame, c, target, TRUE);
+        } else {
+          ok = ecil_emit_scalar_constant(frame, c, t, TRUE);
+        }  /* if */
         break;
       case ck_string:
         emit_string_bytes(frame, c, (target != 0 &&
@@ -969,10 +1172,19 @@ char[5]).
           }  /* if */
         }
         break;
+      case ck_ptr_to_member:
+        ok = ecil_emit_ptr_to_member_constant(frame, c, TRUE);
+        break;
       case ck_dynamic_init:
         if (ecil_skip_dynamic_elements) {
           /* Static storage is zero before its dynamic initialization. */
-          ecil_rec1(frame, eop_c_zero, t);
+          if (!C_mode() && ecil_class_is_dynamic(c->type)) {
+            ok = FALSE;
+            ecil_note_unsupported("a zero constant of a class with virtual "
+                                  "functions");
+          } else {
+            ecil_rec1(frame, eop_c_zero, t);
+          }  /* if */
         } else {
           ok = FALSE;
           ecil_note_unsupported("a non-constant initializer element");
@@ -1117,10 +1329,14 @@ any order (designators) cost one step each.
 
 
 static a_boolean begin_aggregate(an_ecil_frame *frame, a_constant_ptr agg,
-                                 a_constant_ptr *sources, size_t n)
+                                 a_constant_ptr *sources, size_t n,
+                                 a_boolean is_base)
 /*
 Introduce the aggregate's type, push its cursor and emit C_AGG_BEGIN.  The
-aggregate is initialized by agg, or by the n merged constants in sources.
+aggregate is initialized by agg, or by the n merged constants in sources;
+is_base says that it is a base subobject of the aggregate that holds it.  A
+dynamic class needs its vtable facts, and its vtable is used unless it is a
+base subobject (the vptrs are the library's: spec 12.7, 12.8).
 */
 {
   uint32_t  t = ecil_type_id(frame, agg->type);
@@ -1133,23 +1349,13 @@ aggregate is initialized by agg, or by the n merged constants in sources.
                                   "type");
     ok = FALSE;
   }  /* if */
-  if (ok && ecil_note_zero_init_of_dmp(t)) {
-    /* The parts that the constant does not list are zero (the null member
-       pointer is -1). */
-    ok = FALSE;
-  }  /* if */
-  if (ok && !C_mode() && is_immediate_class_type(agg->type) &&
-      (skip_typerefs(agg->type)->variant.class_struct_union.
-                                                any_virtual_functions ||
-       skip_typerefs(agg->type)->variant.class_struct_union.
-                                                any_virtual_base_classes ||
-       (class_type_supp(skip_typerefs(agg->type)) != NULL &&
-        class_type_supp(skip_typerefs(agg->type))->
-                                  virtual_function_info_base_class != NULL))) {
-    /* The constant would need the class's vtable (M4). */
-    ecil_note_unsupported("a constant of a class with virtual functions or "
-                          "virtual bases");
-    ok = FALSE;
+  if (ok && !C_mode() && ecil_class_is_dynamic(agg->type)) {
+    if (is_base) {
+      ecil_class_vtable_facts(frame, agg->type);
+    } else {
+      ecil_note_vtable_used(frame, agg->type);
+    }  /* if */
+    ok = ecil_unsupported_reason == NULL;
   }  /* if */
   if (ok) {
     if (sources == NULL) {
@@ -1191,7 +1397,7 @@ emitted nothing and noted why, if it cannot be expressed.
   scratch->failed = FALSE;
   frame->current = scratch;
   if (constant->kind == (a_constant_repr_kind)ck_aggregate) {
-    ok = begin_aggregate(frame, constant, sources, num_sources);
+    ok = begin_aggregate(frame, constant, sources, num_sources, FALSE);
     while (ok && level_stack_size > base) {
       an_init_level   *level = &level_stack[level_stack_size - 1];
       uint64_t        index = 0;
@@ -1202,7 +1408,7 @@ emitted nothing and noted why, if it cannot be expressed.
         ecil_init_level_end(level);
         level_stack_size--;
       } else if (level->entry_is_char) {
-        ecil_rec1(frame, eop_c_sel, index);
+        ecil_rec1(frame, eop_c_sel, index + level->vptr_shift);
         ecil_emit_string_char(frame, level, value, index);
       } else if (value->kind == (a_constant_repr_kind)ck_init_repeat) {
         a_constant_ptr  repeated = value->variant.init_repeat.constant;
@@ -1218,12 +1424,13 @@ emitted nothing and noted why, if it cannot be expressed.
                                 "multi-dimensional array");
           ok = FALSE;
         } else {
-          ecil_rec2(frame, eop_c_repeat, index, level->entry_count);
+          ecil_rec2(frame, eop_c_repeat, index + level->vptr_shift,
+                    level->entry_count);
         }  /* if */
         if (!ok) {
           /* Noted. */
         } else if (repeated->kind == (a_constant_repr_kind)ck_aggregate) {
-          ok = begin_aggregate(frame, repeated, NULL, 0);
+          ok = begin_aggregate(frame, repeated, NULL, 0, FALSE);
         } else {
           ok = emit_leaf(frame, repeated,
                          ecil_member_type_gid(frame, level, index));
@@ -1232,9 +1439,10 @@ emitted nothing and noted why, if it cannot be expressed.
         a_constant_ptr  *srcs = level->entry_sources;
         size_t          num_srcs = level->entry_num_sources;
 
-        ecil_rec1(frame, eop_c_sel, index);
+        ecil_rec1(frame, eop_c_sel, index + level->vptr_shift);
         if (value->kind == (a_constant_repr_kind)ck_aggregate) {
-          ok = begin_aggregate(frame, value, srcs, num_srcs);
+          ok = begin_aggregate(frame, value, srcs, num_srcs,
+                               !level->is_array && index < level->lead);
         } else {
           ok = emit_leaf(frame, value,
                          ecil_member_type_gid(frame, level, index));
@@ -1505,7 +1713,9 @@ caller to handle by dropping the function.
 
     ecil_skip_dynamic_elements = (ecil_gid_info(gid)->flags &
                                              ECIL_GF_PARTIAL_INIT) != 0;
+    in_var_init = TRUE;
     built = ecil_emit_constant_typed(frame, init->constant, type);
+    in_var_init = FALSE;
     ecil_skip_dynamic_elements = FALSE;
     if (built) ecil_rec1(frame, eop_var_init, gid);
   }  /* if */
@@ -1663,12 +1873,6 @@ finish_variable_definition.
   }  /* if */
   if (type != 0 && (ecil_gid_info(type)->flags & ECIL_GF_FAILED)) {
     ecil_note_unsupported_type(type, "a record type that is not supported");
-  }  /* if */
-  if (type != 0 && var->storage_class != (a_storage_class)sc_extern) {
-    /* A definition of static storage duration is zero-initialized where it is
-       not initialized (a definition without an initializer, the unlisted
-       parts of an aggregate): the null member pointer is -1. */
-    (void)ecil_note_zero_init_of_dmp(type);
   }  /* if */
   if (needs_static_init && is_effective_thread_local(var) &&
       !var->source_corresp.is_local_to_function) {
@@ -2017,6 +2221,11 @@ defined in the frame of their function.
                                                                     != 0);
     }  /* if */
   }  /* for */
+  if (!C_mode()) {
+    /* The vtables and class typeinfo of the dynamic classes: the key
+       functions, the "used" marks and the linkage are final (spec 12.8). */
+    ecil_emit_class_abi_data(frame, FALSE);
+  }  /* if */
   ecil_emit_retractions(frame);
 }  /* ecil_emit_globals */
 

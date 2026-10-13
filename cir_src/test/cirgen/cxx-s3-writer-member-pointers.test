@@ -1,0 +1,508 @@
+ecil 1.2 features=0x0000000a
+; C++ (ECIL 1.2, slice S3): member pointers as the writer streams them: globals
+; (data members of a class and of its bases, non-virtual and virtual member
+; functions, a function of a base converted to the derived class), .* and ->*
+; calls, the base-to-derived conversion of a data member pointer, the
+; comparison and bool conversion of member pointers, null.
+;   int B1::*pa = &B1::a; int (D::*pg)(int) = static_cast<int (D::*)(int)>(&B2::g);
+;   (d.*pf)(10), (p->*pv)(0) through a virtual function, int D::*cvt = pb, np != nullptr
+; The stream is the ECIL writer's output for the program (cpfe-cir --ecil_output).
+; RUN: %ecil-asm %s -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil > %t.cir
+; RUN: %FileCheck %s < %t.cir
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %edg-cir --emit=obj -O2 -o %t.o2.o %t.ecil
+; RUN: g++ %t.o2.o -o %t.o2.exe
+; RUN: %t.o2.exe
+
+; CHECK-DAG: cir.get_runtime_member
+; CHECK-DAG: cir.get_method
+; CHECK-DAG: cir.cmp ne
+
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "s3a.cpp"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  STR 5 "B1"
+  TY_RECORD_DECL 4 0 5
+  TY_PTR 5 4
+  TY_FUNC 6 1 0 [5, 1]
+  TY_VPTR 7
+  STR 6 "a"
+  TY_RECORD_BODY 4 16 12 8 12 2
+  REC_FIELD 7 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 6 0
+  STR 7 "2B1"
+  CLASS_MANGLE 4 7
+  CLASS_INFO 4 12 8 nil 3
+  CLASS_BASES 4 []
+  STR 8 "_ZN2B11fEi"
+  DECL_FUNC 8 6 0 2 8
+  DECL_FUNC 8 6 3 67 8
+  STR 9 "this"
+  STR 10 "x"
+  FUNC_BEGIN 8 0
+  PARAM 1 5 5 9 1
+  PARAM 2 1 1 10 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 4 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 11 "_ZN2B11vEi"
+  DECL_FUNC 9 6 0 2 11
+  DECL_FUNC 9 6 3 67 11
+  TY_VOID 10
+  TY_FUNC 11 10 0 [5]
+  STR 12 "_ZN2B1D1Ev"
+  DECL_FUNC 12 11 0 2 12
+  STR 13 "_ZN2B1D2Ev"
+  DECL_FUNC 13 11 0 2 13
+  STRUCTOR 12 13 1
+  TY_PTR 14 10
+  TY_FUNC 15 10 0 [14, 2]
+  STR 14 "_ZdlPvm"
+  DECL_FUNC 16 15 0 0 14
+  STR 15 "_ZN2B1D0Ev"
+  DECL_FUNC 17 11 0 2 15
+  STRUCTOR_DELETING 17 12 16 1
+  CLASS_VFUNCS 4 [9, 0, 0, 1, 12, 1, 0, 0]
+  CLASS_OVERRIDES 4 []
+  FUNC_BEGIN 9 0
+  PARAM 1 5 5 9 1
+  PARAM 2 1 1 10 0
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  CONST_INT 1 100
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  DECL_FUNC 12 11 3 67 12
+  DECL_FUNC 13 11 3 67 13
+  DECL_FUNC 17 11 3 67 15
+  FUNC_BEGIN 13 0
+  PARAM 1 5 5 9 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 16 "B2"
+  TY_RECORD_DECL 18 0 16
+  TY_PTR 19 18
+  TY_FUNC 20 1 0 [19, 1]
+  STR 17 "b"
+  TY_RECORD_BODY 18 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 17 0
+  STR 18 "_ZN2B21gEi"
+  DECL_FUNC 21 20 0 2 18
+  DECL_FUNC 21 20 3 67 18
+  FUNC_BEGIN 21 0
+  PARAM 1 19 19 9 1
+  PARAM 2 1 1 10 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 18 0
+  LOAD 0
+  LREF 2
+  LOAD 0
+  MUL 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 19 "D"
+  TY_RECORD_DECL 22 0 19
+  TY_PTR 23 22
+  TY_FUNC 24 1 0 [23, 1]
+  STR 20 "d"
+  TY_RECORD_BODY 22 24 20 8 12 3
+  REC_FIELD 4 0 nil nil nil 17
+  REC_FIELD 18 12 nil nil nil 17
+  REC_FIELD 1 16 nil nil 20 0
+  STR 21 "1D"
+  CLASS_MANGLE 22 21
+  CLASS_INFO 22 20 8 0 3
+  CLASS_BASES 22 [0, 1, 1, 1]
+  STR 22 "_ZN1D1hEi"
+  DECL_FUNC 25 24 0 2 22
+  DECL_FUNC 25 24 3 67 22
+  FUNC_BEGIN 25 0
+  PARAM 1 23 23 9 1
+  PARAM 2 1 1 10 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 22 2
+  LOAD 0
+  LREF 2
+  LOAD 0
+  SUB 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 23 "_ZN1D1vEi"
+  DECL_FUNC 26 24 0 2 23
+  DECL_FUNC 26 24 3 67 23
+  TY_FUNC 27 10 0 [23]
+  STR 24 "_ZN1DD1Ev"
+  DECL_FUNC 28 27 0 2 24
+  STR 25 "_ZN1DD2Ev"
+  DECL_FUNC 29 27 0 2 25
+  STRUCTOR 28 29 1
+  STR 26 "_ZN1DD0Ev"
+  DECL_FUNC 30 27 0 2 26
+  STRUCTOR_DELETING 30 28 16 1
+  CLASS_VFUNCS 22 [26, 0, 0, 1, 28, 1, 4, 0]
+  CLASS_OVERRIDES 22 [9, 0, 26, 0, 12, 0, 28, 0]
+  FUNC_BEGIN 26 0
+  PARAM 1 23 23 9 1
+  PARAM 2 1 1 10 0
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  CONST_INT 1 200
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 27 "_ZN2B1C1Ev"
+  DECL_FUNC 31 11 0 2 27
+  STR 28 "_ZN2B1C2Ev"
+  DECL_FUNC 32 11 0 2 28
+  STRUCTOR 31 32 0
+  DECL_FUNC 31 11 3 67 27
+  DECL_FUNC 32 11 3 67 28
+  FUNC_BEGIN 32 0
+  PARAM 1 5 5 9 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  DECL_FUNC 28 27 3 67 24
+  DECL_FUNC 29 27 3 67 25
+  DECL_FUNC 30 27 3 67 26
+  FUNC_BEGIN 29 0
+  PARAM 1 23 23 9 1
+  CLEANUP_BEGIN 3 nil 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 22 4 0 1
+  CALL 13 11 1 0
+  CLEANUP_BODY
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 29 "_ZN1DC1Ev"
+  DECL_FUNC 33 27 0 2 29
+  STR 30 "_ZN1DC2Ev"
+  DECL_FUNC 34 27 0 2 30
+  STRUCTOR 33 34 0
+  DECL_FUNC 33 27 3 67 29
+  DECL_FUNC 34 27 3 67 30
+  FUNC_BEGIN 34 0
+  PARAM 1 23 23 9 1
+  MEMINIT_BEGIN 1 0 1
+  LREF 1
+  LOAD 0
+  BASE_CAST 22 4 0 1
+  CALL 32 11 1 0
+  MEMINIT_END
+  CLEANUP_BEGIN 2 nil 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 22 4 0 1
+  CALL 13 11 1 0
+  CLEANUP_BODY
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 35 1 0 []
+  STR 31 "main"
+  DECL_FUNC 36 35 0 8 31
+  DECL_FUNC 36 35 0 9 31
+  STR 32 "r"
+  TY_DATA_MEMBER 37 1 4
+  STR 33 "pa"
+  DECL_VAR 38 37 0 0 0 33
+  TY_DATA_MEMBER 39 1 18
+  STR 34 "pb"
+  DECL_VAR 40 39 0 0 0 34
+  TY_DATA_MEMBER 41 1 22
+  STR 35 "pd"
+  DECL_VAR 42 41 0 0 0 35
+  TY_METHOD 43 6 4
+  STR 36 "pf"
+  DECL_VAR 44 43 0 0 0 36
+  TY_METHOD 45 24 22
+  STR 37 "ph"
+  DECL_VAR 46 45 0 0 0 37
+  STR 38 "pg"
+  DECL_VAR 47 45 0 0 0 38
+  STR 39 "p"
+  STR 40 "pv"
+  DECL_VAR 48 43 0 0 0 40
+  STR 41 "cvt"
+  TY_BOOL 49 1 1
+  STR 42 "nn"
+  STR 43 "np"
+  FUNC_BEGIN 36 0
+  BLOCK_BEGIN
+  LOCAL 1 22 20 0 0
+  LREF 1
+  ADDR
+  CALL 33 27 1 0
+  CLEANUP_BEGIN 3 nil 0
+  LREF 1
+  ADDR
+  CALL 28 27 1 0
+  CLEANUP_BODY
+  LREF 1
+  ADDR
+  BASE_CAST 22 4 0 1
+  DEREF
+  FIELD 4 1
+  CONST_INT 1 1
+  STORE 0 0
+  LREF 1
+  ADDR
+  BASE_CAST 22 18 12 1
+  DEREF
+  FIELD 18 0
+  CONST_INT 1 2
+  STORE 0 0
+  LREF 1
+  FIELD 22 2
+  CONST_INT 1 3
+  STORE 0 0
+  LOCAL 2 1 32 0 0
+  LREF 2
+  C_INT 1 0
+  INIT_CONST
+  LOCAL 3 1 nil 0 0
+  LREF 3
+  LREF 1
+  ADDR
+  BASE_CAST 22 4 0 1
+  DEREF
+  ADDR
+  GREF 38
+  LOAD 0
+  PM_FIELD 37
+  LOAD 0
+  LREF 1
+  ADDR
+  BASE_CAST 22 18 12 1
+  DEREF
+  ADDR
+  GREF 40
+  LOAD 0
+  PM_FIELD 39
+  LOAD 0
+  ADD 1
+  LREF 1
+  ADDR
+  GREF 42
+  LOAD 0
+  PM_FIELD 41
+  LOAD 0
+  ADD 1
+  STORE 2 0
+  LREF 2
+  DUP
+  LOAD 0
+  LREF 3
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  LOCAL 4 1 nil 0 0
+  LREF 4
+  LREF 1
+  ADDR
+  BASE_CAST 22 4 0 1
+  DEREF
+  ADDR
+  GREF 44
+  LOAD 0
+  CONST_INT 1 10
+  PM_CALL 6 2 0
+  LREF 1
+  ADDR
+  GREF 46
+  LOAD 0
+  CONST_INT 1 1
+  PM_CALL 24 2 0
+  ADD 1
+  LREF 1
+  ADDR
+  GREF 47
+  LOAD 0
+  CONST_INT 1 5
+  PM_CALL 24 2 0
+  ADD 1
+  STORE 2 0
+  LREF 2
+  DUP
+  LOAD 0
+  LREF 4
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  LOCAL 5 5 39 0 0
+  LREF 5
+  LREF 1
+  ADDR
+  BASE_CAST 22 4 0 1
+  STORE 0 0
+  LOCAL 6 1 nil 0 0
+  LREF 6
+  LREF 5
+  LOAD 0
+  GREF 48
+  LOAD 0
+  CONST_INT 1 0
+  PM_CALL 6 2 0
+  STORE 2 0
+  LREF 2
+  DUP
+  LOAD 0
+  LREF 6
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  LOCAL 7 41 41 0 0
+  LREF 7
+  GREF 40
+  LOAD 0
+  PM_CAST 0 39 41 12
+  STORE 0 0
+  LOCAL 8 1 nil 0 0
+  LREF 8
+  LREF 1
+  ADDR
+  LREF 7
+  LOAD 0
+  PM_FIELD 41
+  LOAD 0
+  STORE 2 0
+  LREF 2
+  DUP
+  LOAD 0
+  LREF 8
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  LOCAL 9 49 42 0 0
+  LREF 9
+  GREF 38
+  LOAD 0
+  CONST_DATA_MEMBER 37 nil
+  CMP 5
+  STORE 0 0
+  LOCAL 10 37 43 0 0
+  LREF 10
+  C_DATA_MEMBER 37 nil
+  INIT_CONST
+  LREF 10
+  LOAD 0
+  CONST_DATA_MEMBER 37 nil
+  CMP 5
+  LOR_BEGIN
+  LREF 9
+  LOAD 0
+  TO_BOOL
+  LOG_NOT
+  LOR_END
+  IF_BEGIN false
+  BLOCK_BEGIN
+  CONST_INT 1 100
+  RETURN_STMT true
+  BLOCK_END
+  IF_END
+  LREF 2
+  LOAD 0
+  CONST_INT 1 231
+  CMP 4
+  TERN_BEGIN 1
+  CONST_INT 1 0
+  TERN_ELSE
+  LREF 2
+  LOAD 0
+  CONST_INT 1 127
+  BIT_AND 0
+  TERN_END
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 38 37 0 1 0 33
+  C_DATA_MEMBER 37 8
+  VAR_INIT 38
+  DECL_VAR 40 39 0 1 0 34
+  C_DATA_MEMBER 39 0
+  VAR_INIT 40
+  DECL_VAR 42 41 0 1 0 35
+  C_DATA_MEMBER 41 16
+  VAR_INIT 42
+  DECL_VAR 44 43 0 1 0 36
+  C_METHOD 43 8 0 0
+  VAR_INIT 44
+  DECL_VAR 46 45 0 1 0 37
+  C_METHOD 45 25 0 0
+  VAR_INIT 46
+  DECL_VAR 48 43 0 1 0 40
+  C_METHOD 43 9 0 1
+  VAR_INIT 48
+  DECL_VAR 47 45 0 1 0 38
+  C_METHOD 45 21 12 0
+  VAR_INIT 47
+  DECL_ABI_DATA 50 2 4 3 3 nil
+  DECL_ABI_DATA 51 0 4 3 3 nil
+  STR 44 "2B2"
+  CLASS_MANGLE 18 44
+  CLASS_INFO 18 4 4 nil 0
+  CLASS_BASES 18 []
+  DECL_ABI_DATA 52 2 18 3 3 nil
+  DECL_ABI_DATA 53 2 22 3 3 nil
+  DECL_ABI_DATA 54 0 22 3 3 nil
+frame NAMES
+frame END
+  END 13 0

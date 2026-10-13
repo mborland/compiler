@@ -40,8 +40,11 @@ struct a_class_info {
   std::string  mangled;
   int64_t      size = 0;
   int64_t      nvsize = 0;
+  int64_t      nv_data_end = -1;  /* End of the non-virtual data (-1: not
+                                     known, nvsize stands in). */
   bool         is_dynamic = false;
   bool         is_empty = false;
+  bool         layout_only = false;
   bool         has_primary = false;
   a_key        primary = 0;
   bool         primary_virtual = false;
@@ -57,6 +60,9 @@ struct a_vfunc_info {
   bool         is_deleted = false;
   a_fn_special special = fs_none;
   bool         is_implicit = false;
+  bool         ref_result = false;   /* The result is a reference: a
+                                        covariant return adjustment has no
+                                        null check. */
   uint32_t     sig = 0;
   bool         has_ret_class = false;
   a_key        ret_class = 0;
@@ -80,7 +86,11 @@ public:
   void add_base(a_key cls, a_key base, bool is_virtual, bool is_public,
                 int64_t offset);
   /* A direct base, in declaration order.  Offset: in `cls`; a virtual base:
-     the offset of that base in `cls`. */
+     the offset of that base in `cls`.  `is_public` is the PUBLIC flag of the
+     class's CLASS_BASES entry; for a plain class (set_plain_class, no
+     CLASS_BASES) it is a PLACEHOLDER: the decoder passes true, and nothing
+     reads it (only the RTTI base flags of a class that has CLASS_BASES of
+     its own use is_public, and that class's own entries are real). */
   void add_vbase(a_key cls, a_key base, bool is_public, int64_t offset);
   /* An entry of the class's virtual base list (every virtual base, direct
      or not, in vbases() order). */

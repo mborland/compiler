@@ -119,6 +119,46 @@ DECL_ABI_DATA `TU_LOCAL` flag and never derived from the linkage). `can_use_sing
 `vmi_class_flags` follow `clang::CodeGenUtils` exactly (the flag walk is the
 original pre-order, on an explicit stack).
 
+`dynamic_cast_offset_hint(db, src, dst)` is `CodeGenUtils::computeOffsetHint`,
+the `src2dst` argument of `__dynamic_cast` (the offset hint of `cir.dyn_cast`):
+-1 when a public path from `dst` down to `src` goes through a virtual base, -2
+when `src` is not a public base of `dst`, -3 when it is a public base at
+several places, else the offset of the unique public non-virtual `src`
+subobject. The paths are the direct base lists' paths with their access, on an
+explicit stack. The typeinfo of the types that are not classes (S3) needs no
+facts: lib/cirgen builds them from the stream's `TYPEINFO_DEF`.
+
+## The ECIL decoder and the printers' names (lib/format, ecil-dump)
+
+`lib/format/ecil_abi_decode.{h,cpp}` turns the facts the validator kept of an
+ECIL stream (`ecil_ids.h`: class facts with the CLASS_* entries, the
+`REC_FIELD` fields, the functions and their types) into the tables of this
+library, through `a_fact_builder`, once, after the last record:
+`build_abi_facts(ids, db, problem)`.
+- The classes with a CLASS_INFO start a worklist (a dynamic class whose vtable
+  facts were never sent stays out of the initial set: there are no functions
+  to check its slots against). Bases, virtual bases and the result classes of
+  listed functions, any class (12.2: the library derives covariance from the
+  return types), are added as the walk finds them; a dynamic class that enters
+  that way has `layout_only`: its vtable is never built or checked, its
+  layout gives the result adjustment; those without CLASS_INFO go in through `set_plain_class`
+  with their BASE fields (12.2), and only if they never got one: a class whose
+  CLASS_INFO and CLASS_BASES come after it was used as a base is decoded from
+  those records (`abi_decode_tests`).
+- Function names are spelled the way clang's vtable dump spells them: the
+  demangler in `abi_demangle.{h,cpp}` (source-names, nested names, structors,
+  operators, cv-qualified member functions, builtin, class, pointer and
+  reference parameter types; no template arguments or substitutions, which
+  fall back to the mangled name) and the result type from the function's
+  `TY_FUNC` (builtin types by width and signedness; ABI-identical alternatives
+  such as `long` and `long long` cannot be told apart, a reference prints as a
+  pointer). `ecil-dump --vtable-layouts` prints the layouts of the classes that
+  have vtable facts (the same text as `clang -fdump-vtable-layouts`; the
+  `edg-cir-abi-diff` harness found no difference on the S1 test programs).
+- The finish-time checks (`validate_deep`, `check_all_slots`) run inside
+  `finish()`; the code generator reports a failure as a fatal format error
+  ("class facts: ...").
+
 ## Output and API (abi_vtable.h, abi_print.h)
 
 - `a_vtable_context::vtable_info(c)`: the vtable group (components with vcall

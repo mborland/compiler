@@ -1,6 +1,89 @@
 Version 7.1
 
 10/12/26
+CIR back end: corrections found by running the C++ corpus
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the size
+of a class that was first met incomplete and completed later is no longer
+zero in a new expression; virtual functions that differ in the const or
+volatile qualification of this have different signatures and a virtual function
+that returns a reference is marked; E1[E2] with the integer first evaluates it
+before the pointer; a new[] with a run-time count that is not a nothrow
+allocation throws std::bad_array_new_length for a negative or overflowing
+count; a placement operator delete that the program declares is called when
+the initialization of a new expression throws; a variable whose type is a
+const or volatile alignment typedef has that alignment; the base class entry
+that the front end puts after the members of a designated initializer is
+sent as that of the base; and constructs that need destructors that may throw
+to destroy more objects (an array element's default argument, a returned
+object) are reported as unsupported instead of being miscompiled.  A class
+conditional whose value is discarded, ::delete of an object with a virtual
+destructor, a reference bound to a temporary array, __builtin_launder and the
+pointer-to-member builtins __builtin_is_corresponding_member and
+__builtin_is_pointer_interconvertible_with_class on run-time values are
+supported too, as are a destroying operator delete (direct, and through the
+deleting destructor), the initializers of members of anonymous unions and
+structs in a constructor, class values returned through a comma or a
+conditional, and destructors that throw while other cleanups run; the evaluation
+order of E1[E2] with the integer first changes only for C++.  The other
+configurations are not affected.
+
+10/12/26
+CIR back end: exceptions
+
+The CIR back end configuration (BACK_END_TYPE_CIR) now compiles C++ with
+exceptions: throw expressions and rethrow, try blocks and handlers of every
+parameter kind, function-try-blocks of constructors and destructors,
+exception specifications (noexcept, throw() and dynamic ones), the non-throwing
+marks of functions and calls, and the clean-up on exception paths that the
+front end already described: the members and bases of a constructor that
+throws, the storage of a new expression whose initialization throws (with the
+matching placement operator delete), the elements already built of an array or
+aggregate initialization that throws, and the temporaries of a throw.  A throw
+in a conditional operand gets a full expression of its own.  Arrays of objects
+whose constructor has a default argument, the value-initialization of a new[]
+with a run-time count and if consteval statements are supported too.  The
+other configurations are not affected.
+
+10/12/26
+CIR back end: run-time type information and pointers to members
+
+The CIR back end configuration (BACK_END_TYPE_CIR) now compiles typeid and
+dynamic_cast (pointers, references and void *; the static and dynamic forms
+of typeid, with the null check of typeid(*p)), the typeinfo objects of every
+type (fundamental, pointer, pointer to member, function, array and enum types
+as well as classes, with their cv, incomplete and noexcept masks and the
+linkage clang gives them, including the internal typeinfo of an incomplete
+class and of a TU-local type), and pointers to data members and to member
+functions: their types, constants (offsets, virtual functions, this
+adjustments), .* and ->* (data and calls), conversions to and from base
+classes, comparison and conversion to bool.  A type that contains a pointer
+to a data member, whose null value is -1, is no longer written with zero
+bytes: zero-initialization, value-initialization and new T() produce the null
+value.  The other configurations are not affected.
+
+10/12/26
+CIR back end: polymorphic classes and virtual base classes
+
+The CIR back end configuration (BACK_END_TYPE_CIR) now compiles classes with
+virtual functions and classes with virtual base classes: the vptr is a field
+of the ECIL record and so are the virtual bases, the class's layout facts and
+(at its first need) its vtable facts (slots, overrides, destructors with
+their deleting variants) are streamed, constructors and destructors set the
+vptr, virtual calls are made through the vtable (and devirtualized as clang
+does), a delete through a virtual destructor is virtual, constants of such
+classes are supported, and the vtable, the virtual table table (VTT) and the
+class typeinfo of each class are declared or defined by clang's key function
+rules at the end of the translation unit.  The constructor of a class with
+virtual bases is written twice (complete and base object variants), the
+complete destructor is made from the destructors of the virtual bases and the
+base destructor, casts to a virtual base go through the vtable, and the base
+variants take the VTT.  The zero-initialization of a base subobject writes
+only the base's non-virtual size, a conversion to an indirect base class is a
+chain of casts, and a reference bound to a base subobject of an automatic
+variable is supported.  The other configurations are not affected.
+
+10/12/26
 CIR back end: region keeps, pack references and late names
 
 In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the

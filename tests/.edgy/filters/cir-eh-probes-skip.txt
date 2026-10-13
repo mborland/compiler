@@ -1,0 +1,15 @@
+# Probes of cir_src/test/writer/probes/m4 (the exception probes e*, s4_*,
+# s5_*) for which the eh-probes step of edg-cir-gate-evidence accepts a
+# "CIR back end ... cannot express" diagnostic instead of a run that equals
+# g++'s.  One probe file name per line, with the construct that is not
+# supported yet as the comment.  A probe on this list that passes makes the
+# step fail until it is removed, so the list only holds probes that are
+# genuinely unsupported.
+#
+# Empty at the S5 re-run (every probe is supported or fails): the members of
+# the earlier list (anonymous-member MEMINIT, class conditionals, delete of
+# an object with a virtual destructor through ::delete, the
+# is_corresponding_member and is_pointer_interconvertible builtins and the
+# reference-to-array temporary) were implemented.  The -O2 probes
+# (s5_pmb_*) run optimized: edg-cir-run-diff sends the -O of their options
+# to edg-cir, since eccp's -O does not reach this back end.

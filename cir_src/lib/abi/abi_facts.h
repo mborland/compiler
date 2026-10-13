@@ -55,6 +55,8 @@ struct a_base_fact {
 
 /* A virtual function that has a vtable slot. */
 struct a_fn_fact {
+  uint64_t    key = 0;       /* The stream id (set by the builder; 0 for
+                                facts that did not come from a stream). */
   a_class_id  owner;
   int32_t     slot;          /* The front end's number (clang's index from the
                                 primary address point); a destructor: the
@@ -64,6 +66,8 @@ struct a_fn_fact {
   bool        is_deleted;
   a_fn_special special;
   bool        is_implicit;   /* Compiler-generated. */
+  bool        ref_result = false;   /* The result is a reference (a covariant
+                                       adjustment skips the null check). */
   uint32_t    sig;           /* Same vcall-offset signature class: 0 for a
                                 destructor, else equal iff same name, same
                                 canonical parameter types and method
@@ -91,6 +95,8 @@ struct a_override_fact {
 };  /* a_override_fact */
 
 struct a_class_fact {
+  uint64_t                  key = 0;         /* The stream id (set by the
+                                                builder; 0 otherwise). */
   std::string               name;
   std::string               mangled;         /* The <type> mangling of the
                                                 class (the part after _ZTV),
@@ -99,6 +105,15 @@ struct a_class_fact {
                                                   CXXRecordDecl::isEmpty). */
   int64_t                   size;
   int64_t                   nvsize;
+  int64_t                   nv_data_end = -1;  /* End of the non-virtual data
+                                                (-1: not known: the check
+                                                uses nvsize). */
+  bool                      layout_only = false;  /* A dynamic class whose
+                                                vtable facts were not sent:
+                                                only its layout is known
+                                                (it is the result class of a
+                                                covariant function); no
+                                                vtable is built for it. */
   bool                      is_dynamic;      /* Has a vptr (virtual
                                                 functions or virtual bases,
                                                 its own or inherited). */

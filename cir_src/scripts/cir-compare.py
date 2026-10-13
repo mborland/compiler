@@ -50,6 +50,17 @@ ap.add_argument("--structors", action="store_true",
                 "D0/D1/D2/D5 of a symbol as one (the library emits the base "
                 "variant plus an alias or a use replacement, clang chooses "
                 "per linkage)")
+ap.add_argument("--keep-d0", action="store_true",
+                help="with --structors, keep the deleting destructor D0 apart "
+                "(C1/C2/C5 and D1/D2/D5 still fold)")
+ap.add_argument("--no-structor-fold", action="store_true",
+                help="with --cxx, do not fold the structor variants at all "
+                "(--dump then has the C1/C2/D0/D1/D2 of a symbol apart; "
+                "cir-op-compare.py follows aliases)")
+ap.add_argument("--dump", metavar="DIR",
+                help="write the normalized text of both sides to DIR/edg-cir.txt "
+                "and DIR/clang.txt (items separated by '#### kind @name', see "
+                "cir-op-compare.py)")
 ap.add_argument("--passes", action="store_true",
                 help="run the CIR passes on both sides (default: neither)")
 ap.add_argument("--global-order", action="store_true",
@@ -57,7 +68,7 @@ ap.add_argument("--global-order", action="store_true",
                 "region (dynamic initialization order = module order)")
 args = ap.parse_args()
 if args.cxx:
-    args.structors = True
+    args.structors = not args.no_structor_fold
 
 
 def run(cmd):
@@ -114,7 +125,8 @@ def structor_symbol(sym):
                 break                        # end of the nested name
             depth -= 1
         elif depth == 0 and c in "CD" and i + 1 < n and \
-                sym[i + 1] in ("12345" if c == "C" else "012345"):
+                sym[i + 1] in ("12345" if c == "C" or args.keep_d0
+                               else "012345"):
             out[i + 1] = "x"
             i += 2
             continue
@@ -401,6 +413,12 @@ if rc2:
     sys.exit("clang failed:\n" + err2)
 a = split_items(normalize(ours), "edg-cir")
 b = split_items(normalize(theirs), "clang")
+if args.dump:
+    os.makedirs(args.dump, exist_ok=True)
+    for side, items in (("edg-cir", a), ("clang", b)):
+        with open(os.path.join(args.dump, side + ".txt"), "w") as out:
+            for key in sorted(items):
+                out.write("#### %s @%s\n%s\n" % (key[0], key[1], items[key]))
 status = 0
 for key in sorted(set(a) & set(b)):
     if args.func and key[1] not in args.func:

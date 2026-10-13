@@ -35,4 +35,5 @@ with an all-g++ build.  `NAME/link.flags` holds linker flags (`--wrap` of the
 | `k6c_pm_zero`, `k6c2_zero_attr` | K6c zero- and value-initialization of types with data-member pointers (null is -1); K6c2 is the library's current `#cir.zero` form (FAILs, by design) |
 | `k6d_base_member_const` | K6d `int D::*` into a non-virtual base (empty base, non-zero base offsets): `#cir.data_member<[path]>` is enough |
 | `k10_throw_model` | K10 the final THROW model (implicit deactivatable free, temporaries inside); `spike.sh` reports FAIL against g++ by design (`~A` runs during unwinding in clang, before the throw in g++): compare `mixed.out` with a classic-clang build instead |
+| `k11_vptr_const` | K11 vptrs in constants: `#cir.global_view<@_ZTV.., [0, 2], address_point true> : !cir.vptr` in the base (primary) and member subobjects of a constant `D : C, B` and `M { B b; }` (the library's form, `cxx-s1-const-vptr.test`) |
 | `k7_layout` | K7 record layout of polymorphic classes (a Python port of CIRRecordLowering driven by the writer-streamable facts) |

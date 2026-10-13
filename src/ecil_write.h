@@ -32,6 +32,35 @@ configurations; it must not be set in a real build.
 #define ECIL_WRITER_ENABLED FALSE
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR || ... */
 
+/*
+Front-end macros that the CIR configuration pins (cmake/macro-conf/default/
+cpfe-cir.cmakedef) for every build type, because the stream depends on them:
+
+  NEW_CAN_BE_FOLDED_INTO_CTOR is 0: with it the front end folds the allocation
+  of a class new expression into its constructor and records no operator
+  delete to call if the initialization throws, so the free-on-throw cleanup of
+  the new expression cannot be sent (the debug build type sets it to 0, the
+  others leave it TRUE, and the streams differed).
+
+  DELETE_CAN_BE_FOLDED_INTO_DTOR is 1: the writer uses the class's associated
+  operator delete (assoc_operator_delete_routine, which exists only then).
+
+  NEW_AND_DELETE_FOR_ARRAY_CAN_BE_FOLDED_INTO_RUNTIME_ROUTINE is 1: with 0 the
+  front end chooses another delete[] for the free-on-throw cleanup of a new[]
+  (the sized one), which the goldens and probes have not been checked with.
+*/
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+#if NEW_CAN_BE_FOLDED_INTO_CTOR
+#error NEW_CAN_BE_FOLDED_INTO_CTOR must be 0 for the CIR back end
+#endif /* NEW_CAN_BE_FOLDED_INTO_CTOR */
+#if !DELETE_CAN_BE_FOLDED_INTO_DTOR
+#error DELETE_CAN_BE_FOLDED_INTO_DTOR must be 1 for the CIR back end
+#endif /* !DELETE_CAN_BE_FOLDED_INTO_DTOR */
+#if !NEW_AND_DELETE_FOR_ARRAY_CAN_BE_FOLDED_INTO_RUNTIME_ROUTINE
+#error NEW_AND_DELETE_FOR_ARRAY_CAN_BE_FOLDED_INTO_RUNTIME_ROUTINE must be 1
+#endif /* !NEW_AND_DELETE_FOR_ARRAY_CAN_BE_FOLDED_INTO_RUNTIME_ROUTINE */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
 #ifndef ECIL_ID_IN_PREFIX
 #define ECIL_ID_IN_PREFIX FALSE
 #endif /* ifndef ECIL_ID_IN_PREFIX */
@@ -247,7 +276,11 @@ typedef enum an_ecil_gid_kind {
   egk_record,
   egk_opaque,
   egk_func,       /* A function (DECL_FUNC). */
-  egk_var         /* A variable (DECL_VAR). */
+  egk_var,        /* A variable (DECL_VAR). */
+  egk_vptr,       /* The type of a vptr field (TY_VPTR). */
+  egk_data_member,/* A pointer to a data member (TY_DATA_MEMBER). */
+  egk_method,     /* A pointer to a member function (TY_METHOD). */
+  egk_abi_data    /* A vtable or a class typeinfo (DECL_ABI_DATA). */
 } an_ecil_gid_kind;
 
 #define ECIL_GF_OPAQUE      0x01u   /* An opaque scalar (TY_OPAQUE). */
@@ -283,11 +316,48 @@ typedef enum an_ecil_gid_kind {
                                     /* A routine of a function's memory
                                        region: its IL entry is gone when
                                        the file scope is complete. */
+#define ECIL_GF_LAYOUT_FACTS 0x10000u
+                                    /* A record whose layout facts
+                                       (CLASS_MANGLE, CLASS_INFO,
+                                       CLASS_BASES) were sent. */
+#define ECIL_GF_VTABLE_FACTS 0x20000u
+                                    /* A dynamic class whose vtable facts
+                                       (CLASS_VFUNCS, CLASS_OVERRIDES, its
+                                       DECL_FUNCs and STRUCTOR_DELETING)
+                                       were sent. */
+#define ECIL_GF_VTABLE_USED  0x40000u
+                                    /* A dynamic class whose vtable is used
+                                       by a record that was kept (VPTR_INIT,
+                                       a constant). */
+#define ECIL_GF_DYNAMIC      0x80000u
+                                    /* A record of a dynamic class (a
+                                       TY_VPTR, a VIRTUAL_BASE or the base
+                                       of a dynamic class). */
+#define ECIL_GF_VISITED      0x1000000u
+                                    /* A class being looked at by a walk over
+                                       the base classes (always cleared). */
+#define ECIL_GF_FACTS_BUSY   0x2000000u
+                                    /* A class whose vtable facts are being
+                                       sent (a covariant return class that is
+                                       the class itself is not asked again). */
+#define ECIL_GF_STRUCTOR_VBASES 0x800000u
+                                    /* A constructor or destructor G-id of a
+                                       STRUCTOR pair with has_vbases. */
+#define ECIL_GF_TI_INCOMPLETE 0x4000000u
+                                    /* A record whose class typeinfo was
+                                       introduced while it was incomplete: a
+                                       plain internal __class_type_info that
+                                       is never re-planned (sticky, as in
+                                       clang). */
+#define ECIL_GF_ABI_DONE     0x400000u
+                                    /* A dynamic class whose vtable and
+                                       typeinfo were decided. */
 
 /* The variant of a constructor or destructor G-id. */
 #define ECIL_VARIANT_NONE     0u
 #define ECIL_VARIANT_COMPLETE 1u  /* C1, D1: complete objects. */
 #define ECIL_VARIANT_BASE     2u  /* C2, D2: base subobjects. */
+#define ECIL_VARIANT_DELETING 3u  /* D0: the deleting destructor. */
 
 /* Everything the writer remembers about a G-id. */
 typedef struct an_ecil_gid_info {
@@ -316,6 +386,13 @@ typedef struct an_ecil_gid_info {
      variant C1/D1 and the base variant C2/D2; each names the other. */
   uint32_t      partner;
   unsigned int  variant;          /* ECIL_VARIANT_*. */
+  /* A virtual destructor's complete variant: its deleting variant D0.  A
+     record of a dynamic class: the G-ids of its vtable and of its class
+     typeinfo (DECL_ABI_DATA), once introduced. */
+  uint32_t      aux;
+  uint32_t      aux2;
+  uint32_t      nvsize;           /* A record whose CLASS_INFO was sent: its
+                                     nvsize (a base ends there, spec 12.2). */
 } an_ecil_gid_info;
 
 /* Why the current function or initializer cannot be expressed, or NULL.  The
@@ -436,14 +513,10 @@ extern unsigned int ecil_linkage_for(a_storage_class     storage_class,
                                      a_boolean           is_weak);
 
 /* Return TRUE if the type with G-id gid is, or contains, a pointer to a data
-   member.  Writing zeros into such an object (zero-initialization, explicit or
-   implicit) would write 0, which is not the null member pointer (-1): the
-   writer diagnoses it until member pointers are supported (M4). */
+   member.  Such a type is not zero-initializable: its null member pointer is
+   -1, so it is zeroed by INIT_ZERO or INIT_ZERO_BASE, never ZERO_BYTES (spec
+   12.7). */
 extern a_boolean ecil_gid_has_data_member_pointer(uint32_t gid);
-
-/* Note the unsupported zero-initialization of an object of the type with
-   G-id gid if it has a data member pointer; return TRUE if it did. */
-extern a_boolean ecil_note_zero_init_of_dmp(uint32_t gid);
 
 /* Remember why the function or variable with G-id gid is dropped: the reason
    goes into the unsupported_reason supp blob of its unsupported DECL_FUNC or
@@ -508,11 +581,54 @@ extern uint32_t ecil_func_type_id(an_ecil_frame *frame,
 
 extern void ecil_complete_pending_records(an_ecil_frame *frame);
 
+/* Class facts (spec 12.2): the predicates, and the facts a record that needs
+   them has them sent first.  A dynamic class has a TY_VPTR field, a
+   VIRTUAL_BASE field or a BASE of a dynamic class; its layout facts follow its
+   record body, its vtable facts come at the first need. */
+extern a_boolean ecil_class_is_dynamic(a_type_ptr type);
+
+extern a_boolean ecil_class_has_own_vptr(a_type_ptr type);
+
+extern void ecil_class_layout_facts(an_ecil_frame *frame, a_type_ptr type);
+
+extern void ecil_class_vtable_facts(an_ecil_frame *frame, a_type_ptr type);
+
+/* The G-id of the typeinfo (DECL_ABI_DATA) of a type, a class or not, with
+   everything it needs introduced first (the typeinfo of a pointee or of the
+   class of a member pointer, of the bases of a class); 0 after noting why if
+   it is not expressible (spec 12.3, 12.8). */
+extern uint32_t ecil_typeinfo_id(an_ecil_frame *frame, a_type_ptr type);
+
+/* The G-id of __cxa_throw_bad_array_new_length (no parameters, no return),
+   declared on first use. */
+extern uint32_t ecil_throw_bad_array_new_length_function(
+                                                      an_ecil_frame *frame);
+
+/* A kept record uses the vtable of a dynamic class: send its vtable facts and
+   mark it used.  The mark can be taken back with the position of the log taken
+   before the body or constant (a dropped body); commit forgets the log. */
+extern void ecil_note_vtable_used(an_ecil_frame *frame, a_type_ptr type);
+
+extern size_t ecil_vtable_use_mark(void);
+
+extern void ecil_vtable_use_rollback(size_t mark);
+
+extern void ecil_vtable_use_commit(size_t mark);
+
+/* Decide and send the vtables and class typeinfo of the dynamic classes
+   recorded so far: the local classes at the end of their function's region,
+   the others at the end of the translation unit (spec 12.8). */
+extern void ecil_emit_class_abi_data(an_ecil_frame *frame,
+                                     a_boolean     local_classes);
+
 /* The front end completed a class (class_decl.c): the records declared as
    incomplete are looked at again by the next ecil_complete_pending_records. */
 extern void ecil_note_class_completed(void);
 
 extern void ecil_forget_local_pending_records(void);
+
+/* The same for the virtual function signatures (CLASS_VFUNCS sig). */
+extern void ecil_forget_local_signatures(void);
 
 /* The static invokers of lambdas (spec 11.9): queued when first referenced,
    synthesized into the frame after the function being translated. */
@@ -638,8 +754,13 @@ typedef struct an_init_level {
   a_boolean     done;             /* A union that has its entry. */
   uint64_t      cur;              /* Index of the next member or element. */
   uint64_t      lead;             /* Records: the entries (the base classes)
-                                     before the data members: the REC_FIELD
-                                     index of the first data member. */
+                                     before the data members: the index of
+                                     the first data member among the
+                                     entries (the vptr not counted). */
+  uint64_t      vptr_shift;       /* Records: 1 for a class with a vptr of
+                                     its own (REC_FIELD 0): the REC_FIELD
+                                     index of an entry is its index plus
+                                     this. */
   a_field_ptr   cur_field;        /* Records: the member at cur. */
   a_constant_ptr
                 next_const;       /* The next constant of the list. */
@@ -666,6 +787,17 @@ typedef struct an_init_level {
      temporary, a closure, a new, the aggregate of a dynamic element) is
      initialized completely. */
   a_boolean     skip_constants;
+  /* With exceptions, an element or member that has a non-trivial destructor
+     is destroyed if a later one throws: a DEACTIVATABLE eh cleanup begun
+     after its initialization, ended before AGG_INIT_END (spec 12.6).  The
+     body finds the aggregate through a local that holds its address. */
+  uint32_t      addr_lid;         /* That local, or 0 for none. */
+  unsigned int  num_partial;      /* Cleanups begun at this level. */
+  a_boolean     partial_pending;  /* The entry at partial_index was just
+                                     initialized: its cleanup follows. */
+  uint64_t      partial_index;
+  uint64_t      partial_count;    /* ... and the entries it repeats. */
+  a_type_ptr    partial_type;     /* Its type. */
 } an_init_level;
 
 /*
@@ -715,6 +847,13 @@ extern a_boolean ecil_emit_constant_sources(an_ecil_frame *frame,
                                             a_constant_ptr *sources,
                                             size_t         num_sources,
                                             uint32_t       target_type);
+
+/* CONST_DATA_MEMBER or CONST_METHOD (C_DATA_MEMBER or C_METHOD with
+   as_constant) of a pointer-to-member constant (spec 12.4); FALSE after
+   noting why if it is not expressible. */
+extern a_boolean ecil_emit_ptr_to_member_constant(an_ecil_frame *frame,
+                                                  a_constant_ptr c,
+                                                  a_boolean      as_constant);
 
 extern a_boolean ecil_emit_constant_typed(an_ecil_frame *frame,
                                           a_constant_ptr constant,
@@ -858,6 +997,11 @@ extern a_boolean ecil_jump_check_enabled;
 
 /* TRUE for -fwrapv semantics: never send the nsw flag. */
 extern a_boolean ecil_wrapv;
+
+/* TRUE for a stream with exceptions (HDR_LANG exceptions = 1): C++ with the
+   front end's exceptions enabled.  Functions and calls may throw unless
+   marked NOTHROW (spec 12.6). */
+extern a_boolean ecil_has_exceptions(void);
 
 extern void ecil_submit_frame(an_ecil_frame *frame);
 

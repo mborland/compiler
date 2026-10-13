@@ -29,6 +29,7 @@ are valid only during the callback that receives them.
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <map>
 #include <vector>
 
 #include "ecil_ids.h"
@@ -474,6 +475,9 @@ public:
     { return fn_info_; }
 
 private:
+  bool static_init_may_repeat(uint32_t var) const;
+  /* A second STATIC_INIT_BEGIN of a variable is valid in the other body of a
+     structor pair with virtual bases (K5a). */
   bool need_sid(const an_operand &op, bool optional, const char *what,
                 std::string &problem);
   bool need_type(const an_operand &op, bool optional, std::string &problem);
@@ -540,6 +544,7 @@ private:
   bool check_abi_data(const a_record &record, std::string &problem);
   bool check_typeinfo_def(const a_record &record, std::string &problem);
   bool check_exception_record(const a_record &record, std::string &problem);
+  std::vector<uint32_t> throw_types_;   /* The types of the open THROW_BEGINs. */
   bool check_member_pointer_record(const a_record &record,
                                    std::string &problem);
   bool check_call_flags(const a_record &record, std::string &problem);
@@ -559,6 +564,15 @@ private:
   uint32_t                 ptr_bytes_;      /* HDR_TARGET ptr_bits / 8. */
   a_function_info          fn_info_;
   uint32_t                 fn_class_;       /* Class of the current `this`. */
+  uint32_t                 fn_gid_ = 0;     /* The function being defined. */
+  /* A guarded static local initialized in a structor pair with virtual bases
+     may have a STATIC_INIT in each of the two bodies (K5a, 12.3): per
+     variable, the function of the first one and the number so far. */
+  std::map<uint32_t, std::pair<uint32_t, uint8_t>>
+                           static_inits_;
+  std::map<uint32_t, uint32_t>
+                           structor_partner_;  /* Each STRUCTOR function's
+                                                  other variant. */
   bool                     allow_vptr_;     /* Reading a REC_FIELD type. */
   bool                     vbase_seen_;     /* Current record: a virtual
                                                base field was read. */

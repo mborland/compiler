@@ -183,6 +183,10 @@ suite against a baseline.
 - The worked example in `ecil_format.md` section 10 is regenerated with
   `ecil-asm` in M1.
 - `type_info::name` and other `edg_cir_rt` gaps only matter for C++ (M3).
+  Resolved in M4 S3: `edg_cir_rt` defines `std::type_info::operator==`, `!=`,
+  `before` and `name()` with libstdc++ semantics (a leading `*` name compares by
+  address), for streams built without scraped headers, where EDG's built-in
+  `type_info` declares them out of line and GCC 13+ libstdc++ exports none.
 - Function attributes (`nounwind` for C, `noinline` at -O0, `uwtable`,
   frame pointer) are absent from the spike's LLVM IR. They are not needed
   for correctness. cir-lib adds `nounwind` for C functions in M2, and the
@@ -277,3 +281,8 @@ The contract is `ecil_format.md` §12 (ECIL 1.2). The research behind it:
 | `NOTHROW` | Only from the FE predicates `is_non_throwing_routine` and `is_nothrow_type`: a wrong `NOTHROW` skips cleanups silently | — |
 | `cir.try_call` in CallConvLowering | Not a gap for us: CallConvLowering runs before FlattenCFG and EHABILowering, so it never sees `try_call` | `m4_upstream_drift.md` listed it as NYI upstream; the gate M4a review noted the pass order |
 | Base zero-initialization | `INIT_ZERO_BASE` writes only `nvsize` bytes, so a virtual base or field in the base's tail padding survives | Gate M4a review finding 3 (`EmitNullBaseClassInitialization`) |
+| Library assumptions on the writer (S1) | Covariance is derived from the return types for any result class, polymorphic or not (S1 review: the earlier "dynamic class with vtable facts" assumption dropped return adjustments silently). Every virtual function a defined vtable references is declared. A defined vtable has its class typeinfo `DECL_ABI_DATA` when rtti = 1 (otherwise a fatal diagnostic). A return-adjusting thunk of a variadic function is diagnosed (CIRGen has the same gap). With exceptions = 0 the D0 cleanup is `normal` | cir-lib S1 lit tests `bad-cxx-*` |
+| Null data-member pointer in a zero-initialized base (interop caveat) | We write −1 (the standard and clang). g++ writes 0 for a null data-member pointer inside a base subobject of a zero-initialized or value-initialized derived object. Our code reading such a g++-made object sees offset 0, which is not null | S3 review; probe `s3_dmp`, golden `writer-cxx-dmp-zero-init` |
+| `std::type_info` members in `edg_cir_rt` | `operator==`, `!=`, `before` and `name()` mirror libstdc++ exactly (with merged names off): a `*`-prefixed name compares by address only against another `*` name | S3 review found a non-strict `before`; fixed |
+| Throwing destructors in cleanups | Pending cleanups run when a normal-path cleanup throws (calls in cleanup regions are invokes into the enclosing scopes at the pin), as in g++ and clang. Two cases follow classic clang rather than g++: the element whose constructor's full-expression threw in an array constructor loop is not destroyed, and the returned object is not destroyed when a later destructor throws (CWG2176). An array whose element destructor may throw is diagnosed: the pin skips the elements before the one that threw (upstream; classic clang and g++ destroy them) | cir-lib run tests `cxx-s4-eh-cleanup-throw`, `-array-ctor-arg-throw`, `-return-value`; clang 21 and g++ 15 on the box |
+| `__builtin_is_pointer_interconvertible_with_class` on a union that is not standard-layout | True, as g++ and the FE's own constant folding give (so compile-time and run-time answers agree); the standard's wording ([meta.members]) says false. GCC's test `is-pointer-interconvertible-with-class2` expects true; clang's library lacks the function | M4c review follow-up; writer probe `s5_pmb_*` |

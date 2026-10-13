@@ -13,6 +13,9 @@ image, from the repository root, after building build/gcc-cir and build/cir:
 
   edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-symbols t.cpp
   ... t.cpp --ref clang --std c++14        # another reference compiler
+  ... t.cpp --ref clang --also g++         # clang is the tiebreak; also say
+                                           # where g++ differs from it
+  ... dev_tools/cir-abi-cases/s1           # every .cpp of a directory
   ... --ref-obj a.o --ours-obj b.o         # compare two object files
   ... --self-test                          # no compiler needed
 
@@ -65,6 +68,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 EXIT_SKIP = 3
+# The time limit of a compiler run (seconds); a run that hangs is a failure.
+COMPILE_TIMEOUT = 600
 
 
 # What the writer prints for a construct that the back end cannot express yet:
@@ -262,8 +267,12 @@ def compile_reference(source: Path, work: Path, compiler: str, std: str,
   out = work / 'ref.o'
   command = [compiler, f"-std={std}", '-c', *extra, str(source), '-o',
              str(out)]
-  proc = subprocess.run(command, stdout = subprocess.PIPE,
-                        stderr = subprocess.STDOUT, text = True)
+  try:
+    proc = subprocess.run(command, stdout = subprocess.PIPE,
+                          stderr = subprocess.STDOUT, text = True,
+                          timeout = COMPILE_TIMEOUT)
+  except subprocess.TimeoutExpired:
+    raise RuntimeError(f"{compiler} did not finish in {COMPILE_TIMEOUT} s")
   if proc.returncode != 0:
     raise RuntimeError(f"{compiler} failed:\n{proc.stdout}")
   return out
@@ -283,10 +292,14 @@ def compile_ours(source: Path, work: Path, root: Path, fe_build: str,
   env['EDG_USE_SYSTEM_HEADERS'] = '1'
   local = work / source.name
   shutil.copy2(source, local)
-  proc = subprocess.run(
-    [str(root / 'util/eccp.sh'), '-c', '-tused', f"--{std}", *extra,
-     local.name], cwd = work, env = env, stdout = subprocess.PIPE,
-    stderr = subprocess.STDOUT, text = True)
+  try:
+    proc = subprocess.run(
+      [str(root / 'util/eccp.sh'), '-c', '-tused', f"--{std}", *extra,
+       local.name], cwd = work, env = env, stdout = subprocess.PIPE,
+      stderr = subprocess.STDOUT, text = True, timeout = COMPILE_TIMEOUT)
+  except subprocess.TimeoutExpired:
+    raise OursFailed(f"cpfe-cir did not finish in {COMPILE_TIMEOUT} s",
+                     False)
   produced = work / (local.stem + '.o')
   if proc.returncode != 0 or not produced.exists():
     tail = '\n'.join(proc.stdout.splitlines()[-12:])
@@ -437,15 +450,103 @@ class SelfTest(unittest.TestCase):
       self.assertEqual(symbols['_ZTV1A'].family(), 'vtable')
 
 
+def check_source(source: Optional[Path], args: argparse.Namespace
+                 ) -> Tuple[int, str]:
+  '''Compare one source (or --ref-obj and --ours-obj): (exit status, text).
+
+  The status is 0, 1 (a difference or a failure of cpfe-cir), 2 (setup) or
+  EXIT_SKIP.  Each --also compiler is compared with the reference too (the
+  table says where it differs from the reference: "g++ differences").'''
+  work = Path(args.keep) if args.keep else Path(
+    tempfile.mkdtemp(prefix = 'edg-cir-symbols.'))
+  work.mkdir(parents = True, exist_ok = True)
+  out: List[str] = []
+  status = 0
+  also: Dict[str, Dict[str, Symbol]] = {}
+  try:
+    try:
+      if args.ref_obj:
+        ref_path = Path(args.ref_obj)
+      else:
+        assert source is not None
+        ref_path = compile_reference(source.resolve(), work, args.ref,
+                                     args.std, args.ref_flags.split())
+      reference = readelf(ref_path)
+      for compiler in args.also:
+        other = work / ('also-' + Path(compiler).name)
+        other.mkdir(exist_ok = True)
+        also[compiler] = readelf(compile_reference(
+          source.resolve(), other, compiler, args.std, args.ref_flags.split()
+        ))
+      try:
+        if args.ours_obj:
+          ours_path = Path(args.ours_obj)
+        else:
+          assert source is not None
+          ours_path = compile_ours(source.resolve(), work,
+                                   Path(args.root).resolve(), args.fe_build,
+                                   args.std, args.ours_flags.split())
+        ours: Optional[Dict[str, Symbol]] = readelf(ours_path)
+      except OursFailed as error:
+        ours = None
+        if not error.unsupported:
+          status = 1
+          out.append(f"FAIL: {error}")
+        else:
+          status = EXIT_SKIP
+          out.append(f"SKIP: the CIR back end does not support the file "
+                     f"yet; nothing was compared\n{error}")
+    except (RuntimeError, KeyError, OSError) as error:
+      return 2, f"edg-cir-symbols: {error}"
+  finally:
+    if not args.keep:
+      shutil.rmtree(work, ignore_errors = True)
+  families = sum(1 for s in reference.values() if s.family())
+  if not families and not args.all_symbols:
+    return EXIT_SKIP, ('SKIP: the reference object has no symbol of an ABI '
+                       'family; nothing was compared')
+  if ours is not None:
+    rows = compare(reference, ours, args.all_symbols,
+                   not args.no_normalize_groups)
+    out.append(f"{families} ABI-family symbols in the reference, "
+               f"{sum(1 for s in ours.values() if s.family())} in ours; "
+               f"{len(rows)} difference(s)")
+    if rows:
+      out.append(format_table(rows, reference))
+      status = 1
+  for compiler, symbols in also.items():
+    rows = compare(reference, symbols, args.all_symbols,
+                   not args.no_normalize_groups)
+    out.append(f"{Path(compiler).name} against the reference "
+               f"({args.ref}): {len(rows)} difference(s)")
+    if rows:
+      out.append(format_table(rows, reference))
+  return status, '\n'.join(out)
+
+
+def expand_sources(items: List[str]) -> List[Path]:
+  '''The files named, with each directory replaced by its *.cpp files.'''
+  sources: List[Path] = []
+  for item in items:
+    path = Path(item)
+    sources.extend(sorted(path.glob('*.cpp')) if path.is_dir() else [path])
+  return sources
+
+
 def main() -> None:
   parser = argparse.ArgumentParser(
     description = __doc__.split('\n')[0],
     formatter_class = argparse.RawDescriptionHelpFormatter,
     epilog = __doc__.split('\n', 2)[2]
   )
-  parser.add_argument('source', nargs = '?', help = 'the C++ file')
+  parser.add_argument('source', nargs = '*',
+                      help = 'C++ files or directories of them')
   parser.add_argument('--ref', default = 'g++',
                       help = 'the reference compiler (default g++)')
+  parser.add_argument('--also', action = 'append', default = [],
+                      help = 'another compiler to compare with the '
+                             'reference (repeatable); its differences are '
+                             'listed after ours')
   parser.add_argument('--std', default = 'c++17')
   parser.add_argument('--ref-flags', default = '',
                       help = 'more flags for the reference compiler')
@@ -472,50 +573,30 @@ def main() -> None:
   if not args.source and not (args.ref_obj and args.ours_obj):
     parser.error('a C++ file (or --ref-obj and --ours-obj) is required')
 
-  work = Path(args.keep) if args.keep else Path(
-    tempfile.mkdtemp(prefix = 'edg-cir-symbols.'))
-  work.mkdir(parents = True, exist_ok = True)
-  try:
-    try:
-      if args.ref_obj:
-        ref_path = Path(args.ref_obj)
-      else:
-        ref_path = compile_reference(Path(args.source).resolve(), work,
-                                     args.ref, args.std,
-                                     args.ref_flags.split())
-      if args.ours_obj:
-        ours_path = Path(args.ours_obj)
-      else:
-        ours_path = compile_ours(Path(args.source).resolve(), work,
-                                 Path(args.root).resolve(), args.fe_build,
-                                 args.std, args.ours_flags.split())
-      reference, ours = readelf(ref_path), readelf(ours_path)
-    except OursFailed as error:
-      if not error.unsupported:
-        print(f"edg-cir-symbols: FAIL: {error}", file = sys.stderr)
-        sys.exit(1)
-      print(f"SKIP: the CIR back end does not support the file yet; "
-            f"nothing was compared\n{error}")
-      sys.exit(EXIT_SKIP)
-    except (RuntimeError, KeyError, OSError) as error:
-      print(f"edg-cir-symbols: {error}", file = sys.stderr)
-      sys.exit(2)
-  finally:
-    if not args.keep:
-      shutil.rmtree(work, ignore_errors = True)
-  families = sum(1 for s in reference.values() if s.family())
-  if not families and not args.all_symbols:
-    print('SKIP: the reference object has no symbol of an ABI family; '
-          'nothing was compared')
-    sys.exit(EXIT_SKIP)
-  rows = compare(reference, ours, args.all_symbols,
-                 not args.no_normalize_groups)
-  print(f"{families} ABI-family symbols in the reference, "
-        f"{sum(1 for s in ours.values() if s.family())} in ours; "
-        f"{len(rows)} difference(s)")
-  if rows:
-    print(format_table(rows, reference))
-  sys.exit(1 if rows else 0)
+  if args.ref_obj:
+    status, text = check_source(None, args)
+    print(text)
+    sys.exit(status)
+  sources = expand_sources(args.source)
+  if len(sources) == 1:
+    status, text = check_source(sources[0], args)
+    print(text)
+    sys.exit(status)
+  # Several files: a section for each, then a table of the results.
+  results: List[Tuple[str, int]] = []
+  for source in sources:
+    status, text = check_source(source, args)
+    print(f"==== {source}\n{text}\n", flush = True)
+    results.append((source.name, status))
+  names = {0: 'PASS', 1: 'FAIL', 2: 'ERROR', EXIT_SKIP: 'SKIP'}
+  print(f"{'file':<32}result")
+  for name, status in results:
+    print(f"{name:<32}{names.get(status, status)}")
+  counts = {names[k]: sum(1 for _, s in results if s == k) for k in names}
+  print(', '.join(f"{n} {c}" for n, c in counts.items()))
+  codes = [s for _, s in results]
+  sys.exit(2 if 2 in codes else 1 if 1 in codes else
+           EXIT_SKIP if EXIT_SKIP in codes else 0)
 
 
 if __name__ == '__main__':

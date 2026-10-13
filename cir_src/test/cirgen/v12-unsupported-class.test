@@ -1,9 +1,0 @@
-; ECIL 1.2 records are not supported by the code generator yet (M4 slice S1
-; onward): the reader accepts the stream, the emitter names the first record it
-; cannot implement and fails with status 4, never a silent drop.
-; RUN: sed 's/HDR_LANG 1 201703 6/HDR_LANG 1 201703 4/' %S/../format/fixtures/good_v12_classes.txt > %t.txt
-; RUN: %ecil-asm %t.txt -o %t.ecil
-; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
-; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 4'
-
-; CHECK: ECIL 1.2 record TY_VPTR is not supported yet

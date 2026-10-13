@@ -1,0 +1,147 @@
+; C++ (ECIL 1.2): C_METHOD with a this-adjustment inside records, a nested array
+; and a union of a VAR_INIT (gap G2, K6b): the whole variable is emitted in the
+; lowered form, the pointers to member functions as { i64, i64 }, in a
+; "<name>.lowered" record or array of the same layout; the members that hold
+; an adjustment-free pointer or none are lowered or copied along, and uses of
+; the variable cast back to its declared type.  The host compares the values
+; with g++'s.
+;   struct B1 { int x; int f(int); };  struct B2 { int y; int g(int); };
+;   struct D : B1, B2 { int d; };  typedef int (D::*DM)(int);
+;   struct H { int k; DM pm; int tail; };  struct G { H a[2]; };
+;   union W { DM pm; long x; };
+;   H gh = {1, &B2::g, 3};
+;   G gg = {{ {7, &B1::f, 8}, {9, &B2::g} }};
+;   H garr[2] = { {4, &B2::g, 5}, {5, &B1::f, 6} };
+;   W gu = { &B2::g };
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -std=c++17 -w %S/Inputs/s4_mp_lowered_agg_host.cpp %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %edg-cir --emit=obj -O2 -o %t2.o %t.ecil
+; RUN: g++ -std=c++17 -w %S/Inputs/s4_mp_lowered_agg_host.cpp %t2.o -o %t2.exe
+; RUN: %t2.exe
+
+; CHECK-DAG: cir.global external {{.*}}@gh = #cir.const_record<{#cir.int<1> : !s32i, #cir.const_record<{#cir.global_view<@_ZN2B21gEi> : !s64i, #cir.int<4> : !s64i}>
+; CHECK-DAG: !rec_H2Elowered = !cir.struct<"H.lowered"
+; CHECK-DAG: !rec_W2Elowered = !cir.union<"W.lowered"
+
+frame DECLS
+  STR 100 "B1"
+  STR 101 "B2"
+  STR 102 "D"
+  STR 103 "x"
+  STR 104 "y"
+  STR 105 "d"
+  STR 106 "H"
+  STR 107 "k"
+  STR 108 "pm"
+  STR 109 "tail"
+  STR 110 "G"
+  STR 111 "a"
+  STR 112 "_ZN2B21gEi"
+  STR 113 "_ZN2B11fEi"
+  STR 114 "gh"
+  STR 115 "gg"
+  STR 116 "garr"
+  STR 117 "gu"
+  STR 118 "W"
+  STR 119 "x"
+  TY_RECORD_DECL 41 0 100
+  TY_RECORD_BODY 41 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 103 0
+  TY_RECORD_DECL 42 0 101
+  TY_RECORD_BODY 42 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 104 0
+  TY_RECORD_DECL 43 0 102
+  TY_RECORD_BODY 43 12 12 4 0 3
+  REC_FIELD 41 0 nil nil nil 16
+  REC_FIELD 42 4 nil nil nil 16
+  REC_FIELD 1 8 nil nil 105 0
+  TY_PTR 51 41
+  TY_PTR 52 42
+  TY_PTR 53 43
+  TY_FUNC 61 1 0 [51, 1]
+  TY_FUNC 62 1 0 [52, 1]
+  TY_FUNC 63 1 0 [53, 1]
+  TY_METHOD 71 63 43
+  TY_RECORD_DECL 44 0 106
+  TY_RECORD_BODY 44 32 32 8 0 3
+  REC_FIELD 1 0 nil nil 107 0
+  REC_FIELD 71 8 nil nil 108 0
+  REC_FIELD 1 24 nil nil 109 0
+  TY_ARRAY 81 44 2 0
+  TY_RECORD_DECL 46 0 110
+  TY_RECORD_BODY 46 64 64 8 0 1
+  REC_FIELD 81 0 nil nil 111 0
+  TY_RECORD_DECL 47 1 118
+  TY_RECORD_BODY 47 16 16 8 0 2
+  REC_FIELD 71 0 nil nil 108 0
+  REC_FIELD 3 0 nil nil 119 0
+  DECL_FUNC 201 62 0 0 112
+  DECL_FUNC 202 61 0 0 113
+  DECL_VAR 301 44 0 1 8 114
+  DECL_VAR 302 46 0 1 8 115
+  DECL_VAR 303 81 0 1 8 116
+  DECL_VAR 304 47 0 1 8 117
+frame REGION
+  C_AGG_BEGIN 44
+  C_SEL 0
+  C_INT 1 1
+  C_SEL 1
+  C_METHOD 71 201 4 0
+  C_SEL 2
+  C_INT 1 3
+  C_AGG_END
+  VAR_INIT 301
+  C_AGG_BEGIN 46
+  C_SEL 0
+  C_AGG_BEGIN 81
+  C_SEL 0
+  C_AGG_BEGIN 44
+  C_SEL 0
+  C_INT 1 7
+  C_SEL 1
+  C_METHOD 71 202 0 0
+  C_SEL 2
+  C_INT 1 8
+  C_AGG_END
+  C_SEL 1
+  C_AGG_BEGIN 44
+  C_SEL 0
+  C_INT 1 9
+  C_SEL 1
+  C_METHOD 71 201 4 0
+  C_AGG_END
+  C_AGG_END
+  C_AGG_END
+  VAR_INIT 302
+  C_AGG_BEGIN 81
+  C_SEL 0
+  C_AGG_BEGIN 44
+  C_SEL 0
+  C_INT 1 4
+  C_SEL 1
+  C_METHOD 71 201 4 0
+  C_SEL 2
+  C_INT 1 5
+  C_AGG_END
+  C_SEL 1
+  C_AGG_BEGIN 44
+  C_SEL 0
+  C_INT 1 5
+  C_SEL 1
+  C_METHOD 71 202 0 0
+  C_SEL 2
+  C_INT 1 6
+  C_AGG_END
+  C_AGG_END
+  VAR_INIT 303
+  C_AGG_BEGIN 47
+  C_SEL 0
+  C_METHOD 71 201 4 0
+  C_AGG_END
+  VAR_INIT 304
+frame END
+  END auto 0

@@ -1,5 +1,5 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
-"./cpp0x/lambda/lambda-nullptr.C", line 23: warning: CIR back end: the body of "Call" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+"./cpp0x/lambda/lambda-nullptr.C", line 23: warning: CIR back end: the body of "Call" uses this conversion, which the CIR back end does not support; the function is dropped
   }
   ^
           detected during:
@@ -7,19 +7,7 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
             instantiation of "RType do_test<RType>(int) [with RType=pdm]" at line 35
             instantiation of "void test<RType>() [with RType=pdm]" at line 46
 
-"./cpp0x/lambda/lambda-nullptr.C", line 29: warning: CIR back end: the body of "do_test" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during:
-            instantiation of "RType do_test<RType>(int) [with RType=pdm]" at line 35
-            instantiation of "void test<RType>() [with RType=pdm]" at line 46
-
-"./cpp0x/lambda/lambda-nullptr.C", line 41: warning: CIR back end: the body of "test" uses an operation on an unsupported scalar type, which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during instantiation of "void test<RType>() [with RType=pdm]" at line 46
-
-"./cpp0x/lambda/lambda-nullptr.C", line 23: warning: CIR back end: the body of "Call" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
+"./cpp0x/lambda/lambda-nullptr.C", line 23: warning: CIR back end: the body of "Call" uses this conversion, which the CIR back end does not support; the function is dropped
   }
   ^
           detected during:
@@ -27,28 +15,8 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
             instantiation of "RType do_test<RType>(int) [with RType=pmf]" at line 35
             instantiation of "void test<RType>() [with RType=pmf]" at line 47
 
-"./cpp0x/lambda/lambda-nullptr.C", line 29: warning: CIR back end: the body of "do_test" uses a return type that is unsupported, which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during:
-            instantiation of "RType do_test<RType>(int) [with RType=pmf]" at line 35
-            instantiation of "void test<RType>() [with RType=pmf]" at line 47
+Error: CIR back end: the definition of '_Z4CallIM1AiZ7do_testIS1_ET_iEUliE_ES3_T0_i' was dropped: it uses a construct the CIR back end cannot express: this conversion (and it is referenced)
 
-"./cpp0x/lambda/lambda-nullptr.C", line 41: warning: CIR back end: the body of "test" uses an operation on an unsupported scalar type, which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during instantiation of "void test<RType>() [with RType=pmf]" at line 47
-
-Warning: CIR back end: the unused definition of '_Z4CallIM1AiZ7do_testIS1_ET_iEUliE_ES3_T0_i' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
-
-Warning: CIR back end: the unused definition of '_Z7do_testIM1AiET_i' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
-
-Warning: CIR back end: the unused definition of '_Z4CallIM1AFiiEZ7do_testIS2_ET_iEUliE_ES4_T0_i' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
-
-Warning: CIR back end: the unused definition of '_Z7do_testIM1AFiiEET_i' was dropped and erased: it uses a construct the CIR back end cannot express: a return type that is unsupported
-
-Error: CIR back end: the definition of '_Z4testIM1AiEvv' was dropped: it uses a construct the CIR back end cannot express: an operation on an unsupported scalar type (and it is referenced)
-
-Error: CIR back end: the definition of '_Z4testIM1AFiiEEvv' was dropped: it uses a construct the CIR back end cannot express: an operation on an unsupported scalar type (and it is referenced)
+Error: CIR back end: the definition of '_Z4CallIM1AFiiEZ7do_testIS2_ET_iEUliE_ES4_T0_i' was dropped: it uses a construct the CIR back end cannot express: this conversion (and it is referenced)
 
 2 errors detected in the compilation of "Test_name.c".

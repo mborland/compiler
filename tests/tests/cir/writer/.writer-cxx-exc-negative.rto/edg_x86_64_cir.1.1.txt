@@ -1,0 +1,63 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 12: warning: CIR back end: the body of "bad" uses a catch parameter copy with default arguments or temporaries, which the CIR back end does not support; the function is dropped
+  void bad() { try { g(); } catch (C c) { } }
+                                            ^
+
+ecil 1.2 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  TY_FUNC 5 4 0 []
+  STR 5 "_Z2okv"
+  DECL_FUNC 6 5 0 0 5
+  DECL_FUNC 6 5 0 1 5
+  STR 6 "_Z1gv"
+  DECL_FUNC 7 5 0 0 6
+  STR 7 "_ZTIi"
+  DECL_ABI_DATA 8 2 1 0 0 7
+  TYPEINFO_DEF 8 0 0 nil nil
+  FUNC_BEGIN 6 0
+  BLOCK_BEGIN
+  TRY_BEGIN 0
+  BLOCK_BEGIN
+  CALL 7 5 0 4
+  BLOCK_END
+  CATCH_BEGIN 8
+  LOCAL 1 1 nil 0 0
+  CATCH_PARAM 1 2 nil
+  BLOCK_BEGIN
+  BLOCK_END
+  TRY_END
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 8 "_Z3badv"
+  DECL_FUNC 9 5 0 0 8
+  DECL_FUNC 9 5 0 1 8
+  STR 9 "C"
+  TY_RECORD_DECL 10 0 9
+  TY_RECORD_BODY 10 1 0 1 12 0
+  STR 10 "1C"
+  CLASS_MANGLE 10 10
+  CLASS_INFO 10 1 1 nil 0
+  CLASS_BASES 10 []
+  DECL_ABI_DATA 11 2 10 3 3 nil
+  DECL_FUNC 9 5 0 32 8 supp{13: "a catch parameter copy with default arguments or temporaries"}
+frame GLOBALS
+frame NAMES
+frame END
+  END 5 0

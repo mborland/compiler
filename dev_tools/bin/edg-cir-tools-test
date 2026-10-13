@@ -276,6 +276,220 @@ class CrashExcuseTest(unittest.TestCase):
         tests, path, '-DTEST_NUMBER=1 --c++99'), '')
 
 
+class CommandTimeoutTest(unittest.TestCase):
+  def context(self, tmp: str, **limits: int):
+    import types
+    args = types.SimpleNamespace(
+      tree = tmp, out = str(Path(tmp) / 'out'), command_timeout = 60,
+      step_timeout = [f"{k}={v}" for k, v in limits.items()])
+    return gate.Context(args)
+
+  def test_a_hanging_command_is_stopped(self) -> None:
+    import tempfile, time
+    with tempfile.TemporaryDirectory() as tmp:
+      ctx = self.context(tmp, hang = 1)
+      started = time.time()
+      code = gate.run_logged(ctx, 'hang', ['sleep', '30'], label = 'sleep')
+      self.assertEqual(code, 124)
+      self.assertLess(time.time() - started, 20)
+      self.assertEqual(ctx.timed_out['hang'], ['sleep'])
+      log = (Path(tmp) / 'out/hang/log.txt').read_text()
+      self.assertIn('[TIMEOUT after 1 s', log)
+
+  def test_container_labels_are_per_gate_run(self) -> None:
+    import tempfile, os
+    with tempfile.TemporaryDirectory() as tmp:
+      ctx = self.context(tmp)
+      prefix = gate.job_prefix(ctx, 'cpp-stress')
+      self.assertEqual(prefix, f"cir-config-{Path(tmp).name}-cpp-stress-g"
+                               f"{os.getpid()}")
+      # Another gate run (another pid) of the same tree and step gets
+      # another prefix; the filter holds the whole prefix.
+      real = os.getpid
+      try:
+        os.getpid = lambda: real() + 1
+        other = gate.job_prefix(ctx, 'cpp-stress')
+      finally:
+        os.getpid = real
+      self.assertNotEqual(prefix, other)
+      self.assertEqual(gate.container_filter(prefix),
+                       f"label=edg.job={prefix}")
+      self.assertNotEqual(gate.container_filter(prefix),
+                          gate.container_filter(other))
+
+  def test_a_normal_command_is_not(self) -> None:
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      ctx = self.context(tmp)
+      self.assertEqual(gate.run_logged(ctx, 'fine', ['true']), 0)
+      self.assertEqual(ctx.timed_out, {})
+      self.assertEqual(gate.command_timeout(ctx, 'fine'), 60)
+      self.assertEqual(gate.command_timeout(ctx, 'isolation'), 900)
+
+
+class FingerprintTest(unittest.TestCase):
+  def test_tree_fingerprint(self) -> None:
+    import tempfile
+    module = checkpoint
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      for name in ('src', 'cir_src', 'dev_tools/bin', 'tests/.edgy',
+                   'cmake'):
+        (root / name).mkdir(parents = True)
+      (root / 'src/a.c').write_text('one')
+      (root / 'cir_src/b.cpp').write_text('two')
+      first = module.local_fingerprint(root)
+      self.assertEqual(module.local_fingerprint(root), first)
+      self.assertTrue(first.endswith(' 2'))
+      # A change of a file, or a new file, changes it ...
+      (root / 'src/a.c').write_text('three')
+      changed = module.local_fingerprint(root)
+      self.assertNotEqual(changed, first)
+      (root / 'tests/.edgy/f.txt').write_text('x')
+      self.assertNotEqual(module.local_fingerprint(root), changed)
+      # ... files outside the hashed directories, build directories, caches
+      # and symbolic links do not.
+      again = module.local_fingerprint(root)
+      (root / 'build').mkdir()
+      (root / 'build/x').write_text('y')
+      (root / 'cir_src/build').mkdir()
+      (root / 'cir_src/build/z').write_text('y')
+      (root / 'src/__pycache__').mkdir()
+      (root / 'src/__pycache__/m.pyc').write_text('y')
+      (root / 'src/link').symlink_to(root / 'src/a.c')
+      (root / 'README').write_text('y')
+      self.assertEqual(module.local_fingerprint(root), again)
+
+
+class M4StepsTest(unittest.TestCase):
+  ABI = '''==== dev_tools/cir-abi-cases/s1/%s: %s identical 4, normalized 1, spelling 2, fe 0, ours %d, unknown 0, missing %d, vbase 0, norecord 2
+%s
+'''
+
+  def abi(self, extra: str = '') -> str:
+    names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
+    text = ''.join(self.ABI % (n + '.cpp', 'PASS', 0, 0, '') for n in names)
+    return text + extra
+
+  def test_abi_diff_rule(self) -> None:
+    ok, detail = gate.judge_abi_batch(self.abi())
+    self.assertTrue(ok, detail)
+    # A difference of ours fails; so do missing blocks (but not of a known
+    # tool limit), and a file that did not compare.
+    bad = self.abi(self.ABI % ('k.cpp', 'DIFF', 2, 0, 'DIFFERS (OURS) x'))
+    self.assertFalse(gate.judge_abi_batch(bad)[0])
+    bad = self.abi(self.ABI % ('k.cpp', 'DIFF', 0, 3, 'MISSING vtable A'))
+    self.assertFalse(gate.judge_abi_batch(bad)[0])
+    known = self.abi(self.ABI % ('template.cpp', 'DIFF', 0, 4,
+                                 'MISSING vtable Box (6 entries)'))
+    ok, detail = gate.judge_abi_batch(known)
+    self.assertTrue(ok, detail)
+    self.assertIn('4 missing from known tool limits', detail)
+    self.assertFalse(gate.judge_abi_batch(
+      self.abi() + 'foo.cpp                  FE-REJECT\n')[0])
+    self.assertFalse(gate.judge_abi_batch(
+      'SKIP: ecil-dump has no --vtable-layouts option yet\n')[0])
+
+  def test_abi_diff_needs_a_comparison_per_file(self) -> None:
+    # An all-zero file, and a known-limit file that compared nothing, fail.
+    empty = self.ABI % ('k.cpp', 'PASS', 0, 0, '')
+    empty = empty.replace('identical 4, normalized 1, spelling 2',
+                          'identical 0, normalized 0, spelling 0')
+    ok, detail = gate.judge_abi_batch(self.abi(empty))
+    self.assertFalse(ok)
+    self.assertIn('k.cpp: no block was compared', detail)
+    limited = (self.ABI % ('template.cpp', 'DIFF', 0, 4, 'MISSING x')
+               ).replace('identical 4, normalized 1, spelling 2',
+                         'identical 0, normalized 0, spelling 0')
+    ok, detail = gate.judge_abi_batch(self.abi(limited))
+    self.assertFalse(ok)
+    self.assertIn('template.cpp: no block was compared', detail)
+    # With one compared block (identical or loose) a known-limit file passes.
+    some = (self.ABI % ('template.cpp', 'DIFF', 0, 4, 'MISSING x')
+            ).replace('identical 4, normalized 1, spelling 2',
+                      'identical 0, normalized 0, spelling 1')
+    self.assertTrue(gate.judge_abi_batch(self.abi(some))[0])
+
+  def test_eh_probes_rule(self) -> None:
+    rows = ''.join(f"e{i}.cpp                     PASS        \n"
+                   for i in range(5))
+    rows += 'u1.cpp                     UNSUPPORTED* edg-cir: error ...\n'
+    skip = {'u1.cpp'}
+    ok, detail = gate.judge_eh_probes(rows, skip, 6)
+    self.assertTrue(ok, detail)
+    # Fewer probes than expected (a glob that matched nothing) fails.
+    self.assertFalse(gate.judge_eh_probes('0 probe(s): ...\n', skip, 6)[0])
+    self.assertFalse(gate.judge_eh_probes(rows, skip, 7)[0])
+    # A probe on the skip list that passes now must be removed from it.
+    ok, detail = gate.judge_eh_probes(rows, skip | {'e1.cpp'}, 6)
+    self.assertFalse(ok)
+    self.assertIn('e1.cpp passes: remove it from the skip list', detail)
+    # An unsupported probe that is not on the list, and a DIFF, fail.
+    self.assertFalse(gate.judge_eh_probes(rows, set(), 6)[0])
+    bad = rows.replace('e2.cpp                     PASS',
+                       'e2.cpp                     DIFF')
+    self.assertFalse(gate.judge_eh_probes(bad, skip, 6)[0])
+
+  def test_symbols_rule(self) -> None:
+    def one(name: str, rows: str = '') -> str:
+      return (f"==== dev_tools/cir-abi-cases/s1/{name}\n"
+              f"14 ABI-family symbols in the reference, 12 in ours; "
+              f"{rows.count(chr(10))} difference(s)\n"
+              f"family symbol difference detail\n{rows}"
+              f"g++ against the reference (clang): 0 difference(s)\n")
+    names = [f"c{i}.cpp" for i in range(10)]
+    text = ''.join(one(n) for n in names)
+    self.assertTrue(gate.judge_symbols(text)[0])
+    allowed = one('no-key.cpp',
+                  'dtor _ZN1AD0Ev only in ours WEAK FUNC\n'
+                  'vtable _ZTV1A only in ours WEAK OBJECT\n')
+    ok, detail = gate.judge_symbols(text + allowed)
+    self.assertTrue(ok, detail)
+    self.assertIn('2 known difference(s)', detail)
+    other = one('no-key.cpp', 'vtable _ZTV1B only in ours WEAK OBJECT\n')
+    self.assertFalse(gate.judge_symbols(text + other)[0])
+    skipped = text + '==== x/skip.cpp\nSKIP: the CIR back end ...\n'
+    self.assertFalse(gate.judge_symbols(skipped)[0])
+
+  def test_mixed_tu_rule(self) -> None:
+    good = ('case direction result detail\n'
+            'a ref+ours PASS \na ours+ref PASS \n2 case(s)\n')
+    self.assertTrue(gate.judge_mixed_tu(good)[0])
+    self.assertFalse(gate.judge_mixed_tu(
+      good + 'b ref+ours XFAIL why\n')[0])
+    self.assertFalse(gate.judge_mixed_tu('nothing\n')[0])
+
+  def test_stress_rule(self) -> None:
+    lines = ''.join(
+      f"{c.split(':')[0]:<8} {int(c.split(':')[1]):6d} rc=0 total_ms={m} "
+      f"stages(decode)=1 rss={mb * 1024} \n"
+      for c, (m, mb) in gate.M4_STRESS_CASES.items())
+    ok, detail = gate.judge_stress(lines)
+    self.assertTrue(ok, detail)
+    slow = lines.replace('total_ms=107', 'total_ms=999999')
+    self.assertFalse(gate.judge_stress(slow)[0])
+    self.assertFalse(gate.judge_stress(
+      lines.replace('rc=0', 'rc=139', 1))[0])
+    self.assertFalse(gate.judge_stress(lines.splitlines()[0])[0])
+    self.assertEqual(gate.stress_limits((107, 59)), (2000, 177))
+
+
+class SanitizerTrailerTest(unittest.TestCase):
+  def test_nested_bug_trailer_is_not_compiler_output(self) -> None:
+    reference = ('"t.c", line 10: error: target attribute not recognized\n'
+                 'Segmentation fault\neccp: front end returned an exit '
+                 'status of 139\n')
+    debug = ('"t.c", line 10: error: target attribute not recognized\n'
+             'Segmentation fault\nAddressSanitizer: nested bug in the same '
+             'thread, aborting.\nSegmentation fault\neccp: front end '
+             'returned an exit status of 139\n')
+    self.assertEqual(summary.non_cir_text(debug), reference)
+    self.assertEqual(summary.non_cir_text(reference), reference)
+    # Another AddressSanitizer report is not removed.
+    other = reference + '==1==ERROR: AddressSanitizer: heap-use-after-free\n'
+    self.assertEqual(summary.non_cir_text(other), other)
+
+
 class FeatureBucketTest(unittest.TestCase):
   def feature(self, message: str) -> str:
     return summary.cxx_feature(summary.TestResult(
@@ -325,6 +539,22 @@ class FeatureBucketTest(unittest.TestCase):
         ('undefined reference to `__cxa_begin_catch\'',
          'exceptions: try/catch/function-try')):
       self.assertEqual(self.feature(message), feature, message)
+
+  def test_m4_slices(self) -> None:
+    for feature, slice_name in (
+        ('vtables/virtual: virtual functions and calls', 'S1 polymorphism'),
+        ('vtables/virtual: vtable, VTT and thunk symbols',
+         'S1 polymorphism'),
+        ('vtables/virtual: constructors and destructors of polymorphic '
+         'classes', 'S1 polymorphism'),
+        ('vtables/virtual: virtual bases', 'S2 virtual bases'),
+        ('rtti: typeid', 'S3 rtti and member pointers'),
+        ('rtti: typeinfo', 'S3 rtti and member pointers'),
+        ('member pointers', 'S3 rtti and member pointers'),
+        ('exceptions: throw', 'S4-S5 exceptions'),
+        ('exceptions: try/catch/function-try', 'S4-S5 exceptions'),
+        ('templates', ''), ('other', '')):
+      self.assertEqual(summary.m4_slice(feature), slice_name, feature)
 
   def test_unrelated_messages_stay(self) -> None:
     self.assertEqual(self.feature('error: invalid type conversion'), 'other')

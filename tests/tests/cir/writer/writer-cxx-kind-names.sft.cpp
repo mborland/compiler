@@ -23,7 +23,7 @@ struct O { int v; int *operator&(); };
 O *addr(O &o) { return __builtin_addressof(o); }
 // names of the kinds that are not supported
 struct P { int m; int f(); };
-int throws() { throw 1; }
-int tries() { try { return 1; } catch (...) { return 0; } }
-int pm_call(P *p, int (P::*f)()) { return (p->*f)(); }
-int pm_field(P *p, int P::*m) { return p->*m; }
+int stmt_expr() { return ({ int x = 1; x; }); }
+void asm_use() { asm("nop"); }
+void *pm_addr(P *p, int (P::*f)()) { return (void *)(p->*f); }
+void *pm_addr2(P &p, int (P::*f)()) { return (void *)(p.*f); }

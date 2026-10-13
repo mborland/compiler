@@ -9,7 +9,7 @@ int tern(bool b) { return b ? throw 1 : 7; }
 bool lor(bool b) { return b || (throw 2, false); }
 int main() {
   try { throw E(A(1), 2); } catch (E &e) { std::printf("caught E %d\n", e.w); }
-  try { throw E(A(3), mk(2)); } catch (char c) { std::printf("char %c\n", c); }
+  try { int k = mk(2); throw E(A(3), k); } catch (char c) { std::printf("char %c\n", c); }
   try { throw E(A(4), -1); } catch (int i) { std::printf("int %d\n", i); }
   try { tern(true); } catch (int i) { std::printf("tern %d\n", i); }
   try { lor(false); } catch (int i) { std::printf("lor %d\n", i); }

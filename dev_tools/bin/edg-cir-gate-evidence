@@ -44,6 +44,25 @@ Steps (names for --only/--skip):
              (unless --allow-status-changes)
   modes      in-process and two-process output identical over the corpus
   stress     edg-cir-stress (deep nesting through the two-process path)
+  abi-diff   (--with-m4 or --only) edg-cir-abi-diff batch --vbases over
+             dev_tools/cir-abi-cases/{s1,s2} and the clang vtable-layout and
+             thunk tests (copied from --llvm-project): passes iff no block
+             differs ("ours" or "fe"), none is missing except those of the
+             known tool limits (template classes: clang prints the template
+             name without its arguments), and every file was compared
+  symbols    edg-cir-symbols over the same cases against clang, with g++
+             listed: passes iff every difference is on the allowlist of
+             KNOWN_SYMBOL_DIFFERENCES (with reasons) and nothing was skipped
+  mixed-tu   edg-cir-mixed-tu over every case, both directions, with g++ and
+             with clang as the other translation unit: passes iff every
+             result is PASS
+  eh-probes  edg-cir-run-diff over the writer's exception probes (probes/m4
+             e*, s4_*, s5_*): programs built by g++ and by the CIR back end
+             run alike; the probes of --eh-probes-skip may be diagnosed as
+             unsupported
+  m4-stress  cir_src/scripts/box_m4_stress.sh under `ulimit -s 256` over the
+             cases of M4_STRESS_CASES (the sizes of research/m4_stress.md):
+             passes iff every run succeeds within its time and memory limit
   cpp-smoke  (--with-cpp or --only) cir-cpp-smoke through --cpp-configs
              (--types rp): buckets, pass rate per --c++NN mode, failures by
              C++ feature; fails on a crash, and (--cpp-smoke-all-pass) on any
@@ -61,8 +80,10 @@ Steps (names for --only/--skip):
              the same without the overwriting (build/gcc-cir-nopoison, made
              by the step) and the release front end must show no crash or
              assertion and write byte-identical streams (poison vs. none) for
-             the C corpus, the C and C++ smoke lists and tests/tests/cir
-             (writer and cirgen); the release front end is compared as INFO
+             the C corpus, the C and C++ smoke lists, tests/tests/cir
+             (writer and cirgen) and the C++ corpus; the release front end
+             must write the same streams as the debug one (the build-type
+             dependent macros are pinned in default/cpfe-cir.cmakedef)
   cpp-stress  cir_src/scripts/box_stress.sh over the synthetic C++ streams
              (cxx_locals ... cxx_funcs) through edg-cir under a 256 KiB
              stack: every case rc=0 and run=0 (the streams are self-checking
@@ -153,7 +174,11 @@ STEPS = ('build', 'identity', 'isolation', 'smoke', 'cir-suite', 'corpus',
          'stress', 'writer-stress', 'rss', 'day', 'ctest', 'asm-diff', 'perf',
          'cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
          'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
-         'cpp-asm-diff', 'crash-sweep')
+         'cpp-asm-diff', 'crash-sweep', 'abi-diff', 'symbols', 'mixed-tu',
+         'eh-probes', 'm4-stress')
+# The steps of gate M4 (the ABI and EH harnesses); they run only with
+# --with-m4 or --only.
+M4_STEPS = ('abi-diff', 'symbols', 'mixed-tu', 'eh-probes', 'm4-stress')
 # The steps of the C++ milestones; they run only with --with-cpp or --only.
 CPP_STEPS = ('cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
              'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
@@ -185,25 +210,106 @@ class Context:
     self.env = dict(os.environ)
     self.env['PATH'] = f"{self.tree / 'dev_tools/bin'}:{self.env['PATH']}"
     self.env['PYTHONPATH'] = str(self.tree / 'dev_tools/pylibs')
+    # The commands of a step that were stopped at their time limit.
+    self.timed_out: Dict[str, List[str]] = {}
+
+
+# The time limit of one command of a step (seconds): a command that hangs is
+# stopped, its container with it, and the step fails.  The normal times are a
+# small fraction of these; --command-timeout changes the default.
+COMMAND_TIMEOUT = 7200
+STEP_TIMEOUTS = {
+  'isolation': 900, 'writer-stress': 1800, 'cpp-writer-stress': 1800,
+  'cpp-stress': 1800, 'cpp-stress-asan': 3600, 'abi-diff': 1800,
+  'symbols': 1800, 'mixed-tu': 1800, 'eh-probes': 1800, 'm4-stress': 3600,
+  'poison': 3600, 'release-smoke': 3600, 'crash-sweep': 5400
+}
+
+
+def command_timeout(ctx: Context, step: str) -> int:
+  limits = dict(STEP_TIMEOUTS)
+  for item in ctx.args.step_timeout:
+    name, _, seconds = item.partition('=')
+    limits[name] = int(seconds)
+  return limits.get(step, ctx.args.command_timeout)
+
+
+def job_prefix(ctx: Context, step: str) -> str:
+  '''The name prefix and label of the containers of a step of this gate run:
+  cir-config-<tree>-<step>-g<pid of this process>, so that the containers of
+  another gate run (another process, even of the same tree and step) are
+  never matched.'''
+  return f"cir-config-{ctx.tree.name}-{step}-g{os.getpid()}"
+
+
+def container_filter(prefix: str) -> str:
+  '''The docker filter that matches exactly the containers with the label
+  edg.job=<prefix> (a label filter with a value compares the whole value).'''
+  return f"label=edg.job={prefix}"
+
+
+def stop_containers(ctx: Context, prefix: str) -> List[str]:
+  '''Stop the containers that carry the label edg.job=<prefix> (the ones
+  this step started; edgdocker names them from EDG_DOCKER_NAME_PREFIX) and
+  return their ids.'''
+  try:
+    listing = subprocess.run(
+      ['sg', 'docker', '-c',
+       f"docker ps -q --filter {container_filter(prefix)}"],
+      stdout = subprocess.PIPE, stderr = subprocess.DEVNULL, text = True)
+  except OSError:
+    return []
+  ids = listing.stdout.split()
+  for identifier in ids:
+    subprocess.run(['sg', 'docker', '-c', f"docker stop -t 10 {identifier}"],
+                   stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL)
+  return ids
 
 
 def run_logged(ctx: Context, step: str, command: List[str],
                label: str = '', cwd: Optional[Path] = None,
                extra_env: Optional[Dict[str, str]] = None) -> int:
-  '''Run a command, appending its output to the step's log.txt.'''
+  '''Run a command, appending its output to the step's log.txt.
+
+  The command has a time limit (see command_timeout): after it the process
+  group is killed and the containers of the step are stopped; the exit
+  status is then 124 and the step fails.  The containers are named
+  cir-config-<tree>-<step>-g<gate pid>-<pid>-<n> (edgdocker, from the
+  environment) and carry the label edg.job=<prefix>.'''
   step_dir = ctx.out / step
   step_dir.mkdir(parents = True, exist_ok = True)
   env = dict(ctx.env)
+  prefix = job_prefix(ctx, step)
+  env['EDG_DOCKER_NAME_PREFIX'] = prefix
   env.update(extra_env or {})
+  limit = command_timeout(ctx, step)
   with open(step_dir / 'log.txt', 'a') as log:
     log.write(f"\n$ {label or ' '.join(shlex.quote(c) for c in command)}\n")
     log.flush()
-    proc = subprocess.run(
+    proc = subprocess.Popen(
       command, cwd = cwd or ctx.tree, env = env, stdout = log,
-      stderr = subprocess.STDOUT
-    )
-    log.write(f"[exit {proc.returncode}]\n")
-  return proc.returncode
+      stderr = subprocess.STDOUT, start_new_session = True)
+    try:
+      code = proc.wait(timeout = limit)
+    except subprocess.TimeoutExpired:
+      for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+          os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+          break
+        try:
+          proc.wait(timeout = 10)
+          break
+        except subprocess.TimeoutExpired:
+          continue
+      stopped = stop_containers(ctx, prefix)
+      code = 124
+      ctx.timed_out.setdefault(step, []).append(
+        (label or ' '.join(command))[:70])
+      log.write(f"[TIMEOUT after {limit} s; container(s) stopped: "
+                f"{', '.join(stopped) or 'none'}]\n")
+    log.write(f"[exit {code}]\n")
+  return code
 
 
 def _edg_exec_command(ctx: Context, image: str, command: str,
@@ -557,8 +663,8 @@ def _cpp_run_step(ctx: Context, step: str, filters: str, types: str,
 
 
 def step_cpp_smoke(ctx: Context) -> Tuple[bool, str]:
-  return _cpp_run_step(ctx, 'cpp-smoke', ctx.args.cpp_smoke_filter, 'rp',
-                       ctx.args.cpp_smoke_all_pass)
+  return _cpp_run_step(ctx, 'cpp-smoke', ctx.args.cpp_smoke_filter,
+                       'rp,lp', ctx.args.cpp_smoke_all_pass)
 
 
 def step_cpp_corpus(ctx: Context) -> Tuple[bool, str]:
@@ -584,7 +690,15 @@ def _run_cpp_stress(ctx: Context, step: str, cases: str,
   the script runs) run=0, in at most --cpp-stress-seconds and
   --cpp-stress-rss-mb of peak memory.
   '''
-  command = (f"EDG_CIR_BUILD={build} bash cir_src/scripts/box_stress.sh "
+  # Each case has a hard time limit (box_stress.sh: timeout -k 10 ...): 10
+  # times --cpp-stress-seconds (20 times for the sanitizer build, which is
+  # slower), and a main-thread stack of 256 KiB (8 MiB for the sanitizer
+  # build: its symbolizer recurses deeply when it reports at exit).
+  asan = build != 'build/cir'
+  hard = ctx.args.cpp_stress_seconds * (20 if asan else 10)
+  command = (f"EDG_CIR_STRESS_TIMEOUT={hard} "
+             f"EDG_CIR_STRESS_STACK_KB={8192 if asan else 256} "
+             f"EDG_CIR_BUILD={build} bash cir_src/scripts/box_stress.sh "
              f"{cases}")
   # The tools and the library must be those of this tree (the sanitizer build
   # is not made by the build step).
@@ -604,8 +718,12 @@ def _run_cpp_stress(ctx: Context, step: str, cases: str,
     millis = re.search(r'(\d+) ms', rest)
     peak = re.search(r'(\d+) KB', rest)
     run = re.search(r'run=(\d+)', rest)
-    if rc is None or rc.group(1) != '0' or (run and run.group(1) != '0'):
+    if rest.split() and rest.split()[-1] == 'TIMEOUT':
+      problems.append(f"{name}: TIMEOUT")
+    elif rc is None or rc.group(1) != '0' or (run and run.group(1) != '0'):
       problems.append(f"{name}: {rest.strip()[:80]}")
+    elif 'run=link-failed' in rest:
+      problems.append(f"{name}: the program did not link")
     elif millis and int(millis.group(1)) > ctx.args.cpp_stress_seconds * 1000:
       problems.append(f"{name}: {millis.group(1)} ms")
     elif peak and int(peak.group(1)) > limit_mb * 1024:
@@ -635,7 +753,7 @@ def step_release_smoke(ctx: Context) -> Tuple[bool, str]:
     preexisting_keys: set = set()
     for kind, filters, types in (
         ('c', ctx.args.smoke_filter, 'rp,lp'),
-        ('c++', ctx.args.cpp_smoke_filter, 'rp')):
+        ('c++', ctx.args.cpp_smoke_filter, 'rp,lp')):
       for flavor, posture in (('release', 'cir-release'), ('debug', 'cir')):
         if kind == 'c' and flavor == 'debug':
           continue
@@ -691,9 +809,11 @@ def step_poison(ctx: Context) -> Tuple[bool, str]:
   edg-cir-poison-check compiles with the debug front end (freed IL blocks
   overwritten with 0xdb, expensive checking), the same front end without the
   overwriting (preset linux-gcc-debug-cir-nopoison, built here) and the release
-  front end, and requires no crash or assertion and identical streams: first
-  the C corpus, then the C and C++ smoke lists and tests/tests/cir (writer and
-  cirgen).
+  front end, and requires no crash or assertion and identical streams (the
+  release front end must write the same stream as the debug one: the macros
+  that change what the front end builds are pinned in cmake/macro-conf/
+  default/cpfe-cir.cmakedef): first the C corpus, then the C and C++ smoke
+  lists and tests/tests/cir (writer and cirgen), and the C++ corpus.
   '''
   build = (f"export EDG_BASE=/edg/workspace/bases/docker/cir-env/gcc; cmake "
            f"--preset linux-gcc-debug-cir-nopoison -DEDG_CIR_LINK_LIBRARY=ON "
@@ -707,14 +827,16 @@ def step_poison(ctx: Context) -> Tuple[bool, str]:
     f"--types {ctx.args.types or 'rp,lp'}",
     f"python3 dev_tools/bin/edg-cir-poison-check -j {BUILD_JOBS} --filters "
     f"{shlex.quote(ctx.args.smoke_filter)},"
-    f"{shlex.quote(ctx.args.cpp_smoke_filter)},cir/"
+    f"{shlex.quote(ctx.args.cpp_smoke_filter)},cir/",
+    f"python3 dev_tools/bin/edg-cir-poison-check -j {BUILD_JOBS} --filters "
+    f"{shlex.quote(ctx.args.cpp_corpus_filter)} --types rp,lp"
   ]
   codes = [in_cir_env(ctx, 'poison', c) for c in commands]
   text = (ctx.out / 'poison' / 'log.txt').read_text()
   results = re.findall(r'RESULT: .*', text)
   counts = re.findall(r'checking (\d+) tests', text)
   detail = ' + '.join(counts) + ' tests; ' + '; '.join(results)
-  return not any(codes) and len(results) == 2, detail
+  return not any(codes) and len(results) == 3, detail
 
 
 def step_cpp_stress(ctx: Context) -> Tuple[bool, str]:
@@ -1348,6 +1470,35 @@ def step_crash_sweep(ctx: Context) -> Tuple[bool, str]:
                                f"{label}.json".replace('+', 'x'),
                                text_tag = f"-{label}".replace('+', 'x'))
     killed = killed_tests(ctx, 'crash-sweep', results)
+    # A test that edgy cancelled (it ran out of its time under the load of
+    # the sweep) is run alone once more: if it completes then, it was slow,
+    # not hung, and its result counts as that of the sweep.
+    log = step_dir / 'log.txt'
+    if log.exists():
+      log.rename(step_dir / f"log-{label}.txt".replace('+', 'x'))
+    rerun: List[str] = []
+    for name in sorted(set(killed)):
+      if not name.endswith(('.c', '.cpp', '.cc', '.C', '.cxx')):
+        continue
+      again = edgy_run(ctx, 'crash-sweep', config, name, '',
+                       timeout = ctx.args.sweep_timeout)
+      if again is None:
+        continue
+      more, _ = summarize_run(ctx, 'crash-sweep', again, config,
+                              f"{label}-rerun.json".replace('+', 'x'),
+                              text_tag = f"-{label}-rerun".replace('+', 'x'))
+      cancelled = killed_tests(ctx, 'crash-sweep', more)
+      again_log = step_dir / 'log.txt'
+      if again_log.exists():
+        with open(step_dir / f"log-{label}.txt".replace('+', 'x'),
+                  'a') as handle:
+          handle.write(f"\n# re-run of {name} alone\n"
+                       + again_log.read_text(errors = 'replace'))
+        again_log.unlink()
+      if not cancelled and more:
+        results = [r for r in results if r['path'] != name] + more
+        killed = [k for k in killed if k != name]
+        rerun.append(name)
     problems, excused, fatal, counts = sweep_report(results, label, config,
                                                     killed, allow)
     used.update(k for k in allow if any(
@@ -1356,7 +1507,11 @@ def step_crash_sweep(ctx: Context) -> Tuple[bool, str]:
     parts.append(f"{label}: {counts['cases']} cases "
                  f"({', '.join(f'{t} {n}' for t, n in sorted(types.items()))}"
                  f"), {counts['excused']} excused, {counts['fatal']} fatal "
-                 f"errors, {counts['problems']} problem(s), {(time.time() - started) / 60:.0f} min")
+                 f"errors, {counts['problems']} problem(s), "
+                 f"{(time.time() - started) / 60:.0f} min"
+                 + (f", {len(rerun)} cancelled test(s) completed when run "
+                    f"alone ({', '.join(Path(r).name for r in rerun)})"
+                    if rerun else ''))
     all_problems += problems
     excused_all += excused
     fatal_all += fatal
@@ -1451,6 +1606,377 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
   return limit is None or worst <= limit, detail
 
 
+# ----------------------------------------------------------------------------
+# The steps of gate M4: the ABI and exception harnesses.
+
+# The files of abi-diff whose "missing" blocks are known limits of the tool:
+# clang prints the vtable of a class template specialization under the
+# template name without its arguments, so Box<int> and Box<double> are one
+# name, and ecil-dump prints the mangled name; the blocks cannot be paired.
+# (edg-cir-symbols compares their vtables and typeinfo by symbol.)
+ABI_KNOWN_LIMITS = {
+  'template.cpp': 'clang names Box<int> and Box<double> alike',
+  'clone-impl.cpp': 'clang names clone_impl<my_error> without arguments'
+}
+
+# The differences of edg-cir-symbols that are accepted, as
+# (file, symbol, difference): why.  Each is about the structors of a class
+# that has no explicit constructor, which every translation unit emits for
+# itself when it uses it (an implicit inline constructor is not an external
+# interface), and one spelling of an internal-linkage typeinfo name.
+KNOWN_SYMBOL_DIFFERENCES = {
+  ('anon.cpp', '_ZN12_GLOBAL__N_14ImplC2Ev', 'missing in ours'):
+    'implicit constructor: ours emits only the complete-object variant',
+  ('anon.cpp', '_ZN4BaseC2Ev', 'missing in ours'):
+    'implicit constructor: ours emits only the complete-object variant',
+  ('anon.cpp', '_ZTSN12_GLOBAL__N_14ImplE', 'differs'):
+    'the typeinfo name of an internal-linkage class has the "*" prefix of '
+    'the Itanium ABI (g++ does too; clang omits it)',
+  ('key-external.cpp', '_ZN1AC2Ev', 'missing in ours'):
+    'implicit constructor: ours emits only the complete-object variant',
+  ('key-external.cpp', '_ZN1BC2Ev', 'missing in ours'):
+    'implicit constructor: ours emits only the complete-object variant',
+  ('key-external.cpp', '_ZTV1A', 'missing in ours'):
+    "ours does not reference the vtable of A: B's constructor sets its own",
+  ('no-key.cpp', '_ZN1AD0Ev', 'only in ours'):
+    'ours emits the (weak) deleting destructor of A that clang drops',
+  ('no-key.cpp', '_ZTV1A', 'only in ours'):
+    'ours emits the (weak) vtable of A that clang drops'
+}
+
+# The cases of m4-stress, "kind:n": the time (ms) and the peak memory (MB)
+# that the measurements of research/m4_stress.md show on the box, multiplied
+# by the margins below (5 times the time, at least 2 s; 3 times the memory,
+# at least 100 MB).
+M4_STRESS_CASES = {
+  'wide:2500': (107, 59), 'vchain:500': (585, 82), 'diamond:40': (460, 113),
+  'diamond:80': (3887, 590), 'vbases:200': (38, 51), 'tuple:1000': (432, 67),
+  'tries:500': (1500, 57), 'news:1250': (2700, 113),
+  'unwind:1000': (1060, 80), 'unwindcall:1000': (1080, 88)
+}
+
+
+def stress_limits(measured: Tuple[int, int]) -> Tuple[int, int]:
+  '''(time ms, memory MB) limits of an m4-stress case.'''
+  return max(2000, 5 * measured[0]), max(100, 3 * measured[1])
+
+
+def parse_abi_batch(text: str) -> Dict[str, Dict[str, object]]:
+  '''The files of the output of `edg-cir-abi-diff batch`: name -> {counts,
+  status, missing (the MISSING lines)}; "" if there was no result.'''
+  files: Dict[str, Dict[str, object]] = {}
+  current: Optional[str] = None
+  for line in text.splitlines():
+    match = re.match(r'^==== (\S+?): (\w+) (.*)$', line)
+    if match:
+      current = Path(match.group(1)).name
+      counts = {k: int(v) for k, v in re.findall(r'(\w+) (\d+)',
+                                                 match.group(3))}
+      files[current] = {'status': match.group(2), 'counts': counts,
+                        'missing': []}
+      continue
+    match = re.match(r'^==== (\S+)$', line)
+    if match:
+      current = Path(match.group(1)).name
+      files[current] = {'status': 'NONE', 'counts': {}, 'missing': []}
+      continue
+    if current and line.startswith('MISSING '):
+      files[current]['missing'].append(line)  # type: ignore[union-attr]
+  return files
+
+
+def judge_abi_batch(text: str) -> Tuple[bool, str]:
+  '''The rule of the abi-diff step.'''
+  if 'SKIP:' in text:
+    return False, text.strip().splitlines()[0][:200]
+  files = parse_abi_batch(text)
+  if len(files) < 10:
+    return False, f"only {len(files)} file(s) were compared"
+  totals: Dict[str, int] = {}
+  problems: List[str] = []
+  limited = 0
+  for name, entry in sorted(files.items()):
+    counts = entry['counts']  # type: ignore[assignment]
+    for key, value in counts.items():  # type: ignore[union-attr]
+      totals[key] = totals.get(key, 0) + value
+    if entry['status'] not in ('PASS', 'DIFF'):
+      problems.append(f"{name}: {entry['status']}")
+      continue
+    for key in ('ours', 'fe', 'unknown'):
+      if counts.get(key):  # type: ignore[union-attr]
+        problems.append(f"{name}: {counts[key]} {key}")  # type: ignore
+    # Every file must have compared something (an empty comparison is not a
+    # pass), the files of the known tool limits too.
+    compared = (counts.get('identical', 0) +  # type: ignore[union-attr]
+                counts.get('spelling', 0))  # type: ignore[union-attr]
+    if compared == 0:
+      problems.append(f"{name}: no block was compared")
+    missing = counts.get('missing', 0)  # type: ignore[union-attr]
+    if missing and name in ABI_KNOWN_LIMITS:
+      limited += missing
+    elif missing:
+      problems.append(f"{name}: {missing} missing")
+  # A file that failed to compile or dump is listed in the result table.
+  for line in text.splitlines():
+    match = re.match(r'^(\S+\.cpp)\s+(CLANG-FAIL|DUMP-FAIL|FE-REJECT|SKIP)$',
+                     line)
+    if match:
+      problems.append(f"{match.group(1)}: {match.group(2)}")
+  detail = (f"{len(files)} files; identical {totals.get('identical', 0)} "
+            f"(+{totals.get('normalized', 0)} normalized, "
+            f"{totals.get('spelling', 0)} in the loose form); ours "
+            f"{totals.get('ours', 0)}, fe {totals.get('fe', 0)}; "
+            f"{limited} missing from known tool limits "
+            f"({', '.join(sorted(ABI_KNOWN_LIMITS))})")
+  if problems:
+    detail = 'PROBLEMS: ' + '; '.join(problems[:8]) + ' | ' + detail
+  return not problems, detail
+
+
+def parse_symbols(text: str) -> Dict[str, Dict[str, object]]:
+  '''The files of the output of `edg-cir-symbols` over several sources:
+  name -> {rows: [(symbol, difference)] of ours against the reference,
+  notes: SKIP or FAIL lines}.'''
+  files: Dict[str, Dict[str, object]] = {}
+  current: Optional[str] = None
+  in_ours = False
+  for line in text.splitlines():
+    match = re.match(r'^==== (\S+)$', line)
+    if match:
+      current = Path(match.group(1)).name
+      files[current] = {'rows': [], 'notes': []}
+      in_ours = False
+      continue
+    if current is None:
+      continue
+    if re.search(r'ABI-family symbols in the reference', line):
+      in_ours = True
+      continue
+    if ' against the reference' in line:
+      in_ours = False
+      continue
+    if line.startswith(('SKIP:', 'FAIL:', 'edg-cir-symbols:')):
+      files[current]['notes'].append(line)  # type: ignore[union-attr]
+    if in_ours:
+      match = re.match(r'^(\S+)\s+(\S+)\s+(missing in ours|only in ours|'
+                       r'defined/undefined|differs)\s', line)
+      if match:
+        files[current]['rows'].append(  # type: ignore[union-attr]
+          (match.group(2), match.group(3)))
+  return files
+
+
+def judge_symbols(text: str) -> Tuple[bool, str]:
+  '''The rule of the symbols step.'''
+  files = parse_symbols(text)
+  if len(files) < 10:
+    return False, f"only {len(files)} file(s) were compared"
+  problems: List[str] = []
+  seen = set()
+  accepted = 0
+  for name, entry in sorted(files.items()):
+    for note in entry['notes']:  # type: ignore[union-attr]
+      problems.append(f"{name}: {str(note)[:80]}")
+    for symbol, difference in entry['rows']:  # type: ignore[union-attr]
+      key = (name, symbol, difference)
+      if key in KNOWN_SYMBOL_DIFFERENCES:
+        seen.add(key)
+        accepted += 1
+      else:
+        problems.append(f"{name}: {symbol} {difference}")
+  stale = sorted(k for k in KNOWN_SYMBOL_DIFFERENCES if k not in seen)
+  detail = (f"{len(files)} files; {accepted} known difference(s) allowed "
+            f"(KNOWN_SYMBOL_DIFFERENCES)"
+            + (f"; no longer seen, remove: "
+               f"{', '.join(k[1] for k in stale)}" if stale else ''))
+  if problems:
+    detail = 'PROBLEMS: ' + '; '.join(problems[:8]) + ' | ' + detail
+  return not problems, detail
+
+
+def judge_mixed_tu(text: str) -> Tuple[bool, str]:
+  '''The rule of one run of the mixed-tu step: every row PASS.'''
+  rows = [l.split() for l in text.splitlines()
+          if re.match(r'^\S+\s+(ref\+ours|ours\+ref|all-ours|all-ref)\s+\S+',
+                      l)]
+  results: Dict[str, int] = {}
+  for row in rows:
+    results[row[2]] = results.get(row[2], 0) + 1
+  bad = {k: v for k, v in results.items() if k != 'PASS'}
+  detail = ', '.join(f"{k} {v}" for k, v in sorted(results.items()))
+  if not rows:
+    return False, 'no result rows'
+  return not bad, detail
+
+
+def parse_stress(text: str) -> List[Tuple[str, int, int, int, int]]:
+  '''The lines of box_m4_stress.sh: (kind:n, rc, total ms, rss KB, 0).'''
+  rows = []
+  for line in text.splitlines():
+    match = re.match(r'^(\w+)\s+(\d+)\s+rc=(-?\d+)\s+total_ms=(\d+)\s.*?'
+                     r'rss=(\d*)', line)
+    if match:
+      rows.append((f"{match.group(1)}:{match.group(2)}",
+                   int(match.group(3)), int(match.group(4)),
+                   int(match.group(5) or 0), 0))
+    elif re.match(r'^\w+:\d+ (GEN|ASM)-FAIL', line):
+      rows.append((line.split()[0], 99, 0, 0, 0))
+  return rows
+
+
+def judge_stress(text: str) -> Tuple[bool, str]:
+  '''The rule of the m4-stress step.'''
+  rows = {r[0]: r for r in parse_stress(text)}
+  problems = []
+  worst = 0.0
+  for case, measured in M4_STRESS_CASES.items():
+    if case not in rows:
+      problems.append(f"{case}: no result")
+      continue
+    _, rc, total, rss_kb, _ = rows[case]
+    limit_ms, limit_mb = stress_limits(measured)
+    worst = max(worst, total / limit_ms)
+    if rc != 0:
+      problems.append(f"{case}: rc {rc}")
+    elif total > limit_ms:
+      problems.append(f"{case}: {total} ms > {limit_ms} ms")
+    elif rss_kb / 1024.0 > limit_mb:
+      problems.append(f"{case}: {rss_kb // 1024} MB > {limit_mb} MB")
+  detail = (f"{len(rows)} case(s); the slowest at {100 * worst:.0f}% of its "
+            f"time limit")
+  if problems:
+    detail = 'PROBLEMS: ' + '; '.join(problems[:8]) + ' | ' + detail
+  return not problems, detail
+
+
+def _read_step_output(ctx: Context, step: str, name: str) -> str:
+  path = ctx.out / step / name
+  return path.read_text(errors = 'replace') if path.exists() else ''
+
+
+def stage_clang_tests(ctx: Context) -> Optional[str]:
+  '''Copy the clang tests of the abi-diff step to .tmp/clang-tests of the
+  tree (the container does not have the llvm-project); None if they are not
+  there.'''
+  tool = importlib.machinery.SourceFileLoader(
+    'edg_cir_abi_diff', str(ctx.tree / 'dev_tools/bin/edg-cir-abi-diff'))
+  spec = importlib.util.spec_from_loader('edg_cir_abi_diff', tool)
+  module = importlib.util.module_from_spec(spec)
+  tool.exec_module(module)
+  source = Path(ctx.args.llvm_project).expanduser() / \
+    'clang/test/CodeGenCXX'
+  dest = ctx.tree / '.tmp' / 'clang-tests'
+  dest.mkdir(parents = True, exist_ok = True)
+  copied = 0
+  for name in module.BATCH_TESTS:
+    if (source / name).exists():
+      shutil.copy2(source / name, dest / name)
+      copied += 1
+  return str(dest) if copied == len(module.BATCH_TESTS) else None
+
+
+def step_abi_diff(ctx: Context) -> Tuple[bool, str]:
+  if stage_clang_tests(ctx) is None:
+    return False, (f"the clang tests are missing from "
+                   f"{ctx.args.llvm_project}/clang/test/CodeGenCXX")
+  out = rel(ctx, ctx.out / 'abi-diff' / 'batch.txt')
+  (ctx.out / 'abi-diff').mkdir(parents = True, exist_ok = True)
+  in_cir_env(ctx, 'abi-diff',
+             f"python3 dev_tools/bin/edg-cir-abi-diff batch --vbases "
+             f"dev_tools/cir-abi-cases/s1 dev_tools/cir-abi-cases/s2 "
+             f"--clang-tests .tmp/clang-tests > {out} 2>&1")
+  return judge_abi_batch(_read_step_output(ctx, 'abi-diff', 'batch.txt'))
+
+
+def step_symbols(ctx: Context) -> Tuple[bool, str]:
+  out = rel(ctx, ctx.out / 'symbols' / 'symbols.txt')
+  (ctx.out / 'symbols').mkdir(parents = True, exist_ok = True)
+  in_cir_env(ctx, 'symbols',
+             f"python3 dev_tools/bin/edg-cir-symbols "
+             f"dev_tools/cir-abi-cases/s1 dev_tools/cir-abi-cases/s2 "
+             f"--ref $EDG_LLVM_CIR_PREFIX/bin/clang --also g++ "
+             f"> {out} 2>&1")
+  return judge_symbols(_read_step_output(ctx, 'symbols', 'symbols.txt'))
+
+
+def step_mixed_tu(ctx: Context) -> Tuple[bool, str]:
+  (ctx.out / 'mixed-tu').mkdir(parents = True, exist_ok = True)
+  parts = []
+  ok = True
+  for name, ref in (('g++', 'g++'), ('clang',
+                                      '$EDG_LLVM_CIR_PREFIX/bin/clang')):
+    out = rel(ctx, ctx.out / 'mixed-tu' / f"{name}.txt")
+    in_cir_env(ctx, 'mixed-tu',
+               f"python3 dev_tools/bin/edg-cir-mixed-tu --ref {ref} "
+               f"> {out} 2>&1")
+    passed, detail = judge_mixed_tu(
+      _read_step_output(ctx, 'mixed-tu', f"{name}.txt"))
+    ok = ok and passed
+    parts.append(f"{name}: {detail}")
+  return ok, '; '.join(parts)
+
+
+def judge_eh_probes(text: str, skip: set, expected: int
+                    ) -> Tuple[bool, str]:
+  '''The rule of the eh-probes step: all `expected` probes ran; each is PASS,
+  or UNSUPPORTED and on the skip list; a probe of the skip list that passes
+  must be removed from it.'''
+  results: Dict[str, str] = {}
+  for line in text.splitlines():
+    match = re.match(r'^(\S+\.cpp)\s*(\w[\w-]*)\*?(?:\s|$)', line)
+    if match:
+      results[match.group(1)] = match.group(2)
+  problems: List[str] = []
+  if len(results) != expected:
+    problems.append(f"{len(results)} probe(s) ran, {expected} expected")
+  for name, result in sorted(results.items()):
+    if result == 'PASS':
+      if name in skip:
+        problems.append(f"{name} passes: remove it from the skip list")
+    elif result == 'UNSUPPORTED' and name in skip:
+      continue
+    else:
+      problems.append(f"{name}: {result}")
+  passed = sum(1 for r in results.values() if r == 'PASS')
+  detail = (f"{len(results)} probe(s): {passed} PASS, "
+            f"{len(results) - passed} UNSUPPORTED (allowed, on the skip list)")
+  if problems:
+    detail = 'PROBLEMS: ' + '; '.join(problems[:8]) + ' | ' + detail
+  return not problems, detail
+
+
+def step_eh_probes(ctx: Context) -> Tuple[bool, str]:
+  (ctx.out / 'eh-probes').mkdir(parents = True, exist_ok = True)
+  out = rel(ctx, ctx.out / 'eh-probes' / 'probes.txt')
+  skip = Path(ctx.args.eh_probes_skip)
+  skip_option = f"--list-skip {shlex.quote(str(skip))} " \
+    if (ctx.tree / skip).exists() else ''
+  in_cir_env(
+    ctx, 'eh-probes',
+    f"python3 dev_tools/bin/edg-cir-run-diff cir_src/test/writer/probes/m4 "
+    f"--glob '^(e|s4_|s5_)' {skip_option}> {out} 2>&1")
+  text = _read_step_output(ctx, 'eh-probes', 'probes.txt')
+  names = set()
+  if (ctx.tree / skip).exists():
+    for line in (ctx.tree / skip).read_text().splitlines():
+      line = line.split('#')[0].strip()
+      if line:
+        names.add(line)
+  probes = [p for p in (ctx.tree / 'cir_src/test/writer/probes/m4').glob(
+    '*.cpp') if re.match(r'^(e|s4_|s5_)', p.name)]
+  return judge_eh_probes(text, names, len(probes))
+
+
+def step_m4_stress(ctx: Context) -> Tuple[bool, str]:
+  (ctx.out / 'm4-stress').mkdir(parents = True, exist_ok = True)
+  out = rel(ctx, ctx.out / 'm4-stress' / 'stress.txt')
+  cases = ' '.join(M4_STRESS_CASES)
+  in_cir_env(ctx, 'm4-stress',
+             f"STRESS_DIR=/tmp/m4stress-gate TMO=300 "
+             f"bash cir_src/scripts/box_m4_stress.sh {cases} > {out} 2>&1")
+  return judge_stress(_read_step_output(ctx, 'm4-stress', 'stress.txt'))
+
+
 STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'build': step_build, 'identity': step_identity,
   'isolation': step_isolation, 'smoke': step_smoke, 'corpus': step_corpus,
@@ -1462,7 +1988,9 @@ STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'rss': step_rss,
   'day': step_day, 'ctest': step_ctest, 'asm-diff': step_asm_diff,
   'cpp-asm-diff': step_cpp_asm_diff,
-  'crash-sweep': step_crash_sweep,
+  'crash-sweep': step_crash_sweep, 'abi-diff': step_abi_diff,
+  'symbols': step_symbols, 'mixed-tu': step_mixed_tu,
+  'eh-probes': step_eh_probes, 'm4-stress': step_m4_stress,
   'perf': step_perf
 }
 
@@ -1531,6 +2059,30 @@ def main() -> None:
   parser.add_argument('--with-cpp', action = 'store_true',
                       help = 'also run the C++ steps (cpp-smoke, cpp-corpus, '
                              'cpp-modes, cpp-writer-stress)')
+  parser.add_argument('--tree-fingerprint', default = '',
+                      help = 'the fingerprint of the tree (edg-cir-checkpoint '
+                             'computes it); written at the top of summary.md')
+  parser.add_argument('--command-timeout', type = int,
+                      default = COMMAND_TIMEOUT,
+                      help = 'the time limit (seconds) of one command of a '
+                             'step: it is killed, the step\'s containers '
+                             'stop and the step fails (STEP_TIMEOUTS has '
+                             'shorter limits for some steps)')
+  parser.add_argument('--step-timeout', action = 'append', default = [],
+                      metavar = 'STEP=SECONDS',
+                      help = 'a time limit for the commands of one step')
+  parser.add_argument('--with-m4', action = 'store_true',
+                      help = 'also run the steps of gate M4 (abi-diff, '
+                             'symbols, mixed-tu, eh-probes, m4-stress)')
+  parser.add_argument('--llvm-project',
+                      default = '~/edg-cir-config/llvm-project',
+                      help = 'the llvm-project checkout that has the clang '
+                             'tests of the abi-diff step (copied into '
+                             '.tmp/clang-tests)')
+  parser.add_argument('--eh-probes-skip',
+                      default = 'tests/.edgy/filters/cir-eh-probes-skip.txt',
+                      help = 'probes for which the eh-probes step accepts an '
+                             'unsupported-construct diagnostic')
   parser.add_argument('--excused-crashes',
                       default = 'tests/.edgy/filters/cir-excused-crashes.txt',
                       help = 'the reviewed allowlist of crashes that the '
@@ -1545,7 +2097,10 @@ def main() -> None:
   parser.add_argument('--cpp-corpus-filter',
                       default = '@tests/.edgy/filters/cir-cpp-corpus.txt')
   parser.add_argument('--cpp-stress-seconds', type = int, default = 30,
-                      help = 'time limit of a case of the cpp-stress steps')
+                      help = 'time limit of a case of the cpp-stress steps; '
+                             'a case is also killed at a hard limit of 10 '
+                             'times this (20 times for cpp-stress-asan), '
+                             'which is a TIMEOUT failure')
   parser.add_argument('--cpp-stress-rss-mb', type = int, default = 400,
                       help = 'peak memory limit of a case of cpp-stress')
   parser.add_argument('--cpp-stress-asan-rss-mb', type = int, default = 1200,
@@ -1575,7 +2130,7 @@ def main() -> None:
   ctx.out.mkdir(parents = True, exist_ok = True)
   only = [s for s in args.only.split(',') if s] or [
     s for s in STEPS if (args.with_cpp or s not in CPP_STEPS) and
-    s not in LONG_STEPS]
+    (args.with_m4 or s not in M4_STEPS) and s not in LONG_STEPS]
   skip = set(s for s in args.skip.split(',') if s)
   unknown = [s for s in [*only, *skip] if s not in STEPS]
   if unknown:
@@ -1605,6 +2160,10 @@ def main() -> None:
     except Exception as error:  # a broken step must not hide the others
       passed, detail = False, f"script error: {error!r}"
     seconds = time.time() - started
+    if step in ctx.timed_out:
+      passed = False
+      detail = (f"TIMEOUT: {len(ctx.timed_out[step])} command(s) stopped at "
+                f"their limit ({ctx.timed_out[step][0]}) | {detail}")
     status = 'PASS' if passed else 'FAIL'
     (ctx.out / step).mkdir(parents = True, exist_ok = True)
     result_file.write_text(json.dumps(
@@ -1617,6 +2176,8 @@ def main() -> None:
   for step, status, detail, seconds in table:
     lines.append(f"| {step} | {status} | {detail} | {seconds:.0f} s |")
   summary = '\n'.join(lines)
+  if args.tree_fingerprint:
+    summary = f"Tree fingerprint: {args.tree_fingerprint}\n\n" + summary
   (ctx.out / 'summary.md').write_text(summary + '\n')
   print('\n' + summary)
   failed = [t for t in table if t[1] == 'FAIL']

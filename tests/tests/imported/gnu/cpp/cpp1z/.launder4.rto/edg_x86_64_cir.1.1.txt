@@ -1,9 +1,0 @@
-eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++11 Test_name.c
-"./cpp1z/launder4.C", line 20: warning: CIR back end: the body of "launder" uses the builtin function __builtin_launder, which the CIR back end does not support; the function is dropped
-    }
-    ^
-          detected during instantiation of "T *std::launder(T *) [with T=A]" at line 40
-
-Error: CIR back end: the definition of '_ZSt7launderI1AEPT_S2_' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_launder (and it is referenced)
-
-1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Run C++ programs built by the reference compiler and by the CIR back end
+and compare what they do.
+
+For every source it builds two executables, runs them (--timeout seconds) and
+compares the exit status and the output (standard output and error, merged):
+
+  reference   g++ (--ref) with the options of the source
+  ours        cpfe-cir like the edg_x86_64_cir test configuration (util/eccp.sh
+              -c -tused; the ECIL stream is kept), then `edg-cir -O<N>
+              --emit=obj` on the stream (N from a -O option of the source, 0
+              otherwise), linked by g++ with edg_cir_rt
+
+The options come from the first lines of the source (`//options: ...`, as in
+the test files): `--c++NN` is `-std=c++NN` for the reference, `-O<N>` goes to
+both (to ours through edg-cir: the -O of eccp is not seen by this back end),
+`--gnu_version=N` and `-w` are for ours only.  Results:
+
+  PASS        the same exit status and output
+  DIFF        both ran, and behaved differently
+  OURS-FAIL   cpfe-cir or edg-cir failed (not with a "CIR back end: ...
+              cannot express" diagnostic) or the link failed
+  UNSUPPORTED cpfe-cir refused a construct ("CIR back end: ... cannot
+              express" or "not supported yet")
+  RUN         ours crashed or timed out where the reference did not
+  REF-FAIL    the reference does not build or run: a bad probe
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-cir and build/cir:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-run-diff DIR|FILE...
+  ... --list-skip SKIP.txt   # UNSUPPORTED allowed for the probes named there
+  ... --self-test
+
+A skip file has one probe name per line (the file name; `#` comments).  Exit
+status: 0 if every result is PASS (or UNSUPPORTED and listed in the skip
+file), 1 otherwise, 2 for a setup problem.
+'''
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+_FE_ERROR = re.compile(
+  r'^"[^"\n]*", line \d+: (?:error|catastrophic error|internal error)\b'
+  r'|^(?:catastrophic error|Internal error)\b|^Error: CIR back end\b'
+  r'|^edg-cir: error', re.M)
+_ERROR_PARAGRAPH = re.compile(
+  r'^(?:Error: CIR back end|"[^"\n]*", line \d+: error: CIR back end|'
+  r'edg-cir: error)')
+
+
+def is_unsupported(output: str) -> bool:
+  '''Does the output have an error (not a warning about an unused
+  definition that was dropped) that says the CIR back end cannot express a
+  construct (yet)?'''
+  for paragraph in re.split(r'\n\s*\n', output):
+    paragraph = paragraph.strip()
+    if _ERROR_PARAGRAPH.match(paragraph) and re.search(
+        r'cannot express|not supported yet', paragraph):
+      return True
+  return False
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  '''Parse the `export NAME="value"` lines of a CMake environment.sh.'''
+  exports: Dict[str, str] = {}
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  return exports
+
+
+def parse_options(text: str) -> Tuple[List[str], List[str], int]:
+  '''(reference options, options of ours, optimization level) of a source,
+  from its `//options:` line (in the first ten lines).'''
+  line = ''
+  for candidate in text.splitlines()[:10]:
+    match = re.match(r'//\s*options:(.*)$', candidate)
+    if match:
+      line = match.group(1)
+      break
+  ref: List[str] = []
+  ours: List[str] = []
+  level = 0
+  for token in line.split():
+    std = re.match(r'--c\+\+(\w+)$', token)
+    opt = re.match(r'-O(\d?)$', token)
+    if std:
+      ref.append(f"-std=c++{std.group(1)}")
+      ours.append(token)
+    elif opt:
+      level = int(opt.group(1) or '1')
+      ref.append(token)
+    elif token.startswith(('--gnu_version', '--clang_v', '-w')):
+      ours.append(token)
+    elif token.startswith(('-D', '-f', '-W')):
+      ref.append(token)
+      ours.append(token)
+    else:
+      ours.append(token)
+  if not any(o.startswith('-std') for o in ref):
+    ref.append('-std=c++17')
+    ours.append('--c++17')
+  return ref, ours, level
+
+
+def run(command: List[str], cwd: Path, env: Optional[Dict[str, str]] = None,
+        timeout: int = 300) -> Tuple[int, str]:
+  '''(exit status, merged output); 124 on a timeout.'''
+  try:
+    proc = subprocess.run(command, cwd = cwd, env = env, text = True,
+                          stdout = subprocess.PIPE, stderr = subprocess.STDOUT,
+                          timeout = timeout)
+    return proc.returncode, proc.stdout
+  except subprocess.TimeoutExpired:
+    return 124, 'timeout'
+
+
+def classify(ref: Tuple[int, str], ours: Tuple[int, str]) -> str:
+  '''PASS, DIFF or RUN for two (status, output) runs.'''
+  if ref == ours:
+    return 'PASS'
+  if (ours[0] == 124 or ours[0] < 0 or ours[0] >= 128) and ours[0] != ref[0]:
+    return 'RUN'
+  return 'DIFF'
+
+
+class Toolchain:
+  def __init__(self, root: Path, fe_build: str, ref: str) -> None:
+    self.root = root
+    self.ref = ref
+    exports = load_exports(root / fe_build / 'environment.sh')
+    self.cpfe = exports.get('CPFE_CIR', '')
+    self.edg_cir = exports.get('EDG_CIR_TOOL', '')
+    self.rt_libdir = exports.get('EDG_CIR_RT_LIBDIR', '')
+    self.env = dict(os.environ)
+    self.env.update(exports)
+    self.env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+    self.env['ECCP_LIBDIR'] = self.rt_libdir
+    self.env['EDG_USE_SYSTEM_HEADERS'] = '1'
+    ld = os.pathsep.join(x for x in (self.rt_libdir,
+                                     os.environ.get('LD_LIBRARY_PATH', ''))
+                         if x)
+    self.env['LD_LIBRARY_PATH'] = ld
+
+  def ready(self) -> bool:
+    return bool(self.cpfe and self.edg_cir)
+
+  def build_ref(self, source: Path, work: Path, options: List[str]
+                ) -> Tuple[bool, str, Path]:
+    exe = work / 'ref.exe'
+    code, output = run([self.ref, *options, str(source), '-o', str(exe)], work,
+                       self.env)
+    return code == 0, output, exe
+
+  def build_ours(self, source: Path, work: Path, options: List[str],
+                 level: int) -> Tuple[str, str, Path]:
+    '''("ok", "", exe), ("unsupported", text, ...) or ("fail", text, ...).'''
+    exe = work / 'ours.exe'
+    stream = work / 'ours.ecil'
+    wrapper = work / 'cpfe-wrapper.sh'
+    wrapper.write_text(f"#!/bin/sh\nexec {self.cpfe} "
+                       f"--ecil_output={stream} \"$@\"\n")
+    wrapper.chmod(0o755)
+    env = dict(self.env)
+    env['CPFE'] = str(wrapper)
+    local = work / source.name
+    shutil.copy2(source, local)
+    _, output = run([str(self.root / 'util/eccp.sh'), '-c', '-tused',
+                     *options, local.name], work, env)
+    if is_unsupported(output):
+      return 'unsupported', output, exe
+    # eccp's own last steps fail ("can't open ....int.s": the front end wrote
+    # the stream and no assembly); a front end error is a diagnostic line.
+    if _FE_ERROR.search(output) or not stream.exists() or \
+        not stream.stat().st_size:
+      return 'fail', 'cpfe-cir: ' + output[-800:], exe
+    obj = work / 'ours.o'
+    code, output = run([self.edg_cir, f"-O{level}", '--emit=obj', '-o',
+                        str(obj), str(stream)], work, env)
+    if is_unsupported(output):
+      return 'unsupported', output, exe
+    if code != 0 or not obj.exists():
+      return 'fail', 'edg-cir: ' + output[-800:], exe
+    code, output = run([self.ref, str(obj), f"-L{self.rt_libdir}",
+                        '-ledg_cir_rt', '-o', str(exe)], work, env)
+    if code != 0:
+      return 'fail', 'link: ' + output[-800:], exe
+    return 'ok', '', exe
+
+
+def check_probe(toolchain: Toolchain, source: Path, timeout: int
+                ) -> Tuple[str, str]:
+  '''(result, detail) for one source.'''
+  ref_options, our_options, level = parse_options(source.read_text(
+    errors = 'replace'))
+  with tempfile.TemporaryDirectory(prefix = 'edg-cir-run-diff.') as tmp:
+    work = Path(tmp)
+    ok, output, ref_exe = toolchain.build_ref(source, work, ref_options)
+    if not ok:
+      return 'REF-FAIL', output.strip().splitlines()[-1][:200] if \
+        output.strip() else ''
+    ref_run = run([str(ref_exe)], work, toolchain.env, timeout)
+    state, text, ours_exe = toolchain.build_ours(source, work, our_options,
+                                                 level)
+    if state == 'unsupported':
+      m = re.search(r'CIR back end:[^\n]*(?:\n[^\n]+)*', text)
+      return 'UNSUPPORTED', ' '.join((m.group(0) if m else text).split())[:160]
+    if state == 'fail':
+      return 'OURS-FAIL', ' '.join(text.split())[-200:]
+    ours_run = run([str(ours_exe)], work, toolchain.env, timeout)
+    result = classify(ref_run, ours_run)
+    if result == 'PASS':
+      return result, ''
+    same = 'equal' if ref_run[1] == ours_run[1] else 'differs'
+    return result, (f"status {ref_run[0]} vs {ours_run[0]}; output {same}")
+
+
+def read_skip(path: str) -> set:
+  names = set()
+  if path:
+    for line in Path(path).read_text().splitlines():
+      line = line.split('#')[0].strip()
+      if line:
+        names.add(line)
+  return names
+
+
+class SelfTest(unittest.TestCase):
+  def test_parse_options(self) -> None:
+    ref, ours, level = parse_options(
+      '//options: --c++20 --gnu_version=140000 -O2\nint main() {}\n')
+    self.assertEqual(ref, ['-std=c++20', '-O2'])
+    self.assertEqual(ours, ['--c++20', '--gnu_version=140000'])
+    self.assertEqual(level, 2)
+    ref, ours, level = parse_options('int main() {}\n')
+    self.assertEqual((ref, ours, level), (['-std=c++17'], ['--c++17'], 0))
+    ref, ours, level = parse_options('//options: --c++11 -w -DX=1\n')
+    self.assertEqual(ref, ['-std=c++11', '-DX=1'])
+    self.assertEqual(ours, ['--c++11', '-w', '-DX=1'])
+
+  def test_classify(self) -> None:
+    self.assertEqual(classify((0, 'a'), (0, 'a')), 'PASS')
+    self.assertEqual(classify((0, 'a'), (0, 'b')), 'DIFF')
+    self.assertEqual(classify((0, 'a'), (1, 'a')), 'DIFF')
+    self.assertEqual(classify((0, 'a'), (-11, 'a')), 'RUN')
+    self.assertEqual(classify((0, 'a'), (124, 'timeout')), 'RUN')
+    # The reference dies the same way: not a RUN failure of ours.
+    self.assertEqual(classify((-6, 'x'), (-6, 'x')), 'PASS')
+    self.assertEqual(classify((-6, 'x'), (-6, 'y')), 'DIFF')
+
+  def test_front_end_error_line(self) -> None:
+    self.assertTrue(_FE_ERROR.search(
+      '"t.cpp", line 3: error: expected a ";"\n'))
+    self.assertIsNone(_FE_ERROR.search('1 catastrophic error detected\n'))
+    self.assertTrue(_FE_ERROR.search('Error: CIR back end: internal error'))
+    self.assertTrue(_FE_ERROR.search(
+      'x\n"t.cpp", line 9: internal error: assertion failed\n'))
+    self.assertIsNone(_FE_ERROR.search(
+      "Error: can't open /tmp/eccptmp/t.int.s for reading: No such file\n"
+      "eccp: gcc compilation of t.int.s returned an exit status of 1\n"))
+
+  def test_unsupported_marker(self) -> None:
+    self.assertTrue(is_unsupported(
+      "Error: CIR back end: the definition of 'f' was dropped: it uses a "
+      "construct the CIR back end cannot express: x"))
+    self.assertTrue(is_unsupported(
+      "edg-cir: error [1003]: the definition of 'f' was dropped: it uses a "
+      "construct the CIR back end cannot express: x\n"))
+    self.assertFalse(is_unsupported('error: expected a ";"'))
+    # A warning about an unused definition does not stop the program.
+    self.assertFalse(is_unsupported(
+      "edg-cir: warning [1003]: the unused definition of 'f' was dropped and "
+      "erased: it uses a construct the CIR back end cannot express: asm\n"))
+
+  def test_skip_file(self) -> None:
+    with tempfile.NamedTemporaryFile('w', suffix = '.txt') as handle:
+      handle.write('# why\ne1.cpp  # c\n\ns5_x.cpp\n')
+      handle.flush()
+      self.assertEqual(read_skip(handle.name), {'e1.cpp', 's5_x.cpp'})
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2]
+  )
+  parser.add_argument('sources', nargs = '*',
+                      help = 'C++ files or directories (their *.cpp)')
+  parser.add_argument('--ref', default = 'g++')
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir')
+  parser.add_argument('--timeout', type = int, default = 60)
+  parser.add_argument('--glob', default = '',
+                      help = 'only the directory files whose name matches '
+                             'this regular expression')
+  parser.add_argument('--list-skip', default = '',
+                      help = 'file of probes for which UNSUPPORTED is '
+                             'allowed')
+  parser.add_argument('--self-test', action = 'store_true')
+  args = parser.parse_args()
+  if args.self_test:
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SelfTest)
+    result = unittest.TextTestRunner(verbosity = 1).run(suite)
+    sys.exit(0 if result.wasSuccessful() else 1)
+  if not args.sources:
+    parser.error('a source or directory is required')
+  toolchain = Toolchain(Path(args.root).resolve(), args.fe_build, args.ref)
+  if not toolchain.ready():
+    print(f"edg-cir-run-diff: {args.fe_build}/environment.sh has no CPFE_CIR "
+          f"and EDG_CIR_TOOL (build cpfe-cir and the library; run from the "
+          f"repository root)", file = sys.stderr)
+    sys.exit(2)
+  sources: List[Path] = []
+  for item in args.sources:
+    path = Path(item)
+    found = sorted(path.glob('*.cpp')) if path.is_dir() else [path]
+    sources.extend(p for p in found
+                   if not args.glob or re.search(args.glob, p.name))
+  skip = read_skip(args.list_skip)
+  counts: Dict[str, int] = {}
+  bad = 0
+  print(f"{'probe':<46}{'result':<12}detail")
+  for source in sources:
+    result, detail = check_probe(toolchain, source.resolve(), args.timeout)
+    allowed = result == 'UNSUPPORTED' and source.name in skip
+    label = f"{result}*" if allowed else result
+    print(f"{source.name:<46}{label:<12}{detail}", flush = True)
+    counts[label] = counts.get(label, 0) + 1
+    if result != 'PASS' and not allowed:
+      bad += 1
+  print(f"{len(sources)} probe(s): " + ', '.join(
+    f"{k} {v}" for k, v in sorted(counts.items())) +
+        f"; {bad} not passing (* = UNSUPPORTED, allowed by the skip file)")
+  sys.exit(1 if bad else 0)
+
+
+if __name__ == '__main__':
+  main()

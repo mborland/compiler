@@ -1,0 +1,7 @@
+; edg_cir_rt: std::type_info::operator==, operator!=, before and name() behave
+; as libstdc++'s inline members do (merged names off), over pairs of names that
+; start with '*' (internal linkage) and names that do not.  The reference is
+; the inline code that g++ compiles for a std::type_info subclass; the library
+; is called through its Itanium symbols.
+; RUN: g++ -std=c++17 -w %S/Inputs/type_info_members.cpp -L%rtlibdir -ledg_cir_rt -o %t.exe
+; RUN: %t.exe

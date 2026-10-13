@@ -1,6 +1,6 @@
 # The ECIL writer (what the code does today)
 
-Status: M3 (C and C++, ECIL 1.0). This document describes the
+Status: M4 (C and C++, ECIL 1.2; sections 9.16 to 9.19 and 10 are M4). This document describes the
 implementation in `src/ecil_*.c`, `src/cir_be.c` and the front-end hooks. The
 format is `ecil_format.md`; the design rationale is `design.md`; this file is
 what a reviewer should check the code against. File:function names, not line
@@ -368,10 +368,12 @@ from the `bswap128` builtin mapping, the `constructor` attribute error and the
   data size, a data member by its size, or by its data size for
   `[[no_unique_address]]`). The front end's `data_size_of_type` is not used: it
   gives a short value for a member of a POD class type.
-* Fields: the vptr (opaque, unnamed), then the **direct** non-virtual bases (the
+* Fields: the vptr (`TY_VPTR`, unnamed, at offset 0, only for a class without a
+  primary base: 9.16), then the **direct** non-virtual bases (the
   list is followed through `next_direct`; the front end's base list also has
-  indirect bases), then the data members. A class with a virtual base or one that
-  cannot be written is a failed record: its body is not sent and its uses are
+  indirect bases), then the data members, then the virtual bases (direct and
+  indirect: `VIRTUAL_BASE` fields, 9.17). A class that cannot be written is a
+  failed record: its body is not sent and its uses are
   unsupported (a use of the object of such a class, including a global's
   address in a constant, drops the function or definition:
   `ecil_check_variable_use`).
@@ -405,13 +407,14 @@ from the `bswap128` builtin mapping, the `constructor` attribute error and the
   is a call with the source's member as second operand. Value-initialization
   zeroes first where the front end does
   (`need_zeroing_for_value_initialization`): records and arrays with
-  `ZERO_BYTES` of their whole size, a base only with its data size.
+  `ZERO_BYTES` of their whole size, a base only with its data size (a type with
+  a pointer to a data member uses `INIT_ZERO` / `INIT_ZERO_BASE`: 9.18).
 * A destructor starts with `CLEANUP_BEGIN(all)` for each member and base with a
   non-trivial destructor, in construction order (so they run in reverse after
   the body, also on an early return).
 * `CLEANUP_BEGIN(kind, g|nil, flags)` ... `CLEANUP_BODY`: `all` (every exit),
   `exit` with the object's G-id (static storage duration: run at exit), `eh`
-  (exception paths only: M4, so ignored by `lifetime_needs_cleanups`).
+  (exception paths only; live since S4, 9.19).
 * Temporaries: `FULLEXPR_BEGIN`/`END` around an expression whose lifetime has
   temporaries to destroy; a class prvalue is materialized and its cleanup begun
   as soon as it is complete. A temporary whose lifetime is extended (bound to a
@@ -543,9 +546,9 @@ from the `bswap128` builtin mapping, the `constructor` attribute error and the
 * A constant count (the product of the bounds) of 2^32 elements or more is
   unsupported. Before this rule, the truncated count gave `operator new[]` a
   size that was too small. Golden: `writer-cxx-new-huge-count`.
-* Not supported: a non-throwing allocation function (the null case), an
-  initializer of a new[] with a run-time count, a destroying delete, a virtual
-  destructor.
+* Not supported: an initializer of a new[] with a run-time count other than a
+  list of elements (9.19), a destroying delete, a virtual destructor through
+  `::delete`.
 
 ### 9.9 Value categories and evaluation order (C++)
 
@@ -679,11 +682,9 @@ lose it silently. Dropping a root is a `cir_error` (`cir_be_error`), and the
 translation unit fails (the stream is aborted), in C and in C++. Tests:
 `writer-ctor-attribute-negative.sft.c`, `writer-cxx-ctor-attribute-negative.sft.cpp`.
 
-**Unsupported in C++ (M3)**, each a named reason in the warning:
-virtual functions, virtual bases, polymorphic classes' constructors, destructors
-and constants (M4: a vptr needs the vtable); exception handling (`try`, `throw`,
-`catch`, `typeid`, `dynamic_cast`); coroutines; pointers to members (types,
-constants, calls and `.*`); a `for` with a condition declaration
+**Unsupported in C++ (M3, as of M4 slice S1)**, each a named reason in the
+warning: coroutines; `typeid` of a complex type, a `.*` that yields a function address (a g++
+extension); a `for` with a condition declaration
 and an increment; a conditionally lifetime-extended temporary; a non-trivial class
 through `...`; a constructor initializer of an anonymous-union member; a repeated
 initializer of a multi-dimensional array; the copy of an array of objects;
@@ -696,10 +697,8 @@ the clashing definition that cannot be sent, which is a `cir_error`); under
 `--cfront_2.1`, a case or goto label after a declaration of an object with a
 destructor (the front end accepts a jump past it there, which would run the
 cleanup of an unconstructed object);
-the zero-initialization (explicit, by static storage, or by value-initialization)
-of an object that contains a pointer to a data member, whose null value is -1 and
-not 0 (`writer-cxx-dmp-zero-init`; until M4 implements member pointers, the types
-are opaque storage); an address constant that names a local variable;
+a local aggregate with a pointer to a member function that needs a `this`
+adjustment (9.18); an address constant that names a local variable;
 a constant `new[]` count of 2^32 or more; a constant initialization of a
 `[[no_unique_address]]` member; structured bindings in conditions; variable
 length arrays.
@@ -711,8 +710,8 @@ that is initialized dynamically before it is dynamic, as in clang
 (`cpp0x/constexpr-static4` is the exception that is split: see 9.15); in GNU mode the front end does not extend the lifetime
 of `const int &r = A().i` the way default mode does (`init/ref19`).
 **Kind names.** Unsupported kinds are named in diagnostics, for example
-`the expression kind "throw expression"`, `the statement "try statement"`,
-`the operator "three-way comparison (<=>)"` and
+`the expression kind "GNU statement expression"`, `the statement "inline
+assembly"`, `the operator "three-way comparison (<=>)"` and
 `the constant "pointer-to-member constant"`.
 - The names come from `src/ecil_kind_names.h`, which
   `cir_src/test/writer/tools/gen_kind_names.py` generates from `il_def.h`.
@@ -734,7 +733,8 @@ status 2 and an `F_ABORT` stream.
   ends its locals, spec 11.5);
 - a class conditional used as an operand rather than an initializer
   (`b = (c ? f() : b)`);
-- a range-based for whose body contains `try`.
+- a repeated default argument in an array initialization (`B b[3]` with
+  `B(const A & = A())`): the arguments would be built for each element.
 
 A gnu_inline function in GNU C++ mode is always inline-only: the IL does not
 record whether its definition is `extern`, so `inline` without `extern` is
@@ -805,7 +805,7 @@ kinds (`cik_new`, `cik_meminit`, `cik_ctor_call`, ...) to the same stack.
 * **Constant `if`.** An `if` whose condition the front end folded to an integer
   constant sends only the arm that is taken, unless the other arm contains a label
   (a `goto` or a `case` can reach it) or a statement whose structure the search
-  does not know (a try, coroutine, if consteval statement); `if constexpr` is
+  does not know (a coroutine statement); `if constexpr` is
   unchanged. Goldens `writer-constant-if`, `writer-cxx-constant-if`; probe
   `cxx_constant_if`.
 * **Partial static initialization.** A partly constant aggregate initializer of
@@ -871,3 +871,486 @@ kinds (`cik_new`, `cik_meminit`, `cik_ctor_call`, ...) to the same stack.
     `FUNC_BEGIN` resets the region stack; `STATIC_INIT_BEGIN` pushes a region
     (a static local's initialization is inside the body;
     `writer-cxx-cfront-static-init-regions`).
+
+### 9.16 M4 slice S1: polymorphism without virtual bases
+
+ECIL 1.2, spec section 12. Map: `research/il_to_ecil_map_m4.md`. All of it is in
+`ecil_type.c` (class facts, vtables), `ecil_code.c` (bodies) and `ecil_const.c`
+(constants).
+
+* **Predicates.** `ecil_class_is_dynamic` (`any_virtual_functions_including_in_base_classes
+  || any_virtual_base_classes`; not `needs_virtual_function_table`, which ignores
+  inherited functions) and `ecil_class_has_own_vptr` (dynamic and no
+  `primary_base_class`). CHECKING asserts that the class is dynamic iff its record
+  has a `TY_VPTR` field, a `VIRTUAL_BASE` field or a `BASE` of a dynamic class
+  (`ECIL_GF_DYNAMIC`). A dynamic class is never ABI-opaque; a `LOAD`, a bitwise
+  copy or a conversion of a value of one is diagnosed (copies are constructor
+  calls).
+* **Layout facts** (`CLASS_MANGLE`, `CLASS_INFO`, `CLASS_BASES`) follow the record
+  body of a dynamic class at once (`send_layout_facts`); a plain class gets them at
+  its first need (`ecil_class_layout_facts`, bases first on an explicit stack).
+  `CLASS_INFO` sends the FE's `size_without_virtual_base_classes` (CHECKING:
+  `data_size <= nvsize <= size`). `CLASS_MANGLE` is `mangled_typeinfo_string` and
+  is re-issued in `ecil_resolve_late_names` when a typedef name for linkage
+  changed it.
+* **Vtable facts** come at the first need (`ecil_class_vtable_facts`, dynamic
+  bases first): a `DECL_FUNC` for every virtual function (a destructor as D1, plus
+  D0 with its own `DECL_FUNC` and `STRUCTOR_DELETING` naming the class's
+  `assoc_operator_delete_routine`; the flags are `is_default_operator_delete`'s,
+  CHECKING compares them with the parameter count), `CLASS_VFUNCS` (declaration
+  order, implicit functions last in slot order, `consteval` excluded, `sig` from
+  `virtual_signature_id`: name, parameter types, `this` cv, no ref-qualifiers) and
+  `CLASS_OVERRIDES` (each base entry's own list). D0 is re-issued with D1, never
+  retracted. The needs: `VPTR_INIT`, a virtual call, a virtual `delete`, a
+  `C_AGG_BEGIN` of a dynamic class, the end of the translation unit for a vtable.
+* **Bodies.** `VPTR_INIT`: in a constructor after the base `MEMINIT`s and their eh
+  cleanups (before the first field `MEMINIT`, or at the end of the groups), not in
+  a delegating constructor; in a destructor after the cleanup prologue
+  (`vptr_init_pending`). `CALL VIRTUAL`: `setup_virtual_call` devirtualizes as
+  clang does (complete object, final class, final function) to the final overrider
+  found from the base entry's override list; a covariant overrider keeps the
+  dispatch; CHECKING compares with `final_overrider`. `DELETE VIRTUAL` for a
+  non-array delete through the class's own operator delete; `delete[]` calls the
+  static type's destructor. A conversion to an indirect non-virtual base is a chain
+  of `BASE_CAST` (`emit_base_chain`), a downcast a chain of `DERIVED_CAST`.
+  Zero-initialization of a base subobject is `INIT_ZERO_BASE`.
+* **Constants.** The FE's constants list no vptr, so entry indexes are shifted past
+  the `TY_VPTR` field (`an_init_level.vptr_shift`); `C_AGG_BEGIN` of a dynamic
+  class sends its vtable facts and marks its vtable used (not as a base subobject);
+  `C_ZERO` of one is diagnosed.
+* **Emission** (`ecil_emit_class_abi_data`): at the end of the translation unit
+  (at the end of the function's region for a local class) each dynamic class gets
+  its vtable and class typeinfo `DECL_ABI_DATA` by clang's rules (`vtable_key_of`,
+  `plan_class_abi`): the key function (first non-pure, non-inline,
+  non-compiler-generated virtual function not defined in the class) defined here:
+  external and defined; elsewhere: an external declaration, if used; none: a
+  `linkonce_odr` COMDAT vtable if used; explicit instantiation: `weak_odr`;
+  `extern template`: a declaration; TU-local: internal; the typeinfo has the
+  linkage the vtable would have, with `TU_LOCAL` when the class is, its bases' typeinfo
+  introduced first, and is re-issued at the end if an earlier one changed
+  (`reissue_class_typeinfos`). "Used" is logged and taken back with a dropped body
+  (`ecil_vtable_use_mark`, `_rollback`, `_commit`). A linkonce vtable that would
+  refer to a dropped function becomes an external declaration.
+* **Diagnosed (S1):** a destroying operator delete, `::delete` of an object with
+  a virtual destructor (`nds->global_new_or_delete`).
+* **Covariant returns.** The vtable facts of a class also send, for each override
+  with a covariant return class, that class's layout facts, and its vtable facts when
+  the path from it to the overridden return class goes through a virtual base
+  (`send_covariant_return_facts`; golden `writer-cxx-virtual-covariant-facts`).
+* **Review fixes (S1).** The signature table keeps no function of a local class
+  after its region (`ecil_forget_local_signatures`; golden
+  `writer-cxx-virtual-sig-local`). The definition of a virtual function sends
+  the facts of its class, so that the library emits the thunks to it
+  (`writer-cxx-virtual-thunk-facts`). A local class whose vtable is first used
+  after its region ended (a constructor instantiated later) gets its vtable
+  decided at that use (`ecil_note_vtable_used`, `writer-cxx-virtual-local-late`).
+  With `rtti = 0` no class typeinfo is issued for a vtable. A declared-only
+  vtable (key function elsewhere) has its typeinfo declared too. A local class
+  with internal linkage is `TU_LOCAL` (g++'s `*`). CHECKING: every virtual
+  function of a vtable defined here is defined, external, dropped, pure or
+  deleted.
+* **Tests.** Goldens `writer-cxx-virtual-*` (basic, hierarchy, key, names, devirt,
+  constants, sig, sig20, delete, zero-base, template, vbase-negative,
+  destroying-delete), `writer-cxx-class-assign-constant`,
+  `writer-cxx-agg-closure-init`, `writer-cxx-static-local-late-name`; run probes
+  `probes/m4/s1_*.cpp` (against g++); `stream_sweep.py --reasons` counts the
+  reasons of the dropped functions of a corpus.
+
+### 9.17 M4 slice S2: virtual bases
+
+ECIL 1.2, spec 12.2 (`VIRTUAL_BASE`), 12.3 (`STRUCTOR has_vbases`), 12.4
+(`VBASE_CAST`, `VTT_ADDR`). Map: `research/il_to_ecil_map_m4.md` (sections 2.3,
+3.4, 4.3, 4.4).
+
+* **Record.** The `VIRTUAL_BASE` fields follow the data members, one for each
+  virtual base, direct or indirect, at its complete-object offset, in the order the
+  front end constructs them: **its postorder base list** (`base_classes`, the
+  `next` chain), not its `preorder_base_classes` (which lists `V2` before `V1`
+  for `N : virtual V1, virtual V2` with `V2 : virtual V1`). That is also the order of
+  the `MEMINIT(vbase)` groups, whose `idx` must increase. A virtual base with no
+  storage of its own has `EMPTY_FOR_ABI` (flag 67): an empty class, or the primary
+  virtual base of the class or of one of its bases, direct or indirect
+  (`vbase_is_primary_of_a_base`, clang's hasOwnStorage; CHECKING: its offset is
+  that base's; golden `writer-cxx-vbase-primary`). The data size is the largest end of any field: a base, direct
+  or virtual, ends at its offset plus its nvsize (`base_layout_size`: the
+  `CLASS_INFO` nvsize, else the data size). Checked against clang's
+  `-fdump-record-layouts` (size, dsize, align, nvsize) for the 15 classes of
+  `writer-cxx-vbase-layout`.
+* **Structors.** `STRUCTOR` has `has_vbases` for a class with `VIRTUAL_BASE` fields
+  (`ECIL_GF_STRUCTOR_VBASES` on both G-ids; the record body is sent first). A
+  constructor is walked twice by `emit_function_walk` (C1 with the `MEMINIT(vbase)`
+  groups and their eh cleanups, then C2 without them; the second walk starts with
+  fresh L-ids, and CHECKING asserts that it introduces no G-id: a static
+  temporary is found by owner and sequence number, a lambda is streamed
+  once with its region, a static local keeps one `DECL_VAR`, with its
+  `STATIC_INIT` in both bodies). A destructor's front-end body is D2 (no virtual
+  base entries in its prologue); D1 is synthesized (`emit_synthesized_d1`): a
+  `CLEANUP_BEGIN(all)` per virtual base with a destructor, begun in C1's order
+  (the destruction list from its end), each calling D2 on `VBASE_CAST COMPLETE`,
+  then `CALL` of D2 with `VTT_ADDR(self)`; no `VPTR_INIT`.
+* **Casts.** `VBASE_CAST` (`emit_base_chain`): `NONNULL` as for a `BASE_CAST`,
+  `COMPLETE` for the construction and destruction of the virtual bases and for a
+  cast of `this` in C1; a base reached through a virtual one starts with `VBASE_CAST`
+  and continues with `BASE_CAST`s; a `static_cast` from a virtual base is ill-formed.
+  The facts of the class come before it.
+* **VTT.** The `CALL` of a base variant of a `has_vbases` pair has `VTT` and a
+  `VTT_ADDR` after argument 0: `base idx` or `vbase idx` for the bases of the
+  class being constructed or destroyed, `self` for a delegation in C2 and for D1's
+  call of D2 (`emit_vtt_addr` marks the vtable used). A delegating constructor
+  calls the target's C1 from C1 and C2 from C2. `DECL_ABI_DATA(vtt)` follows the
+  vtable with its linkage and flags, and the typeinfo of every dynamic base,
+  indirect ones included, is declared for the construction vtables
+  (`emit_class_abi_data`).
+* **Copies.** A bitwise-copy entry of a virtual base in an implicit copy
+  constructor, and the assignment of a virtual base subobject in an implicit
+  `operator=`, go through the same casts (`emit_this_subobject`).
+* **Tests.** Goldens `writer-cxx-vbase-{diamond,structors,casts,layout,iostream,
+  clone-impl,order}`; run probes `probes/m4/s2_*.cpp` against g++ (the real
+  `<iostream>` program included); stress: 200 virtual bases and a chain of 150
+  virtual bases validate under `ulimit -s 256`. `writer-cxx-vbase-static-local`
+  waits for the library's relaxed `STATIC_INIT` rule (the validator rejects two
+  `STATIC_INIT`s of one variable).
+
+
+### 9.18 M4 slice S3: RTTI and member pointers
+
+ECIL 1.2, spec 12.2 (`TY_DATA_MEMBER`, `TY_METHOD`), 12.3 (`TYPEINFO_DEF`,
+non-class `DECL_ABI_DATA`), 12.4 (`TYPEID`, `DYNAMIC_CAST`, `PM_*`,
+`CONST_DATA_MEMBER`, `CONST_METHOD`, the `C_` forms), 12.7 (the null
+data-member pointer), 12.8 (typeinfo linkage). Map: `research/il_to_ecil_map_m4.md`
+(sections 6, 7).
+
+* **Types.** A pointer to member is `TY_DATA_MEMBER(member type, class)` or
+  `TY_METHOD(function type, class)`, introduced by `finish_member_pointer`
+  after both children (the class only declared, as a pointee); the function type
+  of a method has the object pointer first (it is the front end's non-static
+  member function type). They are interned by (kind, member, class); a data-member
+  pointer has `ECIL_GF_HAS_DMP`, inherited by arrays and records that contain it,
+  which is what makes a type "not zero-initializable". They are no longer
+  opaque.
+* **Zero-initialization (12.7).** `ZERO_BYTES` is used only for a type without a
+  data-member pointer. `emit_zero_object` (value-initialization, `new T()`,
+  `T t{}`) uses `INIT_ZERO` on the typed glvalue; `emit_zero_pointee` and a base
+  use `INIT_ZERO_BASE`; the data-size zeroing of a `[[no_unique_address]]` member
+  or of a delegation to a trivial constructor is `emit_zero_data_size`
+  (`INIT_ZERO_BASE`, or `ZERO_BYTES` of the data size without a data-member
+  pointer); `new T[k]()` of a constant count uses `INIT_ZERO` on the array
+  (`ecil_array_of`). A partial aggregate constant (`H h{}`, the unlisted parts of a
+  definition) is left to the library, which expands the null constants, so the
+  `ecil_note_zero_init_of_dmp` diagnostics are gone.
+* **Constants** (`ecil_emit_ptr_to_member_constant`). `ck_ptr_to_member`: a data
+  member's offset is the field's own offset (plus those of the anonymous unions that
+  contain it) plus the offset of the base the pointer was converted through
+  (`casting_base_class`, negative for a conversion to a base: not expressible);
+  null is nil; a bit-field or a virtual base path is diagnosed. A function: `g`
+  of the routine, `adj` the non-negative base offset, `VIRTUAL` (with the class's
+  vtable facts) for a virtual function. A global (`VAR_INIT`, `C_AGG`) uses
+  `C_DATA_MEMBER` / `C_METHOD`; a body uses `CONST_DATA_MEMBER` /
+  `CONST_METHOD`, and a local initialized by a method-pointer constant is a
+  `CONST_METHOD` and a `STORE` (a `C_METHOD` with a non-zero `adj` is only valid in a
+  `VAR_INIT`: an aggregate in a body that contains one is diagnosed:
+  `writer-cxx-memptr-negative`).
+* **Operations.** `.*` / `->*` on data are `PM_FIELD` (object address first: a
+  value is materialized; a glvalue, with `LOAD` if the node is a value); a call
+  is `PM_CALL(t_call, nargs, flags)` with the object, the method pointer, then the
+  arguments (`do_pm_call`, C++17 order: the object is evaluated first though the
+  node lists the pointer first; `nargs` counts the object, `NOTHROW` from
+  `is_nothrow_type`); `eok_pm_base_class_cast` / `eok_pm_derived_class_cast` are one
+  `PM_CAST` step to a direct base (`to_base` 1, `to_derived` 0, the offset of the
+  direct base entry; virtual: diagnosed); `==`, `!=` and the conversion to bool
+  are the ordinary `CMP` / `TO_BOOL`.
+* **Typeinfo** (`ecil_typeinfo_id`). A class's typeinfo is `issue_class_typeinfo`
+  (its bases' first, its layout and vtable facts, linkage from `plan_class_abi`); the
+  typeinfo of a class that is incomplete when first needed is a plain internal
+  `__class_type_info` (`ECIL_GF_TI_INCOMPLETE` on its record, never re-planned,
+  sticky as in clang). A type that is not a class gets a `DECL_ABI_DATA` named by
+  `mangled_typeinfo_name` of the type with references and top-level cv removed
+  (unique by name through the word table), then a `TYPEINFO_DEF`, after the
+  typeinfo of its pointee and of the class of a member pointer (an explicit
+  work stack, not recursion: `typeinfo_stack`). Kinds: fundamental, pointer, member
+  pointer, function (a noexcept pointee has its specification stripped and the
+  `NOEXCEPT` mask), array, enum. Masks: `CONST`, `VOLATILE`, `RESTRICT` of the
+  pointee, `INCOMPLETE` where the pointee chain contains an incomplete class
+  (clang's `ContainsIncompleteClassType`), `INCOMPLETE_CLASS` for a member pointer
+  of an incomplete class. Linkage: a fundamental type and a pointer to a
+  cv-unqualified or const one are external declarations (not defined here);
+  an incomplete chain, a TU-local type (`cir_entity_is_tu_local`, which now looks
+  through pointers, member pointers, arrays and functions to the tag types) and a
+  chain with a function-local class of internal statics are internal (the
+  last two with `TU_LOCAL`); the rest `linkonce_odr` in a COMDAT group.
+  `float _Complex` and other non-standard types are diagnosed.
+* **`TYPEID` and `DYNAMIC_CAST`.** `enk_typeid`: static form with the typeinfo of the
+  type operand (nothing popped); a dynamic one has a nil typeinfo and pops the
+  glvalue of the polymorphic operand (a value is materialized), `NULL_CHECK` iff
+  the operand is `eok_indirect`. `&typeid(T)` in a constant (`abk_typeid`) is
+  `C_ADDR` of the typeinfo, in a body `TYPEID` and `ADDR`. `eok_dynamic_cast`: the
+  operand pointer, `DYNAMIC_CAST(src typeinfo, dst typeinfo | nil, result type,
+  0)`; `eok_ref_dynamic_cast`: `ADDR`, `DYNAMIC_CAST ... REF`, `DEREF` (the node's
+  type is `T`). The layout facts (and vtable facts for a dynamic class) of both
+  classes come first.
+* **Run-time-count `new[]` and `if consteval`.** `new T[n]()` and `new T[n]{}` with
+  a run-time count zero every element in a loop (`emit_zero_new_array_loop`:
+  `INIT_ZERO` in an `ARRAY_CTOR` loop for a record element, a `WHILE` over a
+  counter and a local pointer otherwise, because `cir.array.ctor` takes only
+  records), also the zeroing that precedes the constructor loop of a class
+  whose implicit constructor value-initializes (`writer-cxx-new-array-zero`);
+  `new S[n]{S{...}}` stays unsupported (it needs `bad_array_new_length`). `if
+  consteval` and `if !consteval` write only the arm that runs at run time
+  (`writer-cxx-if-consteval`; libstdc++'s C++23 `std::__is_constant_evaluated`
+  and `type_info::operator==`).
+* **Checks.** `check_vtable_members_available` (CHECKING) covers, besides the
+  class's own virtual functions, the final overrider of each virtual function of
+  each base (the `overriding_virtual_functions` of the base entry). The front end's
+  `virtual_functions_marked_as_required` is **not** an invariant of a used vtable
+  (a class whose vtable a derived constructor uses can lack it), so it is not
+  asserted. `push_covariant_return_class` (the covariant-return facts of 9.16) goes
+  on the class stack, not the C stack.
+* **Tests.** Goldens `writer-cxx-memptr-{types,constants,ops,negative}`,
+  `writer-cxx-dmp-zero-init` (re-recorded: supported now), `writer-cxx-typeid`,
+  `writer-cxx-typeinfo-{kinds,incomplete,tu-local}`, `writer-cxx-dynamic-cast`,
+  `writer-cxx-virtual-declared-base-typeinfo`; probes `probes/m4/{m1_memptr,
+  m2_valinit,m3_pm_casts,t1_typeinfo,t2_incomplete,n2_typeinfo_names}.cpp`.
+
+
+### 9.19 M4 slice S4: exceptions
+
+ECIL 1.2, spec 12.4 (`FUNC_EH_SPEC`), 12.5 (`TRY_BEGIN`, `CATCH_BEGIN`,
+`CATCH_PARAM`, `TRY_END`, `THROW_BEGIN`, `THROW_END`, `RETHROW`), 12.6
+(`HDR_LANG exceptions`, `NOTHROW`, `DEACTIVATABLE`, `CLEANUP_END`). Map: sections
+5.1 to 5.8.
+
+* **Header and flags.** `HDR_LANG exceptions` is set for C++ with the front end's
+  `exceptions_enabled` (`ecil_has_exceptions`; `--no_exceptions` turns it off, and
+  nothing in the environment changes it): every function and call may
+  throw unless marked, and the `eh` and `all` cleanups M3 sent are live. `DECL_FUNC
+  NOTHROW` comes from `is_non_throwing_routine` only and is kept by every
+  re-issue (`emit_func_decl_if_changed`); a `CALL_INDIRECT` and a `PM_CALL` have it
+  from `is_nothrow_type` of the call's function type; a direct call needs none.
+* **`FUNC_EH_SPEC`** (`emit_func_eh_spec`), after the PARAMs of every definition
+  (functions, synthesized D1, lambda invokers): `noexcept` for a noexcept
+  specification that is true (the implicit destructor and deallocation function
+  included) and for `throw()` in C++17; `dynamic` with the typeinfo of each
+  listed type otherwise; nothing for `noexcept(false)`, an attribute's nothrow
+  and a trivial member (those are `NOTHROW` only).
+* **`throw`** (`do_throw`): `RETHROW` for `throw;` and the front end's implicit
+  rethrow; else `THROW_BEGIN(t)`, the initialization with the destination on the
+  stack (`cik_init` with `DEST_ON_STACK`: a store, a constructor call with the
+  glvalue as `this`, `INIT_CONST`), `THROW_END(typeinfo, D1)`. It is not a region:
+  the operand's temporaries are cleanups of the enclosing `FULLEXPR`. A throw in a
+  conditional region (a `TERN` arm, the right operand of `&&`/`||`) needs a
+  `FULLEXPR` around the region: the outermost conditional operation of a full
+  expression that has none open wraps itself (`conditional_needs_fullexpr`) when
+  its conditional operands may contain a throw or a new with a free cleanup
+  (`expr_may_contain_throw`, a heap walk that treats forms it does not know as
+  throwing); `fullexpr_depth` and `cond_depth` track both.
+* **`try`/`catch`** (`do_try_block`): `TRY_BEGIN(0)`, the body, then each handler as
+  `CATCH_BEGIN(typeinfo | nil)`, `LOCAL` and `CATCH_PARAM(l, kind, g_copy)` for its
+  parameter (an unnamed one too), the `all` cleanup of a destructible parameter,
+  the handler block; `TRY_END`. The kind comes from the parameter's type
+  (`catch_param_kind`: 7 reference to a record pointer, 6 reference to another
+  pointer, 0 other references, 1 pointer, 2 scalar including member pointers, 4
+  trivial copy, 5 copy constructor with the C1 id). A copy with default arguments
+  or temporaries is diagnosed. The function-try-block of a constructor or
+  destructor is `TRY_BEGIN(FUNCTION_TRY)` right after the header (before the
+  initializers, `VPTR_INIT` and the destruction prologue, `function_try_open`);
+  its handler ends with the front end's implicit rethrow. A plain function's is
+  an ordinary `TRY`. The label search for constant `if`s looks into try blocks.
+* **The free of a new** (`do_new_delete`, spec encoding 10): with an initialization
+  that may throw (`new_has_throwing_initializer`) and an operator delete the front
+  end recorded, the size is kept in a local before the allocation, each
+  placement operand in a local, the result in a pointer local, then
+  `CLEANUP_BEGIN(eh, DEACTIVATABLE)` calls the delete function (sized when it has
+  a size parameter, with the placement operands), and `CLEANUP_END` follows the
+  initialization (phase 5 of the item). The delete function must have one
+  parameter for the pointer, optionally one for the size and one for each
+  operand of the allocation function. Nothing for the global placement new.
+* **Partial destruction.** `ARRAY_PARTIAL_DTOR` follows the `ARRAY_CTOR_BEGIN` of a
+  loop of default constructions with elements that have a destructor (local arrays
+  and `new T[n]`). An aggregate with members or elements that have destructors
+  keeps its address in a local (`an_init_level.addr_lid`) and begins
+  `CLEANUP_BEGIN(eh, DEACTIVATABLE)` after each entry's initialization (a
+  constructor, a constant, an empty list; an array member through an `ARRAY_DTOR`
+  loop), ending them before `AGG_INIT_END` (`agg_note_initialized`,
+  `agg_emit_partial_cleanup`).
+* **Also.** A `ck_void` constant pushes nothing; the typeinfo objects of
+  exceptions exist with RTTI off (`ecil_typeinfo_id` has no RTTI check: `typeid`
+  and `dynamic_cast` check it); the new-array zero loop and the if-consteval
+  statement are in 9.18.
+* **Throwing destructors.** A destructor that may throw (`noexcept(false)`) run as a
+  normal-path cleanup is fine for locals, temporaries and enclosing scopes: the library
+  (the pin) makes calls inside a cleanup region invokes into the enclosing scopes, so the
+  cleanups that remain run (log-for-log with g++ in `cxx-s4-eh-cleanup-throw`). Only the
+  destructor of an array element that may throw is diagnosed (`emit_cleanup`): the pin
+  skips the elements before the one that threw, while clang and g++ destroy them
+  ("watch upstream").
+* **S5 additions.** `new (std::nothrow) T`: the result is kept in a local and the
+  construction is in the arm of a `TERN` on it, with a null arm (`NEW_NOTHROW`,
+  `new_null_test_begin`; a free cleanup there gets a `FULLEXPR` of its own).
+  `new T[n]{...}` with a run-time `n` (`NEW_LIST`, `new_list_rest`): a check
+  `n < k` calls `__cxa_throw_bad_array_new_length` (a runtime function declared on
+  first use, `ecil_throw_bad_array_new_length_function`), the first `k` elements are
+  initialized through a pointer to the array of `k` (their destruction is a
+  `DEACTIVATABLE` cleanup while the others are built), the other `n - k` are a
+  loop of the default constructor (with `ARRAY_PARTIAL_DTOR`) or of `INIT_ZERO`.
+  A catch, throw or `FUNC_EH_SPEC` in a dropped function leaves its typeinfo
+  declared (an incomplete class's is a plain internal one, no facts).
+* **Session-3 corrections.**
+  * A class that was first met as a pointee and completed later (a template
+    instantiation) gets its size and alignment in the G-id table when its
+    `TY_RECORD_BODY` is sent, so the size of a `new` of it is right (opt/cleanup1).
+  * `CLASS_VFUNCS`: the sig of a virtual function includes the cv-qualification of
+    `this` (`rtsp->qualifiers`), so `foo()` and `foo() const` differ (Test38);
+    `ECIL_VFUNC_REF_RESULT` (0x08) is set for a function that returns a reference.
+  * `E1[E2]` with the integer first (`2[p]`) keeps the integer in a temporary and
+    evaluates the pointer after it (C++17 order, `SUBSCRIPT_INT_FIRST`).
+  * `new T[n]` with a run-time count, not a nothrow allocation, from C++11 on:
+    `NEW_ARRAY_SIZE_THROW` (a negative or overflowing count throws
+    `std::bad_array_new_length`); for one-byte elements a negative signed count is
+    tested before the conversion to `size_t`, since it does not overflow the size.
+  * The free-on-throw of a new expression calls a placement `operator delete(void *,
+    void *)` that the program declares; the one from a system header (nothing to
+    free) has no cleanup. A destroying operator delete recorded by the front end
+    for a new expression is unsupported (a reason, not a wrong call).
+  * The LOCAL alignment of a variable of a cv-qualified alignment typedef is that of
+    the typedef (`ecil_variable_alignment` walks the typeref chain).
+  * In C++17 the front end lists the base entry of `{ .x = 1, .y = 2 }` after the
+    members; it is sent as the entry of the base (`stream_next`).
+  * A `const int &k = P{T(5), 6}.k` in GNU mode with `--gnu_version=150200` binds to a
+    copy and ends the temporary at the end of the declaration: that is the front
+    end's IL (g++ 15 and the plain mode extend it), not a writer decision.
+* **S5 corpus fixes.**
+  * A class conditional whose value is discarded (`(c ? D() : throw 0);`) is a void
+    `TERN`: the temporary that holds its value (`is_discarded_conditional_temp`) is
+    skipped and each arm is a discarded temporary with its own cleanup, or, when the
+    front end builds the arms in the temporary of the conditional (a master entry
+    without a variable), the arms build in that temporary (`note_master_dest`).
+    `value_is_pushed` is false for such a conditional (eh/cond1).
+  * `::delete p` of a polymorphic object (and a delete whose operator delete is not the
+    class's) is `DELETE VIRTUAL|GLOBAL` (0x10): the library calls D1 through the vtable
+    and then the operator delete the front end chose, even if the destructor throws
+    (eh/delete1's `virt_glob`; its `ary` case fails in the library).
+  * A reference bound to a temporary array (`auto &&r = Arr{B()};`) is bound to the
+    temporary: the array-to-pointer decay and `lvalue_adjust` of an array temporary use
+    its storage (`is_array_temp_init`, `CIF_GLV`), and an `lvalue_adjust` between two
+    aggregate types is a bitcast of the address.
+* **Pointer-to-member builtins.** `__builtin_is_corresponding_member` and
+  `__builtin_is_pointer_interconvertible_with_class` (and the MS forms with type
+  operands) that the front end could not fold are translated by `do_pm_builtin` as its
+  own lowering does: each pointer to a data member is read as a pointer-sized
+  integer (`MATERIALIZE_TEMP`, `ADDR`, `CAST bitcast`, `DEREF`, `LOAD`; the null value
+  is all ones), and the result is `a == b && a < limit` (`common_initial_sequence_limit`)
+  or `a == 0`. A pointer to a member function, or a class that is not standard-layout
+  (a union is exempt for interconvertible), gives false after the operands are
+  evaluated. A member that cannot be told from the first one by its offset
+  (`[[no_unique_address]]` empty members) gives true, as in the front end's lowering.
+  `__builtin_launder` is the identity.
+* **Known differences from g++ that clang shares (eh/array2, eh/return1).** When the
+  destructor of a temporary of the default argument of an array element's constructor
+  throws (`array2`), g++ destroys the element that was just built; classic clang (21.1.8
+  aborts on the test) and the library do not. Likewise the object returned by value is not
+  destroyed when a destructor that runs after its construction throws (CWG 2176,
+  `return1`): g++ destroys it, clang and the library do not. The writer no longer
+  diagnoses either case.
+* **Members of anonymous unions and structs in constructors.** A constructor-initializer
+  entry for a member of an anonymous union or struct (`struct { int m = 0; };` in the
+  class) is a `MEMINIT` group numbered by the unnamed member that holds it; its body
+  reaches the member through `FIELD` of the unnamed member(s) and then of the member
+  (`emit_this_field`, `anonymous_member_path`), and the entries of one holder share one
+  group (`merge_anon_meminit`). One whose initializer has a destructor stays
+  unsupported.
+* **Class values returned through a comma or a conditional.** The arms of
+  `return X(1), X(2);` and `return c ? X(1) : X(2);` build the return slot: the arm's
+  master entry has no variable, and the destination noted by the initialization that owns
+  it (`note_master_dest`, 0 is the slot) is used. A destination on the stack (`throw c ?
+  B(1) : B(2);`) stays unsupported.
+* **More clang-consistent differences (eh/ref-temp1, eh/ref-temp2, rma/eh40).**
+  Checked with classic clang 21.1.8 and g++ on the box: `ref-temp1` (a reference-bound
+  temporary of a lifetime-extended `A(int)` is not destroyed when the destructor of the
+  temporary that holds the member throws) aborts in clang and in the library, exits 0 in
+  g++; `ref-temp2` (`auto &&r = Arr{B()};`, the elements built before `B`'s destructor
+  throws) exits 3 in clang and in the library, 0 in g++. `rma/eh40` (a placement `new`
+  whose constructor throws, no handler: the placement `delete` must run and exit)
+  terminates in clang, in g++ and in the library: with no handler the unwinder does not
+  run the cleanups; the reference passes only because the front end's own lowering
+  wraps the new in a `catch (...)`.
+* **The assignment of an empty class copies nothing** (found by the run failure of
+  `cpp0x/variadic-tuple`): `tail() = other.tail()` of an empty base (the `tuple<>` of a
+  `tuple<std::string>`) was a one-byte `STORE` through a reference to a subobject that shares
+  its address with the first member, and overwrote the first byte of the `std::string`.
+  `type_is_empty_class` assignments now evaluate the operands and write nothing (probe
+  `s5_empty_assign`, `s5_variadic_tuple`; golden `writer-cxx-empty-assign`). A class whose
+  only member is an empty base has data size 0 and is already copied by data size.
+  "Empty" means no data: `gid_is_empty_class` is true for a complete class with no
+  `REC_FIELD`, or with data size 0 (only empty bases: `Tag2 : Tag`, `std::allocator<T>`), so
+  `std::get<0>(t) = std::allocator<int>{}` of a `tuple<allocator<int>, int>` writes nothing
+  (the assignment evaluates the right operand, as an address if it is an object, then the
+  target, and stores nothing: `empty_assign_operand`, `EMPTY_ASSIGN_RHS`/`LHS`). Golden
+  `writer-cxx-empty-nodata`; probe `s5_empty_overlap` includes `Tag2` and the tuple.
+  The sweep for siblings (probe `s5_empty_overlap`, 45 checks against g++ and clang, an
+  empty base or `[[no_unique_address]]` member sharing its address with a `char`): copy and
+  move construction, aggregate initialization (`A{'1', {}}`, `C{{}, 'a'}`), a member initialized
+  from a function result, delegating constructors, empty arguments and temporaries, defaulted
+  copy and move constructors and assignments of classes with empty bases, and
+  `new C()` all write nothing already (the library omits the store through a field of an
+  omitted empty subobject, `INIT_EMPTY` covers the copy). Two sites wrote the byte through a
+  raw pointer and are fixed: the value-initialization of an empty class (`new (p) E()`,
+  `emit_zero_object`) and its constant initialization (`new (p) E{}`, `INIT_CONST` of an empty
+  aggregate); both now drop the destination (golden `writer-cxx-empty-init`).
+  `__builtin_*_overflow_p` against a bit-field is diagnosed (the check is made against the
+  width of the bit-field).
+* **A constant of another integer type initializes a bool or integer object with the type of
+  the object** (`emit_leaf`): `inline constexpr bool is_integral_v<T>` gave a `C_INT` of a
+  narrower type, which the library now rejects ("VAR_INIT constant type differs from the
+  variable type", `#include <tuple>` in C++20; probe `s5_include_tuple_cxx20`).
+* **Known difference from clang (typeinfo of a class completed later).** The first need of a
+  typeinfo that comes from a file-scope initializer sees the class already completed
+  (`t2_incomplete`: `_ZTIP5Later` is `linkonce_odr` where clang has it internal); only
+  which translation units share the object differs (map 7.3).
+* **Destroying operator delete.** `delete p` of a class with a destroying operator
+  delete and no virtual destructor is `DELETE DESTROYING` (0x20): no destructor
+  (`g_dtor` nil), the size and alignment as the function takes them, the empty tag not
+  counted in the flags; with a virtual destructor it is `DELETE VIRTUAL` and the
+  `STRUCTOR_DELETING` of the class has the flag `DESTROYING` (0x04): D0 calls the
+  destroying delete and runs no D1 (the parameter count includes the tag). A destroying
+  delete of an array and the destroying delete the front end records as the free function
+  of a new expression stay unsupported.
+* **Known gaps** (the library or the contract): the destructor of an array element that
+  throws (`eh/array3`, `ref-temp1`, `ref-temp2`: map 5.9); `delete[]` of an array of a
+  class with a virtual throwing destructor (`eh/delete1`, `ary`).
+* **Tests.** Goldens `writer-cxx-exc-{throw,cond-throw,catch,function-try,spec,
+  spec-dynamic,nothrow,new,partial,no-rtti,negative,hierarchy}`; probes
+  `probes/m4/{e1_try,e1b_catch_kinds,e1c_unnamed_catch,e2_throw,e3_spec,
+  e3b_spec17,e4_new,e4b_new_flag,e5_rangefor,e6_ftb,e7_cond_throw}.cpp` (rewritten
+  to avoid unspecified evaluation order), `s4_partial.cpp`, `s4_stdexcept.cpp`
+  (`<stdexcept>`, `std::string`, `std::vector::at`, `exception_ptr`) and
+  `s4_c_frames.sh` (a throw through a C frame built by the back end), `s5_ftb`, `s5_dynspec`, `s5_nothrow_new`, `s5_new_list`, `s5_dropped_catch`, all equal
+  to g++; the `imported/gnu/cpp/eh` corpus directory passes 45 of 73, the others
+  being the gaps above and vectors, inline assembly and variable length arrays.
+
+## 10. ECIL versions (what the writer sends)
+
+* **1.0** (gate M3): C and core C++ (spec sections 1 to 11). Sections 9.1 to 9.14.
+* **1.1** (gate M3.1): the spaceship `CMP3WAY` and the M3 re-look items (section 9.15).
+* **1.2** (as implemented, frozen at the M4 gate): the records and flags of spec section 12
+  that the writer sends. It is the format the C++ corpus run, the goldens in
+  `tests/tests/cir/writer` and the cir-suite are checked against.
+
+  | Area | 1.2 records and flags the writer sends | Code |
+  |---|---|---|
+  | Polymorphism | `TY_VPTR`, `CLASS_BASES`, `CLASS_VFUNCS` (`PURE`, `DELETED`, `IMPLICIT`, `REF_RESULT` 0x08, the `sig`), `CLASS_OVERRIDES`, `CLASS_MANGLE`, `STRUCTOR_DELETING` (`SIZED`, `ALIGNED`, `DESTROYING` 0x04), `VPTR_INIT`, `CALL` flags `VIRTUAL` and `VTT`, `DELETE` flag `VIRTUAL` | `ecil_type.c` (`ecil_class_vtable_facts`, `deleting_destructor_id`), `ecil_code.c` (`setup_virtual_call`, `do_delete`) |
+  | Virtual bases | `REC_FIELD` `VIRTUAL_BASE`, `VBASE_CAST` (`NONNULL`, `COMPLETE`), `VTT_ADDR`, `MEMINIT` kind `vbase`, the C1/C2 and D1/D2 pairs, `INIT_ZERO_BASE` 0xA8 | `ecil_code.c` (`emit_class_cast`, `emit_zero_data_size`), `ecil_type.c` |
+  | RTTI | `TYPEINFO_DEF` kinds, `DECL_ABI_DATA` (`DEFINED_HERE`, `COMDAT`, `TU_LOCAL` 0x04: the typeinfo of a TU-local type or of an incomplete class, whose name starts with `*`), `DYNAMIC_CAST` (`REF`), `TYPEID` (`NULL_CHECK`) | `ecil_type.c` (`ecil_typeinfo_id`) |
+  | Member pointers | `TY_DATA_MEMBER`, `TY_METHOD`, `CONST_DATA_MEMBER`, `CONST_METHOD`, `C_DATA_MEMBER`, `C_METHOD`, `PM_FIELD`, `PM_CALL`, `PM_CAST` | `ecil_type.c`, `ecil_const.c`, `ecil_code.c` |
+  | Exceptions | `HDR_LANG` exceptions, `DECL_FUNC` `NOTHROW`, `FUNC_EH_SPEC`, `TRY_BEGIN`/`CATCH_BEGIN`/`CATCH_PARAM`/`TRY_END`, `THROW_BEGIN`/`THROW_END`, `RETHROW`, `CLEANUP_END` and `DEACTIVATABLE`, `ARRAY_PARTIAL_DTOR` 0xA7, `NEW_ARRAY_SIZE_THROW` 0xA9 | `ecil_code.c` (`do_throw`, `do_try_block`, `new_cleanups`, `emit_ctor_loop`) |
+  | Deletion | `DELETE` flags `GLOBAL` 0x10 (`::delete` of a polymorphic object: D1 through the vtable, then the chosen operator delete) and `DESTROYING` 0x20 (a destroying operator delete without a virtual destructor) | `ecil_code.c` (`do_delete`) |
+
+  Additions made during M4b (after the contract gate M4a), all part of 1.2:
+  `NEW_ARRAY_SIZE_THROW` (a dynamic-count `new T[n]` that is not a nothrow allocation,
+  from C++11), `CLASS_VFUNCS` `REF_RESULT` (a covariant reference result is adjusted
+  without a null check), `DELETE` `GLOBAL` and `DESTROYING`, `STRUCTOR_DELETING`
+  `DESTROYING` (D0 calls the destroying delete, no D1; the parameter count includes the
+  empty tag), `DECL_ABI_DATA` `TU_LOCAL`, and `INIT_ZERO_BASE` (the zero-initialization of
+  a base subobject writes only `nvsize` bytes and the null constants of data member
+  pointers).
+* **Not in 1.2** (diagnosed by the writer, section 9.12 and the map, `il_to_ecil_map_m4.md`):
+  see the final status there.

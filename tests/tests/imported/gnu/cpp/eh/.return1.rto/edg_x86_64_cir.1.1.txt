@@ -1,104 +1,14 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
-"Test_name.c", line 27: warning: CIR back end: the body of "~X" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
-    }
-    ^
-
 "Test_name.c", line 41: warning: label "foo" was declared but never referenced
    foo:
    ^
-
-"Test_name.c", line 49: warning: CIR back end: the body of "g" uses a class conditional that does not initialize a variable, which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 56: warning: CIR back end: the body of "operator()" uses a class conditional that does not initialize a variable, which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 65: warning: CIR back end: the body of "i" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
 
 "Test_name.c", line 70: warning: label "foo" was declared but never referenced
     foo:
     ^
 
-"Test_name.c", line 75: warning: CIR back end: the body of "i2" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 84: warning: CIR back end: the body of "i3" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 93: warning: CIR back end: the body of "i4" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 102: warning: CIR back end: the body of "i4a" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 130: warning: CIR back end: the body of "i5" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 144: warning: CIR back end: the body of "i6" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 152: warning: CIR back end: the body of "j" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 166: warning: CIR back end: the body of "l" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  template <class T>
-  ^
-
-"Test_name.c", line 204: warning: CIR back end: the body of "main" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"Test_name.c", line 161: warning: CIR back end: the body of "k" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during instantiation of "T k<T>() [with T=X]" at line 198
-
-"Test_name.c", line 169: warning: CIR back end: the body of "m" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-    catch (...) { return T(true),T(false); }
-                                           ^
-          detected during instantiation of "T m<T>() [with T=X]" at line 201
-
-Warning: CIR back end: the unused definition of '_Z1kI1XET_v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Warning: CIR back end: the unused definition of '_Z1mI1XET_v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of '_ZN1XD1Ev' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
-
-Error: CIR back end: the definition of '_ZN1XD2Ev' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
-
-Error: CIR back end: the definition of '_Z1gv' was dropped: it uses a construct the CIR back end cannot express: a class conditional that does not initialize a variable
-
-Error: CIR back end: the definition of '_ZZ1hvENKUlvE_clEv' was dropped: it uses a construct the CIR back end cannot express: a class conditional that does not initialize a variable (and it is referenced)
-
-Error: CIR back end: the definition of '_Z1iv' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of '_Z2i2v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of '_Z2i3v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of '_Z2i4v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of '_Z3i4av' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of '_Z2i5v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of '_Z2i6v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of '_Z1jv' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of '_Z1lv' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-14 errors detected in the compilation of "Test_name.c".
+/usr/sbin/ld: Test_name.o: in function `_Z2i4v':
+Test_name.c:(.text+0xXX): undefined reference to `_ZN1XC1ERKS_'
+/usr/sbin/ld: Test_name.o: in function `_Z3i4av':
+Test_name.c:(.text+0xXX): undefined reference to `_ZN1XC1ERKS_'
+collect2: error: ld returned 1 exit status

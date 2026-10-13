@@ -1,0 +1,117 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 18: warning: CIR back end: the body of "dropped" uses inline assembly, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+ecil 1.2 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  STR 5 "type_info"
+  TY_RECORD_DECL 4 2 5
+  TY_PTR 5 4
+  TY_FUNC 6 5 0 [1]
+  TY_VPTR 7
+  TY_RECORD_BODY 4 8 8 8 12 1
+  REC_FIELD 7 0 nil nil nil 1
+  STR 6 "St9type_info"
+  CLASS_MANGLE 4 6
+  CLASS_INFO 4 8 8 nil 2
+  CLASS_BASES 4 []
+  STR 7 "_Z7droppedi"
+  DECL_FUNC 8 6 0 0 7
+  DECL_FUNC 8 6 0 1 7
+  STR 8 "k"
+  TY_VOID 9
+  TY_FUNC 10 9 0 [1]
+  STR 9 "_Z7throweri"
+  DECL_FUNC 11 10 0 0 9
+  STR 10 "Cmp"
+  TY_RECORD_DECL 12 0 10
+  STR 11 "x"
+  TY_RECORD_BODY 12 16 12 8 12 2
+  REC_FIELD 7 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 11 0
+  STR 12 "3Cmp"
+  CLASS_MANGLE 12 12
+  CLASS_INFO 12 12 8 nil 2
+  CLASS_BASES 12 []
+  TY_PTR 13 12
+  TY_FUNC 14 9 0 [13]
+  STR 13 "_ZN3CmpD1Ev"
+  DECL_FUNC 15 14 0 128 13
+  STR 14 "_ZN3CmpD2Ev"
+  DECL_FUNC 16 14 0 128 14
+  STRUCTOR 15 16 1
+  TY_PTR 17 9
+  TY_FUNC 18 9 0 [17, 2]
+  STR 15 "_ZdlPvm"
+  DECL_FUNC 19 18 0 128 15
+  STR 16 "_ZN3CmpD0Ev"
+  DECL_FUNC 20 14 0 128 16
+  STRUCTOR_DELETING 20 15 19 1
+  CLASS_VFUNCS 12 [15, 0, 0, 0]
+  CLASS_OVERRIDES 12 []
+  DECL_ABI_DATA 21 2 12 0 0 nil
+  STR 17 "_ZTIi"
+  DECL_ABI_DATA 22 2 1 0 0 17
+  TYPEINFO_DEF 22 0 0 nil nil
+  DECL_FUNC 8 6 0 32 7 supp{13: "inline assembly"}
+frame REGION
+  TY_FUNC 23 5 0 []
+  STR 18 "_Z4keptv"
+  DECL_FUNC 24 23 0 0 18
+  DECL_FUNC 24 23 0 1 18
+  STR 19 "_ZTIP3Inc"
+  STR 20 "Inc"
+  TY_RECORD_DECL 25 0 20
+  STR 21 "3Inc"
+  CLASS_MANGLE 25 21
+  DECL_ABI_DATA 26 2 25 1 1 nil
+  TY_PTR 27 25
+  DECL_ABI_DATA 28 2 27 1 1 19
+  TYPEINFO_DEF 28 1 8 26 nil
+  FUNC_BEGIN 24 0
+  BLOCK_BEGIN
+  TYPEID 28 4 0
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 29 9 0 []
+  STR 22 "_Z5kept2v"
+  DECL_FUNC 30 29 0 0 22
+  DECL_FUNC 30 29 0 1 22
+  FUNC_BEGIN 30 0
+  BLOCK_BEGIN
+  TRY_BEGIN 0
+  BLOCK_BEGIN
+  CONST_INT 1 1
+  CALL 11 10 1 4
+  BLOCK_END
+  CATCH_BEGIN 21
+  LOCAL 1 13 nil 0 0
+  CATCH_PARAM 1 0 nil
+  BLOCK_BEGIN
+  BLOCK_END
+  TRY_END
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 6 0

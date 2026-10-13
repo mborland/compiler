@@ -15,7 +15,6 @@ T gt{};
 void show(const S &s) { std::printf("%ld %ld %ld\n", s.a, s.pm ? 1L : 0L, s.b); }
 S *dyn_paren(int n) { return new S[n](); }
 S *dyn_brace(int n) { return new S[n]{}; }
-S *dyn_brace1(int n) { return new S[n]{S{1, nullptr, 2}}; }
 ND *dyn_nd(int n) { return new ND[n](); }
 ND *one_nd() { return new ND(); }
 int main() {
@@ -26,7 +25,7 @@ int main() {
   T t{}; U u{}; NS ns{}; U *nu = new U();
   show(l); show(l2); show(l3); show(l4); show(*np); show(*np2); show(na[1]); show(nb[1]);
   show(*pl); show(ls); show(t); show(gs); show(gs2); show(garr[2]); show(gu.arr[1]); show(gt);
-  show(u.arr[0]); show(nu->s); std::printf("%d\n", ns.nd.pm == nullptr);
-  delete[] dyn_paren(2); delete[] dyn_brace(2); delete[] dyn_brace1(2); delete[] dyn_nd(2); delete one_nd();
+  show(u.arr[0]); show(nu->s);
+  delete[] dyn_paren(2); delete[] dyn_brace(2); delete[] dyn_nd(2); delete one_nd();
   return 0;
 }

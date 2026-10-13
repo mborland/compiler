@@ -1,0 +1,135 @@
+; C++11 (ECIL 1.2): a function that returns a class by value (RETURN_SLOT)
+; while the destructor of a local throws on the normal path.
+;   R c_f(int k) { Td a(k); return R(1); }
+;   R c_g(int k) { Td a(3); Td b(k); R r(2); return r; }     // NRVO
+; The exception leaves the function through the EH cleanups of the other
+; locals (c_g: a is destroyed after b throws).  The returned object is not
+; destroyed: that is what clang does, classic and with -fclangir (g++ destroys
+; it, CWG 2176), and what the pin lowers.
+; RUN: cat %S/Inputs/header12_cxx_eh.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -std=c++17 %S/Inputs/s4_eh_return_value_host.cpp %t.o -o %t.exe
+; RUN: %t.exe | %FileCheck %s --check-prefix=LOG
+; RUN: %edg-cir --emit=obj -O2 -o %t2.o %t.ecil
+; RUN: g++ -std=c++17 %S/Inputs/s4_eh_return_value_host.cpp %t2.o -o %t2.exe
+; RUN: %t2.exe | %FileCheck %s --check-prefix=LOG
+
+; CHECK-LABEL: cir.func {{.*}}@c_f(
+; CHECK: cir.cleanup.scope
+; CHECK-LABEL: cir.func {{.*}}@c_g(
+; CHECK: cir.cleanup.scope
+
+; LOG: c_f(3)
+; LOG-NEXT: Td ctor 3
+; LOG-NEXT: R ctor 1
+; LOG-NEXT: Td dtor 3
+; LOG-NEXT: returned 1
+; LOG-NEXT: R dtor 1
+; LOG-NEXT: c_f(7)
+; LOG-NEXT: Td ctor 7
+; LOG-NEXT: R ctor 1
+; LOG-NEXT: Td dtor 7
+; LOG-NEXT: caught 77
+; LOG-NEXT: c_g(3)
+; LOG-NEXT: Td ctor 3
+; LOG-NEXT: Td ctor 3
+; LOG-NEXT: R ctor 2
+; LOG-NEXT: Td dtor 3
+; LOG-NEXT: Td dtor 3
+; LOG-NEXT: returned 2
+; LOG-NEXT: R dtor 2
+; LOG-NEXT: c_g(7)
+; LOG-NEXT: Td ctor 3
+; LOG-NEXT: Td ctor 7
+; LOG-NEXT: R ctor 2
+; LOG-NEXT: Td dtor 7
+; LOG-NEXT: Td dtor 3
+; LOG-NEXT: caught 77
+
+frame DECLS
+  STR 100 "R"
+  STR 101 "Td"
+  STR 102 "_ZN1RC1Ei"
+  STR 103 "_ZN1RD1Ev"
+  STR 104 "_ZN2TdC1Ei"
+  STR 105 "_ZN2TdD1Ev"
+  STR 106 "c_f"
+  STR 107 "c_g"
+  TY_RECORD_DECL 41 0 100
+  TY_RECORD_BODY 41 4 4 4 12 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 42 41
+  TY_RECORD_DECL 43 0 101
+  TY_RECORD_BODY 43 4 4 4 12 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 44 43
+  TY_FUNC 71 11 0 [42, 1]
+  TY_FUNC 72 11 0 [42]
+  TY_FUNC 73 11 0 [44, 1]
+  TY_FUNC 74 11 0 [44]
+  TY_FUNC 75 41 0 [1]
+  DECL_FUNC 101 71 0 0 102
+  DECL_FUNC 102 72 0 0 103
+  DECL_FUNC 103 73 0 0 104
+  DECL_FUNC 104 74 0 0 105
+  DECL_FUNC 110 75 0 1 106
+  DECL_FUNC 111 75 0 1 107
+frame REGION
+  FUNC_BEGIN 110 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 43 nil 4 0
+  LREF 2
+  ADDR
+  LREF 1
+  LOAD 0
+  CALL 103 73 2 0
+  CLEANUP_BEGIN 3 nil 0
+  LREF 2
+  ADDR
+  CALL 104 74 1 0
+  CLEANUP_BODY
+  RETURN_SLOT
+  ADDR
+  CONST_INT 1 1
+  CALL 101 71 2 0
+  RETURN_FROM_SLOT
+  FUNC_END 0
+  FUNC_BEGIN 111 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 43 nil 4 0
+  LREF 2
+  ADDR
+  CONST_INT 1 3
+  CALL 103 73 2 0
+  CLEANUP_BEGIN 3 nil 0
+  LREF 2
+  ADDR
+  CALL 104 74 1 0
+  CLEANUP_BODY
+  LOCAL 3 43 nil 4 0
+  LREF 3
+  ADDR
+  LREF 1
+  LOAD 0
+  CALL 103 73 2 0
+  CLEANUP_BEGIN 3 nil 0
+  LREF 3
+  ADDR
+  CALL 104 74 1 0
+  CLEANUP_BODY
+  LOCAL 4 41 nil 4 1
+  LREF 4
+  ADDR
+  CONST_INT 1 2
+  CALL 101 71 2 0
+  CLEANUP_BEGIN 3 nil 0
+  LREF 4
+  ADDR
+  CALL 102 72 1 0
+  CLEANUP_BODY
+  RETURN_FROM_SLOT
+  FUNC_END 0
+frame END
+  END auto 0

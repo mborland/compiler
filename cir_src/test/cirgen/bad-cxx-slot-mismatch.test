@@ -1,0 +1,33 @@
+; The front end's slot of a virtual function must be where the vtable builder
+; puts it (CLASS_VFUNCS against check_slots_against_builder): f is declared
+; first but numbered 1, a gap in [0, nslots).  A fatal finish-time diagnostic.
+; RUN: cat %S/Inputs/header12_cxx_rtti.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: error [1001]: class facts: class A: slot 0 of 2 has no function
+
+frame DECLS
+  STR 11 "A"
+  STR 21 "1A"
+  STR 31 "_ZN1A1fEv"
+  TY_VPTR 90
+  TY_RECORD_DECL 61 0 11
+  TY_RECORD_BODY 61 8 8 8 4 1
+  REC_FIELD 90 0 nil nil nil 1
+  CLASS_MANGLE 61 21
+  CLASS_INFO 61 8 8 nil 2
+  CLASS_BASES 61 []
+  TY_PTR 62 61
+  TY_FUNC 70 11 0 [62]
+  DECL_FUNC 100 70 0 1 31
+  CLASS_VFUNCS 61 [100, 1, 0, 1]
+  CLASS_OVERRIDES 61 []
+  DECL_ABI_DATA 110 2 61 0 1 nil
+  DECL_ABI_DATA 111 0 61 0 1 nil
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 62 62 nil 1
+  FUNC_END 1
+frame END
+  END auto 0

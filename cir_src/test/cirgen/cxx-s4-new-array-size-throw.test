@@ -1,0 +1,54 @@
+; C++11: NEW_ARRAY_SIZE_THROW is NEW_ARRAY_SIZE with a throw: a negative or
+; overflowing count calls __cxa_throw_bad_array_new_length instead of yielding
+; SIZE_MAX (which NEW_ARRAY_SIZE, used for a nothrow new[], still does).
+; RUN: cat %S/Inputs/header12_cxx_eh.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -std=c++17 %S/Inputs/s4_new_array_size_throw_host.cpp %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %edg-cir --emit=obj -O2 -o %t2.o %t.ecil
+; RUN: g++ -std=c++17 %S/Inputs/s4_new_array_size_throw_host.cpp %t2.o -o %t2.exe
+; RUN: %t2.exe
+
+; CHECK-LABEL: cir.func {{.*}}@c_size(
+; CHECK: cir.mul.overflow
+; CHECK: cir.call @__cxa_throw_bad_array_new_length
+; CHECK: cir.unreachable
+; CHECK-LABEL: cir.func {{.*}}@c_size_nothrow(
+; CHECK: cir.select
+
+frame DECLS
+  STR 100 "c_size"
+  STR 101 "c_size8"
+  STR 102 "c_size_nothrow"
+  STR 103 "n"
+  TY_FUNC 221 2 0 [1]
+  TY_FUNC 222 2 0 [2]
+  DECL_FUNC 401 221 0 1 100
+  DECL_FUNC 402 222 0 1 101
+  DECL_FUNC 403 221 0 1 102
+frame REGION
+  FUNC_BEGIN 401 0
+  PARAM 1 1 1 103 0
+  LREF 1
+  LOAD 0
+  NEW_ARRAY_SIZE_THROW 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 402 0
+  PARAM 1 2 2 103 0
+  LREF 1
+  LOAD 0
+  NEW_ARRAY_SIZE_THROW 2 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 403 0
+  PARAM 1 1 1 103 0
+  LREF 1
+  LOAD 0
+  NEW_ARRAY_SIZE 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

@@ -6,9 +6,10 @@
 // the writer gives in its diagnostic, as the unsupported_reason supp key
 // (the frame has the supp flag, the stream the SUPP feature).  Both variants
 // of a constructor have it, and so does a variable.
-struct V { virtual void f(); int a; };
+struct VB { int b; };
+struct V : virtual VB { int a; };      // virtual bases: M4 slice S2
 V gv = V();
 thread_local int tl = 5 + gv.a;
 int *use() { return &tl; }
-void thrower() { try { } catch (...) { } }
+void thrower() { asm("nop"); }
 int ok = 1;

@@ -79,6 +79,14 @@ bool rtti_layout(a_vtable_context &ctx, a_class_id c, a_rtti_layout &out,
    __offset_flags needs its vtable's virtual base offset offset, hence the
    context; false (and error) if that layout fails. */
 
+int64_t dynamic_cast_offset_hint(const a_class_db &db, a_class_id src,
+                                 a_class_id dst);
+/* CodeGenUtils::computeOffsetHint: the src2dst hint of __dynamic_cast for
+   a cast from `src` to `dst`: -1 when a public path goes through a virtual
+   base, -2 when src is not a public base of dst, -3 when it is a public base
+   in several places, else the offset of the unique public non-virtual base
+   subobject src in dst. */
+
 std::string print_rtti(const a_class_db &db, const a_rtti_layout &layout);
 /* A line per field, for tests ("vtable _ZTV...+2", "name", "base D",
    "u32 N", "i64 N"). */

@@ -13,23 +13,6 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
                                                          ^
           detected during instantiation of "std::__cxx11::basic_string<<unnamed>, <unnamed>, <unnamed>>::basic_string(const std::__cxx11::basic_string<<unnamed>, <unnamed>, <unnamed>> &) [with <unnamed>=char, <unnamed>=std::char_traits<char>, <unnamed>=std::allocator<char>]" at line 296
 
-"Test_name.c", line 182: warning: CIR back end: the body of "_M_create_nodes" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during:
-            instantiation of "void std::_Deque_base<_Tp, _Alloc>::_M_create_nodes(std::_Deque_base<_Tp, _Alloc>::_Map_pointer, std::_Deque_base<_Tp, _Alloc>::_Map_pointer) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 165
-            instantiation of "void std::_Deque_base<_Tp, _Alloc>::_M_initialize_map(std::size_t) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 134
-            instantiation of "std::_Deque_base<_Tp, _Alloc>::_Deque_base(_Alloc, std::size_t) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 193
-            instantiation of "std::deque<_Tp, _Alloc>::deque(std::deque<_Tp, _Alloc>::size_type, std::deque<_Tp, _Alloc>::value_type, std::deque<_Tp, _Alloc>::allocator_type) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 294
-
-"Test_name.c", line 172: warning: CIR back end: the body of "_M_initialize_map" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during:
-            instantiation of "void std::_Deque_base<_Tp, _Alloc>::_M_initialize_map(std::size_t) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 134
-            instantiation of "std::_Deque_base<_Tp, _Alloc>::_Deque_base(_Alloc, std::size_t) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 193
-            instantiation of "std::deque<_Tp, _Alloc>::deque(std::deque<_Tp, _Alloc>::size_type, std::deque<_Tp, _Alloc>::value_type, std::deque<_Tp, _Alloc>::allocator_type) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 294
-
 "Test_name.c", line 48: warning: function "operator new(unsigned long, void *)" has no corresponding operator delete (to be called if an exception is thrown during initialization of an allocated object)
     template <typename _Up> void construct(_Up *p1) { new (p1) _Up; }
                                                       ^
@@ -40,25 +23,6 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
             instantiation of "void std::deque<_Tp, _Alloc>::_M_fill_initialize(const std::deque<_Tp, _Alloc>::value_type &) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 194
             instantiation of "std::deque<_Tp, _Alloc>::deque(std::deque<_Tp, _Alloc>::size_type, std::deque<_Tp, _Alloc>::value_type, std::deque<_Tp, _Alloc>::allocator_type) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 294
 
-"Test_name.c", line 95: warning: CIR back end: the body of "__uninitialized_fill_a" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during:
-            instantiation of "void std::__uninitialized_fill_a(_ForwardIterator, _ForwardIterator, _Tp, _Allocator) [with _ForwardIterator=Foo *, _Tp=int, _Allocator=std::allocator<Foo>]" at line 210
-            instantiation of "void std::deque<_Tp, _Alloc>::_M_fill_initialize(const std::deque<_Tp, _Alloc>::value_type &) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 194
-            instantiation of "std::deque<_Tp, _Alloc>::deque(std::deque<_Tp, _Alloc>::size_type, std::deque<_Tp, _Alloc>::value_type, std::deque<_Tp, _Alloc>::allocator_type) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 294
-
-"Test_name.c", line 213: warning: CIR back end: the body of "_M_fill_initialize" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during:
-            instantiation of "void std::deque<_Tp, _Alloc>::_M_fill_initialize(const std::deque<_Tp, _Alloc>::value_type &) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 194
-            instantiation of "std::deque<_Tp, _Alloc>::deque(std::deque<_Tp, _Alloc>::size_type, std::deque<_Tp, _Alloc>::value_type, std::deque<_Tp, _Alloc>::allocator_type) [with _Tp=Foo, _Alloc=std::allocator<Foo>]" at line 294
-
-Warning: CIR back end: the unused definition of '_ZNSt11_Deque_baseI3FooSaIS0_EE15_M_create_nodesEPPS0_S4_' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Warning: CIR back end: the unused definition of '_ZSt22__uninitialized_fill_aIP3FooiSaIS0_EEvT_S3_T0_T1_' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
 Error: CIR back end: the definition of '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1Ev' was dropped: it uses a construct the CIR back end cannot express: a function with the symbol name of a constructor or destructor (and it is referenced)
 
 Error: CIR back end: the definition of '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2Ev' was dropped: it uses a construct the CIR back end cannot express: a function with the symbol name of a constructor or destructor (and it is referenced)
@@ -67,8 +31,4 @@ Error: CIR back end: the definition of '_ZNSt7__cxx1112basic_stringIcSt11char_tr
 
 Error: CIR back end: the definition of '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2ERKS4_' was dropped: it uses a construct the CIR back end cannot express: a function with the symbol name of a constructor or destructor (and it is referenced)
 
-Error: CIR back end: the definition of '_ZNSt11_Deque_baseI3FooSaIS0_EE17_M_initialize_mapEi' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
-
-Error: CIR back end: the definition of '_ZNSt5dequeI3FooSaIS0_EE18_M_fill_initializeERKS0_' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
-
-6 errors detected in the compilation of "Test_name.c".
+4 errors detected in the compilation of "Test_name.c".

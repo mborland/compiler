@@ -41,6 +41,7 @@ set_class must define before finish.
   if (it == class_ids_.end()) {
     a_class_fact c;
 
+    c.key = key;
     c.size = 0;
     c.nvsize = 0;
     c.is_dynamic = false;
@@ -67,12 +68,14 @@ The dense id of a function; same forward-reference scheme.
   if (it == fn_ids_.end()) {
     a_fn_fact f;
 
+    f.key = key;
     f.owner = no_id;
     f.slot = -1;
     f.is_pure = false;
     f.is_deleted = false;
     f.special = fs_none;
     f.is_implicit = false;
+    f.ref_result = false;
     f.sig = 0;
     f.ret_class = no_id;
     db_.fns.push_back(f);
@@ -102,8 +105,10 @@ CLASS_INFO.
     c.mangled = info.mangled;
     c.size = info.size;
     c.nvsize = info.nvsize;
+    c.nv_data_end = info.nv_data_end;
     c.is_dynamic = info.is_dynamic;
     c.is_empty = info.is_empty;
+    c.layout_only = info.layout_only;
     c.primary_virtual = info.primary_virtual;
     c.nslots = info.nslots;
     primary_key_[id] = info.primary;
@@ -124,6 +129,7 @@ non-virtual size is its data size.
   info.name = name;
   info.size = size;
   info.nvsize = data_size;
+  info.nv_data_end = data_size;
   info.is_empty = is_empty;
   set_class(cls, info);
 }  /* a_fact_builder::set_plain_class */
@@ -182,6 +188,7 @@ A virtual function declared in a class.
     fact.is_deleted = info.is_deleted;
     fact.special = info.special;
     fact.is_implicit = info.is_implicit;
+    fact.ref_result = info.ref_result;
     fact.sig = info.sig;
     fact.name = info.name;
     fact.mangled = info.mangled;

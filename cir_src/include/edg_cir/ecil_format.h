@@ -277,6 +277,8 @@ supp blob is unambiguous.  Stack effects are documented in the spec.
   X(const_method,     0xA6, 4)  /* t, g|nil, adj, flags -> prv (1.2) */      \
   X(array_partial_dtor,0xA7, 1) /* g dtor (1.2) */                           \
   X(init_zero_base,   0xA8, 0)  /* glv; nvsize bytes (1.2) */               \
+  X(new_array_size_throw,0xA9, 2) /* t elem, cookie; count -> size_t;  */ \
+                                /* bad_array_new_length (1.2)             */ \
   /* Calls, casts and varargs (C0, C1 and C7-C9 are never assigned). */     \
   X(cast,             0xC2, 2)  /* kind, t; prv -> prv */                    \
   X(va_start,         0xC3, 0)  /* prv ap */                                 \
@@ -555,6 +557,9 @@ typedef enum an_ecil_catch_kind {
 #define ECIL_VFUNC_PURE                 0x01u  /* 1.2 (CLASS_VFUNCS) */
 #define ECIL_VFUNC_DELETED              0x02u  /* 1.2 */
 #define ECIL_VFUNC_IMPLICIT             0x04u  /* 1.2 */
+#define ECIL_VFUNC_REF_RESULT           0x08u
+                        /* 1.2: the function returns a reference (a
+                           covariant return adjustment is not null-checked). */
 
 #define ECIL_DECL_FUNC_DEFINED_HERE     0x01u
 #define ECIL_DECL_FUNC_INLINE           0x02u
@@ -595,6 +600,9 @@ typedef enum an_ecil_catch_kind {
 
 #define ECIL_STRUCTOR_DELETING_SIZED    0x01u  /* 1.2 */
 #define ECIL_STRUCTOR_DELETING_ALIGNED  0x02u  /* 1.2 */
+#define ECIL_STRUCTOR_DELETING_DESTROYING 0x04u
+                        /* 1.2: g_delete is a destroying operator delete;
+                           D0 calls it and does not run D1. */
 
 #define ECIL_ABI_DATA_DEFINED_HERE      0x01u  /* 1.2 (DECL_ABI_DATA) */
 #define ECIL_ABI_DATA_COMDAT            0x02u  /* 1.2 */
@@ -685,6 +693,13 @@ typedef enum an_ecil_catch_kind {
 #define ECIL_DELETE_ALIGNED             0x04u  /* v1 */
 #define ECIL_DELETE_VIRTUAL             0x08u
                         /* 1.2: D0 through the vtable. */
+#define ECIL_DELETE_GLOBAL              0x10u
+                        /* 1.2 (with VIRTUAL): ::delete of a polymorphic
+                           object: D1 through the vtable, then the global
+                           operator delete on the complete object. */
+#define ECIL_DELETE_DESTROYING          0x20u
+                        /* 1.2 (without VIRTUAL): a destroying operator
+                           delete; no destructor runs (g dtor is nil). */
 
 /* Supplementary blob keys (all optional; readers skip unknown keys). */
 typedef enum an_ecil_supp_key {

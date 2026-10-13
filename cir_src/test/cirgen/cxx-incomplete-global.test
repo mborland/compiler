@@ -1,17 +1,22 @@
 ; A variable of a record type that never got a body (the writer describes no
 ; class with virtual bases) has no layout.  Declared and unused it is simply
-; left out of the module (this used to abort in the MLIR data layout), and a
-; use in a function body gets a clean error where it used to crash.
+; left out of the module (this used to abort in the MLIR data layout).  When
+; its address is used (an extern declaration of a class that is never
+; completed in the unit, conv20) it stays, as in clang, a declaration of the
+; incomplete record with alignment 1, which lowers to an empty struct.
 ; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
 ; RUN: %ecil-asm %t.txt -o %t.ecil
 ; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
 ; RUN: cat %S/Inputs/header08_cxx.txt %S/Inputs/cxx_incomplete_global_used.txt > %t2.txt
 ; RUN: %ecil-asm %t2.txt -o %t2.ecil
-; RUN: %not %edg-cir --emit=cir %t2.ecil 2>&1 | %FileCheck %s --check-prefix=USED
+; RUN: %edg-cir --emit=cir %t2.ecil | %FileCheck %s --check-prefix=USED
+; RUN: %edg-cir --emit=obj -o %t2.o %t2.ecil
+; RUN: g++ %S/Inputs/cxx_incomplete_global_host.cpp %t2.o -o %t2.exe
+; RUN: %t2.exe
 
 ; CHECK-NOT: @e
 ; CHECK-LABEL: cir.func {{.*}}@f
-; USED: error [1003]: the variable 'e' has a record type without a body and is used
+; USED: cir.global "private" external {{.*}}@e : !rec_{{.*}}align(1)
 
 frame DECLS
   STR 10 "f"

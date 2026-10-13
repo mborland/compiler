@@ -1,0 +1,144 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 11: warning: CIR back end: the body of "f" uses inline assembly, which the CIR back end does not support; the function is dropped
+  struct Q { virtual void f() { asm("nop"); } virtual void g() {} };
+                                            ^
+
+"Test_name.c", line 12: warning: CIR back end: the body of "g" uses inline assembly, which the CIR back end does not support; the function is dropped
+  struct K { virtual void f(); virtual void g() { asm("nop"); } };
+                                                              ^
+
+Warning: CIR back end: the virtual table of "Q" refers to a function whose definition was dropped; it is not defined here
+
+ecil 1.2 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  TY_VOID 4
+  STR 5 "Q"
+  TY_RECORD_DECL 5 0 5
+  TY_PTR 6 5
+  TY_FUNC 7 4 0 [6]
+  TY_VPTR 8
+  TY_RECORD_BODY 5 8 8 8 4 1
+  REC_FIELD 8 0 nil nil nil 1
+  STR 6 "1Q"
+  CLASS_MANGLE 5 6
+  CLASS_INFO 5 8 8 nil 2
+  CLASS_BASES 5 []
+  STR 7 "_ZN1Q1fEv"
+  DECL_FUNC 9 7 0 2 7
+  DECL_FUNC 9 7 3 67 7
+  STR 8 "_ZN1Q1gEv"
+  DECL_FUNC 10 7 0 2 8
+  CLASS_VFUNCS 5 [9, 0, 0, 1, 10, 1, 0, 2]
+  CLASS_OVERRIDES 5 []
+  STR 9 "this"
+  DECL_FUNC 9 7 0 34 7 supp{13: "inline assembly"}
+frame REGION
+  DECL_FUNC 10 7 3 67 8
+  FUNC_BEGIN 10 0
+  PARAM 1 6 6 9 1
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 10 "K"
+  TY_RECORD_DECL 11 0 10
+  TY_PTR 12 11
+  TY_FUNC 13 4 0 [12]
+  TY_RECORD_BODY 11 8 8 8 4 1
+  REC_FIELD 8 0 nil nil nil 1
+  STR 11 "1K"
+  CLASS_MANGLE 11 11
+  CLASS_INFO 11 8 8 nil 2
+  CLASS_BASES 11 []
+  STR 12 "_ZN1K1gEv"
+  DECL_FUNC 14 13 0 2 12
+  DECL_FUNC 14 13 3 67 12
+  STR 13 "_ZN1K1fEv"
+  DECL_FUNC 15 13 0 0 13
+  CLASS_VFUNCS 11 [15, 0, 0, 1, 14, 1, 0, 2]
+  CLASS_OVERRIDES 11 []
+  DECL_FUNC 14 13 0 34 12 supp{13: "inline assembly"}
+frame REGION
+  DECL_FUNC 15 13 0 1 13
+  FUNC_BEGIN 15 0
+  PARAM 1 12 12 9 1
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 14 "_ZN1QC1Ev"
+  DECL_FUNC 16 7 0 130 14
+  STR 15 "_ZN1QC2Ev"
+  DECL_FUNC 17 7 0 130 15
+  STRUCTOR 16 17 0
+  DECL_FUNC 16 7 3 195 14
+  DECL_FUNC 17 7 3 195 15
+  FUNC_BEGIN 17 0
+  PARAM 1 6 6 9 1
+  FUNC_EH_SPEC 1 []
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 16 "_ZN1KC1Ev"
+  DECL_FUNC 18 13 0 130 16
+  STR 17 "_ZN1KC2Ev"
+  DECL_FUNC 19 13 0 130 17
+  STRUCTOR 18 19 0
+  DECL_FUNC 18 13 3 195 16
+  DECL_FUNC 19 13 3 195 17
+  FUNC_BEGIN 19 0
+  PARAM 1 12 12 9 1
+  FUNC_EH_SPEC 1 []
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 20 1 0 []
+  STR 18 "main"
+  DECL_FUNC 21 20 0 8 18
+  DECL_FUNC 21 20 0 9 18
+  FUNC_BEGIN 21 0
+  BLOCK_BEGIN
+  CONST_INT 1 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  STR 19 "q"
+  DECL_VAR 22 5 0 1 0 19
+  C_AGG_BEGIN 5
+  C_AGG_END
+  VAR_INIT 22
+  STR 20 "k"
+  DECL_VAR 23 11 0 1 0 20
+  C_AGG_BEGIN 11
+  C_AGG_END
+  VAR_INIT 23
+  DECL_ABI_DATA 24 2 5 3 3 nil
+  DECL_ABI_DATA 25 0 5 0 0 nil
+  DECL_ABI_DATA 26 2 11 0 1 nil
+  DECL_ABI_DATA 27 0 11 0 1 nil
+frame NAMES
+frame END
+  END 10 0

@@ -1,0 +1,107 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+ecil 1.2 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  STR 5 "E"
+  TY_RECORD_DECL 4 0 5
+  TY_PTR 5 4
+  STR 6 "S"
+  TY_RECORD_DECL 6 0 6
+  TY_PTR 7 6
+  TY_FUNC 8 5 0 [7]
+  TY_RECORD_BODY 4 1 1 1 0 0
+  TY_INT 9 8 true 1 1
+  STR 7 "x"
+  TY_RECORD_BODY 6 1 1 1 0 2
+  REC_FIELD 4 0 nil nil nil 19
+  REC_FIELD 9 0 nil nil 7 0
+  STR 8 "_ZN1S4tailEv"
+  DECL_FUNC 10 8 0 2 8
+  DECL_FUNC 10 8 3 67 8
+  STR 9 "this"
+  FUNC_BEGIN 10 0
+  PARAM 1 7 7 9 1
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  BASE_CAST 6 4 0 1
+  DEREF
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_VOID 11
+  TY_FUNC 12 11 0 [7, 5]
+  STR 10 "_Z1fR1SRK1E"
+  DECL_FUNC 13 12 0 0 10
+  DECL_FUNC 13 12 0 1 10
+  STR 11 "s"
+  STR 12 "e"
+  FUNC_BEGIN 13 0
+  PARAM 1 7 7 11 0
+  PARAM 2 5 5 12 0
+  BLOCK_BEGIN
+  LOCAL 3 4 nil 0 2
+  LREF 3
+  C_AGG_BEGIN 4
+  C_AGG_END
+  INIT_CONST
+  LREF 3
+  LOAD 0
+  DROP
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  CALL 10 8 1 0
+  DEREF
+  DROP
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 14 5 0 [5, 5]
+  STR 13 "_Z1gR1ERKS_"
+  DECL_FUNC 15 14 0 0 13
+  DECL_FUNC 15 14 0 1 13
+  STR 14 "a"
+  STR 15 "b"
+  FUNC_BEGIN 15 0
+  PARAM 1 5 5 14 0
+  PARAM 2 5 5 15 0
+  BLOCK_BEGIN
+  LOCAL 3 4 nil 0 2
+  LREF 3
+  C_AGG_BEGIN 4
+  C_AGG_END
+  INIT_CONST
+  LREF 3
+  LOAD 0
+  DROP
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 6 0

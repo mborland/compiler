@@ -164,6 +164,8 @@ attributes).
   cheap_unaligned_ = (session.header.target_flags &
                       ECIL_TARGET_CHEAP_UNALIGNED_BF) != 0;
   c_language_ = session.header.language == elang_c;
+  exceptions_ = !c_language_ &&
+                (session.header.lang_flags & ECIL_LANG_EXCEPTIONS) != 0;
   unit_attr_ = builder_.getUnitAttr();
   nothrow_name_ = mlir::StringAttr::get(ctx_,
                                         cir::CIRDialect::getNoThrowAttrName());
@@ -483,16 +485,60 @@ Handle one type introduction record (TY_*, except the body records).
       info.nontrivial_dtor = false;
       info.complete = false;
       info.packed = false;
-      info.size = info.data_size = 0;
+      info.size = info.data_size = info.nvsize = 0;
       info.align = 1;
+      info.awaiting_info = false;
+      info.base_type_size = 0;
       info.pending_fields = 0;
       info.name = unique_record_name(name);
+      info.gid = gid;
       t->kind = a_type_kind::record_type;
       t->record = &info;
       t->cir = info.is_union ? compat::incomplete_union(ctx_, info.name)
                              : compat::incomplete_struct(ctx_, info.name,
                                                          info.is_class);
       record_of_type_[t->cir.getAsOpaquePointer()] = &info;
+    }
+    break;
+  }
+  case eop_ty_vptr: {
+    /* The class's own vptr field (1.2): a pointer-sized !cir.vptr. */
+    uint_operand(r.ops[0], a);
+    t->kind = a_type_kind::vptr_type;
+    t->cir = cir::VPtrType::get(ctx_);
+    t->size = 8;
+    t->align = 8;
+    break;
+  }
+  case eop_ty_data_member:
+  case eop_ty_method: {
+    /* A pointer to a data member (the offset of the member: 8 bytes) or to
+       a member function ({ptr or vtable offset + 1, this adjustment}: 16). */
+    bool method = r.opcode == eop_ty_method;
+    a_type *first;
+    a_type *cls;
+
+    uint_operand(r.ops[1], a);
+    uint_operand(r.ops[2], b);
+    first = type_at(a);
+    cls = type_at(b);
+    if (first == nullptr || cls == nullptr) {
+      ok = false;
+    } else if (cls->kind != a_type_kind::record_type) {
+      ok = internal("member pointer of a type that is not a record");
+    } else if (method && !mlir::isa<cir::FuncType>(first->cir)) {
+      ok = internal("TY_METHOD of a type that is not a function type");
+    } else {
+      t->kind = method ? a_type_kind::method_type
+                       : a_type_kind::data_member_type;
+      t->target = a;
+      t->count = b;
+      t->size = method ? 16 : 8;
+      t->align = 8;
+      t->cir = method
+          ? compat::method_type(mlir::cast<cir::FuncType>(first->cir),
+                                cls->cir)
+          : compat::data_member_type(first->cir, cls->cir);
     }
     break;
   }
@@ -551,6 +597,7 @@ TY_RECORD_BODY: remember the layout facts and await the REC_FIELD records.
     a_record_info &info = *t->record;
     info.size = size;
     info.data_size = data_size;
+    info.nvsize = data_size;   /* Until a CLASS_INFO says otherwise (12.2). */
     info.align = align == 0 ? 1 : align;
     info.nontrivial_abi = (flags & ECIL_RECORD_NONTRIVIAL_ABI) != 0;
     info.nontrivial_dtor = (flags & ECIL_RECORD_NONTRIVIAL_DTOR) != 0;
@@ -599,7 +646,8 @@ REC_FIELD: append to the record being defined; complete it with the last one.
     f.bitfield_signed = (flags & ECIL_FIELD_BITFIELD_SIGNED) != 0;
     f.flexible_array = (flags & ECIL_FIELD_FLEXIBLE_ARRAY) != 0;
     f.is_base = (flags & ECIL_FIELD_BASE) != 0;
-    f.overlapping = (flags & (ECIL_FIELD_BASE |
+    f.is_vbase = (flags & ECIL_FIELD_VIRTUAL_BASE) != 0;
+    f.overlapping = (flags & (ECIL_FIELD_BASE | ECIL_FIELD_VIRTUAL_BASE |
                               ECIL_FIELD_POTENTIALLY_OVERLAPPING)) != 0;
     f.omitted = f.overlapping && f.empty_for_abi;
     if (!good || type_at(f.type) == nullptr)
@@ -611,8 +659,9 @@ REC_FIELD: append to the record being defined; complete it with the last one.
              (f.is_bitfield || type_at(f.type)->kind !=
                                    a_type_kind::record_type ||
               !type_at(f.type)->record->complete))
-      ok = format_error("REC_FIELD: a BASE or POTENTIALLY_OVERLAPPING "
-                        "member must be a complete record");
+      ok = format_error("REC_FIELD: a BASE, VIRTUAL_BASE or "
+                        "POTENTIALLY_OVERLAPPING member must be a complete "
+                        "record");
     else if (f.is_base && t->record->is_union)
       ok = format_error("REC_FIELD: a union has no base class");
     else if (f.overlapping && type_at(f.type)->record->is_union &&
@@ -622,12 +671,73 @@ REC_FIELD: append to the record being defined; complete it with the last one.
                        "subobject or [[no_unique_address]] member");
     else {
       t->record->fields.push_back(f);
-      if (--t->record->pending_fields == 0)
-        ok = complete_record_layout(pending_body_gid_, *t);
+      if (--t->record->pending_fields == 0) {
+        const ecil::a_class_facts *facts = ids_.class_facts(
+            static_cast<uint32_t>(pending_body_gid_));
+
+        if (facts != nullptr && facts->dynamic) {
+          /* A dynamic class has its layout facts right after its body
+             (12.2): its CLASS_INFO completes the layout (nvsize is part of
+             it). */
+          t->record->awaiting_info = true;
+          pending_info_gid_ = pending_body_gid_;
+          pending_body_gid_ = 0;
+        } else {
+          ok = complete_record_layout(pending_body_gid_, *t);
+        }
+      }
     }
   }
   return ok;
 }  /* a_emitter::record_field */
+
+bool a_emitter::class_info_record(const ecil::a_record &r)
+/*
+CLASS_INFO(t, nvsize, nvalign, primary_idx|nil, nslots): the non-virtual size
+of the class, which sizes its ".base" record.  A dynamic class is laid out
+only now (12.2: the facts follow its body directly); another class was laid
+out with nvsize = data_size, and a ".base" record made for it with that size
+stays what it was (the derived classes that used it are laid out by their
+fields' offsets: a larger nvsize only adds tail bytes), later uses get a
+record of the new size.
+*/
+{
+  bool ok = true;
+  uint64_t gid = 0;
+  uint64_t nvsize = 0;
+  a_type *t;
+
+  uint_operand(r.ops[0], gid);
+  uint_operand(r.ops[1], nvsize);
+  t = type_at(gid);
+  if (t == nullptr) {
+    ok = false;
+  } else if (t->kind != a_type_kind::record_type) {
+    ok = internal("CLASS_INFO of a type that is not a record");
+  } else if (t->record->awaiting_info) {
+    a_record_info &rec = *t->record;
+
+    uint64_t primary = 0;
+
+    rec.nvsize = nvsize;
+    rec.awaiting_info = false;
+    pending_info_gid_ = 0;
+    if (r.ops[3].kind != ecil::an_operand_kind::nil &&
+        uint_operand(r.ops[3], primary) && primary < rec.fields.size() &&
+        rec.fields[primary].is_vbase)
+      rec.primary_virtual = static_cast<int64_t>(primary);
+    ok = complete_record_layout(gid, *t);
+  } else if (t->record->complete) {
+    a_record_info &rec = *t->record;
+
+    rec.nvsize = nvsize;
+    if (rec.base_type && rec.base_type_size != nvsize)
+      rec.base_type = mlir::Type();
+  } else {
+    ok = internal("CLASS_INFO before the body of its class");
+  }
+  return ok;
+}  /* a_emitter::class_info_record */
 
 /* Record layout lowering (CIRRecordLowering). */
 
@@ -705,7 +815,7 @@ needs it.  Otherwise the complete type serves.
   a_record_info &rec = *t.record;
   mlir::Type result = t.cir;
 
-  if (rec.data_size < rec.size) {
+  if (rec.nvsize < rec.size) {
     if (!rec.base_type) {
       a_record_info scratch = rec;
       std::string name = unique_record_name(rec.name + ".base");
@@ -713,7 +823,8 @@ needs it.  Otherwise the complete type serves.
          class. */
       cir::RecordType base = compat::incomplete_struct(ctx_, name, false);
 
-      scratch.size = rec.data_size;
+      rec.base_type_size = rec.nvsize;
+      scratch.size = rec.nvsize;
       scratch.name = name;
       scratch.member_index.assign(scratch.fields.size(), no_member);
       scratch.bitfields.assign(scratch.fields.size(), a_bitfield_info());
@@ -723,6 +834,7 @@ needs it.  Otherwise the complete type serves.
       lower_struct(t, scratch, true, rec.packed);
       compat::complete_record(base, scratch.members, scratch.packed,
                               scratch.union_padding, scratch.kinds);
+      rec.base_member_index = scratch.member_index;
       rec.base_type = base;
     }
     result = rec.base_type;
@@ -813,6 +925,7 @@ size, and force_packed carries the packedness of the complete type).
 {
   std::vector<a_member> members;
   std::vector<a_member> base_members;
+  std::vector<a_member> vbase_members;
   mlir::Type byte = compat::int_type(ctx_, 8, false);
   const size_t count = rec.fields.size();
   const uint64_t reg_size = reg_bits_ / 8;
@@ -871,11 +984,22 @@ size, and force_packed carries the packedness of the complete type).
     return result;
   };
 
-  /* accumulateFields */
+  /* accumulateFields.  A virtual base is not a field: the primary one goes
+     with the bases, the others after them (accumulateVBases) and only in the
+     complete type. */
   for (size_t i = 0; i < count;) {
     const a_field &f = rec.fields[i];
     if (!f.is_bitfield) {
-      if (!f.omitted) {
+      if (f.is_vbase) {
+        if (!f.omitted) {
+          a_member m = {f.byte_offset, base_subobject_type(*type_at(f.type)),
+                        cir::RecordMemberKind::Data, static_cast<int>(i)};
+          if (static_cast<int64_t>(i) == rec.primary_virtual)
+            base_members.insert(base_members.begin(), m);
+          else if (!as_base)
+            vbase_members.push_back(m);
+        }
+      } else if (!f.omitted) {
         mlir::Type data = f.overlapping ? base_subobject_type(*type_at(f.type))
                                         : type_at(f.type)->cir;
         a_member m = {f.byte_offset, data,
@@ -946,6 +1070,9 @@ size, and force_packed carries the packedness of the complete type).
           if (!install) {
             uint64_t limit = rec.data_size;
             for (size_t probe = field; probe < count; ++probe) {
+              /* Bases are no fields for clang's limit. */
+              if (rec.fields[probe].is_vbase)
+                continue;
               if (!is_empty_for_layout(rec.fields[probe])) {
                 limit = field_bit_offset(rec.fields[probe]) / 8;
                 break;
@@ -1002,6 +1129,7 @@ size, and force_packed carries the packedness of the complete type).
   }
 
   members.insert(members.end(), base_members.begin(), base_members.end());
+  members.insert(members.end(), vbase_members.begin(), vbase_members.end());
   std::stable_sort(members.begin(), members.end(),
                    [](const a_member &x, const a_member &y) {
                      return x.offset < y.offset;
@@ -1013,8 +1141,9 @@ size, and force_packed carries the packedness of the complete type).
   if (!packed) {
     uint64_t alignment = 1;
     uint64_t nv_alignment = 1;
-    /* The non-virtual size of a C++ class is its data size. */
-    uint64_t nv_size = !as_base && !c_language_ ? rec.data_size : 0;
+    /* The non-virtual size of a C++ class: its nvsize (its data size until a
+       CLASS_INFO says otherwise, 12.2). */
+    uint64_t nv_size = !as_base && !c_language_ ? rec.nvsize : 0;
     for (const a_member &m : members) {
       if (!owns_bytes(m))
         continue;

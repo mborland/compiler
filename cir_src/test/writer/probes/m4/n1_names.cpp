@@ -1,3 +1,4 @@
+//options: --c++17 --g++ --gnu_version=140000
 // M4a probe: type manglings that CLASS_MANGLE and typeinfo names need:
 // globals of every kind of typeinfo type, and the classes of l1_local_names.
 struct A { virtual ~A() {} };

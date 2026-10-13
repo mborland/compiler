@@ -16549,6 +16549,11 @@ recursion on the nesting of the entities.
           tu_push_template_args(v->template_info->template_arg_list);
         }  /* if */
       }  /* if */
+    } else if (!is_immediate_class_type((a_type_ptr)item.entity) &&
+               !is_enum_type((a_type_ptr)item.entity)) {
+      /* Another type (a pointer, a member pointer, an array, a function
+         type): it is made of the class and enum types it refers to. */
+      tu_push_type_tree((a_type_ptr)item.entity);
     } else {
       /* A class or enum type. */
       a_type_ptr  t = (a_type_ptr)item.entity;

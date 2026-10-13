@@ -23,10 +23,10 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   	auto&[ h, i, j, k, l, m ] (a);	// { dg-warning "structured bindings only available with" "" { target c++14_down } }
   	     ^
 
-"Test_name.c", line 130: warning: CIR back end: the body of "main" uses a non-constant initializer element, which the CIR back end does not support; the function is dropped
+"Test_name.c", line 130: warning: CIR back end: the body of "main" uses the copy of an array of objects, which the CIR back end does not support; the function is dropped
   }
   ^
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a non-constant initializer element
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the copy of an array of objects
 
 1 error detected in the compilation of "Test_name.c".

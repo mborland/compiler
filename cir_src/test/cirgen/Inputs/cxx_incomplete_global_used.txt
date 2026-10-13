@@ -1,9 +1,12 @@
 frame DECLS
   STR 10 "f"
   STR 11 "e"
+  STR 12 "c_addr"
   TY_RECORD_DECL 20 0 nil
   TY_FUNC 21 1 0 []
+  TY_FUNC 22 12 0 []
   DECL_FUNC 30 21 0 1 10
+  DECL_FUNC 31 22 0 1 12
   DECL_VAR 33 20 0 0 0 11
 frame REGION
   FUNC_BEGIN 30 0
@@ -11,6 +14,12 @@ frame REGION
   ADDR
   DROP
   CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 31 0
+  GREF 33
+  ADDR
+  CAST 11 12
   RETURN_STMT true
   FUNC_END 0
 frame END

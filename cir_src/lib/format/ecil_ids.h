@@ -74,6 +74,7 @@ enum a_gid_flag : uint8_t {
   gf_named     = 8,   /* Declaration: the effective name is set. */
   gf_defined   = 16,  /* Function: FUNC_BEGIN seen.  Variable: defining. */
   gf_owns_name = 32,  /* Declaration: owns its external symbol name. */
+  gf_nontrivial_dtor = 64,  /* Record: TY_RECORD_BODY said NONTRIVIAL_DTOR. */
   gf_in_group  = 128  /* Function: member of a STRUCTOR pair. */
 };  /* a_gid_flag */
 
@@ -159,6 +160,27 @@ enum a_class_stage : uint8_t {
   cs_overrides = 16
 };  /* a_class_stage */
 
+/* The entries of CLASS_BASES, CLASS_VFUNCS and CLASS_OVERRIDES, kept for the
+   ABI decoder (ecil_abi_decode.h). */
+struct a_class_base_entry {
+  uint32_t  field;      /* The BASE or VIRTUAL_BASE field index. */
+  uint8_t   flags;      /* ECIL_CLASS_BASE_*. */
+};  /* a_class_base_entry */
+
+struct a_class_vfunc_entry {
+  uint32_t  fn;         /* The function G-id (a destructor: its D1). */
+  uint32_t  slot;
+  uint8_t   flags;      /* ECIL_VFUNC_*. */
+  uint32_t  sig;
+};  /* a_class_vfunc_entry */
+
+struct a_class_override_entry {
+  uint32_t  fn;         /* The overridden function. */
+  int64_t   sub_off;
+  uint32_t  overrider;
+  int64_t   overrider_off;
+};  /* a_class_override_entry */
+
 struct a_class_facts {
   std::vector<a_class_field>  fields;
   uint64_t   size = 0;
@@ -166,6 +188,10 @@ struct a_class_facts {
   uint64_t   align = 0;
   uint64_t   non_vbase_end = 0;   /* End of the last field that is not a
                                      virtual base (EMPTY_FOR_ABI: 0). */
+  uint64_t   nv_data_end = 0;     /* End of the non-virtual data: the largest
+                                     end of the non-empty non-virtual fields
+                                     (a BASE field ends at its offset plus
+                                     the base's nvsize). */
   uint64_t   nvsize = 0;          /* CLASS_INFO; else data_size. */
   uint64_t   nslots = 0;
   uint32_t   mangle_sid = 0;
@@ -179,6 +205,14 @@ struct a_class_facts {
                                      sorted. */
   std::vector<uint32_t>  direct_bases;  /* Classes of the direct bases
                                      (CLASS_BASES), in its order. */
+  int64_t    primary_idx = -1;    /* CLASS_INFO: the primary base's field. */
+  uint64_t   nvalign = 0;         /* CLASS_INFO. */
+  bool       empty = false;       /* clang's isEmpty (derived at the body). */
+  bool       has_data = false;    /* A field that is not a base and not a
+                                     zero-width bit-field. */
+  std::vector<a_class_base_entry>      base_entries;  /* CLASS_BASES. */
+  std::vector<a_class_vfunc_entry>     vfuncs;        /* CLASS_VFUNCS. */
+  std::vector<a_class_override_entry>  overrides;     /* CLASS_OVERRIDES. */
 };  /* a_class_facts */
 
 class a_id_tables {
@@ -273,6 +307,17 @@ public:
     }
   void set_abi_data(uint64_t key, uint32_t g)
     { abi_keys_[key] = g; }
+  /* The vtable slot of a virtual function (CLASS_VFUNCS). */
+  void set_vslot(uint32_t fn, uint32_t slot)
+    { vslots_[fn] = slot; }
+  bool vslot_of(uint32_t fn, uint32_t &slot) const
+    {
+      auto it = vslots_.find(fn);
+      bool found = it != vslots_.end();
+      if (found)
+        slot = it->second;
+      return found;
+    }
   /* STRUCTOR_DELETING: D1 -> (D0, operator delete). */
   void set_deleting(uint32_t d1, uint32_t d0, uint32_t del)
     { deleting_[d1] = std::make_pair(d0, del); }
@@ -342,6 +387,7 @@ private:
   std::unordered_map<uint32_t, a_class_facts> classes_;
   std::unordered_map<uint64_t, uint32_t> abi_keys_;
   std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> deleting_;
+  std::unordered_map<uint32_t, uint32_t> vslots_;
   uint32_t                               lang_ = 0;
   uint32_t                               lang_flags_ = 0;
   uint64_t                               gids_introduced_;

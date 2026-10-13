@@ -81,7 +81,7 @@ The questions of the draft's section 5 first, then the others of the plan.
 | # | Question | Answer (details in the section named) |
 | --- | --- | --- |
 | 1 | FE-canonical parameter identity for `sig` | The routine type's `param_type_list[i].type` (C++: top-level cv removed, arrays and functions decayed; `declared_type` is the original) plus `this_qualifiers` and `ref_qualifiers`, and the name. Equality is the FE's `identical_types`, so the writer keeps a table from (name, parameter types, qualifiers) to a dense id. **ECIL type G-ids cannot be used**: they carry no pointee cv (`f(const A*)` and `f(A*)` are one G-id) and are merged by width (`long` and `long long`, `char` and `signed char`). 3.5 |
-| 2 | The vtable "used" marker | Writer-side: a vtable is used when a `VPTR_INIT` or `VTT_ADDR` that needs it, or a `C_AGG_BEGIN` of the class as a complete object or member of a constant (not as a base subobject), is streamed in a body or constant that is not dropped, or when it is the VTT or the construction vtables of one that is. The FE's `virtual_functions_marked_as_required` is neither sufficient (it recurses into direct bases and is set by typeinfo forcing and explicit instantiation) nor needed; it is the CHECKING cross-check that the virtual members exist. A vtable is *defined here* if it is used and has no key function or an inline one, or if its key function is defined in this TU (clang emits it at the key function's definition even when unused), or if it is explicitly instantiated here. 8.1 |
+| 2 | The vtable "used" marker | Writer-side: a vtable is used when a `VPTR_INIT` or `VTT_ADDR` that needs it, or a `C_AGG_BEGIN` of the class as a complete object or member of a constant (not as a base subobject), is streamed in a body or constant that is not dropped, or when it is the VTT or the construction vtables of one that is. The FE's `virtual_functions_marked_as_required` is neither sufficient (it recurses into direct bases and is set by typeinfo forcing and explicit instantiation) nor needed, and not usable even as a cross-check: a class whose vtable a derived constructor uses can lack it (`writer-cxx-vbase-layout`, class `L`). The CHECKING cross-check that the virtual members exist is the availability of the class's own virtual functions and of the final overrider of each virtual function of each base (`check_vtable_members_available`). A vtable is *defined here* if it is used and has no key function or an inline one, or if its key function is defined in this TU (clang emits it at the key function's definition even when unused), or if it is explicitly instantiated here. 8.1 |
 | 3 | EH dynamic-init flags to `DEACTIVATABLE`/`CLEANUP_END` | `new`: the FE gives `nds->freeing_of_storage_on_exception`, a destruction entry whose `destructor` is the delete function; it is `DEACTIVATABLE` and ends (`CLEANUP_END`) right after the initialization completes. A partially constructed aggregate: one `destruction_is_for_partially_constructed_aggregate` entry per element or member, each a `DEACTIVATABLE` eh cleanup, ended (all of them) when the aggregate is complete. Details and the traps (sized array delete, placement arguments, a destroying delete is chosen) in 5.5 |
 | 4 | Catch kinds from `a_handler.dynamic_init` | By the parameter type, then by the init kind: `dik_bitwise_copy` for a scalar, pointer, reference and trivially copyable class (`trivial_copy`), `dik_constructor` with `is_copy_constructor_with_implied_source` for a class that needs its copy constructor (`non_trivial_copy`, `g_copy` = its routine); a pointer to member function by value is kind 2 (scalar). `...` has no parameter and no init. An unnamed parameter still has the variable, and g++ and clang both copy it. 5.3 |
 | 5 | Typeinfo closure per TU | Writer-side, on demand: a typeinfo is introduced when a `THROW_END`, `CATCH_BEGIN`, `TYPEID`, `DYNAMIC_CAST`, dynamic `FUNC_EH_SPEC`, or an emitted vtable needs it, and a `DEFINED_HERE` one first introduces the typeinfo of its bases, pointee and class. The FE's `used_in_exception_or_rtti` flag and `il_header.nontag_types_used_in_exception_or_rtti` cover the first group (they also force the virtual functions, which already happened) and are a CHECKING cross-check, not the source. 7.3 |
@@ -244,11 +244,13 @@ virtual base, direct or indirect, `offset` = byte offset in the **complete objec
 of t** (8184-8190), `type`, `direct`. Probes: `E : D`, `D : A, B`, `A, B : virtual V`
 (`v7_vbase_casts`): `E` has one entry for `V`; `V` is also in `D`, `A` and `B`.
 
-- Field order: the draft leaves it free. The writer should use clang's
-  `vbases()` order (`preorder_base_classes`, keeping each virtual base at its
-  first occurrence), because the `MEMINIT(vbase, idx)` groups must have strictly
-  increasing `idx` and the front end lists them in that order (3.4). CHECKING
-  asserts it.
+- Field order: **the front end's postorder base list** (`base_classes`, the `next`
+  chain), keeping the virtual entries, **not** `preorder_base_classes` (found while
+  implementing S2: for `N : virtual V1, virtual V2` with `V2 : virtual V1` the
+  preorder list has `V2` before `V1`). The constructor list is built from that
+  postorder list (decl_inits.c, `ctor_initializer`: depth first, left to right: V1,
+  V2), and the `MEMINIT(vbase, idx)` groups must have strictly increasing `idx`
+  (3.4); the validator rejects any other order.
 - `EMPTY_FOR_ABI`: the base type is an empty class (`is_empty_class`).
   `is_optimized_empty_base` is unreliable (`m4_fe_facts` section 3).
 - A virtual base that is the primary base of `t` or of one of its bases has no
@@ -1002,6 +1004,14 @@ expression is, including a `TERN` arm, `MEMINIT` and `STATIC_INIT`, but not in c
 destructor call is not an `enk_throw` in cleanup code in any case). Worked encoding (7) of 12.10 is
 the shape. Records may follow `THROW_END` and `RETHROW` (dead code), as after `UNREACHABLE`.
 
+**As implemented (S4): the `FULLEXPR` goes around the conditional region, not in the
+arm.** The validator's rule is an *enclosing* `FULLEXPR`, so a `FULLEXPR` opened inside
+the arm does not satisfy it. The writer opens one around the outermost `?:`, `&&` or
+`||` of a full expression that has none open, when its conditional operands may contain a
+throw or a new with a free cleanup (`conditional_needs_fullexpr`; the value is carried
+out of it, so a class prvalue result is diagnosed). The text that follows is the
+first draft.
+
 **A throw in a conditional region needs its own `FULLEXPR`** (12.5: "in a conditional region, a
 `THROW_BEGIN` needs an enclosing `FULLEXPR` in the same function or `STATIC_INIT`", because
 the library guards the implicit free cleanup as it guards a conditional `new`). The writer
@@ -1219,6 +1229,59 @@ throws, the `eh` half of that cleanup runs.
   throw, so every `eh` cleanup the M3 writer already sends (members, bases, temporaries) is
   now live, and `NOTHROW` must be right everywhere. This is what the K4 spikes and the gate
   runs will exercise first.
+
+### 5.9 A destructor that throws while cleanups run (what the library would need)
+
+Observed with the corpus (`eh/init-temp1`, `eh/array3`, `eh/ref-temp1`, `eh/array2`): when
+a destructor that may throw (`noexcept(false)`) runs as a normal-path cleanup, the
+cleanups that remain (those of the enclosing scopes and full expression, the other
+elements of the array) must still run as the exception unwinds. Today they do not:
+
+- **Calls inside cleanup code must unwind into the enclosing cleanup scopes.** Clang pops
+  the cleanup stack one entry at a time, so while the destructor of entry N runs on the
+  normal path, entries N+1.. are still on the EH stack and a throw from it runs their EH
+  cleanups. The consumer's normal-path cleanup blocks need the same property.
+- **`ARRAY_DTOR` must continue on a throw.** Clang's `pushRegularPartialArrayCleanup` makes
+  the elements not yet destroyed the cleanup of the loop, so a throwing element destructor
+  destroys the rest; `cir.array.dtor` has no such cleanup (the constructor loop has
+  `partial_dtor`).
+- **A cleanup begun inside a `FULLEXPR` ends with it**, so the object whose initialization
+  the full expression is (`b tmp(f(a(), a()))`) cannot be registered before the
+  temporaries' destructors run: `eh/init-temp1` expects `~b` before the other `~a`.
+  Either the variable's cleanup begins inside the `FULLEXPR` but belongs to the enclosing
+  scope (a flag on `CLEANUP_BEGIN`), or the `FULLEXPR` must be able to enclose the
+  declaration.
+
+Update (session 3, after cir-lib's run tests against g++): at the pin, calls inside a
+cleanup region are invokes into the enclosing cleanup scopes, so the first and the third
+points hold for other pending locals, temporaries (one or several in a full expression)
+and enclosing scopes, and the writer no longer diagnoses them (`emit_cleanup`). Still
+diagnosed: the destructor of an **array element** that may throw (the second point: the
+pin skips the elements before the one that threw). Two cases that clang itself gets
+differently from g++ are not diagnosed and documented in writer.md: the element whose
+default-argument temporary's destructor threw (`eh/array2`) and the returned object
+(CWG 2176, `eh/return1`).
+
+### 5.10 Front-end issue found by the corpus: no lifetime extension of a member of a prvalue (GNU mode)
+
+Test: `tests/tests/cir/cirgen/cxx-s2-temporaries.sft.cpp`, function `member_ext`, and
+`cir_src/doc/research/cxx_cir_differential.md` R2.
+
+```
+struct T { int id; T(int); ~T(); };  struct P { T a; int k; };
+const int &k = P{T(5), 6}.k;
+```
+
+With `--g++ --gnu_version=150200` the front end's IL has the aggregate temporary `P`
+with the lifetime of the full expression (`LOCAL` flag 2, its `eh`/normal cleanup is
+inside the `FULLEXPR`) and a second, extended temporary of type `int` that holds a copy
+of `.k`; the reference is bound to the copy, so `~T(5)` runs at the end of the
+declaration (`T(5)`, `~T(5)`, `k=6`). g++ 15 and the front end's plain mode extend the
+`P` temporary (`T(5)`, `k=6`, `~T(5)`), as [class.temporary] requires for a member
+access of a prvalue bound to a reference. The writer streams what the IL says (the
+stream shows the `P` cleanup in the `FULLEXPR` and the reference stored from the copy);
+the decision is made by the front end in that mode, so it has to be fixed there. The
+class-typed analogue (`const T &r = P{T(5), 6}.a;`) is right in both modes.
 
 ## 6. Member pointers (draft 1a, 1c, "Constants")
 
@@ -1496,8 +1559,9 @@ instantiation, `inline template`, typeinfo forcing) and **recurses into direct b
 (func_def.c:210-238), so it says "the program needs the definitions *somewhere*", not "this TU
 emits the vtable of this class"; as a marker it would define linkonce vtables of bases whose
 constructors are only declared here, and then 8.2's rule would diagnose their
-undefined functions. Use it only as the CHECKING assertion "a used class has the
-flag".
+undefined functions. It is not even usable as a CHECKING assertion ("a used class has
+the flag" fails: a class whose vtable is used only by a derived class's constructor
+need not have it).
 
 The VTT and the construction vtables follow the vtable. The **class typeinfo has the linkage
 the vtable would have, whether or not the vtable is used or emitted here** (12.8: a thrown class
@@ -1870,3 +1934,90 @@ The same facts, as runnable checks on the box, are in `cir_src/test/writer/tools
 its docstring). The Mac native loop cannot produce these dumps (the aarch64/clang base has no GNU mode
 and `--il_display` needs the debug build), so they are box commands; the stream-level tests of
 M4b will be the usual goldens plus these probes against g++.
+
+## 13. Final status (the M4 gate)
+
+What the writer does today, with ECIL 1.2 as frozen at the gate (`writer.md` section 10).
+Numbers are from the C++ corpus sweep (`stream_sweep --cxx`, 337 TUs of `imported/gnu/cpp`
+minus the excluded directories, every stream validates, only `DRs/dr2867-2` aborts):
+528 unsupported-construct notes in total.
+
+### 13.1 Implemented
+
+* **Virtual functions** (section 3): the vptr as a field, the vtable facts and `CLASS_VFUNCS`
+  (sigs include the cv of `this`; `REF_RESULT`), virtual and devirtualized calls, the deleting
+  destructor `STRUCTOR_DELETING` (also with a destroying operator delete), `delete` through a
+  virtual destructor, `::delete` of a polymorphic object (`DELETE VIRTUAL|GLOBAL`).
+* **Virtual bases** (section 4): the C1/C2 and D1/D2 pairs, the VTT, `VBASE_CAST`,
+  `INIT_ZERO_BASE`.
+* **RTTI** (section 7): `typeid` with the null check, `dynamic_cast`, typeinfo of every kind of
+  type with the masks, the TU-local and the incomplete-class forms, the closure per TU.
+* **Member pointers** (section 6): types, constants, `.*`/`->*`, conversions, comparison; the
+  run-time form of `__builtin_is_corresponding_member` and
+  `__builtin_is_pointer_interconvertible_with_class` (the offsets read as integers; the front end's
+  lowering).
+* **Exceptions** (section 5): throw, try/catch of every parameter kind, function-try-blocks,
+  exception specifications, NOTHROW, the cleanups of constructors, new expressions (also
+  `nothrow` and `new T[n]{...}`, `NEW_ARRAY_SIZE_THROW`), arrays and aggregates, throwing
+  destructors run as cleanups of locals, temporaries and enclosing scopes.
+* **Constructs the above made reachable**: class conditionals whose value is discarded or that
+  initialize the return slot; a destroying operator delete; members of anonymous unions and
+  structs in constructor initializers; a reference bound to a temporary array;
+  `__builtin_launder`; `E1[E2]` with the integer first in C++ (C is unchanged).
+
+### 13.2 Diagnosed (the function is dropped with a reason, never miscompiled)
+
+* **M4 scope, library or contract work**: the destructor of an array element that may throw (the
+  pin skips the elements before the one that threw; "watch upstream", 1 note); a destroying
+  operator delete of an array or the one the front end records as the free function of a new
+  expression (1 note); a class conditional thrown (`throw c ? B(1) : B(2);`: the destination is
+  on the stack); an initializer with a destructor in a member of an anonymous union or struct
+  (2 notes: its cleanup would need the path through the unnamed member).
+* **Later (M5/M6)**: vector types (143 notes), GNU function multiversioning (64), inline assembly
+  (56), floating constants of other formats (37), `__builtin_shuffle`/`convertvector`/`bit_cast`
+  (22), alias/ifunc/weakref (18), the cleanup attribute (17), address constants such as `&&label`
+  and a global reference bound to an array temporary (11), `init_priority` (9),
+  `std::source_location` addresses (8), array/aggregate conversions (7), variable length arrays
+  (7), flexible array initializers (7), `__builtin_clear_padding` (6), reference members with
+  default member initializers (5), the GNU `?:` with an omitted operand (5), complex types (4).
+
+### 13.3 Clang-consistent differences from g++ (not diagnosed)
+
+Each was checked with classic clang 21.1.8 and g++ on the box.
+
+| Test | g++ | clang | library |
+|---|---|---|---|
+| eh/array2 (a default-argument temporary's destructor throws in an array element's constructor) | destroys the element just built | does not (aborts) | does not |
+| eh/return1 (CWG 2176, the returned object when a later destructor throws) | destroys it | does not | does not |
+| eh/ref-temp1, eh/ref-temp2 (a lifetime-extended temporary when a destructor of the full expression throws) | destroys it | does not | does not |
+| rma/eh40 (placement new, no handler) | terminates | terminates | terminates (the reference passes through its own `catch (...)` lowering) |
+
+A member of a class with `[[no_unique_address]]` empty members that shares offset 0 with the
+first member cannot be told from it by the value of its data member pointer
+(`is_pointer_interconvertible_with_class`): true, as in the front end's own lowering.
+
+### 13.4 Front-end and configuration issues
+
+* **Lifetime extension of a member of a prvalue in GNU mode** (5.10): the front end's IL, not
+  the writer.
+* **Run failures that the front end causes (the reference fails them too; g++ and clang
+  agree on the behaviour we lack)**: the lambda capture of `this` in `cpp1y/pr61636-2`
+  (a lambda captures `this` where gcc does not), `init/addr-const1` (the front end does
+  not fold an address constant through a cast, so a static pointer is initialized
+  dynamically), `abi/bitfield9` (the alignment of a class with an unnamed bit-field; an
+  ilp32 test), `init/ref19` (the §5.10 lifetime extension).
+* **Build-type dependent front-end macros** (fixed). `NEW_CAN_BE_FOLDED_INTO_CTOR` was 0 only in
+  the debug build type (`cmake/macro-conf/support/build-type/debug/base.cmakedef`); in a release
+  build the front end folded a class `new` into its constructor and recorded no free-on-throw
+  cleanup, so streams differed between build types. `cmake/macro-conf/default/cpfe-cir.cmakedef` now
+  pins `NEW_CAN_BE_FOLDED_INTO_CTOR=0`, `DELETE_CAN_BE_FOLDED_INTO_DTOR=1` and
+  `NEW_AND_DELETE_FOR_ARRAY_CAN_BE_FOLDED_INTO_RUNTIME_ROUTINE=1` for every build type, and
+  `ecil_write.h` refuses to build the CIR back end with any other value: `DELETE_...=0` does not
+  compile (the writer uses `assoc_operator_delete_routine`), `ARRAY_...=0` makes the front end
+  choose the sized `operator delete[]` for the free-on-throw cleanup of a `new[]` (six goldens
+  differ), `NEW_...=1` loses the cleanup. With the pin, the debug and release `cpfe-cir`
+  write identical streams for every C++ golden.
+* The optimization level does not reach the back end under the cir test configurations (`-O2` is
+  handed to the assembler; `cir_be.c` sets level 0): the pointer-to-member builtin probes were
+  run at `-O2` by hand (`cpfe-cir`, then `edg-cir -O2 --emit=obj`).
+

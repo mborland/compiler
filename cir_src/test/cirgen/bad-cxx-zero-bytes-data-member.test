@@ -1,0 +1,30 @@
+; ZERO_BYTES (a memset) of an object that holds a pointer to a data member is
+; an error: its null is -1, not zero bytes (12.7); INIT_ZERO makes the null
+; constant.
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: error [1001]: ZERO_BYTES of an object with a pointer to a data member (null is -1: use INIT_ZERO or INIT_ZERO_BASE)
+
+frame DECLS
+  STR 100 "S"
+  STR 101 "m"
+  STR 102 "f"
+  TY_RECORD_DECL 201 0 100
+  TY_RECORD_BODY 201 8 8 8 0 1
+  REC_FIELD 1 0 nil nil 101 0
+  TY_DATA_MEMBER 202 1 201
+  TY_RECORD_DECL 203 0 100
+  TY_RECORD_BODY 203 8 8 8 0 1
+  REC_FIELD 202 0 nil nil 101 0
+  TY_FUNC 204 11 0 []
+  DECL_FUNC 300 204 0 1 102
+frame REGION
+  FUNC_BEGIN 300 0
+  LOCAL 1 203 nil 8 0
+  LREF 1
+  ZERO_BYTES 8
+  FUNC_END 0
+frame END
+  END auto 0

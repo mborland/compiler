@@ -1,9 +1,4 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=140000 Test_name.c
-"Test_name.c", line 26: warning: CIR back end: the body of "M" uses the initializer of a member of an anonymous union or struct, which the CIR back end does not support; the function is dropped
-  M m;
-     ^
-          detected during implicit generation of "M::M() noexcept" at line 26
-
 ecil 1.2 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
@@ -14,7 +9,7 @@ frame HEADER
   TY_INT 2 64 false 8 8
   TY_INT 3 64 true 8 8
   HDR_TARGET 1 2 nil 64 64 6
-  HDR_LANG 1 201703 12
+  HDR_LANG 1 201703 14
   HDR_PRODUCER 3 4
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
@@ -162,15 +157,16 @@ frame REGION
   REC_FIELD 24 0 nil nil nil 19
   REC_FIELD 1 0 nil nil 13 0
   STR 26 "_ZN2E1D1Ev"
-  DECL_FUNC 25 23 0 2 26
+  DECL_FUNC 25 23 0 130 26
   STR 27 "_ZN2E1D2Ev"
-  DECL_FUNC 26 23 0 2 27
+  DECL_FUNC 26 23 0 130 27
   STRUCTOR 25 26 1
-  DECL_FUNC 25 23 3 67 26
-  DECL_FUNC 26 23 3 67 27
+  DECL_FUNC 25 23 3 195 26
+  DECL_FUNC 26 23 3 195 27
   STR 28 "this"
   FUNC_BEGIN 26 0
   PARAM 1 22 22 28 1
+  FUNC_EH_SPEC 1 []
   BLOCK_BEGIN
   RETURN_STMT false
   BLOCK_END
@@ -224,7 +220,7 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame REGION supp
+frame REGION
   STR 35 "M"
   TY_RECORD_DECL 38 0 35
   TY_PTR 39 38
@@ -238,14 +234,28 @@ frame REGION supp
   TY_RECORD_BODY 38 4 4 4 12 1
   REC_FIELD 41 0 nil nil nil 1
   STR 38 "_ZN1MC1Ev"
-  DECL_FUNC 42 40 0 2 38
+  DECL_FUNC 42 40 0 130 38
   STR 39 "_ZN1MC2Ev"
-  DECL_FUNC 43 40 0 2 39
+  DECL_FUNC 43 40 0 130 39
   STRUCTOR 42 43 0
-  DECL_FUNC 42 40 3 67 38
-  DECL_FUNC 43 40 3 67 39
-  DECL_FUNC 42 40 0 34 38 supp{13: "the initializer of a member of an anonymous union or struct"}
-  DECL_FUNC 43 40 0 34 39 supp{13: "the initializer of a member of an anonymous union or struct"}
+  DECL_FUNC 42 40 3 195 38
+  DECL_FUNC 43 40 3 195 39
+  FUNC_BEGIN 43 0
+  PARAM 1 39 39 28 1
+  FUNC_EH_SPEC 1 []
+  MEMINIT_BEGIN 2 0 3
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 38 0
+  FIELD 41 0
+  C_INT 1 0
+  INIT_CONST
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
 frame GLOBALS
   STR 40 "u1"
   DECL_VAR 44 4 0 1 0 40
@@ -317,9 +327,9 @@ frame GLOBALS
   C_AGG_END
   VAR_INIT 57
   STR 56 "_ZN1MD1Ev"
-  DECL_FUNC 58 40 0 0 56
+  DECL_FUNC 58 40 0 128 56
   STR 57 "_ZN1MD2Ev"
-  DECL_FUNC 59 40 0 0 57
+  DECL_FUNC 59 40 0 128 57
   STRUCTOR 58 59 1
   STATIC_INIT_BEGIN 52 0
   CLEANUP_BEGIN 4 52 0

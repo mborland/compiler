@@ -1,4 +1,0 @@
-eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics -w --c++03 Test_name.c
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a variable of a record type that is not supported
-
-1 error detected in the compilation of "Test_name.c".

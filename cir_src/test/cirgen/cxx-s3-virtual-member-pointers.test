@@ -1,0 +1,315 @@
+; C++ (ECIL 1.2, slice S3): pointers to virtual member functions.  V1 { f, g },
+; V2 { h }, W : V1, V2 { g, h } and their vtables are the ECIL writer's output;
+; the constants and the call are hand-written: &V1::f (the vtable offset form),
+; &V1::g, a W pointer to V2::h (this-adjustment 16 and a virtual function: the
+; lowered {offset + 1, adjustment} global), an array of one of those and
+; &W::g (a normal virtual constant converted into the lowered array), PM_CALL
+; through them (get_method: the vtable entry of the adjusted object), and the
+; function constants made at run time (a vtable offset method pointer, and
+; derived_method for the adjustment).  A g++ and a clang unit
+; (Inputs/s3_vmp_host.cpp) check values and calls in both directions.
+; RUN: %ecil-asm %s -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil > %t.cir
+; RUN: %FileCheck %s < %t.cir
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -c %S/Inputs/s3_vmp_host.cpp -o %t.host.o
+; RUN: g++ %t.host.o %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %clang -x c++ -std=c++17 -fno-exceptions -c %S/Inputs/s3_vmp_host.cpp -o %t.hostclang.o
+; RUN: g++ %t.hostclang.o %t.o -o %t.clang.exe
+; RUN: %t.clang.exe
+
+; CHECK-DAG: cir.global external dso_local @vpf = #cir.method<vtable_offset = 0> : !cir.method<
+; CHECK-DAG: cir.global external dso_local @vpg = #cir.method<vtable_offset = 8> : !cir.method<
+; CHECK-DAG: cir.global external dso_local @vph = #cir.const_record<{#cir.int<1> : !s64i, #cir.int<16> : !s64i}> : !rec_anon_struct
+; CHECK-DAG: cir.global external dso_local @varr = #cir.const_array<[#cir.const_record<{#cir.int<1> : !s64i, #cir.int<16> : !s64i}> : !rec_anon_struct, #cir.const_record<{#cir.int<9> : !s64i, #cir.int<0> : !s64i}> : !rec_anon_struct]>
+; CHECK-LABEL: cir.func {{.*}}@mk_vf(
+; CHECK: cir.const #cir.method<vtable_offset = 0>
+; CHECK-LABEL: cir.func {{.*}}@mk_vh(
+; CHECK: cir.const #cir.method<vtable_offset = 0> : !cir.method<{{.*}} in !rec_V2>
+; CHECK: cir.derived_method %{{.*}}[16]
+
+ecil 1.2 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "r2_lib.cpp"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  STR 5 "V1"
+  TY_RECORD_DECL 4 0 5
+  TY_PTR 5 4
+  TY_FUNC 6 1 0 [5, 1]
+  TY_VPTR 7
+  STR 6 "v1"
+  TY_RECORD_BODY 4 16 12 8 4 2
+  REC_FIELD 7 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 6 0
+  STR 7 "2V1"
+  CLASS_MANGLE 4 7
+  CLASS_INFO 4 12 8 nil 2
+  CLASS_BASES 4 []
+  STR 8 "_ZN2V11fEi"
+  DECL_FUNC 8 6 0 2 8
+  DECL_FUNC 8 6 3 67 8
+  STR 9 "_ZN2V11gEi"
+  DECL_FUNC 9 6 0 2 9
+  CLASS_VFUNCS 4 [8, 0, 0, 1, 9, 1, 0, 2]
+  CLASS_OVERRIDES 4 []
+  STR 10 "this"
+  STR 11 "x"
+  FUNC_BEGIN 8 0
+  PARAM 1 5 5 10 1
+  PARAM 2 1 1 11 0
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  DECL_FUNC 9 6 3 67 9
+  FUNC_BEGIN 9 0
+  PARAM 1 5 5 10 1
+  PARAM 2 1 1 11 0
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  CONST_INT 1 2
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 12 "V2"
+  TY_RECORD_DECL 10 0 12
+  TY_PTR 11 10
+  TY_FUNC 12 1 0 [11, 1]
+  STR 13 "v2"
+  TY_RECORD_BODY 10 16 12 8 4 2
+  REC_FIELD 7 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 13 0
+  STR 14 "2V2"
+  CLASS_MANGLE 10 14
+  CLASS_INFO 10 12 8 nil 1
+  CLASS_BASES 10 []
+  STR 15 "_ZN2V21hEi"
+  DECL_FUNC 13 12 0 2 15
+  DECL_FUNC 13 12 3 67 15
+  CLASS_VFUNCS 10 [13, 0, 0, 3]
+  CLASS_OVERRIDES 10 []
+  FUNC_BEGIN 13 0
+  PARAM 1 11 11 10 1
+  PARAM 2 1 1 11 0
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  CONST_INT 1 3
+  MUL 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 16 "W"
+  TY_RECORD_DECL 14 0 16
+  TY_PTR 15 14
+  TY_FUNC 16 1 0 [15, 1]
+  STR 17 "w"
+  TY_RECORD_BODY 14 32 32 8 4 3
+  REC_FIELD 4 0 nil nil nil 17
+  REC_FIELD 10 16 nil nil nil 17
+  REC_FIELD 1 28 nil nil 17 0
+  STR 18 "1W"
+  CLASS_MANGLE 14 18
+  CLASS_INFO 14 32 8 0 3
+  CLASS_BASES 14 [0, 1, 1, 1]
+  STR 19 "_ZN1W1gEi"
+  DECL_FUNC 17 16 0 2 19
+  DECL_FUNC 17 16 3 67 19
+  STR 20 "_ZN1W1hEi"
+  DECL_FUNC 18 16 0 2 20
+  CLASS_VFUNCS 14 [17, 1, 0, 2, 18, 2, 0, 3]
+  CLASS_OVERRIDES 14 [9, 0, 17, 0, 13, 16, 18, 0]
+  FUNC_BEGIN 17 0
+  PARAM 1 15 15 10 1
+  PARAM 2 1 1 11 0
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  CONST_INT 1 20
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  DECL_FUNC 18 16 3 67 20
+  FUNC_BEGIN 18 0
+  PARAM 1 15 15 10 1
+  PARAM 2 1 1 11 0
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  CONST_INT 1 30
+  MUL 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_VOID 19
+  TY_FUNC 20 19 0 [5]
+  STR 21 "_ZN2V1C1Ev"
+  DECL_FUNC 21 20 0 2 21
+  STR 22 "_ZN2V1C2Ev"
+  DECL_FUNC 22 20 0 2 22
+  STRUCTOR 21 22 0
+  DECL_FUNC 21 20 3 67 21
+  DECL_FUNC 22 20 3 67 22
+  FUNC_BEGIN 22 0
+  PARAM 1 5 5 10 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 23 19 0 [11]
+  STR 23 "_ZN2V2C1Ev"
+  DECL_FUNC 24 23 0 2 23
+  STR 24 "_ZN2V2C2Ev"
+  DECL_FUNC 25 23 0 2 24
+  STRUCTOR 24 25 0
+  DECL_FUNC 24 23 3 67 23
+  DECL_FUNC 25 23 3 67 24
+  FUNC_BEGIN 25 0
+  PARAM 1 11 11 10 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 26 19 0 [15]
+  STR 25 "_ZN1WC1Ev"
+  DECL_FUNC 27 26 0 2 25
+  STR 26 "_ZN1WC2Ev"
+  DECL_FUNC 28 26 0 2 26
+  STRUCTOR 27 28 0
+  DECL_FUNC 27 26 3 67 25
+  DECL_FUNC 28 26 3 67 26
+  FUNC_BEGIN 28 0
+  PARAM 1 15 15 10 1
+  MEMINIT_BEGIN 1 0 1
+  LREF 1
+  LOAD 0
+  BASE_CAST 14 4 0 1
+  CALL 22 20 1 0
+  MEMINIT_END
+  MEMINIT_BEGIN 1 1 1
+  LREF 1
+  LOAD 0
+  BASE_CAST 14 10 16 1
+  CALL 25 23 1 0
+  MEMINIT_END
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 29 15 0 []
+  STR 27 "_Z6make_wv"
+  DECL_FUNC 30 29 0 0 27
+  DECL_FUNC 30 29 0 1 27
+  TY_PTR 31 19
+  TY_FUNC 32 31 0 [2]
+  STR 28 "_Znwm"
+  DECL_FUNC 33 32 0 0 28
+  FUNC_BEGIN 30 0
+  BLOCK_BEGIN
+  CONST_INT 2 32
+  CALL 33 32 1 0
+  CAST 11 15
+  DUP
+  CALL 27 26 1 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 29 "vpf"
+  STR 30 "vpg"
+  STR 31 "vph"
+  STR 32 "varr"
+  STR 33 "call_w"
+  STR 34 "mk_vf"
+  STR 35 "mk_vh"
+  STR 36 "p"
+  STR 37 "m"
+  STR 38 "x"
+  TY_METHOD 40 6 4
+  TY_METHOD 41 16 14
+  TY_ARRAY 42 41 2 0
+  TY_FUNC 43 1 0 [15, 41, 1]
+  TY_FUNC 44 40 0 []
+  TY_FUNC 45 41 0 []
+  DECL_VAR 46 40 0 1 8 29
+  DECL_VAR 47 40 0 1 8 30
+  DECL_VAR 48 41 0 1 8 31
+  DECL_VAR 49 42 0 1 8 32
+  DECL_FUNC 50 43 0 1 33
+  DECL_FUNC 51 44 0 1 34
+  DECL_FUNC 52 45 0 1 35
+  C_METHOD 40 8 0 1
+  VAR_INIT 46
+  C_METHOD 40 9 0 1
+  VAR_INIT 47
+  C_METHOD 41 13 16 1
+  VAR_INIT 48
+  C_AGG_BEGIN 42
+  C_SEL 0
+  C_METHOD 41 13 16 1
+  C_SEL 1
+  C_METHOD 41 17 0 1
+  C_AGG_END
+  VAR_INIT 49
+  FUNC_BEGIN 50 0
+  PARAM 1 15 15 36 0
+  PARAM 2 41 41 37 0
+  PARAM 3 1 1 38 0
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  LREF 3
+  LOAD 0
+  PM_CALL 16 2 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 51 0
+  CONST_METHOD 40 8 0 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 52 0
+  CONST_METHOD 41 13 16 1
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  DECL_ABI_DATA 34 2 4 3 3 nil
+  DECL_ABI_DATA 35 0 4 3 3 nil
+  DECL_ABI_DATA 36 2 10 3 3 nil
+  DECL_ABI_DATA 37 0 10 3 3 nil
+  DECL_ABI_DATA 38 2 14 3 3 nil
+  DECL_ABI_DATA 39 0 14 3 3 nil
+frame NAMES
+frame END
+  END 13 0

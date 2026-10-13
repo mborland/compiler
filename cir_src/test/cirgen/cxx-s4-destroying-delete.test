@@ -1,0 +1,85 @@
+; C++20 (ECIL 1.2): DELETE with the DESTROYING flag, a destroying operator
+; delete of a class without a virtual destructor.  After the null check there
+; is one call g_delete_fn(ptr[, tag][, size][, align]): no destructor runs,
+; the empty std::destroying_delete_t tag is a temporary passed by value, and
+; the size and alignment come from the flags (SIZED, ALIGNED), as in clang's
+; emitDeleteCall.  The program records what the operators receive.
+; RUN: cat %S/Inputs/header12_cxx_eh.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -std=c++20 %S/Inputs/s4_destroying_delete_host.cpp %t.o -o %t.exe
+; RUN: %t.exe | %FileCheck %s --check-prefix=OUT
+; RUN: %edg-cir --emit=obj -O2 -o %t2.o %t.ecil
+; RUN: g++ -std=c++20 %S/Inputs/s4_destroying_delete_host.cpp %t2.o -o %t2.exe
+; RUN: %t2.exe | %FileCheck %s --check-prefix=OUT
+
+; CHECK-LABEL: cir.func {{.*}}@c_s(
+; CHECK: cir.alloca {{.*}}"destroying.delete.tag"
+; CHECK: cir.if
+; CHECK: cir.call @_ZN1SdlEPS_St19destroying_delete_t(
+; CHECK-NOT: cir.call @_ZdlPv
+; CHECK-LABEL: cir.func {{.*}}@c_s2(
+; CHECK: cir.call @_ZN2S2dlEPS_St19destroying_delete_tm(
+; CHECK-LABEL: cir.func {{.*}}@c_u(
+; CHECK: cir.call @_ZN1UdlEPS_St19destroying_delete_tmSt11align_val_t(
+; OUT: ok
+
+frame DECLS
+  STR 100 "S"
+  STR 101 "S2"
+  STR 102 "U"
+  STR 103 "destroying_delete_t"
+  STR 104 "_ZN1SdlEPS_St19destroying_delete_t"
+  STR 105 "_ZN2S2dlEPS_St19destroying_delete_tm"
+  STR 106 "_ZN1UdlEPS_St19destroying_delete_tmSt11align_val_t"
+  STR 107 "c_s"
+  STR 108 "c_s2"
+  STR 109 "c_u"
+  TY_RECORD_DECL 41 0 100
+  TY_RECORD_BODY 41 4 4 4 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 42 41
+  TY_RECORD_DECL 43 0 101
+  TY_RECORD_BODY 43 4 4 4 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 44 43
+  TY_RECORD_DECL 45 0 102
+  TY_RECORD_BODY 45 16 16 16 0 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 46 45
+  TY_RECORD_DECL 47 0 103
+  TY_RECORD_BODY 47 1 0 1 0 0
+  TY_FUNC 70 11 0 [42, 47]
+  TY_FUNC 71 11 0 [44, 47, 2]
+  TY_FUNC 72 11 0 [46, 47, 2, 2]
+  TY_FUNC 73 11 0 [42]
+  TY_FUNC 74 11 0 [44]
+  TY_FUNC 75 11 0 [46]
+  DECL_FUNC 101 70 0 0 104
+  DECL_FUNC 102 71 0 0 105
+  DECL_FUNC 103 72 0 0 106
+  DECL_FUNC 110 73 0 1 107
+  DECL_FUNC 111 74 0 1 108
+  DECL_FUNC 112 75 0 1 109
+frame REGION
+  FUNC_BEGIN 110 0
+  PARAM 1 42 42 nil 0
+  LREF 1
+  LOAD 0
+  DELETE 101 nil 41 32
+  FUNC_END 1
+  FUNC_BEGIN 111 0
+  PARAM 1 44 44 nil 0
+  LREF 1
+  LOAD 0
+  DELETE 102 nil 43 34
+  FUNC_END 1
+  FUNC_BEGIN 112 0
+  PARAM 1 46 46 nil 0
+  LREF 1
+  LOAD 0
+  DELETE 103 nil 45 38
+  FUNC_END 1
+frame END
+  END auto 0

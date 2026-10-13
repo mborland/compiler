@@ -64,7 +64,10 @@ void find_paths(const a_class_db &db, a_class_id derived, a_class_id base,
 Every path from `derived` down to `base` through the direct base lists, in
 depth-first declaration order (CXXBasePaths of isDerivedFrom), as the
 BaseOffset ComputeBaseOffset(Path) gives: the nearest-to-base virtual step
-starts the non-virtual offset.  Explicit stack.
+starts the non-virtual offset.  As in CXXBasePaths::lookupInBases a virtual
+base is visited once (one subobject however many routes lead to it), which
+keeps a lattice of virtual bases from costing a path per route.  Explicit
+stack; the stack and the visited marks are reused between calls.
 */
 {
   struct a_frame {
@@ -73,8 +76,17 @@ starts the non-virtual offset.  Explicit stack.
     a_class_id  vbase;
     int64_t     nv;
   };  /* a_frame */
-  std::vector<a_frame> stack;
+  static thread_local std::vector<a_frame> stack;
+  static thread_local std::vector<uint32_t> visited;   /* Epoch marks. */
+  static thread_local uint32_t epoch = 0;
 
+  if (visited.size() < db.classes.size())
+    visited.resize(db.classes.size(), 0);
+  if (++epoch == 0) {
+    std::fill(visited.begin(), visited.end(), 0);
+    epoch = 1;
+  }
+  stack.clear();
   paths.clear();
   stack.push_back({derived, 0, no_id, 0});
   while (!stack.empty()) {
@@ -85,6 +97,11 @@ starts the non-virtual offset.  Explicit stack.
       stack.pop_back();
     } else {
       const a_base_fact &b = c.bases[top.next++];
+
+      if (b.is_virtual && visited[b.cls] == epoch)
+        continue;
+      if (b.is_virtual)
+        visited[b.cls] = epoch;
       a_class_id vbase = b.is_virtual ? b.cls : top.vbase;
       int64_t nv = b.is_virtual ? 0 : top.nv + b.offset;
 
@@ -498,19 +515,29 @@ of all its bases.
     } else {
       const a_base_fact &b = c.bases[top.next++];
 
-      if (b.is_virtual && visited_vbases_.insert(b.cls).second) {
-        int64_t off = 0;
+      bool revisit = false;
 
-        if (!db_.find_vbase_offset(lc_, b.cls, off)) {
-          fail("virtual base " + number(b.cls) + " is missing from class " +
-               number(lc_));
+      if (b.is_virtual) {
+        if (!visited_vbases_.insert(b.cls).second) {
+          /* Its own virtual bases were all seen with the first visit, so
+             walking it again adds nothing (clang walks it again: a lattice
+             of virtual bases costs a walk per route). */
+          revisit = true;
         } else {
-          vbase_offset_offsets_[b.cls] = current_offset_offset();
-          components_.push_back(
-              {ck_vbase_offset, off - offset_in_layout_class, no_id});
+          int64_t off = 0;
+
+          if (!db_.find_vbase_offset(lc_, b.cls, off)) {
+            fail("virtual base " + number(b.cls) + " is missing from class " +
+                 number(lc_));
+          } else {
+            vbase_offset_offsets_[b.cls] = current_offset_offset();
+            components_.push_back(
+                {ck_vbase_offset, off - offset_in_layout_class, no_id});
+          }
         }
       }
-      stack.push_back({b.cls, 0});
+      if (!revisit)
+        stack.push_back({b.cls, 0});
     }
   }
 }  /* a_vcall_builder::add_vbase_offsets */
@@ -826,6 +853,7 @@ that is not the primary base of another base (once each).
   };  /* a_frame */
   std::vector<a_frame> stack;
   std::set<a_class_id> vbases;
+  std::set<a_class_id> explored;
 
   stack.push_back({md_, 0});
   while (error_.empty() && !stack.empty()) {
@@ -850,7 +878,10 @@ that is not the primary base of another base (once each).
           layout_primary_and_secondary(a_subobject{b.cls, base_offset}, true,
                                        true, offset_in_lc);
       }
-      if (error_.empty() && !db().cls(b.cls).vbases.empty())
+      /* A class whose subtree was walked finds no new virtual base the second
+         time (clang walks it again, once per route to it). */
+      if (error_.empty() && !db().cls(b.cls).vbases.empty() &&
+          explored.insert(b.cls).second)
         stack.push_back({b.cls, 0});
     }
   }
@@ -966,6 +997,7 @@ thunk), the others get new slots (implicit ones in clang's order).
 
             thunk.this_adj = this_adj;
             thunk.return_adj = return_adj;
+            thunk.ref_result = db().fn(overrider.method).ref_result;
             thunk.this_class = db().fn(overridden).owner;
             add_thunk(overrider.method, thunk);
           }
@@ -1042,8 +1074,10 @@ AddMethod: one component for a function, two for a destructor.
     components.push_back({ck_complete_dtor, 0, fn});
     components.push_back({ck_deleting_dtor, 0, fn});
   } else {
-    if (!return_adjustment.is_empty())
+    if (!return_adjustment.is_empty()) {
       vtable_thunks[components.size()].return_adj = return_adjustment;
+      vtable_thunks[components.size()].ref_result = db().fn(fn).ref_result;
+    }
     components.push_back({ck_function, 0, fn});
   }
 }  /* a_vtable_builder::add_method */
@@ -1116,25 +1150,16 @@ a_fn_id a_vtable_builder::find_nearest_overridden(
 /*
 FindNearestOverriddenMethod: the function fn overrides that is declared in the
 most derived of the primary bases seen so far (bases are in order, the most
-derived last).  One pass over the overridden functions with a position map.
+derived last).  The bases are tried from the last; a function's overridden
+functions are indexed by owner once, so a call is a few binary searches (a
+chain of single inheritance finds it at the first try).
 */
 {
   a_fn_id result = no_id;
-  const std::vector<a_fn_id> &all = ctx_.all_overridden(fn);
-  std::unordered_map<a_class_id, size_t> position;
-  size_t best = 0;
 
-  if (!all.empty()) {
-    for (size_t i = 0; i < bases.size(); ++i)
-      position[bases[i]] = i;
-    for (a_fn_id f : all) {
-      auto found = position.find(db().fn(f).owner);
-
-      if (found != position.end() && (result == no_id || found->second > best)) {
-        result = f;
-        best = found->second;
-      }
-    }
+  if (!ctx_.all_overridden(fn).empty()) {
+    for (size_t i = bases.size(); result == no_id && i > 0; --i)
+      result = ctx_.overridden_in(fn, bases[i - 1]);
   }
   return result;
 }  /* a_vtable_builder::find_nearest_overridden */
@@ -1382,6 +1407,39 @@ that added the slot.
   }
   return f;
 }  /* a_vtable_context::find_original_method */
+
+a_fn_id a_vtable_context::overridden_in(a_fn_id f, a_class_id owner)
+{
+  a_fn_id result = no_id;
+
+  if (owner_index_.size() < db_.fns.size()) {
+    owner_index_.resize(db_.fns.size());
+    owner_index_done_.resize(db_.fns.size(), 0);
+  }
+  if (!owner_index_done_[f]) {
+    std::vector<std::pair<a_class_id, a_fn_id>> &index = owner_index_[f];
+
+    for (a_fn_id g : db_.fn(f).overridden)
+      index.push_back({db_.fn(g).owner, g});
+    /* The first function of an owner stays first. */
+    std::stable_sort(index.begin(), index.end(),
+                     [](const std::pair<a_class_id, a_fn_id> &a,
+                        const std::pair<a_class_id, a_fn_id> &b) {
+                       return a.first < b.first;
+                     });
+    owner_index_done_[f] = 1;
+  }
+  {
+    const std::vector<std::pair<a_class_id, a_fn_id>> &index = owner_index_[f];
+    auto it = std::lower_bound(index.begin(), index.end(), owner,
+                               [](const std::pair<a_class_id, a_fn_id> &e,
+                                  a_class_id o) { return e.first < o; });
+
+    if (it != index.end() && it->first == owner)
+      result = it->second;
+  }
+  return result;
+}  /* a_vtable_context::overridden_in */
 
 const std::vector<a_fn_id> &a_vtable_context::all_overridden(a_fn_id f)
 /*

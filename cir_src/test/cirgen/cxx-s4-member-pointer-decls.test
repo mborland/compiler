@@ -1,0 +1,87 @@
+; C++ (ECIL 1.2): external declarations of pointer-to-member variables (the pin's
+; CXX ABI lowering needs a null initial value for them, which the library gives
+; and takes away around the passes), a call through a method pointer of a class
+; that is incomplete here, PM_FIELD, and a pointer to an empty
+; [[no_unique_address]] member (#cir.data_member_offset).
+;   struct Z; extern Z *p; extern int (Z::*m)();   int c_callm() { return (p->*m)(); }
+;   struct D { int a, b; }; extern int D::*dm;      int c_getb(D *d) { return d->*dm; }
+;   struct E {}; struct M { [[no_unique_address]] E e; int f; };  E M::*g_pe = &M::e;
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -std=c++17 -w %S/Inputs/s4_mp_decls_host.cpp %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %edg-cir --emit=obj -O2 -o %t2.o %t.ecil
+; RUN: g++ -std=c++17 -w %S/Inputs/s4_mp_decls_host.cpp %t2.o -o %t2.exe
+; RUN: %t2.exe
+
+; CHECK-DAG: cir.global "private" external @m : !cir.method<
+; CHECK-DAG: cir.global "private" external @dm : !cir.data_member<
+; CHECK-DAG: @g_pe = #cir.data_member_offset<0>
+
+frame DECLS
+  STR 100 "Z"
+  STR 101 "D"
+  STR 102 "a"
+  STR 103 "b"
+  STR 104 "p"
+  STR 105 "m"
+  STR 106 "dm"
+  STR 107 "E"
+  STR 108 "M"
+  STR 109 "e"
+  STR 110 "f"
+  STR 111 "g_pe"
+  STR 112 "c_callm"
+  STR 113 "c_getb"
+  STR 114 "d"
+  TY_RECORD_DECL 201 0 100
+  TY_PTR 211 201
+  TY_FUNC 221 1 0 [211]
+  TY_METHOD 231 221 201
+  DECL_VAR 301 211 0 0 8 104
+  DECL_VAR 302 231 0 0 8 105
+  TY_RECORD_DECL 202 0 101
+  TY_RECORD_BODY 202 8 8 4 0 2
+  REC_FIELD 1 0 nil nil 102 0
+  REC_FIELD 1 4 nil nil 103 0
+  TY_PTR 212 202
+  TY_DATA_MEMBER 232 1 202
+  DECL_VAR 303 232 0 0 8 106
+  TY_RECORD_DECL 203 0 107
+  TY_RECORD_BODY 203 1 1 1 0 0
+  TY_RECORD_DECL 204 0 108
+  TY_RECORD_BODY 204 4 4 4 0 2
+  REC_FIELD 203 0 nil nil 109 34
+  REC_FIELD 1 0 nil nil 110 0
+  TY_DATA_MEMBER 233 203 204
+  DECL_VAR 304 233 0 1 8 111
+  TY_FUNC 222 1 0 []
+  DECL_FUNC 401 222 0 1 112
+  TY_FUNC 223 1 0 [212]
+  DECL_FUNC 402 223 0 1 113
+frame REGION
+  FUNC_BEGIN 401 0
+  GREF 301
+  LOAD 0
+  GREF 302
+  LOAD 0
+  PM_CALL 221 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 402 0
+  PARAM 1 212 212 114 0
+  LREF 1
+  LOAD 0
+  GREF 303
+  LOAD 0
+  PM_FIELD 232
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  C_DATA_MEMBER 233 0
+  VAR_INIT 304
+frame END
+  END auto 0

@@ -104,14 +104,18 @@ resolved.
 
 a_entity *a_emitter::entity_at(uint64_t gid)
 /*
-The function or variable entity of a G-id.  The validator checked that the
-G-id was declared, so a miss is an internal error.
+The function or variable entity of a G-id (the global of a DECL_ABI_DATA too:
+C_ADDR names one).  The validator checked that the G-id was declared, so a
+miss is an internal error.
 */
 {
   a_entity *result = nullptr;
   const ecil::a_gid_entry *entry = ids_.find_gid(gid);
 
-  if (entry == nullptr || entry->payload == nullptr ||
+  if (entry != nullptr && entry->payload != nullptr &&
+      entry->kind == ecil::gk_abi_data)
+    result = static_cast<a_abi_entity *>(entry->payload)->entity;
+  else if (entry == nullptr || entry->payload == nullptr ||
       (entry->kind != ecil::gk_func && entry->kind != ecil::gk_var))
     internal("G-id " + std::to_string(gid) + " has no declaration object");
   else
@@ -178,6 +182,7 @@ cir.get_global of a variable.
   cir::GlobalOp g = mlir::cast<cir::GlobalOp>(e.op);
   cir::GetGlobalOp op = builder_.createGetGlobal(
       loc(), g, g.getTlsModel().has_value());
+  mlir::Value result = op;
 
   /* Every address of a guarded function-local static says so. */
   if ((e.flags & ECIL_DECL_VAR_STATIC_LOCAL) &&
@@ -185,7 +190,17 @@ cir.get_global of a variable.
     compat::mark_static_local(op);
   e.addresses.push_back(op);
   e.referenced = true;
-  return op;
+  /* A variable emitted in another form than its declared type (lowered
+     method pointers) is cast back. */
+  if (e.lowered_form) {
+    a_type *declared = type_at(e.type);
+
+    if (declared != nullptr &&
+        op.getType() != compat::pointer_to(declared->cir))
+      result = builder_.createBitcast(loc(), result,
+                                      compat::pointer_to(declared->cir));
+  }
+  return result;
 }  /* a_emitter::variable_address */
 
 /* Re-issued declarations. */
@@ -323,10 +338,23 @@ variant becomes an alias of it, or is redirected to it (ECIL spec 11.4).
   } else if (c == b || c->in_structor || b->in_structor) {
     ok = internal("STRUCTOR out of step with the validator");
   } else {
-    a_structor_pair pair = {c, b, (flags & ECIL_STRUCTOR_DTOR) != 0};
+    bool has_vbases = (flags & ECIL_STRUCTOR_HAS_VBASES) != 0;
+    a_structor_pair pair = {c, b, (flags & ECIL_STRUCTOR_DTOR) != 0,
+                            has_vbases};
     c->in_structor = true;
     b->in_structor = true;
     structors_.push_back(pair);
+    if (has_vbases) {
+      /* The base variant takes the VTT after `this` (12.3). */
+      if (b->has_body) {
+        ok = internal("STRUCTOR has_vbases after the body of its base "
+                      "variant");
+      } else {
+        b->has_vtt = true;
+        retype_function(*b, with_vtt_parameter(mlir::cast<cir::FuncOp>(b->op)
+                                                   .getFunctionType()));
+      }
+    }
   }
   return ok;
 }  /* a_emitter::structor_record */
@@ -414,7 +442,9 @@ renames the entity (spec 7); the new name is applied at finish.
       if (e.type != tgid) {
         a_type *old_type = type_at(e.type);
         if (old_type == nullptr || old_type->cir != t->cir)
-          retype_function(e, t->cir);
+          retype_function(e, e.has_vtt
+              ? with_vtt_parameter(mlir::cast<cir::FuncType>(t->cir))
+              : t->cir);
         e.type = tgid;
       }
       apply_function_attributes(e, fn);
@@ -571,10 +601,26 @@ VAR_INIT: the constant on top of the constant stack initializes the variable.
     cir::GlobalOp g = mlir::cast<cir::GlobalOp>(e->op);
     a_const c = consts_.back();
     consts_.pop_back();
+    if (c.lowered_type) {
+      /* Pointers to member functions with a this-adjustment: the variable
+         is emitted in the lowered form (G2); its uses are cast back. */
+      if (c.lowered_type != g.getSymType())
+        retype_variable(*e, c.lowered_type);
+      e->lowered_form = true;
+    }
     if (mlir::cast<mlir::TypedAttr>(c.attr).getType() != g.getSymType()) {
+      std::string have;
+      std::string want;
+      llvm::raw_string_ostream have_stream(have);
+      llvm::raw_string_ostream want_stream(want);
+
+      mlir::cast<mlir::TypedAttr>(c.attr).getType().print(have_stream);
+      g.getSymType().print(want_stream);
       ok = format_error("VAR_INIT constant type differs from the variable "
-                        "type");
+                        "type (constant " + have_stream.str() + ", variable " +
+                        want_stream.str() + ")");
     } else {
+      resolve_vptr_markers(c, g.getSymType());
       g.setInitialValueAttr(c.attr);
       e->has_init = true;
     }
@@ -661,10 +707,12 @@ Push a constant with its zero-ness.
 
 mlir::Attribute a_emitter::zero_attribute(mlir::Type type)
 /*
-The zero constant of any (scalar or aggregate) type.
+The constant of the value zero of any (scalar or aggregate) type: its null
+constant when a pointer to a data member (null: -1) is inside (12.7).
 */
 {
-  return builder_.getZeroInitAttr(type);
+  return zero_initializable(type) ? builder_.getZeroInitAttr(type)
+                                  : null_attribute(type);
 }  /* a_emitter::zero_attribute */
 
 mlir::Attribute a_emitter::scalar_int_attribute(mlir::Type type,
@@ -836,31 +884,118 @@ same members except for the tail padding.
 
 bool a_emitter::build_constant_aggregate(a_const_aggregate &agg, a_const &out)
 /*
-Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
+Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.  When a
+member is a pointer to member function with a this-adjustment (in the lowered
+{i64, i64} form, G2) the aggregate is built in the lowered form of its type:
+the other members that hold pointers to member functions are lowered too, and
+the record is built from a view of its type with the lowered member types.
 */
 {
   bool ok = true;
   a_type *t = type_at(agg.type);
+  a_type view;
+  a_record_info view_record;
 
   out.attr = mlir::Attribute();
-  out.is_zero = true;
+  out.lowered_type = mlir::Type();
+  /* A type with a pointer to a data member is never all-zero bytes. */
+  out.is_zero = t == nullptr || zero_initializable(t->cir);
   for (const auto &entry : agg.entries) {
     if (!entry.value.is_zero)
       out.is_zero = false;
   }
+  bool any_lowered = false;
+
+  for (const auto &entry : agg.entries) {
+    if (entry.value.lowered_type)
+      any_lowered = true;
+  }
+  if (t != nullptr && any_lowered &&
+      t->kind == a_type_kind::record_type && t->record->complete) {
+    /* The lowered view of the record: its CIR type and member types. */
+    a_record_info &original = *t->record;
+
+    view_record = original;
+    view_record.members.clear();
+    for (mlir::Type member : original.members)
+      view_record.members.push_back(lowered_type_of(member));
+    view = *t;
+    view.cir = lowered_type_of(t->cir);
+    view.record = &view_record;
+    /* Every entry whose member changes is in the lowered form. */
+    for (auto &entry : agg.entries) {
+      for (uint64_t k = 0; k < entry.count; ++k) {
+        size_t index = static_cast<size_t>(entry.index + k);
+        uint32_t member = index < original.fields.size()
+                              ? original.member_index[index] : no_member;
+
+        if (member != no_member && !entry.value.lowered_type &&
+            !original.fields[index].is_bitfield &&
+            lowered_type_of(original.members[member]) !=
+                original.members[member]) {
+          entry.value.attr = lower_constant(entry.value.attr,
+                                            original.members[member]);
+          entry.value.lowered_type = view_record.members[member];
+        }
+        if (member != no_member && original.is_union)
+          break;
+      }
+    }
+    t = &view;
+  }
   if (t == nullptr) {
     ok = false;
+  } else if (any_lowered && t->kind == a_type_kind::array_type) {
+    /* An array whose elements hold pointers to member functions, one with an
+       adjustment: all elements go in the lowered form. */
+    a_type *element = type_at(t->target);
+    mlir::Type lowered_element = lowered_type_of(element->cir);
+    mlir::Attribute null_element = lower_constant(
+        zero_attribute(element->cir), element->cir);
+    uint64_t listed = 0;
+    std::vector<mlir::Attribute> elements;
+
+    for (const auto &entry : agg.entries)
+      listed = std::max(listed, entry.index + entry.count);
+    elements.assign(listed, null_element);
+    for (const auto &entry : agg.entries) {
+      mlir::Attribute value = entry.value.lowered_type
+          ? entry.value.attr : lower_constant(entry.value.attr, element->cir);
+
+      for (uint64_t k = 0; k < entry.count; ++k) {
+        if (entry.index + k < listed)
+          elements[entry.index + k] = value;
+      }
+    }
+    out.lowered_type = compat::array_of(lowered_element, t->count);
+    out.is_zero = false;
+    out.attr = cir::ConstArrayAttr::get(
+        mlir::cast<cir::ArrayType>(out.lowered_type),
+        builder_.getArrayAttr(elements));
   } else if (t->kind == a_type_kind::array_type) {
     uint64_t count = t->count;
     std::vector<mlir::Attribute> elements;
     uint64_t listed = 0;
     a_type *element = type_at(t->target);
 
+    a_type *leaf = element;
+
+    while (leaf != nullptr && leaf->kind == a_type_kind::array_type)
+      leaf = type_at(leaf->target);
     for (const auto &entry : agg.entries) {
       if (entry.index + entry.count > count && count != 0)
         ok = internal("C_SEL index past the end of the array");
       if (!entry.value.is_zero)
         listed = std::max(listed, entry.index + entry.count);
+      /* An element is a complete object: the vptrs inside it use its
+         class's vtable group. */
+      if (leaf != nullptr && leaf->kind == a_type_kind::record_type) {
+        for (uint32_t mk = entry.value.mark_begin; mk < entry.value.mark_end;
+             ++mk) {
+          if (vptr_markers_[mk].vtable_class == 0)
+            vptr_markers_[mk].vtable_class = leaf->record->gid;
+        }
+      }
     }
     if (!ok) {
       /* The failure is already recorded. */
@@ -868,6 +1003,11 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
       out.attr = cir::ZeroAttr::get(t->cir);
     } else {
       mlir::Attribute zero = zero_attribute(element->cir);
+
+      /* The unlisted elements of a type with pointers to data members hold
+         the null constant, not zero bytes: they are all listed. */
+      if (!zero_initializable(element->cir))
+        listed = count;
       elements.assign(listed, zero);
       for (const auto &entry : agg.entries) {
         for (uint64_t k = 0; k < entry.count; ++k) {
@@ -894,6 +1034,17 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
         const auto &entry = agg.entries[0];
         size_t index = static_cast<size_t>(entry.index);
         mlir::Attribute element = entry.value.attr;
+        a_type *member_type = type_at(rec.fields[index].type);
+
+        /* The member is a complete object of its own class. */
+        if (member_type != nullptr &&
+            member_type->kind == a_type_kind::record_type) {
+          for (uint32_t mk = entry.value.mark_begin;
+               mk < entry.value.mark_end; ++mk) {
+            if (vptr_markers_[mk].vtable_class == 0)
+              vptr_markers_[mk].vtable_class = member_type->record->gid;
+          }
+        }
         if (rec.fields[index].is_bitfield) {
           const a_bitfield_info &info = rec.bitfields[index];
           unsigned bits = static_cast<unsigned>(type_size(info.storage) * 8);
@@ -934,6 +1085,25 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
             continue;
           }
           member = rec.member_index[index];
+          if (k == 0) {
+            const a_field &mf = rec.fields[index];
+            a_type *mt = type_at(mf.type);
+
+            /* The vptrs inside the member: a base subobject moves them by
+               its offset (the complete object is not known yet), a member is
+               a complete object of its class. */
+            for (uint32_t mk = entry.value.mark_begin;
+                 mk < entry.value.mark_end; ++mk) {
+              a_vptr_marker &marker = vptr_markers_[mk];
+
+              if (marker.vtable_class != 0)
+                continue;
+              if (mf.is_base)
+                marker.offset += static_cast<int64_t>(mf.byte_offset);
+              else if (mt != nullptr && mt->kind == a_type_kind::record_type)
+                marker.vtable_class = mt->record->gid;
+            }
+          }
           if (member == no_member)
             continue;  /* An empty base or member: nothing to store. */
           if (rec.fields[index].is_bitfield) {
@@ -967,6 +1137,26 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
           }
         }
       }
+      /* The class's own vptr: a placeholder until the complete object is
+         known (a #cir.global_view of the vtable, address_point). */
+      for (size_t i = 0; ok && i < rec.fields.size(); ++i) {
+        a_type *ft = type_at(rec.fields[i].type);
+
+        if (ft != nullptr && ft->kind == a_type_kind::vptr_type &&
+            rec.member_index[i] != no_member) {
+          a_vptr_marker marker = {agg.type, 0, 0};
+          mlir::MLIRContext *mctx = ctx_;
+          std::string name = "__ecil.vptr." +
+                             std::to_string(vptr_markers_.size());
+
+          elems[rec.member_index[i]] = compat::global_view(
+              cir::VPtrType::get(mctx), mlir::StringAttr::get(mctx, name),
+              builder_.getArrayAttr({builder_.getI32IntegerAttr(0),
+                                     builder_.getI32IntegerAttr(0)}),
+              true);
+          vptr_markers_.push_back(marker);
+        }
+      }
       std::vector<mlir::Attribute> stored;
       for (size_t m = 0; ok && m < rec.members.size(); ++m) {
         mlir::Type member_type = rec.members[m];
@@ -991,6 +1181,8 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
           stored.push_back(zero_attribute(storage));
         }
       }
+      if (vptr_markers_.size() > agg.marker_base)
+        out.is_zero = false;
       if (!ok) {
         /* The failure is already recorded. */
       } else if (out.is_zero) {
@@ -1003,8 +1195,33 @@ Build the attribute of a finished C_AGG_BEGIN..C_AGG_END aggregate.
   } else {
     ok = internal("C_AGG_BEGIN type is not a complete record or array");
   }
+  if (ok && any_lowered && t == &view) {
+    out.lowered_type = t->cir;
+    out.is_zero = false;
+  }
+  out.mark_begin = agg.marker_base;
+  out.mark_end = static_cast<uint32_t>(vptr_markers_.size());
   return ok;
 }  /* a_emitter::build_constant_aggregate */
+
+void a_emitter::resolve_vptr_markers(const a_const &c, mlir::Type object_type)
+/*
+A constant is used to initialize an object of the given type (a variable, an
+INIT_CONST target): the vptrs inside it that no member boundary claimed belong
+to that class's vtable group.
+*/
+{
+  while (auto array = mlir::dyn_cast<cir::ArrayType>(object_type))
+    object_type = array.getElementType();
+  const a_record_info *rec = record_info_of(object_type);
+
+  if (rec != nullptr) {
+    for (uint32_t mk = c.mark_begin; mk < c.mark_end; ++mk) {
+      if (vptr_markers_[mk].vtable_class == 0)
+        vptr_markers_[mk].vtable_class = rec->gid;
+    }
+  }
+}  /* a_emitter::resolve_vptr_markers */
 
 bool a_emitter::const_aggregate_end()
 /*
@@ -1116,8 +1333,31 @@ C_AGG_BEGIN records, once their type is known.
   }
   case eop_c_null:
   case eop_c_zero:
-    push_const(zero_attribute(t->cir), true);
+    push_const(zero_attribute(t->cir), zero_initializable(t->cir));
     break;
+  case eop_c_data_member: {
+    mlir::Attribute attr = data_member_constant(*t, r.ops[1], good);
+
+    if (!good)
+      ok = false;
+    else
+      push_const(attr, false);
+    break;
+  }
+  case eop_c_method: {
+    bool lowered = false;
+    mlir::Attribute attr = method_constant(*t, r, false, good, lowered);
+
+    if (!good) {
+      ok = false;
+    } else {
+      a_const c = {attr, r.ops[1].kind == ecil::an_operand_kind::nil};
+      if (lowered)
+        c.lowered_type = lowered_method_type();
+      consts_.push_back(c);
+    }
+    break;
+  }
   case eop_c_string: {
     if (t->kind != a_type_kind::array_type ||
         !mlir::isa<cir::IntType>(mlir::cast<cir::ArrayType>(t->cir)
@@ -1166,6 +1406,7 @@ C_AGG_BEGIN records, once their type is known.
     a_const_aggregate agg;
     agg.type = tgid;
     agg.base = consts_.size();
+    agg.marker_base = static_cast<uint32_t>(vptr_markers_.size());
     const_aggs_.push_back(std::move(agg));
     break;
   }
@@ -1511,8 +1752,23 @@ dies together: a use of C1 is a use of C2.  Runs at finish, on the worker.
 
 bool a_emitter::finish()
 /*
+Runs on the worker thread: the class facts' products (vtables, typeinfo,
+thunks, D0), then the policy of the entities.
+*/
+{
+  /* The class facts first: the vtables, typeinfo, thunks and D0 they produce
+     are entities like any other and take part in the naming that follows. */
+  bool ok = finish_classes();
+
+  if (ok)
+    ok = finish_entities();
+  return ok;
+}  /* a_emitter::finish */
+
+bool a_emitter::finish_entities()
+/*
 Late names, record layout metadata, inline-only bodies and the unsupported
-entity policy (spec 8.11).  Runs on the worker thread.
+entity policy (spec 8.11).
 */
 {
   bool ok = true;
@@ -1553,6 +1809,12 @@ entity policy (spec 8.11).  Runs on the worker thread.
     if (mlir::SymbolTable::symbolKnownUseEmpty(g.getSymNameAttr(), module_)) {
       e.op->erase();
       e.op = nullptr;
+    } else if (!(e.flags & ECIL_DECL_VAR_DEFINITION)) {
+      /* An external declaration of an incomplete type whose address is used
+         (conv20: `extern B<int> b; f(b);` with B<int> never instantiated): as
+         clang, a declaration of the incomplete record with alignment 1 (it
+         lowers to an empty struct). */
+      g.setAlignmentAttr(builder_.getI64IntegerAttr(1));
     } else {
       errors.push_back("the variable '" + std::string(e.symbol) +
                        "' has a record type without a body and is used");
@@ -1707,6 +1969,6 @@ entity policy (spec 8.11).  Runs on the worker thread.
       session_.report(EDG_CIR_SEVERITY_ERROR, edc_unsupported, errors[k]);
   }
   return ok;
-}  /* a_emitter::finish */
+}  /* a_emitter::finish_entities */
 
 }  /* namespace edg_cir */

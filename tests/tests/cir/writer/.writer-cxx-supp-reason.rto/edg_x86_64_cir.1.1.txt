@@ -1,12 +1,7 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-"Test_name.c", line 10: warning: CIR back end: the body of "V" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-  V gv = V();
-         ^
-          detected during implicit generation of "V::V() noexcept" at line 10
-
-"Test_name.c", line 13: warning: CIR back end: the body of "thrower" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  void thrower() { try { } catch (...) { } }
-                                           ^
+"Test_name.c", line 14: warning: CIR back end: the body of "thrower" uses inline assembly, which the CIR back end does not support; the function is dropped
+  void thrower() { asm("nop"); }
+                               ^
 
 Warning: CIR back end: the initializer of "tl" uses a thread_local variable that is initialized or destroyed dynamically, which the CIR back end does not support; the definition is dropped
 
@@ -20,66 +15,101 @@ frame HEADER
   TY_INT 2 64 false 8 8
   TY_INT 3 64 true 8 8
   HDR_TARGET 1 2 nil 64 64 6
-  HDR_LANG 1 201703 12
+  HDR_LANG 1 201703 14
   HDR_PRODUCER 3 4
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION supp
+frame REGION
   TY_VOID 4
   STR 5 "V"
   TY_RECORD_DECL 5 0 5
   TY_PTR 6 5
   TY_FUNC 7 4 0 [6]
-  TY_OPAQUE 8 8 8
-  STR 6 "a"
-  TY_RECORD_BODY 5 16 12 8 4 2
-  REC_FIELD 8 0 nil nil nil 1
-  REC_FIELD 1 8 nil nil 6 0
-  STR 7 "_ZN1VC1Ev"
-  DECL_FUNC 9 7 0 2 7
-  STR 8 "_ZN1VC2Ev"
-  DECL_FUNC 10 7 0 2 8
-  STRUCTOR 9 10 0
-  DECL_FUNC 9 7 3 67 7
-  DECL_FUNC 10 7 3 67 8
-  DECL_FUNC 9 7 0 34 7 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
-  DECL_FUNC 10 7 0 34 8 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
-frame REGION
-  TY_PTR 11 1
-  TY_FUNC 12 11 0 []
-  STR 9 "_Z3usev"
-  DECL_FUNC 13 12 0 0 9
-  DECL_FUNC 13 12 0 1 9
-  STR 10 "tl"
-  DECL_VAR 14 1 0 4 0 10
-  FUNC_BEGIN 13 0
+  STR 6 "VB"
+  TY_RECORD_DECL 8 0 6
+  STR 7 "b"
+  TY_RECORD_BODY 8 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 7 0
+  TY_VPTR 9
+  STR 8 "a"
+  TY_RECORD_BODY 5 16 16 8 4 3
+  REC_FIELD 9 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 8 0
+  REC_FIELD 8 12 nil nil nil 65
+  STR 9 "1V"
+  CLASS_MANGLE 5 9
+  CLASS_INFO 5 12 8 nil 0
+  CLASS_BASES 5 [2, 1]
+  STR 10 "_ZN1VC1Ev"
+  DECL_FUNC 10 7 0 130 10
+  STR 11 "_ZN1VC2Ev"
+  DECL_FUNC 11 7 0 130 11
+  STRUCTOR 10 11 2
+  DECL_FUNC 10 7 3 195 10
+  DECL_FUNC 11 7 3 195 11
+  STR 12 "this"
+  CLASS_VFUNCS 5 []
+  CLASS_OVERRIDES 5 []
+  FUNC_BEGIN 10 0
+  PARAM 1 6 6 12 1
+  FUNC_EH_SPEC 1 []
+  VPTR_INIT
   BLOCK_BEGIN
-  GREF 14
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 11 0
+  PARAM 1 6 6 12 1
+  FUNC_EH_SPEC 1 []
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_PTR 12 1
+  TY_FUNC 13 12 0 []
+  STR 13 "_Z3usev"
+  DECL_FUNC 14 13 0 0 13
+  DECL_FUNC 14 13 0 1 13
+  STR 14 "tl"
+  DECL_VAR 15 1 0 4 0 14
+  FUNC_BEGIN 14 0
+  BLOCK_BEGIN
+  GREF 15
   ADDR
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
 frame REGION supp
-  TY_FUNC 15 4 0 []
-  STR 11 "_Z7throwerv"
-  DECL_FUNC 16 15 0 0 11
-  DECL_FUNC 16 15 0 1 11
-  DECL_FUNC 16 15 0 32 11 supp{13: "the statement \"try statement\""}
+  TY_FUNC 16 4 0 []
+  STR 15 "_Z7throwerv"
+  DECL_FUNC 17 16 0 0 15
+  DECL_FUNC 17 16 0 1 15
+  DECL_FUNC 17 16 0 32 15 supp{13: "inline assembly"}
 frame GLOBALS supp
-  STR 12 "gv"
-  DECL_VAR 17 5 0 1 0 12
-  DECL_VAR 14 1 0 68 0 10 supp{13: "a thread_local variable that is initialized or destroyed dynamically"}
-  STR 13 "ok"
-  DECL_VAR 18 1 0 1 0 13
+  STR 16 "gv"
+  DECL_VAR 18 5 0 1 0 16
+  DECL_VAR 15 1 0 68 0 14 supp{13: "a thread_local variable that is initialized or destroyed dynamically"}
+  STR 17 "ok"
+  DECL_VAR 19 1 0 1 0 17
   C_INT 1 1
-  VAR_INIT 18
-  STATIC_INIT_BEGIN 17 0
-  GREF 17
+  VAR_INIT 19
+  STR 18 "2VB"
+  CLASS_MANGLE 8 18
+  CLASS_INFO 8 4 4 nil 0
+  CLASS_BASES 8 []
+  DECL_ABI_DATA 20 2 8 3 3 nil
+  DECL_ABI_DATA 21 2 5 3 3 nil
+  DECL_ABI_DATA 22 0 5 3 3 nil
+  DECL_ABI_DATA 23 1 5 3 3 nil
+  STATIC_INIT_BEGIN 18 0
+  GREF 18
   DUP
   ZERO_BYTES 16
   ADDR
-  CALL 9 7 1 0
+  CALL 10 7 1 0
   STATIC_INIT_END
 frame NAMES
 frame END

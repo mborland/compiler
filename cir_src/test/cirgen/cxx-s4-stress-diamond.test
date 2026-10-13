@@ -1,0 +1,15 @@
+; C++ (ECIL 1.2): a lattice of 80 classes (40 layers, each class virtually
+; derived from both classes of the layer below, so every class has all the
+; classes below it as virtual bases, reached by exponentially many paths) must
+; build its vtable groups, VTTs and typeinfo in well under a second, under a
+; 256 KiB stack.  The vtable builder once searched every path to a virtual
+; base (clang's CXXBasePaths marks them visited): the time doubled with each
+; layer, 25 layers took 15 s and 50 never finished.  `timeout` makes a return
+; of that behavior a failure of this test.  See research/m4_stress.md.
+; RUN: %python %scripts/ecil-m4-stress-gen.py diamond 40 > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: sh -c 'ulimit -s 256; timeout 60 %edg-cir --emit=obj -o %t.o %t.ecil'
+; RUN: sh -c 'ulimit -s 256; timeout 60 %ecil-dump --vtable-layouts %t.ecil > %t.layout'
+; RUN: %FileCheck %s < %t.layout
+
+; CHECK: Vtable for 'A40'

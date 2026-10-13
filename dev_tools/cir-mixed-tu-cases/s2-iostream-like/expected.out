@@ -1,0 +1,22 @@
+ios()
+ios::init 2
+istream()
+ios::init 1
+ostream()
+iostream()
+flush 2 12
+get 44 44
+~iostream
+~ostream
+~istream
+~ios
+~ios_base
+ios()
+ios::init 1
+ostream()
+ofstream()
+flush 1 5
+~ofstream
+~ostream
+~ios
+~ios_base

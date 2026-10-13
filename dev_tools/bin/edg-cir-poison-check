@@ -22,18 +22,21 @@ This tool checks the configurations (--dump_configuration) and then compiles
 every case of the selected tests with the front ends, writing an ECIL stream
 (--ecil_output), and requires:
 
-  - the poisoning front end shows no crash, assertion or sanitizer report,
+  - the poisoning front end shows no crash, assertion or sanitizer report
+    that the front end without poison does not show too,
   - all front ends have the same exit status, and
   - the streams are byte-identical: poisoning vs. not poisoning (the writer
     depends on freed memory if these differ).
 
-The release front end (--release-build, "" skips it) is compared as
-information only: the release macro configuration (linux-gcc-release) differs
-from the debug one (linux-gcc) in macros that change what the front end
-builds (PRAGMA_WEAK_ALLOWED, NEW_CAN_BE_FOLDED_INTO_CTOR,
-ASSIGNMENT_TO_THIS_ALLOWED, ...), so its streams may differ legitimately; the
-cases are listed as `INFO` lines and do not fail.  The release front end is
-tested by the release-smoke gate step.
+The release front end (--release-build, "" skips it) must write the same
+stream and have the same exit status as the debug one: cmake/macro-conf/
+default/cpfe-cir.cmakedef pins every macro that changes what the front end
+builds (NEW_CAN_BE_FOLDED_INTO_CTOR, ASSIGNMENT_TO_THIS_ALLOWED,
+PRAGMA_WEAK_ALLOWED, ...) to one value for both build types.  A difference is
+a failure (a build-type dependent front end: a release front end once dropped
+the free-on-throw cleanup of a new expression).  --release-info lists the
+differences as `INFO` lines instead.  The release front end is also tested by
+the release-smoke gate step.
 
 Run it inside the cir-env image from the repository root, after building
 build/gcc-cir and build/gcc-release-cir:
@@ -159,7 +162,8 @@ def compile_to_stream(source: Path, options: List[str], env: Dict[str, str],
 
 def check_test(test: Path, tests_dir: Path, env_debug: Dict[str, str],
                env_clean: Dict[str, str],
-               env_release: Optional[Dict[str, str]]) -> List[str]:
+               env_release: Optional[Dict[str, str]],
+               release_info: bool = False) -> List[str]:
   '''The problems of every case of a test (empty if none).'''
   problems: List[str] = []
   top = tests_dir / test.relative_to(tests_dir).parts[0]
@@ -184,6 +188,10 @@ def check_test(test: Path, tests_dir: Path, env_debug: Dict[str, str],
       shutil.rmtree(work, ignore_errors = True)
     tag = f"{name}#{number}"
     bad = _BAD_OUTPUT_REGEX.search(out_debug)
+    # A crash or assertion that the front end without poison has too is not
+    # caused by the poisoning (crash-sweep gates those against the reference).
+    if bad and bad.group(0) in out_clean:
+      bad = None
     if bad:
       problems.append(f"{tag}: {bad.group(0)} in the poisoning front end")
     if rc_debug != rc_clean:
@@ -193,7 +201,8 @@ def check_test(test: Path, tests_dir: Path, env_debug: Dict[str, str],
       problems.append(f"{tag}: the streams differ with and without poison")
     if env_release is not None and (rc_debug != rc_rel or
                                     stream_debug != stream_rel):
-      problems.append(f"INFO {tag}: debug and release differ (exit status "
+      prefix = 'INFO ' if release_info else ''
+      problems.append(f"{prefix}{tag}: debug and release differ (exit status "
                       f"{rc_debug}/{rc_rel}, streams "
                       f"{'differ' if stream_debug != stream_rel else 'same'})")
   return problems
@@ -213,6 +222,9 @@ def main() -> None:
                       help = 'the same front end without it')
   parser.add_argument('--release-build', default = 'build/gcc-release-cir',
                       help = 'the release front end ("" to skip it)')
+  parser.add_argument('--release-info', action = 'store_true',
+                      help = 'list the cases where the release front end '
+                             'differs as INFO, not as failures')
   parser.add_argument('-j', dest = 'jobs', type = int,
                       default = os.cpu_count() or 1)
   args = parser.parse_args()
@@ -263,7 +275,7 @@ def main() -> None:
   with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
     for result in pool.map(
         lambda t: check_test(t, tests_dir, envs['debug'], envs['clean'],
-                             envs.get('release')),
+                             envs.get('release'), args.release_info),
         tests):
       problems.extend(result)
   failures = [p for p in problems if not p.startswith('INFO ')]

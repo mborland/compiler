@@ -46,9 +46,11 @@ struct a_dump_options {
   bool   show_offsets;   /* Prefix records with "; @offset". */
   size_t chunk_size;     /* Feed the reader in chunks of this size (0: all). */
   size_t split_at;       /* Feed two chunks split here (0: no split). */
+  bool   vtable_layouts; /* Append the vtable layouts of the classes (clang's
+                            -fdump-vtable-layouts text; needs check). */
 
   a_dump_options() : check(true), show_offsets(false), chunk_size(0),
-                     split_at(0) {}
+                     split_at(0), vtable_layouts(false) {}
 };  /* a_dump_options */
 
 bool dump_stream(const uint8_t *data, size_t size,

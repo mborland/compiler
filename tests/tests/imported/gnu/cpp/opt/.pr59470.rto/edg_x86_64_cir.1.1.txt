@@ -15,20 +15,12 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-"Test_name.c", line 66: warning: CIR back end: the body of "g3" uses a virtual call, which the CIR back end does not support; the function is dropped
-    }
-    ^
-
 "Test_name.c", line 80: warning: unknown attribute "noclone"
     void h9 (const D &) __attribute__((noinline, noclone));
                                                  ^
 
 "Test_name.c", line 89: warning: CIR back end: the body of "h9" uses inline assembly, which the CIR back end does not support; the function is dropped
   };
-  ^
-
-"Test_name.c", line 112: warning: CIR back end: the body of "foo" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
   ^
 
 "Test_name.c", line 114: warning: unknown attribute "noclone"
@@ -55,18 +47,14 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
     test (0, g, e, 0, 0);
              ^
 
-Error: CIR back end: the definition of '_ZN1B2b1Ev' was dropped: it uses a construct the CIR back end cannot express: inline assembly
+Error: CIR back end: the definition of '_ZN1B2b1Ev' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Error: CIR back end: the definition of '_ZN1C2c2EPK1Aj' was dropped: it uses a construct the CIR back end cannot express: inline assembly
-
-Error: CIR back end: the definition of '_ZN1G2g3EPKci' was dropped: it uses a construct the CIR back end cannot express: a virtual call (and it is referenced)
+Error: CIR back end: the definition of '_ZN1C2c2EPK1Aj' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
 Error: CIR back end: the definition of '_ZN1H2h9ERK1D' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
-
-Error: CIR back end: the definition of '_Z3fooRK1D' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
 
 Error: CIR back end: the definition of '_Z3barPcmPKcib' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
 Error: CIR back end: the definition of '_Z3bazPvPKcjcR1EPcS4_Ri' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-7 errors detected in the compilation of "Test_name.c".
+5 errors detected in the compilation of "Test_name.c".

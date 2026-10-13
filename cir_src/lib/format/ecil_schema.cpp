@@ -189,7 +189,8 @@ const a_spec_row spec_rows[] = {
   {eop_array_dtor_end, SB | V1, {}},
   {eop_new_array_size, SB | V1, {s_id, s_uint}},
   {eop_new_array_cookie, SB | V1, {s_id, s_uint}},
-  {eop_delete, SB | V1, {s_id, s_idn, s_id, s_flags(0xF)}},
+  {eop_new_array_size_throw, SB | V1, {s_id, s_uint}},
+  {eop_delete, SB | V1, {s_id, s_idn, s_id, s_flags(0x3F)}},
   {eop_zero_bytes, SB | V1, {s_uint}},
   {eop_cmp3way, SB | V1, {s_id, s_int, s_int, s_int, s_intn}},
   {eop_cast, SB, {s_enum(0, eck_array_to_ptrdecay), s_id}},
@@ -226,7 +227,7 @@ const a_spec_row spec_rows[] = {
   {eop_ty_data_member, ST, {s_id, s_id, s_id}},
   {eop_ty_method, ST, {s_id, s_id, s_id}},
   {eop_class_mangle, SD, {s_id, s_id}},
-  {eop_structor_deleting, SD, {s_id, s_id, s_id, s_flags(3)}},
+  {eop_structor_deleting, SD, {s_id, s_id, s_id, s_flags(7)}},
   {eop_decl_abi_data, SD, {s_id, s_enum(eadk_vtable, eadk_typeinfo), s_id,
                            s_enum(0, elk_common), s_flags(7), s_idn}},
   {eop_typeinfo_def, SD, {s_id, s_enum(etik_fundamental, etik_enum),
@@ -323,7 +324,7 @@ spec_rows, then cross-check the two.
     eop_pm_cast, eop_const_data_member, eop_const_method,
     eop_array_partial_dtor, eop_init_zero_base, eop_try_begin, eop_catch_begin, eop_catch_param,
     eop_try_end, eop_throw_begin, eop_throw_end, eop_rethrow,
-    eop_c_data_member, eop_c_method
+    eop_c_data_member, eop_c_method, eop_new_array_size_throw
   };
   for (uint8_t op : minor2) {
     if (present[op])

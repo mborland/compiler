@@ -3,462 +3,228 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   static ditype f1 (void *p) __attribute__ ((noinline)); static ditype f1 (void *p) { return (__sync_fetch_and_add((ditype*)p, 1)); } static void t1 () { try { f1(0); } catch (...) { return; } abort(); }
                                                                                                                                     ^
 
-"./ext/sync-4.C", line 37: warning: CIR back end: the body of "t1" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f1 (void *p) __attribute__ ((noinline)); static ditype f1 (void *p) { return (__sync_fetch_and_add((ditype*)p, 1)); } static void t1 () { try { f1(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                          ^
-
 "./ext/sync-4.C", line 38: warning: CIR back end: the body of "f2" uses the builtin function __sync_fetch_and_sub_8, which the CIR back end does not support; the function is dropped
   static ditype f2 (void *p) __attribute__ ((noinline)); static ditype f2 (void *p) { return (__sync_fetch_and_sub((ditype*)p, 1)); } static void t2 () { try { f2(0); } catch (...) { return; } abort(); }
                                                                                                                                     ^
-
-"./ext/sync-4.C", line 38: warning: CIR back end: the body of "t2" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f2 (void *p) __attribute__ ((noinline)); static ditype f2 (void *p) { return (__sync_fetch_and_sub((ditype*)p, 1)); } static void t2 () { try { f2(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                          ^
 
 "./ext/sync-4.C", line 39: warning: CIR back end: the body of "f3" uses the builtin function __sync_fetch_and_or_8, which the CIR back end does not support; the function is dropped
   static ditype f3 (void *p) __attribute__ ((noinline)); static ditype f3 (void *p) { return (__sync_fetch_and_or((ditype*)p, 1)); } static void t3 () { try { f3(0); } catch (...) { return; } abort(); }
                                                                                                                                    ^
 
-"./ext/sync-4.C", line 39: warning: CIR back end: the body of "t3" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f3 (void *p) __attribute__ ((noinline)); static ditype f3 (void *p) { return (__sync_fetch_and_or((ditype*)p, 1)); } static void t3 () { try { f3(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                         ^
-
 "./ext/sync-4.C", line 40: warning: CIR back end: the body of "f4" uses the builtin function __sync_fetch_and_and_8, which the CIR back end does not support; the function is dropped
   static ditype f4 (void *p) __attribute__ ((noinline)); static ditype f4 (void *p) { return (__sync_fetch_and_and((ditype*)p, 1)); } static void t4 () { try { f4(0); } catch (...) { return; } abort(); }
                                                                                                                                     ^
-
-"./ext/sync-4.C", line 40: warning: CIR back end: the body of "t4" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f4 (void *p) __attribute__ ((noinline)); static ditype f4 (void *p) { return (__sync_fetch_and_and((ditype*)p, 1)); } static void t4 () { try { f4(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                          ^
 
 "./ext/sync-4.C", line 41: warning: CIR back end: the body of "f5" uses the builtin function __sync_fetch_and_xor_8, which the CIR back end does not support; the function is dropped
   static ditype f5 (void *p) __attribute__ ((noinline)); static ditype f5 (void *p) { return (__sync_fetch_and_xor((ditype*)p, 1)); } static void t5 () { try { f5(0); } catch (...) { return; } abort(); }
                                                                                                                                     ^
 
-"./ext/sync-4.C", line 41: warning: CIR back end: the body of "t5" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f5 (void *p) __attribute__ ((noinline)); static ditype f5 (void *p) { return (__sync_fetch_and_xor((ditype*)p, 1)); } static void t5 () { try { f5(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                          ^
-
 "./ext/sync-4.C", line 42: warning: CIR back end: the body of "f6" uses the builtin function __sync_fetch_and_nand_8, which the CIR back end does not support; the function is dropped
   static ditype f6 (void *p) __attribute__ ((noinline)); static ditype f6 (void *p) { return (__sync_fetch_and_nand((ditype*)p, 1)); } static void t6 () { try { f6(0); } catch (...) { return; } abort(); }
                                                                                                                                      ^
-
-"./ext/sync-4.C", line 42: warning: CIR back end: the body of "t6" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f6 (void *p) __attribute__ ((noinline)); static ditype f6 (void *p) { return (__sync_fetch_and_nand((ditype*)p, 1)); } static void t6 () { try { f6(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                           ^
 
 "./ext/sync-4.C", line 44: warning: CIR back end: the body of "f7" uses the builtin function __sync_add_and_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f7 (void *p) __attribute__ ((noinline)); static ditype f7 (void *p) { return (__sync_add_and_fetch((ditype*)p, 1)); } static void t7 () { try { f7(0); } catch (...) { return; } abort(); }
                                                                                                                                     ^
 
-"./ext/sync-4.C", line 44: warning: CIR back end: the body of "t7" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f7 (void *p) __attribute__ ((noinline)); static ditype f7 (void *p) { return (__sync_add_and_fetch((ditype*)p, 1)); } static void t7 () { try { f7(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                          ^
-
 "./ext/sync-4.C", line 45: warning: CIR back end: the body of "f8" uses the builtin function __sync_sub_and_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f8 (void *p) __attribute__ ((noinline)); static ditype f8 (void *p) { return (__sync_sub_and_fetch((ditype*)p, 1)); } static void t8 () { try { f8(0); } catch (...) { return; } abort(); }
                                                                                                                                     ^
-
-"./ext/sync-4.C", line 45: warning: CIR back end: the body of "t8" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f8 (void *p) __attribute__ ((noinline)); static ditype f8 (void *p) { return (__sync_sub_and_fetch((ditype*)p, 1)); } static void t8 () { try { f8(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                          ^
 
 "./ext/sync-4.C", line 46: warning: CIR back end: the body of "f9" uses the builtin function __sync_or_and_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f9 (void *p) __attribute__ ((noinline)); static ditype f9 (void *p) { return (__sync_or_and_fetch((ditype*)p, 1)); } static void t9 () { try { f9(0); } catch (...) { return; } abort(); }
                                                                                                                                    ^
 
-"./ext/sync-4.C", line 46: warning: CIR back end: the body of "t9" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f9 (void *p) __attribute__ ((noinline)); static ditype f9 (void *p) { return (__sync_or_and_fetch((ditype*)p, 1)); } static void t9 () { try { f9(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                         ^
-
 "./ext/sync-4.C", line 47: warning: CIR back end: the body of "f10" uses the builtin function __sync_and_and_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f10 (void *p) __attribute__ ((noinline)); static ditype f10 (void *p) { return (__sync_and_and_fetch((ditype*)p, 1)); } static void t10 () { try { f10(0); } catch (...) { return; } abort(); }
                                                                                                                                       ^
-
-"./ext/sync-4.C", line 47: warning: CIR back end: the body of "t10" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f10 (void *p) __attribute__ ((noinline)); static ditype f10 (void *p) { return (__sync_and_and_fetch((ditype*)p, 1)); } static void t10 () { try { f10(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                              ^
 
 "./ext/sync-4.C", line 48: warning: CIR back end: the body of "f11" uses the builtin function __sync_xor_and_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f11 (void *p) __attribute__ ((noinline)); static ditype f11 (void *p) { return (__sync_xor_and_fetch((ditype*)p, 1)); } static void t11 () { try { f11(0); } catch (...) { return; } abort(); }
                                                                                                                                       ^
 
-"./ext/sync-4.C", line 48: warning: CIR back end: the body of "t11" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f11 (void *p) __attribute__ ((noinline)); static ditype f11 (void *p) { return (__sync_xor_and_fetch((ditype*)p, 1)); } static void t11 () { try { f11(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                              ^
-
 "./ext/sync-4.C", line 49: warning: CIR back end: the body of "f12" uses the builtin function __sync_nand_and_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f12 (void *p) __attribute__ ((noinline)); static ditype f12 (void *p) { return (__sync_nand_and_fetch((ditype*)p, 1)); } static void t12 () { try { f12(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
-
-"./ext/sync-4.C", line 49: warning: CIR back end: the body of "t12" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f12 (void *p) __attribute__ ((noinline)); static ditype f12 (void *p) { return (__sync_nand_and_fetch((ditype*)p, 1)); } static void t12 () { try { f12(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
 
 "./ext/sync-4.C", line 51: warning: CIR back end: the body of "f13" uses the builtin function __sync_bool_compare_and_swap_8, which the CIR back end does not support; the function is dropped
   static bool f13 (void *p) __attribute__ ((noinline)); static bool f13 (void *p) { return (__sync_bool_compare_and_swap((ditype*)p, 1, 2)); } static void t13 () { try { f13(0); } catch (...) { return; } abort(); }
                                                                                                                                              ^
 
-"./ext/sync-4.C", line 51: warning: CIR back end: the body of "t13" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static bool f13 (void *p) __attribute__ ((noinline)); static bool f13 (void *p) { return (__sync_bool_compare_and_swap((ditype*)p, 1, 2)); } static void t13 () { try { f13(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                     ^
-
 "./ext/sync-4.C", line 52: warning: CIR back end: the body of "f14" uses the builtin function __sync_val_compare_and_swap_8, which the CIR back end does not support; the function is dropped
   static ditype f14 (void *p) __attribute__ ((noinline)); static ditype f14 (void *p) { return (__sync_val_compare_and_swap((ditype*)p, 1, 2)); } static void t14 () { try { f14(0); } catch (...) { return; } abort(); }
                                                                                                                                                 ^
-
-"./ext/sync-4.C", line 52: warning: CIR back end: the body of "t14" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f14 (void *p) __attribute__ ((noinline)); static ditype f14 (void *p) { return (__sync_val_compare_and_swap((ditype*)p, 1, 2)); } static void t14 () { try { f14(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                        ^
 
 "./ext/sync-4.C", line 54: warning: CIR back end: the body of "f15" uses the builtin function __sync_lock_test_and_set_8, which the CIR back end does not support; the function is dropped
   static ditype f15 (void *p) __attribute__ ((noinline)); static ditype f15 (void *p) { return (__sync_lock_test_and_set((ditype*)p, 1)); } static void t15 () { try { f15(0); } catch (...) { return; } abort(); }
                                                                                                                                           ^
 
-"./ext/sync-4.C", line 54: warning: CIR back end: the body of "t15" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f15 (void *p) __attribute__ ((noinline)); static ditype f15 (void *p) { return (__sync_lock_test_and_set((ditype*)p, 1)); } static void t15 () { try { f15(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                  ^
-
 "./ext/sync-4.C", line 55: warning: CIR back end: the body of "f16" uses the builtin function __sync_lock_release_8, which the CIR back end does not support; the function is dropped
   static void f16 (void *p) __attribute__ ((noinline)); static void f16 (void *p) { return (__sync_lock_release((ditype*)p)); } static void t16 () { try { f16(0); } catch (...) { return; } abort(); }
                                                                                                                               ^
-
-"./ext/sync-4.C", line 55: warning: CIR back end: the body of "t16" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static void f16 (void *p) __attribute__ ((noinline)); static void f16 (void *p) { return (__sync_lock_release((ditype*)p)); } static void t16 () { try { f16(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                      ^
 
 "./ext/sync-4.C", line 57: warning: CIR back end: the body of "f17" uses the builtin function __atomic_test_and_set, which the CIR back end does not support; the function is dropped
   static bool f17 (void *p) __attribute__ ((noinline)); static bool f17 (void *p) { return (__atomic_test_and_set((ditype*)p, 5)); } static void t17 () { try { f17(0); } catch (...) { return; } abort(); }
                                                                                                                                    ^
 
-"./ext/sync-4.C", line 57: warning: CIR back end: the body of "t17" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static bool f17 (void *p) __attribute__ ((noinline)); static bool f17 (void *p) { return (__atomic_test_and_set((ditype*)p, 5)); } static void t17 () { try { f17(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                           ^
-
 "./ext/sync-4.C", line 58: warning: CIR back end: the body of "f18" uses the builtin function __atomic_clear, which the CIR back end does not support; the function is dropped
   static void f18 (void *p) __attribute__ ((noinline)); static void f18 (void *p) { return (__atomic_clear((ditype*)p, 5)); } static void t18 () { try { f18(0); } catch (...) { return; } abort(); }
                                                                                                                             ^
-
-"./ext/sync-4.C", line 58: warning: CIR back end: the body of "t18" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static void f18 (void *p) __attribute__ ((noinline)); static void f18 (void *p) { return (__atomic_clear((ditype*)p, 5)); } static void t18 () { try { f18(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                    ^
 
 "./ext/sync-4.C", line 60: warning: CIR back end: the body of "f19" uses the builtin function __atomic_exchange, which the CIR back end does not support; the function is dropped
   static void f19 (void *p) __attribute__ ((noinline)); static void f19 (void *p) { return (__atomic_exchange((ditype*)p, (ditype*)0, (ditype*)0, 5)); } static void t19 () { try { f19(0); } catch (...) { return; } abort(); }
                                                                                                                                                        ^
 
-"./ext/sync-4.C", line 60: warning: CIR back end: the body of "t19" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static void f19 (void *p) __attribute__ ((noinline)); static void f19 (void *p) { return (__atomic_exchange((ditype*)p, (ditype*)0, (ditype*)0, 5)); } static void t19 () { try { f19(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                               ^
-
 "./ext/sync-4.C", line 61: warning: CIR back end: the body of "f20" uses the builtin function __atomic_exchange_8, which the CIR back end does not support; the function is dropped
   static ditype f20 (void *p) __attribute__ ((noinline)); static ditype f20 (void *p) { return (__atomic_exchange_n((ditype*)p, 1, 2)); } static void t20 () { try { f20(0); } catch (...) { return; } abort(); }
                                                                                                                                         ^
-
-"./ext/sync-4.C", line 61: warning: CIR back end: the body of "t20" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f20 (void *p) __attribute__ ((noinline)); static ditype f20 (void *p) { return (__atomic_exchange_n((ditype*)p, 1, 2)); } static void t20 () { try { f20(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                ^
 
 "./ext/sync-4.C", line 63: warning: CIR back end: the body of "f21" uses the builtin function __atomic_load, which the CIR back end does not support; the function is dropped
   static void f21 (void *p) __attribute__ ((noinline)); static void f21 (void *p) { return (__atomic_load((ditype*)p, (ditype*)0, 5)); } static void t21 () { try { f21(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
 
-"./ext/sync-4.C", line 63: warning: CIR back end: the body of "t21" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static void f21 (void *p) __attribute__ ((noinline)); static void f21 (void *p) { return (__atomic_load((ditype*)p, (ditype*)0, 5)); } static void t21 () { try { f21(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
-
 "./ext/sync-4.C", line 64: warning: CIR back end: the body of "f22" uses the builtin function __atomic_load_8, which the CIR back end does not support; the function is dropped
   static ditype f22 (void *p) __attribute__ ((noinline)); static ditype f22 (void *p) { return (__atomic_load_n((ditype*)p, 5)); } static void t22 () { try { f22(0); } catch (...) { return; } abort(); }
                                                                                                                                  ^
-
-"./ext/sync-4.C", line 64: warning: CIR back end: the body of "t22" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f22 (void *p) __attribute__ ((noinline)); static ditype f22 (void *p) { return (__atomic_load_n((ditype*)p, 5)); } static void t22 () { try { f22(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                         ^
 
 "./ext/sync-4.C", line 66: warning: CIR back end: the body of "f23" uses the builtin function __atomic_compare_exchange, which the CIR back end does not support; the function is dropped
   static bool f23 (void *p) __attribute__ ((noinline)); static bool f23 (void *p) { return (__atomic_compare_exchange((ditype*)p, (ditype*)0, (ditype*)0, false, 5, 5)); } static void t23 () { try { f23(0); } catch (...) { return; } abort(); }
                                                                                                                                                                          ^
 
-"./ext/sync-4.C", line 66: warning: CIR back end: the body of "t23" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static bool f23 (void *p) __attribute__ ((noinline)); static bool f23 (void *p) { return (__atomic_compare_exchange((ditype*)p, (ditype*)0, (ditype*)0, false, 5, 5)); } static void t23 () { try { f23(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                                                 ^
-
 "./ext/sync-4.C", line 67: warning: CIR back end: the body of "f24" uses the builtin function __atomic_compare_exchange_8, which the CIR back end does not support; the function is dropped
   static bool f24 (void *p) __attribute__ ((noinline)); static bool f24 (void *p) { return (__atomic_compare_exchange_n((ditype*)p, (ditype*)0, 1, false, 5, 5)); } static void t24 () { try { f24(0); } catch (...) { return; } abort(); }
                                                                                                                                                                   ^
-
-"./ext/sync-4.C", line 67: warning: CIR back end: the body of "t24" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static bool f24 (void *p) __attribute__ ((noinline)); static bool f24 (void *p) { return (__atomic_compare_exchange_n((ditype*)p, (ditype*)0, 1, false, 5, 5)); } static void t24 () { try { f24(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                                          ^
 
 "./ext/sync-4.C", line 69: warning: CIR back end: the body of "f25" uses the builtin function __atomic_store, which the CIR back end does not support; the function is dropped
   static void f25 (void *p) __attribute__ ((noinline)); static void f25 (void *p) { return (__atomic_store((ditype*)p, (ditype*)0, 5)); } static void t25 () { try { f25(0); } catch (...) { return; } abort(); }
                                                                                                                                         ^
 
-"./ext/sync-4.C", line 69: warning: CIR back end: the body of "t25" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static void f25 (void *p) __attribute__ ((noinline)); static void f25 (void *p) { return (__atomic_store((ditype*)p, (ditype*)0, 5)); } static void t25 () { try { f25(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                ^
-
 "./ext/sync-4.C", line 70: warning: CIR back end: the body of "f26" uses the builtin function __atomic_store_8, which the CIR back end does not support; the function is dropped
   static void f26 (void *p) __attribute__ ((noinline)); static void f26 (void *p) { return (__atomic_store_n((ditype*)p, 1, 5)); } static void t26 () { try { f26(0); } catch (...) { return; } abort(); }
                                                                                                                                  ^
-
-"./ext/sync-4.C", line 70: warning: CIR back end: the body of "t26" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static void f26 (void *p) __attribute__ ((noinline)); static void f26 (void *p) { return (__atomic_store_n((ditype*)p, 1, 5)); } static void t26 () { try { f26(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                         ^
 
 "./ext/sync-4.C", line 72: warning: CIR back end: the body of "f27" uses the builtin function __atomic_add_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f27 (void *p) __attribute__ ((noinline)); static ditype f27 (void *p) { return (__atomic_add_fetch((ditype*)p, 1, 5)); } static void t27 () { try { f27(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
 
-"./ext/sync-4.C", line 72: warning: CIR back end: the body of "t27" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f27 (void *p) __attribute__ ((noinline)); static ditype f27 (void *p) { return (__atomic_add_fetch((ditype*)p, 1, 5)); } static void t27 () { try { f27(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
-
 "./ext/sync-4.C", line 73: warning: CIR back end: the body of "f28" uses the builtin function __atomic_sub_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f28 (void *p) __attribute__ ((noinline)); static ditype f28 (void *p) { return (__atomic_sub_fetch((ditype*)p, 1, 5)); } static void t28 () { try { f28(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
-
-"./ext/sync-4.C", line 73: warning: CIR back end: the body of "t28" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f28 (void *p) __attribute__ ((noinline)); static ditype f28 (void *p) { return (__atomic_sub_fetch((ditype*)p, 1, 5)); } static void t28 () { try { f28(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
 
 "./ext/sync-4.C", line 74: warning: CIR back end: the body of "f29" uses the builtin function __atomic_and_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f29 (void *p) __attribute__ ((noinline)); static ditype f29 (void *p) { return (__atomic_and_fetch((ditype*)p, 1, 5)); } static void t29 () { try { f29(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
 
-"./ext/sync-4.C", line 74: warning: CIR back end: the body of "t29" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f29 (void *p) __attribute__ ((noinline)); static ditype f29 (void *p) { return (__atomic_and_fetch((ditype*)p, 1, 5)); } static void t29 () { try { f29(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
-
 "./ext/sync-4.C", line 75: warning: CIR back end: the body of "f30" uses the builtin function __atomic_nand_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f30 (void *p) __attribute__ ((noinline)); static ditype f30 (void *p) { return (__atomic_nand_fetch((ditype*)p, 1, 5)); } static void t30 () { try { f30(0); } catch (...) { return; } abort(); }
                                                                                                                                         ^
-
-"./ext/sync-4.C", line 75: warning: CIR back end: the body of "t30" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f30 (void *p) __attribute__ ((noinline)); static ditype f30 (void *p) { return (__atomic_nand_fetch((ditype*)p, 1, 5)); } static void t30 () { try { f30(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                ^
 
 "./ext/sync-4.C", line 76: warning: CIR back end: the body of "f31" uses the builtin function __atomic_xor_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f31 (void *p) __attribute__ ((noinline)); static ditype f31 (void *p) { return (__atomic_xor_fetch((ditype*)p, 1, 5)); } static void t31 () { try { f31(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
 
-"./ext/sync-4.C", line 76: warning: CIR back end: the body of "t31" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f31 (void *p) __attribute__ ((noinline)); static ditype f31 (void *p) { return (__atomic_xor_fetch((ditype*)p, 1, 5)); } static void t31 () { try { f31(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
-
 "./ext/sync-4.C", line 77: warning: CIR back end: the body of "f32" uses the builtin function __atomic_or_fetch_8, which the CIR back end does not support; the function is dropped
   static ditype f32 (void *p) __attribute__ ((noinline)); static ditype f32 (void *p) { return (__atomic_or_fetch((ditype*)p, 1, 5)); } static void t32 () { try { f32(0); } catch (...) { return; } abort(); }
                                                                                                                                       ^
-
-"./ext/sync-4.C", line 77: warning: CIR back end: the body of "t32" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f32 (void *p) __attribute__ ((noinline)); static ditype f32 (void *p) { return (__atomic_or_fetch((ditype*)p, 1, 5)); } static void t32 () { try { f32(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                              ^
 
 "./ext/sync-4.C", line 79: warning: CIR back end: the body of "f33" uses the builtin function __atomic_fetch_add_8, which the CIR back end does not support; the function is dropped
   static ditype f33 (void *p) __attribute__ ((noinline)); static ditype f33 (void *p) { return (__atomic_fetch_add((ditype*)p, 1, 5)); } static void t33 () { try { f33(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
 
-"./ext/sync-4.C", line 79: warning: CIR back end: the body of "t33" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f33 (void *p) __attribute__ ((noinline)); static ditype f33 (void *p) { return (__atomic_fetch_add((ditype*)p, 1, 5)); } static void t33 () { try { f33(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
-
 "./ext/sync-4.C", line 80: warning: CIR back end: the body of "f34" uses the builtin function __atomic_fetch_sub_8, which the CIR back end does not support; the function is dropped
   static ditype f34 (void *p) __attribute__ ((noinline)); static ditype f34 (void *p) { return (__atomic_fetch_sub((ditype*)p, 1, 5)); } static void t34 () { try { f34(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
-
-"./ext/sync-4.C", line 80: warning: CIR back end: the body of "t34" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f34 (void *p) __attribute__ ((noinline)); static ditype f34 (void *p) { return (__atomic_fetch_sub((ditype*)p, 1, 5)); } static void t34 () { try { f34(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
 
 "./ext/sync-4.C", line 81: warning: CIR back end: the body of "f35" uses the builtin function __atomic_fetch_and_8, which the CIR back end does not support; the function is dropped
   static ditype f35 (void *p) __attribute__ ((noinline)); static ditype f35 (void *p) { return (__atomic_fetch_and((ditype*)p, 1, 5)); } static void t35 () { try { f35(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
 
-"./ext/sync-4.C", line 81: warning: CIR back end: the body of "t35" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f35 (void *p) __attribute__ ((noinline)); static ditype f35 (void *p) { return (__atomic_fetch_and((ditype*)p, 1, 5)); } static void t35 () { try { f35(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
-
 "./ext/sync-4.C", line 82: warning: CIR back end: the body of "f36" uses the builtin function __atomic_fetch_nand_8, which the CIR back end does not support; the function is dropped
   static ditype f36 (void *p) __attribute__ ((noinline)); static ditype f36 (void *p) { return (__atomic_fetch_nand((ditype*)p, 1, 5)); } static void t36 () { try { f36(0); } catch (...) { return; } abort(); }
                                                                                                                                         ^
-
-"./ext/sync-4.C", line 82: warning: CIR back end: the body of "t36" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f36 (void *p) __attribute__ ((noinline)); static ditype f36 (void *p) { return (__atomic_fetch_nand((ditype*)p, 1, 5)); } static void t36 () { try { f36(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                                ^
 
 "./ext/sync-4.C", line 83: warning: CIR back end: the body of "f37" uses the builtin function __atomic_fetch_xor_8, which the CIR back end does not support; the function is dropped
   static ditype f37 (void *p) __attribute__ ((noinline)); static ditype f37 (void *p) { return (__atomic_fetch_xor((ditype*)p, 1, 5)); } static void t37 () { try { f37(0); } catch (...) { return; } abort(); }
                                                                                                                                        ^
 
-"./ext/sync-4.C", line 83: warning: CIR back end: the body of "t37" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f37 (void *p) __attribute__ ((noinline)); static ditype f37 (void *p) { return (__atomic_fetch_xor((ditype*)p, 1, 5)); } static void t37 () { try { f37(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                               ^
-
 "./ext/sync-4.C", line 84: warning: CIR back end: the body of "f38" uses the builtin function __atomic_fetch_or_8, which the CIR back end does not support; the function is dropped
   static ditype f38 (void *p) __attribute__ ((noinline)); static ditype f38 (void *p) { return (__atomic_fetch_or((ditype*)p, 1, 5)); } static void t38 () { try { f38(0); } catch (...) { return; } abort(); }
                                                                                                                                       ^
 
-"./ext/sync-4.C", line 84: warning: CIR back end: the body of "t38" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  static ditype f38 (void *p) __attribute__ ((noinline)); static ditype f38 (void *p) { return (__atomic_fetch_or((ditype*)p, 1, 5)); } static void t38 () { try { f38(0); } catch (...) { return; } abort(); }
-                                                                                                                                                                                                              ^
-
-"./ext/sync-4.C", line 94: warning: CIR back end: the body of "handler" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-Warning: CIR back end: the unused definition of '_ZL2f1Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_add_8
-
-Warning: CIR back end: the unused definition of '_ZL2f2Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_sub_8
-
-Warning: CIR back end: the unused definition of '_ZL2f3Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_or_8
-
-Warning: CIR back end: the unused definition of '_ZL2f4Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_and_8
-
-Warning: CIR back end: the unused definition of '_ZL2f5Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_xor_8
-
-Warning: CIR back end: the unused definition of '_ZL2f6Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_nand_8
-
-Warning: CIR back end: the unused definition of '_ZL2f7Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_add_and_fetch_8
-
-Warning: CIR back end: the unused definition of '_ZL2f8Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_sub_and_fetch_8
-
-Warning: CIR back end: the unused definition of '_ZL2f9Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_or_and_fetch_8
-
-Warning: CIR back end: the unused definition of '_ZL3f10Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_and_and_fetch_8
-
-Warning: CIR back end: the unused definition of '_ZL3f11Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_xor_and_fetch_8
-
-Warning: CIR back end: the unused definition of '_ZL3f12Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_nand_and_fetch_8
-
-Warning: CIR back end: the unused definition of '_ZL3f13Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_bool_compare_and_swap_8
-
-Warning: CIR back end: the unused definition of '_ZL3f14Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_val_compare_and_swap_8
-
-Warning: CIR back end: the unused definition of '_ZL3f15Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_lock_test_and_set_8
-
-Warning: CIR back end: the unused definition of '_ZL3f16Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __sync_lock_release_8
-
-Warning: CIR back end: the unused definition of '_ZL3f17Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_test_and_set
-
-Warning: CIR back end: the unused definition of '_ZL3f18Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_clear
-
-Warning: CIR back end: the unused definition of '_ZL3f19Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_exchange
-
-Warning: CIR back end: the unused definition of '_ZL3f20Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_exchange_8
-
 Warning: CIR back end: the unused definition of '_ZL3f21Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_load
-
-Warning: CIR back end: the unused definition of '_ZL3t21v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 Warning: CIR back end: the unused definition of '_ZL3f22Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_load_8
 
-Warning: CIR back end: the unused definition of '_ZL3t22v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
 Warning: CIR back end: the unused definition of '_ZL3f23Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_compare_exchange
-
-Warning: CIR back end: the unused definition of '_ZL3t23v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 Warning: CIR back end: the unused definition of '_ZL3f24Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_compare_exchange_8
 
-Warning: CIR back end: the unused definition of '_ZL3t24v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
 Warning: CIR back end: the unused definition of '_ZL3f25Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_store
-
-Warning: CIR back end: the unused definition of '_ZL3t25v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 Warning: CIR back end: the unused definition of '_ZL3f26Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_store_8
 
-Warning: CIR back end: the unused definition of '_ZL3t26v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
 Warning: CIR back end: the unused definition of '_ZL3f27Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_add_fetch_8
-
-Warning: CIR back end: the unused definition of '_ZL3t27v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 Warning: CIR back end: the unused definition of '_ZL3f28Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_sub_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3t28v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
 Warning: CIR back end: the unused definition of '_ZL3f29Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_and_fetch_8
-
-Warning: CIR back end: the unused definition of '_ZL3t29v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 Warning: CIR back end: the unused definition of '_ZL3f30Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_nand_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3t30v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
 Warning: CIR back end: the unused definition of '_ZL3f31Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_xor_fetch_8
-
-Warning: CIR back end: the unused definition of '_ZL3t31v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 Warning: CIR back end: the unused definition of '_ZL3f32Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_or_fetch_8
 
-Warning: CIR back end: the unused definition of '_ZL3t32v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
 Warning: CIR back end: the unused definition of '_ZL3f33Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_add_8
-
-Warning: CIR back end: the unused definition of '_ZL3t33v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 Warning: CIR back end: the unused definition of '_ZL3f34Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_sub_8
 
-Warning: CIR back end: the unused definition of '_ZL3t34v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
 Warning: CIR back end: the unused definition of '_ZL3f35Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_and_8
-
-Warning: CIR back end: the unused definition of '_ZL3t35v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 Warning: CIR back end: the unused definition of '_ZL3f36Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_nand_8
 
-Warning: CIR back end: the unused definition of '_ZL3t36v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
 Warning: CIR back end: the unused definition of '_ZL3f37Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_xor_8
-
-Warning: CIR back end: the unused definition of '_ZL3t37v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
 
 Warning: CIR back end: the unused definition of '_ZL3f38Pv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_or_8
 
-Warning: CIR back end: the unused definition of '_ZL3t38v' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
+Error: CIR back end: the definition of '_ZL2f1Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_add_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t1v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL2f2Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_sub_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t2v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL2f3Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_or_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t3v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL2f4Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_and_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t4v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL2f5Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_xor_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t5v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL2f6Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_fetch_and_nand_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t6v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL2f7Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_add_and_fetch_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t7v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL2f8Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_sub_and_fetch_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t8v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL2f9Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_or_and_fetch_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL2t9v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f10Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_and_and_fetch_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t10v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f11Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_xor_and_fetch_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t11v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f12Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_nand_and_fetch_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t12v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f13Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_bool_compare_and_swap_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t13v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f14Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_val_compare_and_swap_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t14v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f15Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_lock_test_and_set_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t15v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f16Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __sync_lock_release_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t16v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f17Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_test_and_set (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t17v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f18Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_clear (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t18v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f19Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_exchange (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t19v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
+Error: CIR back end: the definition of '_ZL3f20Pv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_exchange_8 (and it is referenced)
 
-Error: CIR back end: the definition of '_ZL3t20v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
-
-Error: CIR back end: the definition of '_ZL7handleri' was dropped: it uses a construct the CIR back end cannot express: the expression kind "throw expression" (and it is referenced)
-
-21 errors detected in the compilation of "Test_name.c".
+20 errors detected in the compilation of "Test_name.c".

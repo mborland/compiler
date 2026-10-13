@@ -209,6 +209,23 @@ Per-frame state: the initializer target stacks.
   const_targets_.clear();
 }  /* a_ref_checker::begin_frame */
 
+bool a_ref_checker::static_init_may_repeat(uint32_t var) const
+/*
+The second body of a structor pair with virtual bases (C1 and C2, D1 and D2)
+repeats the STATIC_INIT of a static local of the function (K5a, 12.3): the
+same variable, the other variant of the same STRUCTOR pair, at most two.
+*/
+{
+  auto found = static_inits_.find(var);
+
+  auto partner = structor_partner_.find(fn_gid_);
+
+  return tracker_.function_depth() != 0 && fn_info_.has_vbases &&
+         found != static_inits_.end() && found->second.second < 2 &&
+         partner != structor_partner_.end() &&
+         partner->second == found->second.first;
+}  /* a_ref_checker::static_init_may_repeat */
+
 bool a_ref_checker::need_sid(const an_operand &op, bool optional,
                              const char *what, std::string &problem)
 /*
@@ -675,6 +692,8 @@ one linkage, not in a group yet, whose names differ in exactly one character
         ((sflags & ECIL_STRUCTOR_HAS_VBASES) ? sr_vbases : 0) |
         ((sflags & ECIL_STRUCTOR_DTOR) ? sr_dtor : 0));
 
+    structor_partner_[static_cast<uint32_t>(gc)] = static_cast<uint32_t>(gb);
+    structor_partner_[static_cast<uint32_t>(gb)] = static_cast<uint32_t>(gc);
     c->flags |= gf_in_group;
     b->flags |= gf_in_group;
     c->role = static_cast<uint8_t>(sr_complete | common);
@@ -736,7 +755,8 @@ ones are the bracket tracker's).
       problem = "STATIC_INIT_BEGIN of G-id " + number(v) +
                 ", which is not a definition";
       ok = false;
-    } else if (ne->role & vr_static_init) {
+    } else if ((ne->role & vr_static_init) &&
+               !static_init_may_repeat(static_cast<uint32_t>(v))) {
       problem = "G-id " + number(v) + " is initialized twice "
                 "(STATIC_INIT_BEGIN already seen)";
       ok = false;
@@ -765,6 +785,13 @@ ones are the bracket tracker's).
       else if (ne->role & vr_var_init)
         tracker_.mark_static_init_exit_only();
       ne->role |= vr_static_init;
+      if (tracker_.function_depth() != 0 && fn_info_.has_vbases) {
+        auto &seen = static_inits_[static_cast<uint32_t>(v)];
+
+        if (seen.second == 0)
+          seen.first = fn_gid_;
+        ++seen.second;
+      }
       static_own_ids_.push_back(own);
       if (own) {
         /* Each initializer in F_GLOBALS has its own L-id space. */
@@ -806,6 +833,7 @@ ones are the bracket tracker's).
   case eop_array_ctor_begin:
   case eop_array_dtor_begin:
   case eop_new_array_size:
+  case eop_new_array_size_throw:
   case eop_new_array_cookie:
     ok = need_type(r.ops[0], false, problem);
     break;
@@ -850,7 +878,31 @@ ones are the bracket tracker's).
     }
     if (ok)
       ok = need_type(r.ops[2], false, problem);
-    if (ok && (r.ops[3].u & ECIL_DELETE_VIRTUAL)) {
+    if (ok && (r.ops[3].u & ECIL_DELETE_DESTROYING) &&
+        ((r.ops[3].u & (ECIL_DELETE_VIRTUAL | ECIL_DELETE_GLOBAL |
+                        ECIL_DELETE_ARRAY)) != 0 ||
+         r.ops[1].kind != an_operand_kind::nil)) {
+      /* A destroying operator delete destroys the object itself: no
+         destructor, and not with VIRTUAL (D0 calls it), GLOBAL or ARRAY. */
+      problem = "DELETE DESTROYING takes no destructor and none of "
+                "VIRTUAL, GLOBAL and ARRAY";
+      ok = false;
+    } else if (ok && (r.ops[3].u & ECIL_DELETE_GLOBAL) &&
+        !(r.ops[3].u & ECIL_DELETE_VIRTUAL)) {
+      problem = "DELETE GLOBAL needs VIRTUAL";
+      ok = false;
+    } else if (ok && (r.ops[3].u & ECIL_DELETE_GLOBAL)) {
+      uint32_t slot = 0;
+
+      /* ::delete of a polymorphic object: D1 is called through the vtable
+         and g_delete_fn is the global operator delete. */
+      if (!operand_id(r.ops[1], w) ||
+          !ids_.vslot_of(static_cast<uint32_t>(w), slot)) {
+        problem = "DELETE GLOBAL needs the virtual destructor (D1 of a "
+                  "CLASS_VFUNCS entry)";
+        ok = false;
+      }
+    } else if (ok && (r.ops[3].u & ECIL_DELETE_VIRTUAL)) {
       uint32_t d0 = 0;
       uint32_t del = 0;
 
@@ -1083,8 +1135,16 @@ Apply the reference rules of one record.
     ne = introduce(r.ops[0], gk_int, problem);
     ok = ne != nullptr;
     if (ok) {
+      uint64_t is_signed = 0;
+
       operand_u64(r.ops[1], ne->extent);
       operand_u64(r.ops[3], ne->size);
+      /* The signedness (the ABI decoder spells result types). */
+      if (r.ops[2].kind == an_operand_kind::boolean)
+        is_signed = r.ops[2].u;
+      else
+        operand_u64(r.ops[2], is_signed);
+      ne->role = is_signed != 0 ? 1 : 0;
     }
     break;
   case eop_ty_opaque:
@@ -1195,6 +1255,11 @@ Apply the reference rules of one record.
         ok = false;
       } else {
         rec->flags |= gf_complete;
+        uint64_t record_flags = 0;
+
+        operand_u64(r.ops[4], record_flags);
+        if (record_flags & ECIL_RECORD_NONTRIVIAL_DTOR)
+          rec->flags |= gf_nontrivial_dtor;
         rec->extent = w;
         rec->size = size;
         if (data_size != size)
@@ -1274,8 +1339,33 @@ Apply the reference rules of one record.
                                    static_cast<uint8_t>(fflags)};
 
             facts->fields.push_back(field);
+            /* A [[no_unique_address]] member of an empty class is zero-size:
+               it does not make the class non-empty (isZeroSize). */
+            if (!(fflags & (ECIL_FIELD_BASE | ECIL_FIELD_VIRTUAL_BASE)) &&
+                !((fflags & ECIL_FIELD_POTENTIALLY_OVERLAPPING) &&
+                  (fflags & ECIL_FIELD_EMPTY_FOR_ABI))) {
+              uint64_t width = 0;
+
+              /* A zero-width bit-field is no data member (isEmpty). */
+              if (r.ops[3].kind == an_operand_kind::nil ||
+                  !operand_u64(r.ops[3], width) || width != 0)
+                facts->has_data = true;
+            }
             if (!(fflags & ECIL_FIELD_VIRTUAL_BASE))
               facts->non_vbase_end = std::max(facts->non_vbase_end, fend);
+            if (!(fflags & ECIL_FIELD_VIRTUAL_BASE) &&
+                !(fflags & ECIL_FIELD_EMPTY_FOR_ABI)) {
+              uint64_t data_end = fend;
+
+              if ((fflags & ECIL_FIELD_BASE) && e->kind == gk_record) {
+                const a_class_facts *bf = ids_.class_facts(
+                                              static_cast<uint32_t>(v));
+
+                if (bf != nullptr && bf->complete)
+                  data_end = foffset + bf->nvsize;
+              }
+              facts->nv_data_end = std::max(facts->nv_data_end, data_end);
+            }
           }
           if (ok && (fflags & (ECIL_FIELD_BASE | ECIL_FIELD_VIRTUAL_BASE |
                                ECIL_FIELD_POTENTIALLY_OVERLAPPING)) &&
@@ -1398,6 +1488,7 @@ Apply the reference rules of one record.
       fns_.push_back(state);
       fn_info_ = a_function_info();
       fn_class_ = 0;
+      fn_gid_ = static_cast<uint32_t>(v);
       if (ne->role & (sr_complete | sr_base)) {
         fn_info_.structor = (ne->role & sr_dtor) ? 2 : 1;
         fn_info_.complete = (ne->role & sr_complete) != 0;

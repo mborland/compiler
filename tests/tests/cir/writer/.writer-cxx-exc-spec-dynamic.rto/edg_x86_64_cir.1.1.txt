@@ -1,0 +1,108 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++14 Test_name.c
+"Test_name.c", line 10: warning: dynamic exception specifications are deprecated
+  void d1() throw(int, E) { g(); }
+            ^
+
+"Test_name.c", line 11: warning: dynamic exception specifications are deprecated
+  void d2() throw(E *, const char *) { g(); }
+            ^
+
+"Test_name.c", line 13: warning: dynamic exception specifications are deprecated
+  void d4() throw(int, int, long) { g(); }
+            ^
+
+ecil 1.2 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201402 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  TY_FUNC 5 4 0 []
+  STR 5 "_Z2d1v"
+  DECL_FUNC 6 5 0 0 5
+  DECL_FUNC 6 5 0 1 5
+  STR 6 "_ZTIi"
+  DECL_ABI_DATA 7 2 1 0 0 6
+  TYPEINFO_DEF 7 0 0 nil nil
+  STR 7 "E"
+  TY_RECORD_DECL 8 0 7
+  STR 8 "e"
+  TY_RECORD_BODY 8 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 8 0
+  STR 9 "1E"
+  CLASS_MANGLE 8 9
+  CLASS_INFO 8 4 4 nil 0
+  CLASS_BASES 8 []
+  DECL_ABI_DATA 9 2 8 3 3 nil
+  STR 10 "_Z1gv"
+  DECL_FUNC 10 5 0 0 10
+  FUNC_BEGIN 6 0
+  FUNC_EH_SPEC 2 [7, 9]
+  BLOCK_BEGIN
+  CALL 10 5 0 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 11 "_Z2d2v"
+  DECL_FUNC 11 5 0 0 11
+  DECL_FUNC 11 5 0 1 11
+  STR 12 "_ZTIP1E"
+  TY_PTR 12 8
+  DECL_ABI_DATA 13 2 12 3 3 12
+  TYPEINFO_DEF 13 1 0 9 nil
+  STR 13 "_ZTIPKc"
+  STR 14 "_ZTIc"
+  TY_INT 14 8 true 1 1
+  DECL_ABI_DATA 15 2 14 0 0 14
+  TYPEINFO_DEF 15 0 0 nil nil
+  TY_PTR 16 14
+  DECL_ABI_DATA 17 2 16 0 0 13
+  TYPEINFO_DEF 17 1 1 15 nil
+  FUNC_BEGIN 11 0
+  FUNC_EH_SPEC 2 [13, 17]
+  BLOCK_BEGIN
+  CALL 10 5 0 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 15 "_Z2d3v"
+  DECL_FUNC 18 5 0 128 15
+  DECL_FUNC 18 5 0 129 15
+  FUNC_BEGIN 18 0
+  FUNC_EH_SPEC 2 []
+  BLOCK_BEGIN
+  CALL 10 5 0 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 16 "_Z2d4v"
+  DECL_FUNC 19 5 0 0 16
+  DECL_FUNC 19 5 0 1 16
+  STR 17 "_ZTIl"
+  DECL_ABI_DATA 20 2 3 0 0 17
+  TYPEINFO_DEF 20 0 0 nil nil
+  FUNC_BEGIN 19 0
+  FUNC_EH_SPEC 2 [7, 20]
+  BLOCK_BEGIN
+  CALL 10 5 0 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 7 0

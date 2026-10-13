@@ -14,6 +14,7 @@ ecil_text.cpp -- dump (binary to text) and assemble (text to binary).
 #include <cstdlib>
 #include <cstring>
 
+#include "ecil_abi_decode.h"
 #include "ecil_text.h"
 
 namespace ecil {
@@ -1275,8 +1276,18 @@ Write the text form of the stream to out.
   }
   if (result)
     result = reader.finish();
-  if (!result)
+  if (!result) {
     error = reader.error();
+  } else if (options.vtable_layouts) {
+    std::string problem;
+
+    if (!print_abi_layouts(reader.ids(), out, problem)) {
+      error.kind = an_error_kind::format;
+      error.message = "vtable layouts: " + problem;
+      error.stream_offset = reader.offset();
+      result = false;
+    }
+  }
   return result;
 }  /* dump_stream */
 

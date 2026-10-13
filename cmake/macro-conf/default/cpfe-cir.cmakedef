@@ -41,3 +41,68 @@ import <support/feature/microsoft-extensions/off>
 # Neither modules nor precompiled headers are supported yet.
 DEFAULT_MODULES_ENABLED=0
 COROUTINE_ENABLING_POSSIBLE=0
+
+# Front end behavior that must not depend on the build type.  The debug
+# build type (support/build-type/debug/base.cmakedef) sets these for
+# test builds and the release type does not, so a release cpfe-cir took the
+# defaults of src/targ_def.h and host_envir.h and behaved differently: with
+# DO_IL_LOWERING=0 the default NEW_CAN_BE_FOLDED_INTO_CTOR is TRUE, and a
+# release front end then dropped the entry that frees the storage when a
+# constructor throws (the debug build wrote it).  Each value is the one the
+# debug build has (the one the recorded expectations and the corpus ran
+# with).  The streams of the two build types must be byte-identical (the
+# poison step of edg-cir-gate-evidence checks that).  Not pinned, because
+# they are meant to differ: DEBUG, USE_EDG_NAMESPACE, OVERWRITE_FREED_MEM_
+# BLOCKS (poison), CHECKING and EXPENSIVE_CHECKING, CHECK_SWITCH_DEFAULT_
+# UNEXPECTED, ABORT_ON_INIT_COMPONENT_LEAKAGE, NEED_IL_DISPLAY, the inlining
+# hints, and the five EDG test-feature macros ADD_CHECKING_PRAGMAS_FOR_
+# INTERNAL_TESTING, INCLUDE_EDG_TEST_PRAGMAS, INCLUDE_EDG_TEST_ATTRIBUTES,
+# INCLUDE_EDG_TEST_NAMED_ADDRESS_SPACES and INCLUDE_EDG_TEST_NAMED_REGISTERS.
+# Those five now differ between the build types (the debug type has them on,
+# the release type off): a source that uses EDG test pragmas or attributes
+# behaves differently in the debug and the release cpfe-cir.  The poison step
+# shows only that no test of its sets (the C corpus, the smoke lists, cir/ and
+# the C++ corpus) uses them.
+#
+# BEFORE ANY RELEASE (M7): the pins are of two kinds.  The IL-semantic ones
+# decide what the front end writes into the stream and are kept.  The test
+# and diagnostic ones are in this file only so that the debug and release
+# front ends behave alike during development: they enable the debug
+# diagnostics defaults in the release front end, and are to be taken out
+# (restored to the release defaults of the build type) once the corpus and
+# the goldens have been recorded without them.  The language-behavior pins in
+# the middle group need a decision per macro at that time.
+
+# --- IL-semantic pins: kept.
+# Folding the allocation into the constructor, the deallocation into the
+# destructor and the array allocation into a runtime routine (the Itanium ABI
+# calls the allocation function from the new expression, and the writer
+# emits the free-on-throw cleanup from it).
+NEW_CAN_BE_FOLDED_INTO_CTOR=0
+DELETE_CAN_BE_FOLDED_INTO_DTOR=1
+NEW_AND_DELETE_FOR_ARRAY_CAN_BE_FOLDED_INTO_RUNTIME_ROUTINE=1
+# Assignment to "this" (an anachronism) requires the folding: off.
+ASSIGNMENT_TO_THIS_ALLOWED=0
+# The IL does not treat integer types of the same representation alike.
+SAME_REPR_INTS_INTERCHANGEABLE_IN_IL=0
+
+# --- Language-behavior pins: decide one by one before a release.
+PRAGMA_WEAK_ALLOWED=1
+SUPPRESS_MICROSOFT_ATTRIBUTE_PROCESSING=0
+MICROSOFT_MODE_TYPE_INFO_IN_NAMESPACE_STD=1
+INCLUDE_COMMENTS_IN_ASM_FUNC_BODY=1
+# The depth limit of constexpr calls (the release default is 512).
+DEFAULT_MAX_DEPTH_CONSTEXPR_CALL=256
+
+# --- Test and diagnostic pins: restore the release defaults before a release.
+# The five EDG test-feature macros (ADD_CHECKING_PRAGMAS_FOR_INTERNAL_TESTING
+# and the INCLUDE_EDG_TEST_* ones) are restored already: a cachegrind
+# measurement of the release cpfe-cir on the 6000-function C file showed that
+# pinning them on cost 5.7% of the front end's instructions (1,802 M against
+# 1,700 M), and they do not change the ECIL stream.  The pins that remain cost
+# nothing measurable (SEQUENCING_DIAGNOSTICS_ENABLED, ENABLE_TRANS_UNIT_TEST_
+# MODE and DEFAULT_DISPLAY_ERROR_CONTEXT_ON_CATASTROPHE: 0.02% or less
+# together), but are still to be reviewed before a release.
+ENABLE_TRANS_UNIT_TEST_MODE=1
+SEQUENCING_DIAGNOSTICS_ENABLED=1
+DEFAULT_DISPLAY_ERROR_CONTEXT_ON_CATASTROPHE=1

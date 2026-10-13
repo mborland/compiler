@@ -79,6 +79,16 @@ against.
         f->dynamic = true;
     }
   }
+  /* clang's isEmpty: no data member, no vptr, no virtual base, and every
+     base empty (the bases' bodies came first). */
+  f->empty = !f->has_data && !f->has_vptr && f->vbases.empty();
+  for (const a_class_field &field : f->fields) {
+    if (f->empty && (field.flags & ECIL_FIELD_BASE)) {
+      const a_class_facts *b = ids_.class_facts(field.type);
+
+      f->empty = b != nullptr && b->empty;
+    }
+  }
   std::sort(f->vbases.begin(), f->vbases.end());
   if (std::adjacent_find(f->vbases.begin(), f->vbases.end()) !=
       f->vbases.end()) {
@@ -267,7 +277,9 @@ CLASS_INFO(t, nvsize, nvalign, primary_idx|nil, nslots).
   }
   if (ok) {
     f->nvsize = nvsize;
+    f->nvalign = nvalign;
     f->nslots = nslots;
+    f->primary_idx = has_primary ? static_cast<int64_t>(primary) : -1;
     f->stage |= cs_info;
   }
   return ok;
@@ -298,6 +310,7 @@ CLASS_BASES(t, [(field_idx, flags)...]).
     std::vector<bool> used(f->fields.size(), false);
     std::vector<uint32_t> expected;
     std::vector<uint32_t> direct;
+    std::vector<a_class_base_entry> entries;
     uint64_t last_base = 0;
     bool have_base = false;
     size_t base_entries = 0;
@@ -329,6 +342,8 @@ CLASS_BASES(t, [(field_idx, flags)...]).
 
         used[idx] = true;
         direct.push_back(field.type);
+        entries.push_back({static_cast<uint32_t>(idx),
+                           static_cast<uint8_t>(flags)});
         if (field.flags & ECIL_FIELD_BASE) {
           if (have_base && idx < last_base) {
             problem = "CLASS_BASES: the BASE entries are in increasing "
@@ -349,8 +364,8 @@ CLASS_BASES(t, [(field_idx, flags)...]).
              only by the records that use them. */
           problem = "the layout facts (CLASS_MANGLE, CLASS_INFO, "
                     "CLASS_BASES) of class G-id " + number(field.type) +
-                    ", a dynamic class, must come before CLASS_BASES of a class "
-                    "derived from it";
+                    ", a dynamic class, must come before CLASS_BASES of a "
+                    "class derived from it";
           ok = false;
         }
         if (ok && b != nullptr)
@@ -375,6 +390,7 @@ CLASS_BASES(t, [(field_idx, flags)...]).
     }
     if (ok) {
       f->direct_bases = direct;
+      f->base_entries = entries;
       f->stage |= cs_bases;
     }
   }
@@ -412,6 +428,7 @@ CLASS_VFUNCS(t, [(g, slot, flags, sig)...]).
     uint64_t slot = 0;
     uint64_t flags = 0;
     uint64_t sig = 0;
+    std::vector<a_class_vfunc_entry> vfuncs;
 
     while (ok && next_uint_element(reader, g) &&
            next_uint_element(reader, slot) &&
@@ -432,7 +449,8 @@ CLASS_VFUNCS(t, [(g, slot, flags, sig)...]).
         ok = false;
       } else if (flags & ~static_cast<uint64_t>(ECIL_VFUNC_PURE |
                                                 ECIL_VFUNC_DELETED |
-                                                ECIL_VFUNC_IMPLICIT)) {
+                                                ECIL_VFUNC_IMPLICIT |
+                                                ECIL_VFUNC_REF_RESULT)) {
         problem = "CLASS_VFUNCS: unknown flag bits";
         ok = false;
       } else {
@@ -453,6 +471,12 @@ CLASS_VFUNCS(t, [(g, slot, flags, sig)...]).
           ok = false;
         } else {
           fn->extent = t;
+          vfuncs.push_back({static_cast<uint32_t>(g),
+                            static_cast<uint32_t>(slot),
+                            static_cast<uint8_t>(flags),
+                            static_cast<uint32_t>(sig)});
+          ids_.set_vslot(static_cast<uint32_t>(g),
+                         static_cast<uint32_t>(slot));
         }
       }
     }
@@ -471,8 +495,10 @@ CLASS_VFUNCS(t, [(g, slot, flags, sig)...]).
         ok = false;
       }
     }
-    if (ok)
+    if (ok) {
+      f->vfuncs = vfuncs;
       f->stage |= cs_vfuncs;
+    }
   }
   return ok;
 }  /* a_ref_checker::check_class_vfuncs */
@@ -506,6 +532,7 @@ CLASS_OVERRIDES(t, [(g_fn, sub_off, g_ovr, ovr_off)...]).
     uint64_t sub = 0;
     uint64_t ovr = 0;
     uint64_t ovr_off = 0;
+    std::vector<a_class_override_entry> entries;
 
     while (ok && next_uint_element(reader, fn) &&
            next_uint_element(reader, sub) && next_uint_element(reader, ovr) &&
@@ -528,6 +555,10 @@ CLASS_OVERRIDES(t, [(g_fn, sub_off, g_ovr, ovr_off)...]).
         ok = false;
       } else {
         keys.push_back(std::make_pair(fn, sub));
+        entries.push_back({static_cast<uint32_t>(fn),
+                           static_cast<int64_t>(sub),
+                           static_cast<uint32_t>(ovr),
+                           static_cast<int64_t>(ovr_off)});
       }
     }
     if (ok) {
@@ -538,8 +569,10 @@ CLASS_OVERRIDES(t, [(g_fn, sub_off, g_ovr, ovr_off)...]).
         ok = false;
       }
     }
-    if (ok)
+    if (ok) {
+      f->overrides = entries;
       f->stage |= cs_overrides;
+    }
   }
   return ok;
 }  /* a_ref_checker::check_class_overrides */
@@ -804,6 +837,20 @@ ARRAY_PARTIAL_DTOR.
                (te == nullptr || te->kind != gk_record)) {
       problem = "CATCH_PARAM copy kinds need a parameter of a record type";
       ok = false;
+    } else if (ok && (kind == ecat_reference || kind == ecat_pointer) &&
+               (te == nullptr || te->kind != gk_ptr)) {
+      problem = "CATCH_PARAM reference and pointer kinds need a parameter "
+                "of a pointer type";
+      ok = false;
+    } else if (ok && kind == ecat_scalar &&
+               (te == nullptr ||
+                (te->kind != gk_bool && te->kind != gk_int &&
+                 te->kind != gk_float && te->kind != gk_ptr &&
+                 te->kind != gk_data_member && te->kind != gk_method))) {
+      /* Arithmetic, enumeration, bool, nullptr_t (a pointer) or a pointer
+         to a data member or member function. */
+      problem = "CATCH_PARAM scalar kind needs a parameter of a scalar type";
+      ok = false;
     } else if (ok && (kind == ecat_reference_to_pointer ||
                       kind == ecat_reference_to_record_pointer)) {
       const a_gid_entry *pointee = te != nullptr && te->kind == gk_ptr
@@ -838,9 +885,20 @@ ARRAY_PARTIAL_DTOR.
   }
   case eop_throw_begin:
     ok = need_object(r.ops[0], "THROW_BEGIN", problem);
+    if (ok && operand_id(r.ops[0], v))
+      throw_types_.push_back(static_cast<uint32_t>(v));
     break;
-  case eop_throw_end:
-    ok = typeinfo_entry(r.ops[0], false, false, problem) != nullptr;
+  case eop_throw_end: {
+    const a_gid_entry *ti = typeinfo_entry(r.ops[0], false, false, problem);
+    const a_gid_entry *thrown = nullptr;
+    uint32_t thrown_gid = 0;
+
+    ok = ti != nullptr;
+    if (!throw_types_.empty()) {
+      thrown_gid = throw_types_.back();
+      throw_types_.pop_back();
+      thrown = ids_.find_gid(thrown_gid);
+    }
     if (ok && operand_id(r.ops[1], w)) {
       const a_gid_entry *d = ids_.find_gid(w);
 
@@ -850,7 +908,40 @@ ARRAY_PARTIAL_DTOR.
         ok = false;
       }
     }
+    if (ok && thrown != nullptr) {
+      /* The typeinfo is the one of the thrown type: a class by its G-id, any
+         other type by its kind (and width). */
+      const a_gid_entry *ti_type = ids_.find_gid(ti->element);
+      bool match = ti_type != nullptr;
+      bool dtor = r.ops[1].kind != an_operand_kind::nil;
+
+      if (match && thrown->kind == gk_record)
+        match = ti->element == thrown_gid;
+      else if (match)
+        match = ti_type->kind == thrown->kind &&
+                (thrown->kind == gk_ptr || thrown->kind == gk_bool ||
+                 ti_type->extent == thrown->extent);
+      if (!match) {
+        problem = "THROW_END typeinfo is not the typeinfo of the type of its "
+                  "THROW_BEGIN";
+        ok = false;
+      } else if (dtor != (thrown->kind == gk_record &&
+                          (thrown->flags & gf_nontrivial_dtor) != 0)) {
+        problem = "THROW_END has a destructor if and only if the thrown "
+                  "class has a non-trivial destructor";
+        ok = false;
+      } else if (dtor) {
+        uint32_t cls = 0;
+
+        if (!class_of_function(ids_.find_gid(w), cls) || cls != thrown_gid) {
+          problem = "THROW_END destructor is not the destructor of the "
+                    "thrown class";
+          ok = false;
+        }
+      }
+    }
     break;
+  }
   case eop_func_eh_spec: {
     an_array_reader reader = array_elements(r.ops[1]);
     uint64_t kind = 0;
@@ -1169,12 +1260,14 @@ The ECIL 1.2 records that need the id tables.
       ok = false;
     } else {
       const a_gid_entry *ft = ids_.find_gid(del->element);
+      /* The empty std::destroying_delete_t tag counts one. */
       uint64_t params = 1 + ((sflags & ECIL_STRUCTOR_DELETING_SIZED) ? 1 : 0) +
-                        ((sflags & ECIL_STRUCTOR_DELETING_ALIGNED) ? 1 : 0);
+                        ((sflags & ECIL_STRUCTOR_DELETING_ALIGNED) ? 1 : 0) +
+                        ((sflags & ECIL_STRUCTOR_DELETING_DESTROYING) ? 1 : 0);
 
       if (ft == nullptr || ft->kind != gk_func_type || ft->extent != params) {
-        problem = "STRUCTOR_DELETING flags SIZED/ALIGNED do not match the "
-                  "parameters of g_delete";
+        problem = "STRUCTOR_DELETING flags SIZED/ALIGNED/DESTROYING do not "
+                  "match the parameters of g_delete";
         ok = false;
       }
     }

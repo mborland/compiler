@@ -1,24 +1,4 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-"Test_name.c", line 24: warning: CIR back end: the body of "V" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-  W we;
-      ^
-          detected during:
-            implicit generation of "V::V() noexcept" at line 24
-            implicit generation of "W::W() noexcept" at line 24
-
-"Test_name.c", line 24: warning: CIR back end: the body of "W" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-  W we;
-      ^
-          detected during implicit generation of "W::W() noexcept" at line 24
-
-"Test_name.c", line 26: warning: CIR back end: the body of "use_failed" uses a virtual call, which the CIR back end does not support; the function is dropped
-  int use_failed() { return (int)sizeof(W) + (we.h(), 0); }
-                                                          ^
-
-Warning: CIR back end: the initializer of "we" uses a record type that is not supported, which the CIR back end does not support; the definition is dropped
-
-Warning: CIR back end: the initializer of "pw" uses a variable of a record type that is not supported, which the CIR back end does not support; the definition is dropped
-
 ecil 1.2 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
@@ -29,7 +9,7 @@ frame HEADER
   TY_INT 2 64 false 8 8
   TY_INT 3 64 true 8 8
   HDR_TARGET 1 2 nil 64 64 6
-  HDR_LANG 1 201703 12
+  HDR_LANG 1 201703 14
   HDR_PRODUCER 3 4
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
@@ -90,9 +70,9 @@ frame REGION
   DECL_FUNC 21 19 0 0 16
   STRUCTOR 20 21 0
   STR 17 "_ZN1AD1Ev"
-  DECL_FUNC 22 19 0 0 17
+  DECL_FUNC 22 19 0 128 17
   STR 18 "_ZN1AD2Ev"
-  DECL_FUNC 23 19 0 0 18
+  DECL_FUNC 23 19 0 128 18
   STRUCTOR 22 23 1
   FUNC_BEGIN 17 0
   PARAM 1 12 12 9 1
@@ -128,24 +108,24 @@ frame REGION
   TY_RECORD_BODY 26 1 1 1 12 1
   REC_FIELD 14 0 nil nil 20 0
   STR 21 "y"
-  TY_FUNC 27 4 0 [18, 18]
+  TY_PTR 27 26
+  TY_FUNC 28 4 0 [18, 18]
   STR 22 "_ZN1AC1ERKS_"
-  DECL_FUNC 28 27 0 0 22
+  DECL_FUNC 29 28 0 0 22
   STR 23 "_ZN1AC2ERKS_"
-  DECL_FUNC 29 27 0 0 23
-  STRUCTOR 28 29 0
-  TY_PTR 30 26
-  TY_FUNC 31 4 0 [30]
+  DECL_FUNC 30 28 0 0 23
+  STRUCTOR 29 30 0
+  TY_FUNC 31 4 0 [27]
   STR 24 "_ZZ12copy_capturevENUlvE_D1Ev"
-  DECL_FUNC 32 31 1 2 24
+  DECL_FUNC 32 31 1 130 24
   STR 25 "_ZZ12copy_capturevENUlvE_D2Ev"
-  DECL_FUNC 33 31 1 2 25
+  DECL_FUNC 33 31 1 130 25
   STRUCTOR 32 33 1
-  TY_FUNC 34 14 0 [30]
+  TY_FUNC 34 14 0 [27]
   STR 26 "_ZZ12copy_capturevENUlvE_clEv"
   DECL_FUNC 35 34 1 2 26
-  DECL_FUNC 32 31 1 3 24
-  DECL_FUNC 33 31 1 3 25
+  DECL_FUNC 32 31 1 131 24
+  DECL_FUNC 33 31 1 131 25
   DECL_FUNC 35 34 1 3 26
   FUNC_BEGIN 25 0
   BLOCK_BEGIN
@@ -160,12 +140,25 @@ frame REGION
   CLEANUP_BODY
   LOCAL 2 26 21 0 0
   LREF 2
+  DUP
+  ADDR
+  MATERIALIZE_TEMP 3 27
+  DROP
   AGG_INIT_BEGIN 26 0
   AGG_SEL 0
   ADDR
   LREF 1
   ADDR
-  CALL 28 27 2 0
+  CALL 29 28 2 0
+  CLEANUP_BEGIN 2 nil 1
+  LREF 3
+  LOAD 0
+  DEREF
+  FIELD 26 0
+  ADDR
+  CALL 22 19 1 0
+  CLEANUP_BODY
+  CLEANUP_END
   AGG_INIT_END
   CLEANUP_BEGIN 3 nil 0
   LREF 2
@@ -173,18 +166,18 @@ frame REGION
   CALL 32 31 1 0
   CLEANUP_BODY
   FULLEXPR_BEGIN
-  LOCAL 3 14 nil 0 2
-  LREF 3
+  LOCAL 4 14 nil 0 2
+  LREF 4
   LREF 2
   ADDR
   CALL 35 34 1 0
   STORE 2 0
   CLEANUP_BEGIN 3 nil 0
-  LREF 3
+  LREF 4
   ADDR
   CALL 22 19 1 0
   CLEANUP_BODY
-  LREF 3
+  LREF 4
   FIELD 14 0
   LOAD 0
   CAST 4 1
@@ -193,7 +186,8 @@ frame REGION
   BLOCK_END
   FUNC_END 0
   FUNC_BEGIN 33 0
-  PARAM 1 30 30 9 1
+  PARAM 1 27 27 9 1
+  FUNC_EH_SPEC 1 []
   CLEANUP_BEGIN 3 nil 0
   LREF 1
   LOAD 0
@@ -207,7 +201,7 @@ frame REGION
   BLOCK_END
   FUNC_END 0
   FUNC_BEGIN 35 0
-  PARAM 1 30 30 9 1
+  PARAM 1 27 27 9 1
   BLOCK_BEGIN
   RETURN_SLOT
   ADDR
@@ -216,7 +210,7 @@ frame REGION
   DEREF
   FIELD 26 0
   ADDR
-  CALL 28 27 2 0
+  CALL 29 28 2 0
   RETURN_FROM_SLOT
   BLOCK_END
   FUNC_END 0
@@ -434,116 +428,196 @@ frame REGION
   RETURN_FROM_SLOT
   BLOCK_END
   FUNC_END 0
-frame REGION supp
+frame REGION
   STR 50 "V"
   TY_RECORD_DECL 68 0 50
   TY_PTR 69 68
   TY_FUNC 70 4 0 [69]
-  TY_OPAQUE 71 8 8
+  TY_VPTR 71
   TY_RECORD_BODY 68 8 8 8 4 1
   REC_FIELD 71 0 nil nil nil 1
-  STR 51 "_ZN1VC1Ev"
-  DECL_FUNC 72 70 0 2 51
-  STR 52 "_ZN1VC2Ev"
-  DECL_FUNC 73 70 0 2 52
+  STR 51 "1V"
+  CLASS_MANGLE 68 51
+  CLASS_INFO 68 8 8 nil 1
+  CLASS_BASES 68 []
+  STR 52 "_ZN1VC1Ev"
+  DECL_FUNC 72 70 0 130 52
+  STR 53 "_ZN1VC2Ev"
+  DECL_FUNC 73 70 0 130 53
   STRUCTOR 72 73 0
-  DECL_FUNC 72 70 3 67 51
-  DECL_FUNC 73 70 3 67 52
-  DECL_FUNC 72 70 0 34 51 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
-  DECL_FUNC 73 70 0 34 52 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
-frame REGION supp
-  STR 53 "W"
-  TY_RECORD_DECL 74 0 53
-  TY_PTR 75 74
-  TY_FUNC 76 4 0 [75]
-  STR 54 "_ZN1WC1Ev"
-  DECL_FUNC 77 76 0 2 54
-  STR 55 "_ZN1WC2Ev"
-  DECL_FUNC 78 76 0 2 55
-  STRUCTOR 77 78 0
-  DECL_FUNC 77 76 3 67 54
-  DECL_FUNC 78 76 3 67 55
-  DECL_FUNC 77 76 0 34 54 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
-  DECL_FUNC 78 76 0 34 55 supp{13: "a constructor or destructor of a class with virtual functions or virtual bases"}
-frame REGION supp
-  STR 56 "_Z10use_failedv"
-  DECL_FUNC 79 24 0 0 56
-  DECL_FUNC 79 24 0 1 56
-  DECL_FUNC 79 24 0 32 56 supp{13: "a virtual call"}
-frame REGION
-  STR 57 "N"
-  TY_RECORD_DECL 80 0 57
-  TY_PTR 81 80
-  TY_FUNC 82 81 0 []
-  STR 58 "v"
-  TY_RECORD_BODY 80 4 4 4 0 1
-  REC_FIELD 1 0 nil nil 58 0
-  STR 59 "_Z6make_nv"
-  DECL_FUNC 83 82 0 0 59
-  DECL_FUNC 83 82 0 1 59
-  TY_PTR 84 4
-  TY_FUNC 85 84 0 [2]
-  STR 60 "_ZN1NnwEm"
-  DECL_FUNC 86 85 0 0 60
-  TY_FUNC 87 4 0 [81]
-  STR 61 "_ZN1NC1Ev"
-  DECL_FUNC 88 87 0 0 61
-  STR 62 "_ZN1NC2Ev"
-  DECL_FUNC 89 87 0 0 62
-  STRUCTOR 88 89 0
-  FUNC_BEGIN 83 0
+  DECL_FUNC 72 70 3 195 52
+  DECL_FUNC 73 70 3 195 53
+  TY_FUNC 74 1 0 [69]
+  STR 54 "_ZN1V1hEv"
+  DECL_FUNC 75 74 0 0 54
+  CLASS_VFUNCS 68 [75, 0, 0, 1]
+  CLASS_OVERRIDES 68 []
+  FUNC_BEGIN 73 0
+  PARAM 1 69 69 9 1
+  FUNC_EH_SPEC 1 []
+  VPTR_INIT
   BLOCK_BEGIN
-  CONST_INT 2 4
-  CALL 86 85 1 0
-  CAST 11 81
-  DUP
-  CALL 88 87 1 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 55 "W"
+  TY_RECORD_DECL 76 0 55
+  TY_PTR 77 76
+  TY_FUNC 78 4 0 [77]
+  TY_RECORD_BODY 76 8 8 8 4 1
+  REC_FIELD 68 0 nil nil nil 67
+  STR 56 "1W"
+  CLASS_MANGLE 76 56
+  CLASS_INFO 76 8 8 0 1
+  CLASS_BASES 76 [0, 1]
+  STR 57 "_ZN1WC1Ev"
+  DECL_FUNC 79 78 0 130 57
+  STR 58 "_ZN1WC2Ev"
+  DECL_FUNC 80 78 0 130 58
+  STRUCTOR 79 80 2
+  DECL_FUNC 79 78 3 195 57
+  DECL_FUNC 80 78 3 195 58
+  CLASS_VFUNCS 76 []
+  CLASS_OVERRIDES 76 []
+  FUNC_BEGIN 79 0
+  PARAM 1 77 77 9 1
+  FUNC_EH_SPEC 1 []
+  MEMINIT_BEGIN 0 0 1
+  LREF 1
+  LOAD 0
+  VBASE_CAST 76 68 3
+  CALL 73 70 1 0
+  MEMINIT_END
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 80 0
+  PARAM 1 77 77 9 1
+  FUNC_EH_SPEC 1 []
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 59 "_Z10use_failedv"
+  DECL_FUNC 81 24 0 0 59
+  DECL_FUNC 81 24 0 1 59
+  STR 60 "we"
+  DECL_VAR 82 76 0 0 0 60
+  FUNC_BEGIN 81 0
+  BLOCK_BEGIN
+  CONST_INT 1 8
+  GREF 82
+  ADDR
+  VBASE_CAST 76 68 1
+  CALL 75 74 1 4
+  DROP
+  CONST_INT 1 0
+  ADD 1
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
 frame REGION
-  STR 63 "_Z5del_nP1N"
-  DECL_FUNC 90 87 0 0 63
-  DECL_FUNC 90 87 0 1 63
-  STR 64 "n"
-  TY_FUNC 91 4 0 [84]
+  STR 61 "N"
+  TY_RECORD_DECL 83 0 61
+  TY_PTR 84 83
+  TY_FUNC 85 84 0 []
+  STR 62 "v"
+  TY_RECORD_BODY 83 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 62 0
+  STR 63 "_Z6make_nv"
+  DECL_FUNC 86 85 0 0 63
+  DECL_FUNC 86 85 0 1 63
+  TY_PTR 87 4
+  TY_FUNC 88 87 0 [2]
+  STR 64 "_ZN1NnwEm"
+  DECL_FUNC 89 88 0 0 64
+  TY_FUNC 90 4 0 [87]
   STR 65 "_ZN1NdlEPv"
-  DECL_FUNC 92 91 0 0 65
-  FUNC_BEGIN 90 0
-  PARAM 1 81 81 64 0
+  DECL_FUNC 91 90 0 128 65
+  TY_FUNC 92 4 0 [84]
+  STR 66 "_ZN1NC1Ev"
+  DECL_FUNC 93 92 0 0 66
+  STR 67 "_ZN1NC2Ev"
+  DECL_FUNC 94 92 0 0 67
+  STRUCTOR 93 94 0
+  FUNC_BEGIN 86 0
+  BLOCK_BEGIN
+  LOCAL 1 2 nil 0 0
+  LREF 1
+  CONST_INT 2 4
+  STORE 2 0
+  LOCAL 2 87 nil 0 0
+  LREF 2
+  LREF 1
+  LOAD 0
+  CALL 89 88 1 0
+  STORE 2 0
+  CLEANUP_BEGIN 2 nil 1
+  LREF 2
+  LOAD 0
+  CALL 91 90 1 0
+  CLEANUP_BODY
+  LREF 2
+  LOAD 0
+  CAST 11 84
+  DUP
+  CALL 93 92 1 0
+  CLEANUP_END
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 68 "_Z5del_nP1N"
+  DECL_FUNC 95 92 0 0 68
+  DECL_FUNC 95 92 0 1 68
+  STR 69 "n"
+  FUNC_BEGIN 95 0
+  PARAM 1 84 84 69 0
   BLOCK_BEGIN
   LREF 1
   LOAD 0
-  DELETE 92 nil 80 0
+  DELETE 91 nil 83 0
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame GLOBALS supp
+frame GLOBALS
   DECL_VAR 54 1 0 33 0 38
   DECL_VAR 53 49 0 33 0 37
-  STR 66 "w"
-  DECL_VAR 93 59 0 1 0 66
-  STR 67 "zp"
-  DECL_VAR 94 62 0 1 0 67
+  STR 70 "w"
+  DECL_VAR 96 59 0 1 0 70
+  STR 71 "zp"
+  DECL_VAR 97 62 0 1 0 71
   C_AGG_BEGIN 62
   C_SEL 0
   C_INT 63 0
   C_SEL 1
   C_INT 1 0
   C_AGG_END
-  VAR_INIT 94
-  STR 68 "we"
-  DECL_VAR 95 74 0 0 0 68
-  DECL_VAR 95 74 0 64 0 68 supp{13: "a record type that is not supported"}
-  STR 69 "pw"
-  DECL_VAR 96 75 0 1 0 69
-  C_ADDR 75 95 0
-  VAR_INIT 96
-  DECL_VAR 96 75 0 64 0 69 supp{13: "a variable of a record type that is not supported"}
-  STATIC_INIT_BEGIN 93 0
-  GREF 93
+  VAR_INIT 97
+  DECL_VAR 82 76 0 1 0 60
+  STR 72 "pw"
+  DECL_VAR 98 77 0 1 0 72
+  C_ADDR 77 82 0
+  VAR_INIT 98
+  DECL_ABI_DATA 99 2 68 0 0 nil
+  DECL_ABI_DATA 100 0 68 0 0 nil
+  DECL_ABI_DATA 101 2 76 3 3 nil
+  DECL_ABI_DATA 102 0 76 3 3 nil
+  DECL_ABI_DATA 103 1 76 3 3 nil
+  STATIC_INIT_BEGIN 96 0
+  GREF 96
   ADDR
   CALL 64 61 1 0
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 82 0
+  GREF 82
+  ADDR
+  CALL 79 78 1 0
   STATIC_INIT_END
 frame NAMES
 frame END

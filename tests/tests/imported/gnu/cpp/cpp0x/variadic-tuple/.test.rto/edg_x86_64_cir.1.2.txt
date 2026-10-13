@@ -1,2 +1,0 @@
-./a.out
-a.out: ./cpp0x/variadic-tuple.C:289: int main(): Assertion `t3a == t3b' failed.

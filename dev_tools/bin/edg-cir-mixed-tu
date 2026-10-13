@@ -38,7 +38,11 @@ have:
 
   flags         extra compiler flags, one line (e.g. -std=c++14)
   expected.out  the expected standard output (default: the all-ref run's)
-  expected.rc   the expected exit status (default: the all-ref run's)
+  expected.rc   the expected exit status (default: the all-ref run's); a
+                negative one is a signal (-6: an abort, which the case
+                then expects: a negative case)
+  ref_*.cpp     more files, always compiled with the reference compiler
+                (a driver that cannot be compiled by cpfe-cir yet)
   xfail         the directions (e.g. "ref+ours ours+ref") that fail today (an
                 M4 case lists the directions that cannot work yet); they are
                 reported XFAIL (expected failure) and, if they pass, XPASS
@@ -95,8 +99,16 @@ class Toolchain:
     self.fe_build = fe_build
     self.ours_cxx = ours_cxx
     self.env = dict(os.environ)
+    # What the link line carries for the objects of cpfe-cir: the CIR runtime
+    # library (edg_cir_rt defines std::type_info's operator==, before, name,
+    # which GCC 13+ libstdc++ does not export), as the eccp configuration of
+    # the cir-env base does for its own link step.
+    self.link_flags: List[str] = []
     if not ours_cxx:
       exports = load_exports(root / fe_build / 'environment.sh')
+      libdir = exports.get('EDG_CIR_RT_LIBDIR', '')
+      if libdir and (Path(libdir) / 'libedg_cir_rt.a').exists():
+        self.link_flags = [f"-L{libdir}", '-ledg_cir_rt']
       self.env.update(exports)
       self.env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
       self.env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
@@ -177,14 +189,19 @@ def build_and_run(toolchain: Toolchain, case: Case, work: Path, who: str,
   parts = {'all-ref': ('ref', 'ref'), 'ref+ours': ('ref', 'ours'),
            'ours+ref': ('ours', 'ref'), 'all-ours': ('ours', 'ours')}[who]
   objects = []
-  for side, name in zip(parts, ('a.cpp', 'b.cpp')):
+  # a.cpp and b.cpp as the direction says; every ref_*.cpp (a driver that
+  # uses typeid or catches exceptions, say) always with the reference.
+  sources = [(side, name) for side, name in zip(parts, ('a.cpp', 'b.cpp'))]
+  sources += [('ref', f.name) for f in sorted(case.path.glob('ref_*.cpp'))]
+  for side, name in sources:
     ok, output, obj = toolchain.compile(side, case.path / name, work,
                                         case.flags)
     if not ok:
       return ('ours' if side == 'ours' else 'ref'), 1, output[-1500:]
     objects.append(str(obj))
   exe = work / f"{who.replace('+', '-')}.exe"
-  code, output = run([toolchain.link, *objects, '-o', str(exe)], work,
+  code, output = run([toolchain.link, *objects, *toolchain.link_flags, '-o',
+                      str(exe)], work,
                      toolchain.env)
   if code != 0:
     return 'link', code, output[-1500:]
@@ -221,10 +238,11 @@ def run_case(toolchain: Toolchain, case: Case, directions: List[str],
         result, detail = 'REF-FAIL', first_error(text)
       elif stage == 'link':
         result, detail = 'LINK', first_error(text)
+      elif (text, code) == (want_out, want_rc):
+        # Also a crash that the case expects (expected.rc -6: an abort).
+        result, detail = 'PASS', ''
       elif code in (124,) or code < 0 or code >= 128:
         result, detail = 'RUN', f"status {code}: {text[-200:]!r}"
-      elif (text, code) == (want_out, want_rc):
-        result, detail = 'PASS', ''
       else:
         same = 'equal' if text == want_out else 'differs'
         result, detail = 'DIFF', (f"status {code} (want {want_rc}); output "
@@ -350,6 +368,42 @@ class SelfTest(unittest.TestCase):
     (case.path / 'xfail').write_text('ref+ours ours+ref')
     rows = run_case(toolchain, case, list(DIRECTIONS), 30)
     self.assertEqual([r for _, r, _ in rows], ['XFAIL', 'XFAIL'])
+
+  def test_ref_files_and_an_expected_abort(self) -> None:
+    # ref_main.cpp holds main and is always compiled by the reference; the
+    # case expects an abort (a negative case), which is a PASS, and a run
+    # that dies when it should not is RUN.
+    case = self.make_case(
+      'neg', '#include "common.h"\nint twice(int x) { return 2 * x; }\n',
+      '#include "common.h"\nint other() { return twice(1); }\n',
+      expected_rc = '-6\n')
+    (case.path / 'ref_main.cpp').write_text(
+      '#include <cstdlib>\n#include "common.h"\n'
+      'int main() { twice(1); std::abort(); }\n')
+    rows = run_case(self.toolchain(), case, list(DIRECTIONS), 30)
+    self.assertEqual([(d, r) for d, r, _ in rows],
+                     [('ref+ours', 'PASS'), ('ours+ref', 'PASS')])
+    # Without expected.rc the baseline itself aborts and is the expectation.
+    (case.path / 'expected.rc').unlink()
+    rows = run_case(self.toolchain(), case, list(DIRECTIONS), 30)
+    self.assertEqual([r for _, r, _ in rows], ['PASS', 'PASS'])
+
+  def test_link_line_carries_the_cir_runtime(self) -> None:
+    libdir = self.root / 'rtlib'
+    libdir.mkdir()
+    (libdir / 'libedg_cir_rt.a').write_text('')
+    build = self.root / 'build'
+    build.mkdir()
+    (build / 'environment.sh').write_text(
+      f'export EDG_CIR_RT_LIBDIR="{libdir}"\nexport CPFE_CIR="/x/cpfe"\n')
+    toolchain = Toolchain('g++', 'g++', 'c++17', self.root, 'build')
+    self.assertEqual(toolchain.link_flags,
+                     [f"-L{libdir}", '-ledg_cir_rt'])
+    # No library in the directory (or a host compiler as "ours"): no flags.
+    (libdir / 'libedg_cir_rt.a').unlink()
+    self.assertEqual(Toolchain('g++', 'g++', 'c++17', self.root,
+                               'build').link_flags, [])
+    self.assertEqual(self.toolchain().link_flags, [])
 
   def test_find_cases(self) -> None:
     self.make_case('c1', '', '')

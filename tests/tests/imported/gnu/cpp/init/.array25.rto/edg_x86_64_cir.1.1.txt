@@ -1,13 +1,4 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
-"Test_name.c", line 13: warning: CIR back end: the body of "f" uses a virtual function, which the CIR back end does not support; the function is dropped
-  void elt::f() { }
-                  ^
-
-"Test_name.c", line 22: warning: CIR back end: the body of "elt" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-    : buffer()
-            ^
-          detected during implicit generation of "elt::elt() noexcept" at line 22
-
 "Test_name.c", line 23: warning: CIR back end: the body of "foo" uses the value-initialization of an array of objects, which the CIR back end does not support; the function is dropped
   {}
    ^
@@ -16,14 +7,8 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
     foo *f = new (heap) foo ();
              ^
 
-Warning: CIR back end: the unused definition of '_ZN3eltC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN3eltC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Error: CIR back end: the definition of '_ZN3elt1fEv' was dropped: it uses a construct the CIR back end cannot express: a virtual function
-
 Error: CIR back end: the definition of '_ZN3fooC1Ev' was dropped: it uses a construct the CIR back end cannot express: the value-initialization of an array of objects (and it is referenced)
 
 Error: CIR back end: the definition of '_ZN3fooC2Ev' was dropped: it uses a construct the CIR back end cannot express: the value-initialization of an array of objects (and it is referenced)
 
-3 errors detected in the compilation of "Test_name.c".
+2 errors detected in the compilation of "Test_name.c".

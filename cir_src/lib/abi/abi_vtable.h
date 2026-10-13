@@ -92,13 +92,16 @@ struct a_thunk_info {
   a_adjustment  return_adj;
   a_fn_id       method = no_id;
   a_class_id    this_class = no_id;
+  bool          ref_result = false;   /* The result adjusted is a reference:
+                                         no null check. */
 
   bool is_empty() const
     { return this_adj.is_empty() && return_adj.is_empty() && method == no_id; }
   bool operator==(const a_thunk_info &o) const
     {
       return this_adj == o.this_adj && return_adj == o.return_adj &&
-             method == o.method && this_class == o.this_class;
+             method == o.method && this_class == o.this_class &&
+             ref_result == o.ref_result;
     }
 };  /* a_thunk_info */
 
@@ -203,6 +206,10 @@ public:
   /* Every function f overrides, directly or not (the facts' lists, which are
      the whole set). */
 
+  a_fn_id overridden_in(a_fn_id f, a_class_id owner);
+  /* The function of class `owner` that f overrides (no_id if none), by
+     binary search in an index of f's overridden functions built once. */
+
   const a_class_db &db() const
     { return db_; }
 
@@ -220,6 +227,8 @@ private:
   const a_class_db                                 &db_;
   std::map<a_class_id, a_vtable_info>              info_;
   std::map<a_fn_id, a_fn_id>                       original_;
+  std::vector<std::vector<std::pair<a_class_id, a_fn_id>>>  owner_index_;
+  std::vector<char>                                owner_index_done_;
   std::map<std::pair<a_class_id, a_class_id>, int64_t>  vbase_oo_;
   a_vtable_info                                    empty_info_;
   std::map<a_fn_id, std::vector<a_fn_id>>          overridden_closure_;

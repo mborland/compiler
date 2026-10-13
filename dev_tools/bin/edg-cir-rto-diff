@@ -33,9 +33,18 @@ Usage:
   edg-cir-rto-diff                       # working tree against HEAD
   edg-cir-rto-diff --rev 3592b2b3f7      # against another revision
   edg-cir-rto-diff --expect expected.txt # attribute the status changes
+  edg-cir-rto-diff --auto                # attribute the tests that now pass
   edg-cir-rto-diff --list status         # list the tests of one class
   edg-cir-rto-diff --ignore cir/writer/  # count (not review) a directory
   edg-cir-rto-diff --self-test
+
+With --auto, a recording that only lost "CIR back end ... cannot express"
+paragraphs about M4 features (and gained nothing) is attributed to the slice
+of the feature, and a test that did not pass before and passes now is attributed
+by what its old recording said failed (the feature of edg-cir-summary and
+its M4 slice, for example "S1 polymorphism" for "uses a virtual function");
+the table at the end counts them per slice.  A test that stopped passing, or
+whose status changed in any other way, is never attributed automatically.
 
 The expect file has one line per test: `<suite>/<path> <reason>` (the path as
 in the log, with the suite directory first); `#` starts a comment.  A status
@@ -44,6 +53,9 @@ run (exit status 1), as does a `content` change.  Exit status 2: setup problem.
 '''
 
 import argparse
+import importlib.machinery
+import importlib.util
+import os
 import re
 import subprocess
 import sys
@@ -103,10 +115,145 @@ def git_show(rev: str, path: str) -> Optional[str]:
 
 
 class Change:
-  def __init__(self, kind: str, name: str, detail: str = '') -> None:
+  def __init__(self, kind: str, name: str, detail: str = '',
+               old: str = '', new: str = '') -> None:
     self.kind = kind
     self.name = name
     self.detail = detail
+    self.old = old
+    self.new = new
+    self.old_text = ''
+    self.new_text = ''
+    self.suite = ''
+    self.key: Tuple[str, str, str] = ('', '', '')
+
+
+def reference_status(suite: str, key: Tuple[str, str, str]) -> str:
+  '''The recorded status of a case in the reference configuration
+  (tests/expectations/edg_x86_64): "PASS" if the log does not list it.'''
+  path = Path('tests/expectations/edg_x86_64') / f"{suite}.log"
+  if path not in _REFERENCE_LOGS:
+    _REFERENCE_LOGS[path] = parse_log(path.read_text(errors = 'replace')
+                                      if path.exists() else '')
+  return _REFERENCE_LOGS[path].get(key, 'PASS')
+
+
+_REFERENCE_LOGS: Dict[Path, Dict[Tuple[str, str, str], str]] = {}
+
+
+def auto_reference(old: str, new: str, reference: str) -> Optional[str]:
+  '''The attribution of a status change that is not a pass: a test that did
+  not pass before and fails in the reference configuration too only got
+  further in ours ("newly compiling, also failing in the reference").  A
+  change from PASS to a failure, or to a failure that the reference does
+  not have, is not attributed (None).'''
+  if old == 'PASS' or new == 'PASS' or reference == 'PASS':
+    return None
+  return (f"newly compiling, also failing in the reference ({reference})"
+          if old.startswith('FAIL(COMPILE)') and not new.startswith(
+            'FAIL(COMPILE)') else
+          f"also failing in the reference ({reference})")
+
+
+def load_summary():
+  '''The edg-cir-summary module (a script without a .py suffix).'''
+  path = Path(__file__).resolve().parent / 'edg-cir-summary'
+  loader = importlib.machinery.SourceFileLoader('edg_cir_summary', str(path))
+  spec = importlib.util.spec_from_loader('edg_cir_summary', loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+_COUNT_LINE = re.compile(r'^\d+ (errors?|warnings?) detected', re.M)
+
+
+def paragraphs(text: str) -> List[str]:
+  '''The blank-line separated paragraphs of a recording, without the
+  "N errors detected in the compilation" count lines.'''
+  text = _COUNT_LINE.sub('', text)
+  # The first line is the command ("eccp ...") of the recording; it shares its
+  # paragraph with the first diagnostic.
+  if text.startswith('eccp ') or text.startswith('fe_only '):
+    text = text.partition('\n')[2]
+  return [re.sub(r'\s+', ' ', p).strip() for p in re.split(r'\n\s*\n', text)
+          if p.strip()]
+
+
+def auto_content(summary, change: Change) -> Optional[str]:
+  '''The attribution of a recording that only lost diagnostics of the CIR
+  back end about a feature of M4 that is supported now: the M4 slice of the
+  feature (None if the recording gained anything, or lost another kind of
+  paragraph, or the feature is not one of M4).'''
+  old, new = paragraphs(change.old_text), paragraphs(change.new_text)
+  remaining = list(new)
+  removed = []
+  for paragraph in old:
+    if paragraph in remaining:
+      remaining.remove(paragraph)
+    else:
+      removed.append(paragraph)
+  def unsupported(paragraph: str) -> bool:
+    return 'CIR back end' in paragraph and bool(re.search(
+      r'cannot express|does not support|not supported', paragraph))
+  def feature_of(paragraph: str) -> str:
+    return summary.cxx_feature(summary.TestResult(
+      '', '', 'UNSUPPORTED', paragraph))
+  if not removed:
+    return None
+  if not remaining:
+    # Only diagnostics were lost.
+    slices = set()
+    for paragraph in removed:
+      if not unsupported(paragraph) or not summary.m4_slice(
+          feature_of(paragraph)):
+        return None
+      slices.add(summary.m4_slice(feature_of(paragraph)))
+    return '+'.join(sorted(slices))
+  # Diagnostics of unsupported constructs were replaced by others of the
+  # same kind (a test that still uses another feature that is not supported).
+  if all(unsupported(p) for p in removed) and all(
+      unsupported(p) for p in remaining):
+    slices = {summary.m4_slice(feature_of(p)) for p in removed} - {''}
+    return ('unsupported-construct diagnostics changed (' +
+            '+'.join(sorted(slices)) + ' lost)') if slices else None
+  return None
+
+
+_BASE_CLAUSE = re.compile(
+  r'\b(?:class|struct)\s+\w+\s*(?:<[^>{;]*>)?\s*:\s*([^{;]*)\{')
+
+
+def has_virtual_base(test: str) -> bool:
+  '''Does the source of a test (tests/tests/<test>) name a virtual base?'''
+  try:
+    text = Path('tests/tests', test).read_text(errors = 'replace')
+  except OSError:
+    return False
+  return any(re.search(r'\bvirtual\b', m.group(1))
+             for m in _BASE_CLAUSE.finditer(text))
+
+
+def old_feature(summary, rev: str, config: str, test: str,
+                old_status: str) -> str:
+  '''What the old recording of a test says failed: the M4 slice of its
+  feature, else the feature, else the bucket (edg-cir-summary classes).'''
+  directory, base = os.path.split(test)
+  # The recording directory is named after the test without .sft.cpp.
+  stem = re.sub(r'(\.sft)?\.(cpp|cc|cxx|c|C)$', '', base)
+  prefix = f"tests/tests/{directory}/.{stem}.rto/"
+  files = [f for f in git('ls-tree', '-r', '--name-only', rev, prefix,
+                          check = False).splitlines()
+           if os.path.basename(f).startswith(config + '.')]
+  text = '\n'.join(git_show(rev, f) or '' for f in sorted(files))
+  bucket, message = summary.classify(old_status, text, '')
+  feature = summary.cxx_feature(summary.TestResult(
+    test, old_status, bucket, message))
+  label = summary.m4_slice(feature) or feature if feature != 'other' \
+    else f"{bucket}: {message[:60]}"
+  if label == 'S1 polymorphism' and has_virtual_base(test):
+    label = 'S2 virtual bases (the test has a virtual base)'
+  return label
 
 
 def status_changes(rev: str) -> Dict[str, List[Change]]:
@@ -124,9 +271,12 @@ def status_changes(rev: str) -> Dict[str, List[Change]]:
     for key in sorted(set(old) | set(new)):
       if old.get(key) != new.get(key):
         name = f"{suite}/{key[0]} [{key[1]}] {key[2]}"
-        result[config].append(Change(
+        change = Change(
           'status', name, f"{old.get(key, '(pass)')} -> "
-                          f"{new.get(key, '(pass)')}"))
+                          f"{new.get(key, '(pass)')}",
+          old.get(key, 'PASS'), new.get(key, 'PASS'))
+        change.suite, change.key = suite, key
+        result[config].append(change)
   return result
 
 
@@ -158,9 +308,47 @@ def recording_changes(rev: str) -> Dict[str, List[Change]]:
         result[config].append(Change('text-only', name))
       else:
         diff = [l for l in new.splitlines() if l not in set(old.splitlines())]
-        result[config].append(Change('content', name, ' | '.join(
-          l.strip()[:80] for l in diff[:3])))
+        change = Change('content', name, ' | '.join(
+          l.strip()[:80] for l in diff[:3]))
+        change.old_text, change.new_text = old, new
+        result[config].append(change)
   return result
+
+
+def read_documented(path: str) -> List[Tuple[str, str, str, str]]:
+  '''The documented gaps of a file, one per line:
+
+    <suite>/<path> | <variant> | <status> | <reason>
+
+  as (test, variant, expected status, reason).  The variant is the option
+  list of the case as in the status log (-DTEST_NUMBER=2 --strict), the
+  status the one the case has now (FAIL(COMPILE), FAIL, ...).'''
+  rows: List[Tuple[str, str, str, str]] = []
+  if path and Path(path).exists():
+    for number, line in enumerate(Path(path).read_text().splitlines(), 1):
+      line = line.strip()
+      if not line or line.startswith('#'):
+        continue
+      parts = [p.strip() for p in line.split('|', 3)]
+      if len(parts) != 4 or not parts[0] or not parts[1] or not parts[2]:
+        raise ValueError(f"{path}:{number}: need <test> | <variant> | "
+                         f"<status> | <reason>")
+      rows.append((parts[0], parts[1], parts[2], parts[3]))
+  return rows
+
+
+def documented_reason(rows: List[Tuple[str, str, str, str]], test: str,
+                      variant: str, status: str) -> Optional[str]:
+  '''The reason of the documented gap that covers a case, if any: the test
+  is the same, the variant has exactly the same options (token by token, so
+  that -DTEST_NUMBER=2 is not -DTEST_NUMBER=20) and the status now is the
+  documented one.  Another status of a listed case (a crash, say) is not
+  covered.'''
+  for name, text, expected, reason in rows:
+    if name == test and text.split() == variant.split() and \
+        expected == status:
+      return reason
+  return None
 
 
 def read_expect(path: str) -> Dict[str, str]:
@@ -194,6 +382,83 @@ class SelfTest(unittest.TestCase):
                                       ('c.cpp', 'rp', '-DT=1 --c++11'):
                                       'PASS'})
 
+  def test_auto_reference(self) -> None:
+    # It compiled badly before, compiles now and fails like the reference.
+    self.assertEqual(
+      auto_reference('FAIL(COMPILE)', 'FAIL', 'FAIL'),
+      'newly compiling, also failing in the reference (FAIL)')
+    self.assertEqual(
+      auto_reference('FAIL', 'FAIL--OUTPUT MISMATCH', 'FAIL'),
+      'also failing in the reference (FAIL)')
+    # A change to a failure that the reference does not have, and a test that
+    # stopped passing, are never attributed.
+    self.assertIsNone(auto_reference('FAIL(COMPILE)', 'FAIL', 'PASS'))
+    self.assertIsNone(auto_reference('PASS', 'FAIL', 'FAIL'))
+    self.assertIsNone(auto_reference('FAIL', 'PASS', 'FAIL'))
+
+  def test_documented_gaps(self) -> None:
+    rows = [('edg/rma/init33.sft.cpp', '-DTEST_NUMBER=2', 'FAIL(COMPILE)',
+             'why a'),
+            ('edg/rma/eh40.sft.cpp', '-DTEST_NUMBER=1 --strict', 'FAIL',
+             'why b')]
+    self.assertEqual(documented_reason(
+      rows, 'edg/rma/init33.sft.cpp', '-DTEST_NUMBER=2', 'FAIL(COMPILE)'),
+      'why a')
+    self.assertEqual(documented_reason(
+      rows, 'edg/rma/eh40.sft.cpp', '-DTEST_NUMBER=1  --strict', 'FAIL'),
+      'why b')
+    # Another status of a listed case (a crash, a new failure) is not
+    # covered.
+    for status in ('ABORT', 'FAIL', 'PASS', 'FAIL(COMPILE)--OUTPUT MISMATCH'):
+      self.assertIsNone(documented_reason(
+        rows, 'edg/rma/init33.sft.cpp', '-DTEST_NUMBER=2', status), status)
+    # Another variant of the same test is not covered, and neither is the
+    # variant that only starts with the documented text.
+    for variant in ('-DTEST_NUMBER=1', '-DTEST_NUMBER=20',
+                    '-DTEST_NUMBER=2 --c++11', '-DTEST_NUMBER=21', ''):
+      self.assertIsNone(documented_reason(
+        rows, 'edg/rma/init33.sft.cpp', variant, 'FAIL(COMPILE)'), variant)
+    self.assertIsNone(documented_reason(
+      rows, 'edg/rma/eh40.sft.cpp', '-DTEST_NUMBER=1', 'FAIL'))
+    self.assertIsNone(documented_reason(
+      rows, 'edg/rma/other.sft.cpp', '-DTEST_NUMBER=2', 'FAIL(COMPILE)'))
+    import tempfile
+    with tempfile.NamedTemporaryFile('w', suffix = '.txt') as handle:
+      handle.write('# c\nedg/x.sft.cpp | -DTEST_NUMBER=2 | FAIL | the reason'
+                   ' | with a bar\n\n')
+      handle.flush()
+      self.assertEqual(read_documented(handle.name),
+                       [('edg/x.sft.cpp', '-DTEST_NUMBER=2', 'FAIL',
+                         'the reason | with a bar')])
+    # A line without the variant or the status is refused.
+    with tempfile.NamedTemporaryFile('w', suffix = '.txt') as handle:
+      handle.write('edg/x.sft.cpp | | FAIL | why\n')
+      handle.flush()
+      with self.assertRaises(ValueError):
+        read_documented(handle.name)
+
+  def test_old_feature(self) -> None:
+    class Fake:
+      def classify(self, status, compile_output, run_output):
+        return 'UNSUPPORTED', compile_output.strip()[:80]
+      def cxx_feature(self, result):
+        return 'vtables/virtual: virtual functions and calls'
+      def m4_slice(self, feature):
+        return 'S1 polymorphism'
+      class TestResult:
+        def __init__(self, *args):
+          pass
+    global git, git_show
+    saved = (git, git_show)
+    try:
+      git = lambda *a, **k: 'tests/tests/x/.t.cpp.rto/edg_x86_64_cir.1.1.txt\n'
+      git_show = lambda rev, path: 'uses a virtual function'
+      self.assertEqual(old_feature(Fake(), 'HEAD', 'edg_x86_64_cir',
+                                   'x/t.cpp', 'FAIL(COMPILE)'),
+                       'S1 polymorphism')
+    finally:
+      git, git_show = saved
+
   def test_expect(self) -> None:
     import tempfile
     with tempfile.NamedTemporaryFile('w', suffix = '.txt') as handle:
@@ -216,6 +481,13 @@ def main() -> None:
                       help = 'a test path prefix whose changes are only '
                              'counted as "ignored" (the goldens that '
                              'cir-writer owns: cir/writer/)')
+  parser.add_argument('--documented',
+                      default = 'tests/.edgy/filters/cir-documented-gaps.txt',
+                      help = 'the documented gaps (tests whose status change '
+                             'is explained there; used with --auto)')
+  parser.add_argument('--auto', action = 'store_true',
+                      help = 'attribute the tests that did not pass and '
+                             'pass now by their old recording')
   parser.add_argument('--list', default = '',
                       help = 'list the tests of this class: status, '
                              'text-only, content, added, deleted')
@@ -235,6 +507,14 @@ def main() -> None:
     print(f"edg-cir-rto-diff: {error}", file = sys.stderr)
     sys.exit(2)
   expect = read_expect(args.expect)
+  summary = load_summary() if args.auto else None
+  try:
+    documented = read_documented(args.documented) if args.auto else []
+  except ValueError as error:
+    print(f"edg-cir-rto-diff: {error}", file = sys.stderr)
+    sys.exit(2)
+  by_slice: Counter = Counter()
+  by_content: Counter = Counter()
   bad = 0
   for config in sorted(set(statuses) | set(recordings)):
     print(f"== {config}")
@@ -248,7 +528,24 @@ def main() -> None:
       if change.kind == 'status':
         path = change.name.split(' ')[0]
         reason = expect.get(path)
-        if reason is None and args.expect:
+        if reason is None and summary is not None and \
+            change.old != 'PASS' and change.new == 'PASS':
+          reason = 'auto: ' + old_feature(summary, args.rev, config, path,
+                                          change.old)
+          by_slice[reason[6:]] += 1
+        if reason is None and summary is not None:
+          reason = auto_reference(change.old, change.new, reference_status(
+            change.suite, change.key))
+          if reason is not None:
+            by_slice[reason] += 1
+            reason = 'auto: ' + reason
+        if reason is None and documented:
+          found = documented_reason(documented, path, change.key[2],
+                                    change.new)
+          if found is not None:
+            reason = 'documented: ' + found
+            by_slice['documented gap'] += 1
+        if reason is None and (args.expect or summary is not None):
           print(f"  UNATTRIBUTED status change: {change.name}: "
                 f"{change.detail}")
           bad += 1
@@ -256,12 +553,27 @@ def main() -> None:
           print(f"  status {change.name}: {change.detail}"
                 f"{' (' + reason + ')' if reason else ''}")
       elif change.kind == 'content':
-        print(f"  CONTENT {change.name}: {change.detail}")
-        bad += 1
+        reason = auto_content(summary, change) if summary else None
+        if reason is not None:
+          by_content[reason] += 1
+          if listed:
+            print(f"  content {change.name}: auto {reason}")
+        else:
+          print(f"  CONTENT {change.name}: {change.detail}")
+          bad += 1
       elif listed:
         print(f"  {change.kind} {change.name}")
     print('  ' + ', '.join(f"{k} {v}" for k, v in sorted(counts.items()))
           if counts else '  no change')
+  if by_content:
+    print('== recordings that only lost the diagnostics of a construct that '
+          'is supported now')
+    for name, count in by_content.most_common():
+      print(f"  {count:>5}  {name}")
+  if by_slice:
+    print('== newly passing, by what the old recording said failed')
+    for name, count in by_slice.most_common():
+      print(f"  {count:>5}  {name}")
   sys.exit(1 if bad else 0)
 
 

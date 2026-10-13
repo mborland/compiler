@@ -670,6 +670,30 @@ it, a trailing supp blob).  The supp payload structure is checked.
   return result;
 }  /* decode_record */
 
+namespace {
+
+struct a_minor2_flags {
+  uint8_t   opcode;
+  uint8_t   operand;   /* Index of the flags operand. */
+  uint32_t  mask;      /* The bits that exist only from ECIL 1.2. */
+  const char *names;
+};  /* a_minor2_flags */
+
+/* Flag bits of records that are older than 1.2: a 1.0 or 1.1 stream must not
+   use them (the reader would otherwise accept a 1.2 meaning in a stream that
+   says it predates it). */
+const a_minor2_flags minor2_flags[] = {
+  {eop_rec_field, 5, 0x40, "VIRTUAL_BASE"},
+  {eop_decl_func, 3, 0x80, "NOTHROW"},
+  {eop_structor, 2, 0x02, "HAS_VBASES"},
+  {eop_call, 3, 0x38, "NOTHROW, VIRTUAL or VTT"},
+  {eop_call_indirect, 2, 0x08, "NOTHROW"},
+  {eop_cleanup_begin, 2, 0x01, "DEACTIVATABLE"},
+  {eop_delete, 3, 0x38, "VIRTUAL, GLOBAL or DESTROYING"},
+};
+
+}  /* anonymous namespace */
+
 bool check_record_operands(const a_record &record, uint16_t stream_minor,
                            an_error &error)
 /*
@@ -749,6 +773,21 @@ Check operand kinds, flag masks and enumerator ranges against the schema.
                                                  : an_error_kind::format;
         error.message = buffer;
         result = false;
+      } else if (stream_minor < 2) {
+        for (const a_minor2_flags &g : minor2_flags) {
+          if (g.opcode == record.opcode && g.operand == k &&
+              (v & g.mask) != 0) {
+            char buffer[200];
+
+            std::snprintf(buffer, sizeof buffer, "%s operand %d: flag %s "
+                          "needs ECIL minor >= 2 (the stream says 1.%u)",
+                          info.name, k + 1, g.names,
+                          static_cast<unsigned>(stream_minor));
+            error.kind = an_error_kind::format;
+            error.message = buffer;
+            result = false;
+          }
+        }
       }
       break;
     case an_operand_class::enumerator:

@@ -1,0 +1,42 @@
+; ecil-dump --vtable-layouts: after the records, the Itanium vtable layouts of
+; the dynamic classes of the stream in the text of clang's
+; -fdump-vtable-layouts (the same names, the thunk notes and the indices), from
+; the class facts the stream carries (the decoder of lib/format into lib/abi).
+; The option is listed in --help (tools such as edg-cir-abi-diff look for it).
+; RUN: cat %S/../cirgen/Inputs/header12_cxx_rtti.txt %S/../cirgen/cxx-s1-covariant.test > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %ecil-dump %t.ecil > %t.plain
+; RUN: %not grep -e "^Vtable for" %t.plain
+; RUN: %ecil-dump --vtable-layouts %t.ecil | %FileCheck %s
+; RUN: %ecil-dump --help | %FileCheck %s --check-prefix=HELP
+
+; HELP: --vtable-layouts
+
+; CHECK-LABEL: Vtable for 'Y' (4 entries).
+; CHECK-NEXT: 0 | offset_to_top (0)
+; CHECK-NEXT: 1 | Y RTTI
+; CHECK-NEXT: -- (Y, 0) vtable address --
+; CHECK-NEXT: 2 | Y *Y::me()
+; CHECK-NEXT: 3 | int Y::vf(int, ...)
+; CHECK-LABEL: Vtable for 'Z' (9 entries).
+; CHECK-NEXT: 0 | offset_to_top (0)
+; CHECK-NEXT: 1 | Z RTTI
+; CHECK-NEXT: -- (P2, 0) vtable address --
+; CHECK-NEXT: -- (Z, 0) vtable address --
+; CHECK-NEXT: 2 | int P2::q()
+; CHECK-NEXT: 3 | Z *Z::me()
+; CHECK-NEXT: 4 | int Z::vf(int, ...)
+; CHECK-NEXT: 5 | offset_to_top (-16)
+; CHECK-NEXT: 6 | Z RTTI
+; CHECK-NEXT: -- (Y, 16) vtable address --
+; CHECK-NEXT: 7 | Z *Z::me()
+; CHECK-NEXT: [return adjustment: 16 non-virtual] method: Y *Y::me()
+; CHECK-NEXT: [this adjustment: -16 non-virtual] method: Y *Y::me()
+; CHECK-NEXT: 8 | int Z::vf(int, ...)
+; CHECK-NEXT: [this adjustment: -16 non-virtual] method: int Y::vf(int, ...)
+; CHECK-LABEL: Thunks for 'Z *Z::me()' (1 entry).
+; CHECK-NEXT: 0 | return adjustment: 16 non-virtual
+; CHECK-NEXT: this adjustment: -16 non-virtual
+; CHECK-LABEL: VTable indices for 'Z' (2 entries).
+; CHECK-NEXT: 1 | Z *Z::me()
+; CHECK-NEXT: 2 | int Z::vf(int, ...)

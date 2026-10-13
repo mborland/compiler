@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 add_library(ecil_format STATIC
+  ecil_abi_decode.cpp
   ecil_brackets.cpp
   ecil_classes.cpp
   ecil_decode.cpp
@@ -10,4 +11,4 @@ add_library(ecil_format STATIC
   ecil_text.cpp)
 target_include_directories(ecil_format PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(ecil_format PUBLIC edg_cir_options)
+target_link_libraries(ecil_format PUBLIC edg_cir_options edg_abi)

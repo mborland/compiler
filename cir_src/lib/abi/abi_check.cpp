@@ -181,7 +181,7 @@ CALL VIRTUAL uses the front end's slot).
       is_primary[cf.primary] = 1;
   }
   for (a_class_id c = 0; problem.empty() && c < db.classes.size(); ++c) {
-    if (!db.cls(c).is_dynamic)
+    if (!db.cls(c).is_dynamic || db.cls(c).layout_only)
       continue;
     problem = check_slots(ctx, c);
     if (problem.empty() && !is_primary[c])

@@ -5,8 +5,6 @@ Error: CIR back end: the definition of '_Z7vecfuncDv4_i' was dropped: it uses a 
 
 Error: CIR back end: the definition of '_Z2f3v' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
 
-Error: CIR back end: the definition of '_Z2f2v' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported)
+Error: CIR back end: the definition of '_Z2f2v' was dropped: it uses a construct the CIR back end cannot express: a vector type (vector types are not supported) (and it is referenced)
 
-Error: CIR back end: the definition of '_Z2f1v' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
-
-5 errors detected in the compilation of "Test_name.c".
+4 errors detected in the compilation of "Test_name.c".

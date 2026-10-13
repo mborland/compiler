@@ -19,6 +19,7 @@ edgy gives the tests of the GNU testsuite (edg-cir-compare-modes).
 """
 
 import argparse
+import collections
 import concurrent.futures
 import hashlib
 import os
@@ -27,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -73,6 +75,13 @@ def find_tests(tests_dir: Path, positive: List[str],
   return found
 
 
+# --reasons: how often each reason of an unsupported construct was noted.
+REASONS: 'collections.Counter[str]' = collections.Counter()
+REASONS_LOCK = threading.Lock()
+REASON_PATTERN = re.compile(
+  r'uses (.*?), which the CIR back end does not support')
+
+
 def sweep_one(test: Path, tests_dir: Path, env: Dict[str, str],
               standard: List[str], out: Path, keep: bool, grep: str
               ) -> List[Tuple[str, int, str, int, int, int]]:
@@ -103,6 +112,9 @@ def sweep_one(test: Path, tests_dir: Path, env: Dict[str, str],
         rc = 124
         text = ''
       matched = text.count(grep) if grep else 0
+      with REASONS_LOCK:
+        for reason in REASON_PATTERN.findall(text):
+          REASONS[re.sub(r'"[^"]*"', '"..."', reason)] += 1
       data = stream.read_bytes() if stream.exists() else b''
       name = f"{rel}.{case_number}"
       ir = 0
@@ -177,6 +189,8 @@ def main() -> None:
     for name, rc, digest, size, matched, ir in rows:
       extra = f"\t{ir}" if args.count_ir else ''
       tsv.write(f"{name}\t{rc}\t{digest}\t{size}{extra}\n")
+  (out / 'reasons.txt').write_text(''.join(
+    f"{n}\t{r}\n" for r, n in REASONS.most_common()))
   if args.grep:
     (out / 'matches.txt').write_text(''.join(
       f"{r[0]}\t{r[4]}\n" for r in rows if r[4]) +

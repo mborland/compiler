@@ -1,6 +1,0 @@
-; ECIL 1.2 pointers to members: the first 1.2 record of the stream is named.
-; RUN: %ecil-asm %S/../format/fixtures/good_v12_member_pointers.txt -o %t.ecil
-; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
-; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 4'
-
-; CHECK: ECIL 1.2 record TY_DATA_MEMBER is not supported yet

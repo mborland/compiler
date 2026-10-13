@@ -1,0 +1,378 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 20: warning: function "operator new(unsigned long, void *) noexcept" has no corresponding operator delete (to be called if an exception is thrown during initialization of an allocated object)
+    D *d = new (buf) D();
+           ^
+
+"Test_name.c", line 21: warning: function "operator new(unsigned long, void *) noexcept" has no corresponding operator delete (to be called if an exception is thrown during initialization of an allocated object)
+    DV *dv = new (buf) DV();
+             ^
+
+"Test_name.c", line 22: warning: function "operator new(unsigned long, void *) noexcept" has no corresponding operator delete (to be called if an exception is thrown during initialization of an allocated object)
+    F *f = new (buf) F();
+           ^
+
+"Test_name.c", line 23: warning: function "operator new(unsigned long, void *) noexcept" has no corresponding operator delete (to be called if an exception is thrown during initialization of an allocated object)
+    G *g = new (buf) G();
+           ^
+
+ecil 1.2 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  TY_PTR 5 4
+  TY_FUNC 6 5 0 [2, 5]
+  STR 5 "_ZnwmPv"
+  DECL_FUNC 7 6 0 130 5
+  DECL_FUNC 7 6 3 195 5
+  STR 6 "p"
+  FUNC_BEGIN 7 0
+  PARAM 1 2 2 nil 0
+  PARAM 2 5 5 6 0
+  FUNC_EH_SPEC 1 []
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 7 "B"
+  TY_RECORD_DECL 8 0 7
+  TY_PTR 9 8
+  TY_FUNC 10 4 0 [9]
+  STR 8 "x"
+  TY_RECORD_BODY 8 4 4 4 12 1
+  REC_FIELD 1 0 nil nil 8 0
+  STR 9 "_ZN1BD1Ev"
+  DECL_FUNC 11 10 0 130 9
+  STR 10 "_ZN1BD2Ev"
+  DECL_FUNC 12 10 0 130 10
+  STRUCTOR 11 12 1
+  DECL_FUNC 11 10 3 195 9
+  DECL_FUNC 12 10 3 195 10
+  STR 11 "this"
+  FUNC_BEGIN 12 0
+  PARAM 1 9 9 11 1
+  FUNC_EH_SPEC 1 []
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 12 "D"
+  TY_RECORD_DECL 13 0 12
+  TY_PTR 14 13
+  TY_FUNC 15 4 0 [14]
+  TY_INT 16 8 true 1 1
+  STR 13 "c"
+  TY_RECORD_BODY 13 8 5 4 12 2
+  REC_FIELD 8 0 nil nil nil 17
+  REC_FIELD 16 4 nil nil 13 0
+  STR 14 "_ZN1DC1Ev"
+  DECL_FUNC 17 15 0 2 14
+  STR 15 "_ZN1DC2Ev"
+  DECL_FUNC 18 15 0 2 15
+  STRUCTOR 17 18 0
+  DECL_FUNC 17 15 3 67 14
+  DECL_FUNC 18 15 3 67 15
+  FUNC_BEGIN 18 0
+  PARAM 1 14 14 11 1
+  MEMINIT_BEGIN 1 0 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 13 8 0 1
+  DEREF
+  INIT_ZERO_BASE
+  MEMINIT_END
+  CLEANUP_BEGIN 2 nil 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 13 8 0 1
+  CALL 12 10 1 0
+  CLEANUP_BODY
+  BLOCK_BEGIN
+  LOCAL 2 16 nil 0 0
+  LREF 2
+  CONST_INT 16 1
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 13 1
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 16 "BV"
+  TY_RECORD_DECL 19 0 16
+  TY_PTR 20 19
+  TY_FUNC 21 4 0 [20]
+  TY_VPTR 22
+  TY_RECORD_BODY 19 16 12 8 4 2
+  REC_FIELD 22 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 8 0
+  STR 17 "2BV"
+  CLASS_MANGLE 19 17
+  CLASS_INFO 19 12 8 nil 1
+  CLASS_BASES 19 []
+  STR 18 "_ZN2BV1fEv"
+  DECL_FUNC 23 21 0 2 18
+  DECL_FUNC 23 21 3 67 18
+  CLASS_VFUNCS 19 [23, 0, 0, 1]
+  CLASS_OVERRIDES 19 []
+  FUNC_BEGIN 23 0
+  PARAM 1 20 20 11 1
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 19 "_ZN2BVC1Ev"
+  DECL_FUNC 24 21 0 130 19
+  STR 20 "_ZN2BVC2Ev"
+  DECL_FUNC 25 21 0 130 20
+  STRUCTOR 24 25 0
+  DECL_FUNC 24 21 3 195 19
+  DECL_FUNC 25 21 3 195 20
+  FUNC_BEGIN 25 0
+  PARAM 1 20 20 11 1
+  FUNC_EH_SPEC 1 []
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 21 "DV"
+  TY_RECORD_DECL 26 0 21
+  TY_PTR 27 26
+  TY_FUNC 28 4 0 [27]
+  TY_RECORD_BODY 26 16 13 8 4 2
+  REC_FIELD 19 0 nil nil nil 17
+  REC_FIELD 16 12 nil nil 13 0
+  STR 22 "2DV"
+  CLASS_MANGLE 26 22
+  CLASS_INFO 26 13 8 0 1
+  CLASS_BASES 26 [0, 1]
+  STR 23 "_ZN2DVC1Ev"
+  DECL_FUNC 29 28 0 2 23
+  STR 24 "_ZN2DVC2Ev"
+  DECL_FUNC 30 28 0 2 24
+  STRUCTOR 29 30 0
+  DECL_FUNC 29 28 3 67 23
+  DECL_FUNC 30 28 3 67 24
+  CLASS_VFUNCS 26 []
+  CLASS_OVERRIDES 26 []
+  FUNC_BEGIN 30 0
+  PARAM 1 27 27 11 1
+  MEMINIT_BEGIN 1 0 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 26 19 0 1
+  DUP
+  DEREF
+  INIT_ZERO_BASE
+  CALL 25 21 1 0
+  MEMINIT_END
+  VPTR_INIT
+  BLOCK_BEGIN
+  LOCAL 2 16 nil 0 0
+  LREF 2
+  CONST_INT 16 2
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 26 1
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 25 "E"
+  TY_RECORD_DECL 31 0 25
+  TY_PTR 32 31
+  TY_FUNC 33 4 0 [32]
+  TY_RECORD_BODY 31 4 4 4 12 1
+  REC_FIELD 1 0 nil nil 8 0
+  STR 26 "_ZN1ED1Ev"
+  DECL_FUNC 34 33 0 130 26
+  STR 27 "_ZN1ED2Ev"
+  DECL_FUNC 35 33 0 130 27
+  STRUCTOR 34 35 1
+  DECL_FUNC 34 33 3 195 26
+  DECL_FUNC 35 33 3 195 27
+  FUNC_BEGIN 35 0
+  PARAM 1 32 32 11 1
+  FUNC_EH_SPEC 1 []
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 28 "F"
+  TY_RECORD_DECL 36 0 28
+  TY_PTR 37 36
+  TY_FUNC 38 4 0 [37]
+  TY_RECORD_BODY 36 8 5 4 12 2
+  REC_FIELD 31 0 nil nil nil 17
+  REC_FIELD 16 4 nil nil 13 0
+  STR 29 "_ZN1FC1Ev"
+  DECL_FUNC 39 38 0 2 29
+  STR 30 "_ZN1FC2Ev"
+  DECL_FUNC 40 38 0 2 30
+  STRUCTOR 39 40 0
+  DECL_FUNC 39 38 3 67 29
+  DECL_FUNC 40 38 3 67 30
+  FUNC_BEGIN 40 0
+  PARAM 1 37 37 11 1
+  MEMINIT_BEGIN 1 0 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 36 31 0 1
+  DEREF
+  INIT_ZERO_BASE
+  MEMINIT_END
+  CLEANUP_BEGIN 2 nil 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 36 31 0 1
+  CALL 35 33 1 0
+  CLEANUP_BODY
+  BLOCK_BEGIN
+  LOCAL 2 16 nil 0 0
+  LREF 2
+  CONST_INT 16 3
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 36 1
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 41 1 0 []
+  STR 31 "main"
+  DECL_FUNC 42 41 0 8 31
+  DECL_FUNC 42 41 0 9 31
+  STR 32 "d"
+  TY_ARRAY 43 16 64 0
+  STR 33 "buf"
+  DECL_VAR 44 43 0 0 16 33
+  STR 34 "dv"
+  STR 35 "f"
+  STR 36 "G"
+  TY_RECORD_DECL 45 0 36
+  TY_PTR 46 45
+  TY_RECORD_BODY 45 8 5 4 12 2
+  REC_FIELD 8 0 nil nil nil 17
+  REC_FIELD 16 4 nil nil 13 0
+  STR 37 "g"
+  FUNC_BEGIN 42 0
+  BLOCK_BEGIN
+  LOCAL 1 14 32 0 0
+  LREF 1
+  CONST_INT 2 8
+  GREF 44
+  ADDR
+  ADDR_OFFSET 5 0
+  CALL 7 6 2 0
+  CAST 11 14
+  DUP
+  CALL 17 15 1 0
+  STORE 0 0
+  LOCAL 2 27 34 0 0
+  LREF 2
+  CONST_INT 2 16
+  GREF 44
+  ADDR
+  ADDR_OFFSET 5 0
+  CALL 7 6 2 0
+  CAST 11 27
+  DUP
+  CALL 29 28 1 0
+  STORE 0 0
+  LOCAL 3 37 35 0 0
+  LREF 3
+  CONST_INT 2 8
+  GREF 44
+  ADDR
+  ADDR_OFFSET 5 0
+  CALL 7 6 2 0
+  CAST 11 37
+  DUP
+  CALL 39 38 1 0
+  STORE 0 0
+  LOCAL 4 46 37 0 0
+  LREF 4
+  CONST_INT 2 8
+  GREF 44
+  ADDR
+  ADDR_OFFSET 5 0
+  CALL 7 6 2 0
+  CAST 11 46
+  DUP
+  DEREF
+  ZERO_BYTES 8
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 13 8 0 1
+  DEREF
+  FIELD 8 0
+  LOAD 0
+  LREF 2
+  LOAD 0
+  BASE_CAST 26 19 0 1
+  DEREF
+  FIELD 19 1
+  LOAD 0
+  ADD 1
+  LREF 3
+  LOAD 0
+  BASE_CAST 36 31 0 1
+  DEREF
+  FIELD 31 0
+  LOAD 0
+  ADD 1
+  LREF 4
+  LOAD 0
+  BASE_CAST 45 8 0 1
+  DEREF
+  FIELD 8 0
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 44 43 0 33 16 33
+  DECL_ABI_DATA 47 2 19 3 3 nil
+  DECL_ABI_DATA 48 0 19 3 3 nil
+  DECL_ABI_DATA 49 2 26 3 3 nil
+  DECL_ABI_DATA 50 0 26 3 3 nil
+frame NAMES
+frame END
+  END 12 0

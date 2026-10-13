@@ -1,0 +1,131 @@
+ecil 1.2 features=0x0000000a
+; C++: a virtual base placed over the one-byte tail of an empty non-virtual base:
+;   struct E {}; struct E2 : E {}; struct A { int i; }; struct B { int j; };
+;   struct C : E, A, E2, virtual B {};   (nvsize 13, B at 12, as clang lays it out)
+; The class facts check accepts it.  The stream is the ECIL writer's output.
+; RUN: %ecil-asm %s -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+
+; CHECK: cir.global {{.*}}@c
+
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "empty10.cpp"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  STR 5 "C"
+  TY_RECORD_DECL 5 0 5
+  TY_PTR 6 5
+  TY_FUNC 7 4 0 [6]
+  STR 6 "E"
+  TY_RECORD_DECL 8 0 6
+  TY_RECORD_BODY 8 1 1 1 0 0
+  STR 7 "A"
+  TY_RECORD_DECL 9 0 7
+  STR 8 "i"
+  TY_RECORD_BODY 9 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 8 0
+  STR 9 "E2"
+  TY_RECORD_DECL 10 0 9
+  TY_RECORD_BODY 10 1 0 1 0 1
+  REC_FIELD 8 0 nil nil nil 19
+  STR 10 "B"
+  TY_RECORD_DECL 11 0 10
+  STR 11 "j"
+  TY_RECORD_BODY 11 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 11 0
+  TY_VPTR 12
+  TY_RECORD_BODY 5 16 16 8 4 5
+  REC_FIELD 12 0 nil nil nil 1
+  REC_FIELD 8 0 nil nil nil 19
+  REC_FIELD 9 8 nil nil nil 17
+  REC_FIELD 10 12 nil nil nil 19
+  REC_FIELD 11 12 nil nil nil 65
+  STR 12 "1C"
+  CLASS_MANGLE 5 12
+  CLASS_INFO 5 13 8 nil 0
+  CLASS_BASES 5 [1, 1, 2, 1, 3, 1, 4, 1]
+  STR 13 "_ZN1CC1Ev"
+  DECL_FUNC 13 7 0 130 13
+  STR 14 "_ZN1CC2Ev"
+  DECL_FUNC 14 7 0 130 14
+  STRUCTOR 13 14 2
+  DECL_FUNC 13 7 3 195 13
+  DECL_FUNC 14 7 3 195 14
+  STR 15 "this"
+  CLASS_VFUNCS 5 []
+  CLASS_OVERRIDES 5 []
+  FUNC_BEGIN 13 0
+  PARAM 1 6 6 15 1
+  FUNC_EH_SPEC 1 []
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 14 0
+  PARAM 1 6 6 15 1
+  FUNC_EH_SPEC 1 []
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 15 1 0 []
+  STR 16 "main"
+  DECL_FUNC 16 15 0 8 16
+  DECL_FUNC 16 15 0 9 16
+  FUNC_BEGIN 16 0
+  BLOCK_BEGIN
+  BLOCK_BEGIN
+  CONST_INT 1 1
+  RETURN_STMT true
+  BLOCK_END
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  STR 17 "c"
+  DECL_VAR 17 5 0 1 0 17
+  STR 18 "1E"
+  CLASS_MANGLE 8 18
+  CLASS_INFO 8 1 1 nil 0
+  CLASS_BASES 8 []
+  DECL_ABI_DATA 18 2 8 3 3 nil
+  STR 19 "1A"
+  CLASS_MANGLE 9 19
+  CLASS_INFO 9 4 4 nil 0
+  CLASS_BASES 9 []
+  DECL_ABI_DATA 19 2 9 3 3 nil
+  STR 20 "2E2"
+  CLASS_MANGLE 10 20
+  CLASS_INFO 10 1 1 nil 0
+  CLASS_BASES 10 [0, 1]
+  DECL_ABI_DATA 20 2 10 3 3 nil
+  STR 21 "1B"
+  CLASS_MANGLE 11 21
+  CLASS_INFO 11 4 4 nil 0
+  CLASS_BASES 11 []
+  DECL_ABI_DATA 21 2 11 3 3 nil
+  DECL_ABI_DATA 22 2 5 3 3 nil
+  DECL_ABI_DATA 23 0 5 3 3 nil
+  DECL_ABI_DATA 24 1 5 3 3 nil
+  STATIC_INIT_BEGIN 17 0
+  GREF 17
+  ADDR
+  CALL 13 7 1 0
+  STATIC_INIT_END
+frame NAMES
+frame END
+  END 5 0

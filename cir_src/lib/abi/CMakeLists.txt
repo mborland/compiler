@@ -21,7 +21,7 @@ endif()
 
 add_library(edg_abi STATIC
   abi_facts.cpp abi_vtable.cpp abi_vtt.cpp abi_print.cpp abi_check.cpp
-  abi_text.cpp abi_builder.cpp abi_validate.cpp abi_names.cpp abi_rtti.cpp)
+  abi_text.cpp abi_builder.cpp abi_validate.cpp abi_names.cpp abi_rtti.cpp abi_demangle.cpp)
 target_include_directories(edg_abi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 if(EDG_ABI_STANDALONE)
   target_compile_options(edg_abi PRIVATE -Wall -Wextra)

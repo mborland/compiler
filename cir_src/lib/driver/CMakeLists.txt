@@ -20,6 +20,10 @@ add_library(edg_cir_objects OBJECT
   cir_module.cpp
   pipeline.cpp
   session.cpp
+  ../cirgen/classes.cpp
+  ../cirgen/members.cpp
+  ../cirgen/rtti.cpp
+  ../cirgen/eh.cpp
   ../cirgen/expr.cpp
   ../cirgen/function.cpp
   ../cirgen/globals.cpp

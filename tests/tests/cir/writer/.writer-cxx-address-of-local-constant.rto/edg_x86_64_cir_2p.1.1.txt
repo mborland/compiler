@@ -9,12 +9,12 @@ frame HEADER
   TY_INT 2 64 false 8 8
   TY_INT 3 64 true 8 8
   HDR_TARGET 1 2 nil 64 64 6
-  HDR_LANG 1 202603 12
+  HDR_LANG 1 202603 14
   HDR_PRODUCER 3 4
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION supp
+frame REGION
   TY_VOID 4
   TY_FUNC 5 4 0 []
   STR 5 "_Z1fv"
@@ -30,23 +30,56 @@ frame REGION supp
   STR 8 "c0"
   TY_PTR 9 8
   STR 9 "b1"
-  DECL_FUNC 6 5 0 34 5 supp{13: "the address of a local variable in a constant"}
-frame REGION supp
-  STR 10 "_Z1gv"
-  DECL_FUNC 10 5 0 2 10
-  DECL_FUNC 10 5 3 67 10
-  STR 11 "D1"
-  TY_RECORD_DECL 11 0 11
-  STR 12 "B2"
-  TY_RECORD_DECL 12 0 12
-  TY_RECORD_BODY 12 1 1 1 0 0
-  TY_RECORD_BODY 11 1 0 1 0 2
+  TY_RECORD_DECL 10 0 6
+  STR 10 "B2"
+  TY_RECORD_DECL 11 0 10
+  TY_RECORD_BODY 11 1 1 1 0 0
+  TY_RECORD_BODY 10 1 0 1 0 1
+  REC_FIELD 11 0 nil nil nil 19
+  STR 11 "c1"
+  TY_PTR 12 11
+  STR 12 "b2"
+  FUNC_BEGIN 6 0
+  BLOCK_BEGIN
+  LOCAL 1 7 8 0 0
+  LOCAL 2 9 9 0 0
+  LREF 2
+  LREF 1
+  ADDR
+  ADDR_OFFSET 9 0
+  STORE 2 0
+  LOCAL 3 10 11 0 0
+  LOCAL 4 12 12 0 0
+  LREF 4
+  LREF 3
+  ADDR
+  ADDR_OFFSET 12 0
+  STORE 2 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 13 "_Z1gv"
+  DECL_FUNC 13 5 0 2 13
+  DECL_FUNC 13 5 3 67 13
+  STR 14 "D1"
+  TY_RECORD_DECL 14 0 14
+  TY_RECORD_BODY 14 1 0 1 0 2
   REC_FIELD 8 0 nil nil nil 19
-  REC_FIELD 12 0 nil nil nil 19
-  STR 13 "d"
-  TY_PTR 13 12
-  STR 14 "b2"
-  DECL_FUNC 10 5 0 34 10 supp{13: "the address of a local variable in a constant"}
+  REC_FIELD 11 0 nil nil nil 19
+  STR 15 "d"
+  FUNC_BEGIN 13 0
+  BLOCK_BEGIN
+  LOCAL 1 14 15 0 0
+  LOCAL 2 12 12 0 0
+  LREF 2
+  LREF 1
+  ADDR
+  ADDR_OFFSET 12 0
+  STORE 2 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
 frame GLOBALS
 frame NAMES
 frame END

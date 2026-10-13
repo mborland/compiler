@@ -1,0 +1,27 @@
+; C++ (ECIL 1.2, slice S1): inheritance depth and class width scale with the
+; input, so nothing in the pipeline may recurse (format validation, the fact
+; decoder, the vtable builder, the finish-time emission).  Run under a 256 KiB
+; stack: a class with 5000 virtual functions, and a chain of 500 classes, each
+; overriding the function of its base (125 thousand CLASS_OVERRIDES entries) with
+; the vtable and the typeinfo of every class and a constructor of the last one.
+; RUN: %python %S/gen_s1_stress.py wide 5000 > %t.wide.body
+; RUN: cat %S/Inputs/header12_cxx_rtti.txt %t.wide.body > %t.wide.txt
+; RUN: %ecil-asm %t.wide.txt -o %t.wide.ecil
+; RUN: sh -c 'ulimit -s 256; %edg-cir --emit=cir -o %t.wide.cir %t.wide.ecil'
+; RUN: %FileCheck %s --check-prefix=WIDE < %t.wide.cir
+; RUN: sh -c 'ulimit -s 256; %ecil-dump --vtable-layouts %t.wide.ecil > %t.wide.layout'
+; RUN: %FileCheck %s --check-prefix=WIDELAYOUT < %t.wide.layout
+; RUN: sh -c 'ulimit -s 256; %edg-cir --emit=obj -o %t.wide.o %t.wide.ecil'
+; RUN: %python %S/gen_s1_stress.py chain 500 > %t.chain.body
+; RUN: cat %S/Inputs/header12_cxx_rtti.txt %t.chain.body > %t.chain.txt
+; RUN: %ecil-asm %t.chain.txt -o %t.chain.ecil
+; RUN: sh -c 'ulimit -s 256; %edg-cir --emit=cir -o %t.chain.cir %t.chain.ecil'
+; RUN: %FileCheck %s --check-prefix=CHAIN < %t.chain.cir
+; RUN: sh -c 'ulimit -s 256; %edg-cir --emit=obj -o %t.chain.o %t.chain.ecil'
+
+; WIDE: cir.vtable.address_point(@_ZTV1W, address_point = <index = 0, offset = 2>) : !cir.vptr
+; WIDE: cir.global {{.*}}@_ZTV1W = #cir.vtable<{#cir.const_array<[#cir.ptr<null> : !cir.ptr<!u8i>, #cir.global_view<@_ZTI1W> : !cir.ptr<!u8i>, #cir.global_view<@_ZN1W2f0Ev> : !cir.ptr<!u8i>, #cir.global_view<@_ZN1W2f1Ev> : !cir.ptr<!u8i>
+; WIDELAYOUT: Vtable for 'W' (5002 entries).
+; WIDELAYOUT: 5001 | void W::f4999()
+
+; CHAIN: cir.vtable.address_point(@_ZTV4C499, address_point = <index = 0, offset = 2>) : !cir.vptr

@@ -66,50 +66,6 @@ reported as not supported yet.
   return result;
 }  /* v1_implemented */
 
-const char *unsupported_12_flag(const ecil::a_record &r)
-/*
-The ECIL 1.2 flag or kind of an older record that the code generator does
-not implement yet (NOTHROW is a no-op while exceptions are off, so it is
-accepted): its name, or nullptr.
-*/
-{
-  const char *result = nullptr;
-  uint64_t v = 0;
-
-  switch (r.opcode) {
-  case eop_call:
-    if (ecil::operand_u64(r.ops[3], v) &&
-        (v & ECIL_CALL_VIRTUAL))
-      result = "the VIRTUAL flag";
-    else if (ecil::operand_u64(r.ops[3], v) && (v & ECIL_CALL_VTT))
-      result = "the VTT flag";
-    break;
-  case eop_delete:
-    if (ecil::operand_u64(r.ops[3], v) && (v & ECIL_DELETE_VIRTUAL))
-      result = "the VIRTUAL flag";
-    break;
-  case eop_rec_field:
-    if (ecil::operand_u64(r.ops[5], v) && (v & ECIL_FIELD_VIRTUAL_BASE))
-      result = "the VIRTUAL_BASE flag";
-    break;
-  case eop_cleanup_begin:
-    if (ecil::operand_u64(r.ops[2], v) && (v & ECIL_CLEANUP_DEACTIVATABLE))
-      result = "the DEACTIVATABLE flag";
-    break;
-  case eop_structor:
-    if (ecil::operand_u64(r.ops[2], v) && (v & ECIL_STRUCTOR_HAS_VBASES))
-      result = "the has_vbases flag";
-    break;
-  case eop_meminit_begin:
-    if (ecil::operand_u64(r.ops[0], v) && v == emk_vbase)
-      result = "kind vbase";
-    break;
-  default:
-    break;
-  }
-  return result;
-}  /* unsupported_12_flag */
-
 }  /* anonymous namespace */
 
 bool a_emitter::on_record(const ecil::a_record &r,
@@ -123,14 +79,44 @@ records and they are ignored here, up to the one that closes it.
   bool ok = true;
 
   record_depth_ = context.scope.bracket_depth;
+  if (in_function_ && !entry_mark_set_ && r.opcode != eop_param &&
+      r.opcode != eop_func_eh_spec && !frames_.empty() &&
+      frames_.front().kind == a_frame_kind::function && fn_entry_ != nullptr) {
+    /* The parameters are done: where the body starts. */
+    entry_mark_set_ = true;
+    entry_mark_ = fn_entry_->empty() ? nullptr : &fn_entry_->back();
+  }
   if (drop_depth_ == 0) {
-    const char *flag = unsupported_12_flag(r);
-
-    if (flag != nullptr)
-      ok = unsupported("ECIL 1.2 record " + std::string(r.info->name) +
-                       " with " + flag + " is not supported yet");
-    else
-      ok = dispatch_record(r, context);
+    if (pending_head_ >= 0 && !flush_catch_head(r)) {
+      ok = false;
+    } else {
+      /* The free of a thrown object under initialization starts before a
+         construct that opens a region of its own. */
+      if (!throws_.empty()) {
+        switch (r.opcode) {
+        case eop_tern_begin:
+        case eop_land_begin:
+        case eop_lor_begin:
+        case eop_array_ctor_begin:
+        case eop_array_dtor_begin:
+        case eop_fullexpr_begin:
+        case eop_static_init_begin:
+        case eop_block_begin:
+        case eop_if_begin:
+        case eop_while_begin:
+        case eop_do_begin:
+        case eop_for_begin:
+        case eop_switch_begin:
+        case eop_try_begin:
+          ok = materialize_throws();
+          break;
+        default:
+          break;
+        }
+      }
+      if (ok)
+        ok = dispatch_record(r, context);
+    }
   } else if (record_depth_ < drop_depth_) {
     drop_depth_ = 0;
     if (frames_.empty() || frames_.back().kind != a_frame_kind::dropped)
@@ -189,7 +175,90 @@ Process one decoded record outside any dropped construct.
   case eop_ty_func:
   case eop_ty_record_decl:
   case eop_ty_opaque:
+  case eop_ty_vptr:
+  case eop_ty_data_member:
+  case eop_ty_method:
     ok = type_record(r);
+    break;
+  case eop_class_vfuncs:
+    /* A class with vtable facts takes part in finish even when the stream
+       has no vtable or VPTR_INIT: the thunks to the overriders defined here
+       are emitted for it. */
+    have_vtable_facts_ = true;
+    break;
+  case eop_class_mangle:
+  case eop_class_bases:
+  case eop_class_overrides:
+    /* The validator keeps these facts (ecil_ids.h); finish decodes them. */
+    break;
+  case eop_class_info:
+    ok = class_info_record(r);
+    break;
+  case eop_structor_deleting:
+    ok = structor_deleting_record(r);
+    break;
+  case eop_decl_abi_data:
+    ok = abi_data_record(r);
+    break;
+  case eop_vptr_init:
+    ok = in_function_ ? vptr_init_record()
+                      : format_error("VPTR_INIT outside a function body");
+    break;
+  case eop_c_data_member:
+  case eop_c_method:
+    ok = constant_record(r);
+    break;
+  case eop_typeinfo_def:
+    ok = typeinfo_def_record(r);
+    break;
+  case eop_const_data_member:
+  case eop_const_method:
+  case eop_pm_field:
+  case eop_pm_call:
+  case eop_pm_cast:
+    ok = in_function_ ? member_pointer_record(r)
+                      : format_error(std::string(r.info->name) +
+                                     " outside a function body");
+    break;
+  case eop_new_array_size_throw:
+    ok = in_function_ ? new_array_record(r)
+                      : format_error("NEW_ARRAY_SIZE_THROW outside a "
+                                     "function body");
+    break;
+  case eop_typeid:
+    ok = in_function_ ? typeid_record(r)
+                      : format_error("TYPEID outside a function body");
+    break;
+  case eop_dynamic_cast:
+    ok = in_function_ ? dynamic_cast_record(r)
+                      : format_error("DYNAMIC_CAST outside a function body");
+    break;
+  case eop_try_begin:
+  case eop_catch_begin:
+  case eop_catch_param:
+  case eop_try_end:
+  case eop_throw_begin:
+  case eop_throw_end:
+  case eop_rethrow:
+  case eop_func_eh_spec:
+  case eop_array_partial_dtor:
+  case eop_cleanup_end:
+    ok = in_function_ ? exception_record(r)
+                      : format_error(std::string(r.info->name) +
+                                     " outside a function body");
+    break;
+  case eop_vbase_cast:
+    ok = in_function_ ? vbase_cast_record(r)
+                      : format_error("VBASE_CAST outside a function body");
+    break;
+  case eop_vtt_addr:
+    ok = in_function_ ? vtt_addr_record(r)
+                      : format_error("VTT_ADDR outside a function body");
+    break;
+  case eop_init_zero_base:
+    ok = in_function_ ? init_zero_base_record()
+                      : format_error("INIT_ZERO_BASE outside a function "
+                                     "body");
     break;
   case eop_ty_record_body:
     ok = record_body(r);
@@ -276,6 +345,9 @@ type definition is left half way.
   if (pending_body_gid_ != 0)
     ok = internal("a TY_RECORD_BODY is missing REC_FIELD records at the "
                       "end of its frame");
+  else if (pending_info_gid_ != 0)
+    ok = internal("a dynamic class is missing its CLASS_INFO at the end of "
+                  "its frame");
   else if (in_function_ || !frames_.empty())
     ok = internal("a function body is open at the end of its frame");
   else if (!values_.empty() || !consts_.empty() || !const_aggs_.empty() ||
@@ -415,18 +487,26 @@ innermost scope would not dominate later uses.
   return alloca_in(fn_entry_, type, name, align);
 }  /* a_emitter::alloca_here */
 
-bool a_emitter::terminate_region(mlir::Region &region, bool)
+bool a_emitter::terminate_region(mlir::Region &region, bool keep_dead)
 /*
 End a structured region: give every unterminated block a cir.yield and erase
 empty blocks nothing can reach (CIRGenFunction::terminateStructuredRegionBody).
+The body of a cleanup scope whose paths all end in cir.unreachable (a throw)
+keeps its dead block, which holds the yield that gives the body an exit:
+FlattenCFG does not accept a cleanup scope body without one.
 */
 {
   llvm::SmallVector<mlir::Block *> dead;
   size_t blocks = region.getBlocks().size();
+  bool unreachable = false;
 
   for (mlir::Block &block : region.getBlocks()) {
+    if (!block.empty() && mlir::isa<cir::UnreachableOp>(block.back()))
+      unreachable = true;
+  }
+  for (mlir::Block &block : region.getBlocks()) {
     if (blocks != 1 && &block != &region.front() && block.empty() &&
-        block.hasNoPredecessors())
+        block.hasNoPredecessors() && !(keep_dead && unreachable))
       dead.push_back(&block);
     if (block.empty() ||
         !block.back().hasTrait<mlir::OpTrait::IsTerminator>()) {
@@ -500,9 +580,17 @@ FUNC_BEGIN: create the entry block and open the function frame.
     e->referenced = true;
     apply_function_attributes(*e, fn);
     /* As CIRGen: a definition compiled without exceptions cannot throw. */
-    if (!(session_.header.lang_flags & ECIL_LANG_EXCEPTIONS))
+    if (is_nothrow_call(0, e))
       fn->setAttr(nothrow_name_, unit_attr_);
     compat::set_dso_local(fn.getOperation(), true);
+    compat::set_unwind_tables(fn);
+    this_local_ = nullptr;
+    this_class_ = 0;
+    vtt_arg_ = mlir::Value();
+    entry_mark_ = nullptr;
+    entry_mark_set_ = false;
+    vptr_set_early_ = false;
+    vptr_init_seen_ = false;
     fn_ = fn;
     fn_entity_ = e;
     fn_entry_ = fn.addEntryBlock();
@@ -593,6 +681,23 @@ PARAM: an alloca of the declared type holding the (cast) argument.
       local->address = address;
       local->align = align;
       local->type = t_decl;
+      if ((r.ops[4].u & ECIL_PARAM_THIS) != 0 &&
+          decl->kind == a_type_kind::pointer_type) {
+        /* The object of VPTR_INIT: this and its class. */
+        this_local_ = local;
+        this_class_ = decl->target;
+        /* The hidden VTT parameter of a C2/D2 of a class with virtual bases
+           follows it (12.3): no PARAM record names it. */
+        if (fn_entity_ != nullptr && fn_entity_->has_vtt) {
+          if (params_seen_ < fn_entry_->getNumArguments()) {
+            vtt_arg_ = fn_entry_->getArgument(params_seen_);
+            ++params_seen_;
+          } else {
+            ok = internal("the VTT parameter is missing from the entry "
+                          "block");
+          }
+        }
+      }
     }
   }
   return ok;
@@ -718,6 +823,8 @@ FUNC_END: apply the fall-off-the-end rule and close the function.
 
   if (!frames_.empty() && frames_.front().kind == a_frame_kind::function)
     close_cleanups(0, -1);
+  if (eh_spec_active_ && frames_.size() == 1)
+    close_eh_spec();
   if (frames_.size() != 1 || frames_.back().kind != a_frame_kind::function)
     ok = internal("FUNC_END inside an open construct");
   else if (params_seen_ != fn_entry_->getNumArguments())
@@ -789,9 +896,11 @@ RETURN_STMT: cir.return directly at the statement (no shared return block).
     }
     /* An aggregate always returns through __retval; so does every value
        while a cleanup is open: a bare load of an entry alloca would be sunk
-       past the cleanup (spike 2). */
+       past the cleanup (spike 2).  Likewise while a try or an exception
+       specification is open. */
     if (ok && (mlir::isa<cir::RecordType>(ret->cir) ||
-               mlir::isa<cir::ArrayType>(ret->cir) || !cleanups_.empty())) {
+               mlir::isa<cir::ArrayType>(ret->cir) || !cleanups_.empty() ||
+               try_depth() > 0)) {
       uint32_t align = static_cast<uint32_t>(type_align(ret->cir));
       mlir::Value slot = return_slot();
       builder_.createStore(loc(), v, slot, false, false,
@@ -834,7 +943,8 @@ lasts to its end).
          kind == a_frame_kind::do_stmt || kind == a_frame_kind::for_stmt ||
          kind == a_frame_kind::switch_stmt || kind == a_frame_kind::meminit ||
          kind == a_frame_kind::fullexpr || kind == a_frame_kind::array_body ||
-         kind == a_frame_kind::static_init;
+         kind == a_frame_kind::static_init ||
+         kind == a_frame_kind::try_body || kind == a_frame_kind::catch_body;
 }  /* is_region_frame */
 
 }  /* anonymous namespace */
@@ -864,11 +974,12 @@ too, and emission continues after the scope.
     a_cleanup_scope scope = cleanups_.back();
 
     cleanups_.pop_back();
-    terminate_region(scope.op.getBodyRegion());
+    terminate_region(scope.op.getBodyRegion(), true);
     if (scope.conditional)
       terminate_region(scope.op.getCleanupRegion());
     builder_.setInsertionPointAfter(scope.op.getOperation());
   }
+  prune_deacts();
 }  /* a_emitter::close_cleanups */
 
 void a_emitter::close_cleanups_down_to(size_t count)
@@ -880,11 +991,12 @@ Close the innermost cleanup scopes until count remain.
     a_cleanup_scope scope = cleanups_.back();
 
     cleanups_.pop_back();
-    terminate_region(scope.op.getBodyRegion());
+    terminate_region(scope.op.getBodyRegion(), true);
     if (scope.conditional)
       terminate_region(scope.op.getCleanupRegion());
     builder_.setInsertionPointAfter(scope.op.getOperation());
   }
+  prune_deacts();
 }  /* a_emitter::close_cleanups_down_to */
 
 bool a_emitter::in_conditional_region(size_t &outermost) const
@@ -934,7 +1046,9 @@ inside it.
   while (fullexpr > 0 && frames_[fullexpr].kind != a_frame_kind::fullexpr)
     --fullexpr;
   builder_.setInsertionPoint(conditional);
-  scope = compat::open_cleanup_scope(builder_, loc());
+  scope = compat::open_cleanup_scope(
+      builder_, loc(),
+      exceptions_ ? cir::CleanupKind::All : cir::CleanupKind::Normal);
   body = &scope.getBodyRegion().front();
   conditional->moveBefore(body, body->end());
   entry.op = scope;
@@ -945,22 +1059,228 @@ inside it.
   cleanups_.push_back(entry);
 }  /* a_emitter::open_conditional_scope */
 
+cir::CleanupKind a_emitter::cleanup_kind(uint64_t kind) const
+/*
+The kind of cir.cleanup.scope of an ECIL cleanup kind: with exceptions off an
+all cleanup is a normal one (an eh cleanup is dropped before it gets here).
+*/
+{
+  cir::CleanupKind result = cir::CleanupKind::Normal;
+
+  if (kind == ecl_eh)
+    result = cir::CleanupKind::EH;
+  else if (kind == ecl_all && exceptions_)
+    result = cir::CleanupKind::All;
+  return result;
+}  /* a_emitter::cleanup_kind */
+
+void a_emitter::prune_deacts()
+/*
+Forget the deactivatable cleanups whose scope is closed.
+*/
+{
+  while (!deacts_.empty() && deacts_.back().depth > cleanups_.size())
+    deacts_.pop_back();
+}  /* a_emitter::prune_deacts */
+
+void a_emitter::deactivate_flag(mlir::Value flag)
+/*
+THROW_END: the implicit free cleanup of the throw stops being active.  It is
+the cleanup with this flag, not the innermost active one (a statement
+expression in the initializer may have begun others, and the throw may sit in
+a new-expression whose own cleanup is active around it).
+*/
+{
+  for (size_t k = deacts_.size(); k > 0; --k) {
+    if (deacts_[k - 1].flag == flag) {
+      deacts_.erase(deacts_.begin() + (k - 1));
+      break;
+    }
+  }
+  builder_.createStore(loc(), builder_.getFalse(loc()), flag, false, false,
+                       alignment_attr(1));
+}  /* a_emitter::deactivate_flag */
+
+void a_emitter::deactivate_cleanup()
+/*
+CLEANUP_END: the innermost active deactivatable cleanup stops being active
+(its flag turns false: neither the normal nor the exception path runs it).
+*/
+{
+  prune_deacts();
+  if (!deacts_.empty()) {
+    a_deact entry = deacts_.back();
+
+    deacts_.pop_back();
+    builder_.createStore(loc(), builder_.getFalse(loc()), entry.flag, false,
+                         false, alignment_attr(1));
+  }
+}  /* a_emitter::deactivate_cleanup */
+
+bool a_emitter::begin_cleanup_code(uint64_t kind, bool deactivatable)
+/*
+The start of a cleanup (CLEANUP_BEGIN of a normal, eh or all cleanup): the
+insertion point moves into the code of its cleanup region.  A normal cleanup
+is a cir.cleanup.scope whose cleanup region fills with that code and whose
+body takes the rest of the enclosing scope region.  An eh cleanup is dropped
+when exceptions are off.  A DEACTIVATABLE one has a flag (set true where its
+body starts) and its code runs under that flag.  Inside a conditional record
+the cleanup is guarded by a flag in the full expression's flag-guarded scope
+(open_conditional_scope); a DEACTIVATABLE one uses that flag as its active
+flag.
+*/
+{
+  bool ok = true;
+  size_t outermost = 0;
+
+  if (kind == ecl_eh && !exceptions_) {
+    open_frame(a_frame_kind::dropped, nullptr);
+    drop_depth_ = record_depth_;
+  } else if (!in_conditional_region(outermost)) {
+    cir::CleanupScopeOp scope = compat::open_cleanup_scope(
+        builder_, loc(), cleanup_kind(kind));
+
+    open_frame(a_frame_kind::cleanup, scope.getOperation());
+    frames_.back().cleanup_op = scope.getOperation();
+    builder_.setInsertionPointToStart(&scope.getCleanupRegion().front());
+    if (deactivatable) {
+      mlir::Value flag = alloca_here(builder_.getBoolTy(), "cleanup.isactive",
+                                     1);
+      mlir::Value set = builder_.createLoad(loc(), flag, false, 1);
+      cir::IfOp guard = compat::open_if(builder_, loc(), set);
+
+      frames_.back().deactivatable = true;
+      frames_.back().deact_flag = flag;
+      frames_.back().deact_guard = guard;
+      builder_.setInsertionPointToStart(&guard.getThenRegion().front());
+    }
+  } else if (kind == ecl_eh && !deactivatable) {
+    ok = unsupported("a conditional eh cleanup that is not DEACTIVATABLE");
+  } else {
+    if (frames_[outermost].cond_scope == static_cast<size_t>(-1))
+      open_conditional_scope(outermost);
+    a_cleanup_scope &entry = cleanups_[frames_[outermost].cond_scope];
+    cir::CleanupScopeOp scope = entry.op;
+    mlir::Value flag = alloca_here(builder_.getBoolTy(), "cleanup.cond", 1);
+    mlir::OpBuilder::InsertPoint here = builder_.saveInsertionPoint();
+
+    /* The flag starts false at the top of the scope body and turns true
+       where the object is constructed. */
+    builder_.setInsertionPointToStart(&scope.getBodyRegion().front());
+    builder_.createStore(loc(), builder_.getFalse(loc()), flag, false, false,
+                         alignment_attr(1));
+    /* Its destruction goes first in the cleanup region: reverse order. */
+    builder_.setInsertionPointToStart(&scope.getCleanupRegion().front());
+    mlir::Value set = builder_.createLoad(loc(), flag, false, 1);
+    cir::IfOp guard = compat::open_if(builder_, loc(), set);
+    open_frame(a_frame_kind::cleanup, guard.getOperation());
+    a_frame &f = frames_.back();
+    f.cleanup_mode = 1;
+    f.saved_ip = here;
+    f.flag = flag;
+    f.cleanup_op = guard.getOperation();
+    f.deactivatable = deactivatable;
+    f.cond_index = frames_[outermost].cond_scope;
+    builder_.setInsertionPointToStart(&guard.getThenRegion().front());
+  }
+  return ok;
+}  /* a_emitter::begin_cleanup_code */
+
+bool a_emitter::end_cleanup_code()
+/*
+CLEANUP_BODY: the cleanup code is complete.
+*/
+{
+  bool ok = true;
+  a_frame *f = top_frame(a_frame_kind::cleanup, "CLEANUP_BODY");
+
+  if (f == nullptr) {
+    ok = false;
+  } else if (f->cleanup_mode >= 2) {
+    mlir::OpBuilder::InsertPoint here = f->saved_ip;
+    mlir::Operation *code_op = f->cleanup_op;
+
+    mlir::Block *block = builder_.getBlock();
+
+    /* LoweringPrepare outlines the destruction code and requires it to
+       start with the get_global of the object. */
+    if (block->empty() || !mlir::isa<cir::GetGlobalOp>(block->front()))
+      ok = format_error("the exit cleanup code of a static-duration "
+                        "object must start with GREF of that object");
+    terminate_region(*block->getParent());
+    if (ok)
+      ok = pop_frame();
+    if (ok) {
+      if (code_op != nullptr)
+        builder_.setInsertionPointAfter(code_op);
+      else
+        builder_.restoreInsertionPoint(here);
+    }
+  } else if (f->cleanup_mode == 0) {
+    cir::CleanupScopeOp scope = mlir::cast<cir::CleanupScopeOp>(
+                                                         f->cleanup_op);
+    bool deactivatable = f->deactivatable;
+    mlir::Value flag = f->deact_flag;
+
+    if (f->nrvo_guard != nullptr) {
+      cir::IfOp guard = mlir::cast<cir::IfOp>(f->nrvo_guard);
+
+      terminate_region(guard.getThenRegion());
+      builder_.setInsertionPointAfter(guard.getOperation());
+    }
+    if (deactivatable)
+      terminate_region(f->deact_guard.getThenRegion());
+    terminate_region(scope.getCleanupRegion());
+    ok = pop_frame();
+    if (ok) {
+      a_cleanup_scope entry;
+      entry.op = scope;
+      entry.owner = region_owner();
+      entry.owner_phase = frames_[entry.owner].phase;
+      entry.conditional = false;
+      cleanups_.push_back(entry);
+      builder_.setInsertionPointToStart(&scope.getBodyRegion().front());
+      if (deactivatable) {
+        builder_.createStore(loc(), builder_.getTrue(loc()), flag, false,
+                             false, alignment_attr(1));
+        deacts_.push_back({flag, cleanups_.size()});
+      }
+    }
+  } else {
+    cir::IfOp guard = mlir::cast<cir::IfOp>(f->cleanup_op);
+    mlir::OpBuilder::InsertPoint here = f->saved_ip;
+    mlir::Value flag = f->flag;
+    bool deactivatable = f->deactivatable;
+    size_t scope_index = f->cond_index;
+
+    terminate_region(guard.getThenRegion());
+    ok = pop_frame();
+    if (ok) {
+      builder_.restoreInsertionPoint(here);
+      builder_.createStore(loc(), builder_.getTrue(loc()), flag, false, false,
+                           alignment_attr(1));
+      if (deactivatable)
+        deacts_.push_back({flag, scope_index + 1});
+    }
+  }
+  return ok;
+}  /* a_emitter::end_cleanup_code */
+
 bool a_emitter::cleanup_record(const ecil::a_record &r)
 /*
-CLEANUP_BEGIN .. CLEANUP_BODY.  A normal or all cleanup becomes a
-cir.cleanup.scope normal: the cleanup code fills its cleanup region and the
-rest of the enclosing scope region its body.  An eh cleanup is dropped
-(exceptions are off).  Inside a conditional record the cleanup is guarded by
-a flag in the full expression's flag-guarded scope (open_conditional_scope).
+CLEANUP_BEGIN .. CLEANUP_BODY.  An exit cleanup registers code for the exit
+of a static-duration object; the others are begin_cleanup_code and
+end_cleanup_code.
 */
 {
   bool ok = true;
 
   if (r.opcode == eop_cleanup_begin) {
     uint64_t kind = 0;
-    size_t outermost = 0;
+    uint64_t flags = 0;
 
     uint_operand(r.ops[0], kind);
+    uint_operand(r.ops[2], flags);
     if (kind == ecl_exit) {
       /* The destruction of a static-duration object at program exit: the
          dtor region of the variable being initialized, or, for another
@@ -1004,103 +1324,17 @@ a flag in the full expression's flag-guarded scope (open_conditional_scope).
         frames_.back().cleanup_op = code_op;
         builder_.setInsertionPointToStart(block);
       }
-    } else if (kind == ecl_eh) {
-      open_frame(a_frame_kind::dropped, nullptr);
-      drop_depth_ = record_depth_;
     } else {
-      bool conditional = in_conditional_region(outermost);
-
-      if (!conditional) {
-        cir::CleanupScopeOp scope = compat::open_cleanup_scope(builder_,
-                                                               loc());
-        open_frame(a_frame_kind::cleanup, scope.getOperation());
-        frames_.back().cleanup_op = scope.getOperation();
-        builder_.setInsertionPointToStart(&scope.getCleanupRegion().front());
-      } else {
-        if (frames_[outermost].cond_scope == static_cast<size_t>(-1))
-          open_conditional_scope(outermost);
-        a_cleanup_scope &entry = cleanups_[frames_[outermost].cond_scope];
-        cir::CleanupScopeOp scope = entry.op;
-        mlir::Value flag = alloca_here(builder_.getBoolTy(), "cleanup.cond",
-                                       1);
-        mlir::OpBuilder::InsertPoint here = builder_.saveInsertionPoint();
-
-        /* The flag starts false at the top of the scope body and turns true
-           where the object is constructed. */
-        builder_.setInsertionPointToStart(&scope.getBodyRegion().front());
-        builder_.createStore(loc(), builder_.getFalse(loc()), flag, false,
-                             false, alignment_attr(1));
-        /* Its destruction goes first in the cleanup region: reverse order. */
-        builder_.setInsertionPointToStart(&scope.getCleanupRegion().front());
-        mlir::Value set = builder_.createLoad(loc(), flag, false, 1);
-        cir::IfOp guard = compat::open_if(builder_, loc(), set);
-        open_frame(a_frame_kind::cleanup, guard.getOperation());
-        a_frame &f = frames_.back();
-        f.cleanup_mode = 1;
-        f.saved_ip = here;
-        f.flag = flag;
-        f.cleanup_op = guard.getOperation();
-        builder_.setInsertionPointToStart(&guard.getThenRegion().front());
-      }
+      /* A cleanup begun in a thrown object's initializer nests inside the
+         cleanup that frees the object. */
+      if (!throws_.empty())
+        ok = materialize_throws();
+      if (ok)
+        ok = begin_cleanup_code(kind,
+                                (flags & ECIL_CLEANUP_DEACTIVATABLE) != 0);
     }
   } else {
-    a_frame *f = top_frame(a_frame_kind::cleanup, "CLEANUP_BODY");
-
-    if (f == nullptr) {
-      ok = false;
-    } else if (f->cleanup_mode >= 2) {
-      mlir::OpBuilder::InsertPoint here = f->saved_ip;
-      mlir::Operation *code_op = f->cleanup_op;
-
-      mlir::Block *block = builder_.getBlock();
-
-      /* LoweringPrepare outlines the destruction code and requires it to
-         start with the get_global of the object. */
-      if (block->empty() || !mlir::isa<cir::GetGlobalOp>(block->front()))
-        ok = format_error("the exit cleanup code of a static-duration "
-                          "object must start with GREF of that object");
-      terminate_region(*block->getParent());
-      if (ok)
-        ok = pop_frame();
-      if (ok) {
-        if (code_op != nullptr)
-          builder_.setInsertionPointAfter(code_op);
-        else
-          builder_.restoreInsertionPoint(here);
-      }
-    } else if (f->cleanup_mode == 0) {
-      cir::CleanupScopeOp scope = mlir::cast<cir::CleanupScopeOp>(
-                                                           f->cleanup_op);
-      if (f->nrvo_guard != nullptr) {
-        cir::IfOp guard = mlir::cast<cir::IfOp>(f->nrvo_guard);
-
-        terminate_region(guard.getThenRegion());
-        builder_.setInsertionPointAfter(guard.getOperation());
-      }
-      terminate_region(scope.getCleanupRegion());
-      ok = pop_frame();
-      if (ok) {
-        a_cleanup_scope entry;
-        entry.op = scope;
-        entry.owner = region_owner();
-        entry.owner_phase = frames_[entry.owner].phase;
-        entry.conditional = false;
-        cleanups_.push_back(entry);
-        builder_.setInsertionPointToStart(&scope.getBodyRegion().front());
-      }
-    } else {
-      cir::IfOp guard = mlir::cast<cir::IfOp>(f->cleanup_op);
-      mlir::OpBuilder::InsertPoint here = f->saved_ip;
-      mlir::Value flag = f->flag;
-
-      terminate_region(guard.getThenRegion());
-      ok = pop_frame();
-      if (ok) {
-        builder_.restoreInsertionPoint(here);
-        builder_.createStore(loc(), builder_.getTrue(loc()), flag, false,
-                             false, alignment_attr(1));
-      }
-    }
+    ok = end_cleanup_code();
   }
   return ok;
 }  /* a_emitter::cleanup_record */
@@ -1254,6 +1488,13 @@ innermost element type.  An empty array drops the loop.
       mlir::Operation *op = f->op;
       close_cleanups(frames_.size() - 1, -1);
       terminate_region(op->getRegion(0));
+      /* The array.dtor is never marked dtor_may_throw: the lowering would
+         put an EH cleanup scope (the loop that destroys the elements before
+         the one that threw) inside the cleanup region that holds the loop,
+         and the pin's cleanup flattening asserts on it ("cleanup region has
+         exits in non-final blocks").  As with clang -fclangir, the elements
+         before one whose destructor throws are not destroyed; the cleanups
+         of the enclosing scopes do run. */
       builder_.setInsertionPointAfter(op);
       ok = pop_frame();
     }

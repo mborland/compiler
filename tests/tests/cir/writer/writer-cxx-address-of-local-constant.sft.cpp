@@ -4,8 +4,9 @@
 //script:edg-cir-ecil-dump
 // A reference bound to a base class subobject of an automatic local is an
 // address constant that names a local variable (an automatic one has a local
-// id, not a G-id): the function is unsupported instead of an assertion
-// failure in ecil_check_variable_use (edg/cmeerw/gnats-26823).
+// id, not a G-id): the writer stores the address of the local at the offset
+// of the base (LREF, ADDR, ADDR_OFFSET, STORE) instead of failing in
+// ecil_check_variable_use (edg/cmeerw/gnats-26823).
 
 template<int I, typename ... Ts>
 struct C : Ts ... [I]

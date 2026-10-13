@@ -1,0 +1,26 @@
+; Reader check (ECIL 1.2): DELETE DESTROYING (0x20) never goes with VIRTUAL
+; (D0 calls the destroying delete there), nor with GLOBAL or ARRAY.
+; RUN: cat %S/Inputs/header12_cxx_eh.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: DELETE DESTROYING takes no destructor and none of VIRTUAL, GLOBAL and ARRAY
+
+frame DECLS
+  STR 10 "_ZdlPv"
+  STR 11 "f"
+  TY_PTR 21 1
+  TY_FUNC 22 11 0 [12]
+  TY_FUNC 23 11 0 [21]
+  DECL_FUNC 30 22 0 0 10
+  DECL_FUNC 31 23 0 1 11
+frame REGION
+  FUNC_BEGIN 31 0
+  PARAM 1 21 21 nil 0
+  LREF 1
+  LOAD 0
+  DELETE 30 nil 1 40
+  FUNC_END 1
+frame END
+  END auto 0

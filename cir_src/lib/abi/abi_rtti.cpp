@@ -37,10 +37,60 @@ See abi_rtti.h.
   return ok;
 }  /* can_use_single_inheritance */
 
+namespace {
+
+bool has_non_virtual_base_below(const a_class_db &db, a_class_id c,
+                                std::vector<int8_t> &memo)
+/*
+Whether class c or any class reachable from it through its bases has a
+non-virtual base (memoized; explicit stack).
+*/
+{
+  struct a_frame {
+    a_class_id  cls;
+    size_t      next;
+    bool        found;
+  };  /* a_frame */
+  std::vector<a_frame> stack;
+
+  if (memo[c] < 0) {
+    stack.push_back({c, 0, false});
+    while (!stack.empty()) {
+      a_frame &top = stack.back();
+      const a_class_fact &cls = db.cls(top.cls);
+
+      if (top.next >= cls.bases.size()) {
+        bool found = top.found;
+
+        memo[top.cls] = found ? 1 : 0;
+        stack.pop_back();
+        if (!stack.empty() && found)
+          stack.back().found = true;
+      } else {
+        const a_base_fact &b = cls.bases[top.next++];
+
+        if (!b.is_virtual)
+          top.found = true;
+        if (memo[b.cls] >= 0)
+          top.found = top.found || memo[b.cls] == 1;
+        else
+          stack.push_back({b.cls, 0, false});
+      }
+    }
+  }
+  return memo[c] == 1;
+}  /* has_non_virtual_base_below */
+
+}  /* anonymous namespace */
+
 uint32_t vmi_class_flags(const a_class_db &db, a_class_id c)
 /*
 See abi_rtti.h.  Order matters (a base seen "before" decides which kind of
-repeat it is), so the walk is the original's pre-order.
+repeat it is), so the walk is the original's pre-order.  The original walks
+every route to a class again; the second visit of a virtual base is not
+walked: all it can add is the diamond flag (set by the visit itself) and, when
+a non-virtual base lies below it, the repeat flag, which is looked up (a
+lattice of virtual bases would cost a walk per route).
 */
 {
   struct a_frame {
@@ -50,6 +100,7 @@ repeat it is), so the walk is the original's pre-order.
   std::vector<a_frame> stack;
   std::set<a_class_id> non_virtual_seen;
   std::set<a_class_id> virtual_seen;
+  std::vector<int8_t> below(db.classes.size(), -1);
   uint32_t flags = 0;
 
   stack.push_back({c, 0});
@@ -61,19 +112,25 @@ repeat it is), so the walk is the original's pre-order.
       stack.pop_back();
     } else {
       const a_base_fact &b = cls.bases[top.next++];
+      bool walk = true;
 
       if (b.is_virtual) {
-        if (!virtual_seen.insert(b.cls).second)
+        if (!virtual_seen.insert(b.cls).second) {
           flags |= vmi_diamond_shaped;
-        else if (non_virtual_seen.count(b.cls) != 0)
+          if (has_non_virtual_base_below(db, b.cls, below))
+            flags |= vmi_non_diamond_repeat;
+          walk = false;
+        } else if (non_virtual_seen.count(b.cls) != 0) {
           flags |= vmi_non_diamond_repeat;
+        }
       } else {
         if (!non_virtual_seen.insert(b.cls).second)
           flags |= vmi_non_diamond_repeat;
         else if (virtual_seen.count(b.cls) != 0)
           flags |= vmi_non_diamond_repeat;
       }
-      stack.push_back({b.cls, 0});
+      if (walk)
+        stack.push_back({b.cls, 0});
     }
   }
   return flags;
@@ -127,6 +184,74 @@ See abi_rtti.h.
   }
   return error.empty();
 }  /* rtti_layout */
+
+int64_t dynamic_cast_offset_hint(const a_class_db &db, a_class_id src,
+                                 a_class_id dst)
+/*
+Every path from dst down to src through the direct base lists, in
+depth-first declaration order (CXXBasePaths of isDerivedFrom), then the walk
+of computeOffsetHint over the paths.  Explicit stack.
+*/
+{
+  struct a_frame {
+    a_class_id  cls;
+    size_t      next;
+    bool        is_public;     /* Every step so far is public. */
+    bool        has_virtual;
+    int64_t     offset;
+  };  /* a_frame */
+  struct a_path {
+    bool     is_public;
+    bool     has_virtual;
+    int64_t  offset;
+  };  /* a_path */
+  std::vector<a_frame> stack;
+  std::vector<a_path> paths;
+  int64_t hint = -2;
+  unsigned public_paths = 0;
+  int64_t offset = 0;
+  bool done = false;
+
+  stack.push_back({dst, 0, true, false, 0});
+  while (!stack.empty()) {
+    a_frame &top = stack.back();
+    const a_class_fact &c = db.cls(top.cls);
+
+    if (top.next >= c.bases.size()) {
+      stack.pop_back();
+    } else {
+      const a_base_fact &b = c.bases[top.next++];
+      bool is_public = top.is_public && b.is_public;
+      bool has_virtual = top.has_virtual || b.is_virtual;
+      int64_t sum = top.offset + b.offset;
+
+      if (b.cls == src)
+        paths.push_back({is_public, has_virtual, sum});
+      else
+        stack.push_back({b.cls, 0, is_public, has_virtual, sum});
+    }
+  }
+  for (size_t k = 0; !done && k < paths.size(); ++k) {
+    if (!paths[k].is_public)
+      continue;
+    ++public_paths;
+    if (paths[k].has_virtual) {
+      hint = -1;
+      done = true;
+    } else if (public_paths == 1) {
+      offset = paths[k].offset;
+    }
+  }
+  if (!done) {
+    if (public_paths == 0)
+      hint = -2;
+    else if (public_paths > 1)
+      hint = -3;
+    else
+      hint = offset;
+  }
+  return hint;
+}  /* dynamic_cast_offset_hint */
 
 std::string print_rtti(const a_class_db &db, const a_rtti_layout &layout)
 /*

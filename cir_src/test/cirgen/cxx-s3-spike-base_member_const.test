@@ -1,0 +1,306 @@
+ecil 1.2 features=0x0000000a
+; C++ (ECIL 1.2, slice S3): an int D::* that designates a member of a non-virtual base (an empty base, bases at non-zero offsets): globals, locals, comparisons (spike K6d).  The stream is the writer's output for
+; Inputs/s3_mp_base_cir.cpp; a g++ unit prints what it reads and the result of the
+; mixed build must equal the all-g++ build's.
+; RUN: %ecil-asm %s -o %t.ecil
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -c %S/Inputs/s3_mp_base_host.cpp -o %t.host.o
+; RUN: g++ %t.host.o %t.o -o %t.mixed
+; RUN: %t.mixed > %t.mixed.out
+; RUN: g++ -std=c++17 -w -I%S/Inputs %S/Inputs/s3_mp_base_cir.cpp %S/Inputs/s3_mp_base_host.cpp -o %t.ref
+; RUN: %t.ref > %t.ref.out
+; RUN: diff %t.mixed.out %t.ref.out
+; RUN: %edg-cir --emit=obj -O2 -o %t.o2.o %t.ecil
+; RUN: g++ %t.host.o %t.o2.o -o %t.mixed2
+; RUN: %t.mixed2 > %t.mixed2.out
+; RUN: diff %t.mixed2.out %t.ref.out
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "cir.cpp"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  STR 5 "D"
+  TY_RECORD_DECL 4 0 5
+  TY_PTR 5 4
+  TY_FUNC 6 3 0 [5]
+  STR 6 "E"
+  TY_RECORD_DECL 7 0 6
+  TY_RECORD_BODY 7 1 1 1 0 0
+  STR 7 "B1"
+  TY_RECORD_DECL 8 0 7
+  STR 8 "p"
+  STR 9 "q"
+  TY_RECORD_BODY 8 16 16 8 0 2
+  REC_FIELD 1 0 nil nil 8 0
+  REC_FIELD 3 8 nil nil 9 0
+  STR 10 "B2"
+  TY_RECORD_DECL 9 0 10
+  TY_INT 10 8 true 1 1
+  TY_FLOAT 11 3 8 8
+  STR 11 "c"
+  STR 12 "r"
+  STR 13 "d"
+  TY_RECORD_BODY 9 16 16 8 0 3
+  REC_FIELD 10 0 nil nil 11 0
+  REC_FIELD 1 4 nil nil 12 0
+  REC_FIELD 11 8 nil nil 13 0
+  STR 14 "own"
+  TY_RECORD_BODY 4 40 36 8 0 4
+  REC_FIELD 7 0 nil nil nil 19
+  REC_FIELD 8 0 nil nil nil 17
+  REC_FIELD 9 16 nil nil nil 17
+  REC_FIELD 1 32 nil nil 14 0
+  STR 15 "_Z3runP1D"
+  DECL_FUNC 12 6 0 0 15
+  DECL_FUNC 12 6 0 1 15
+  TY_DATA_MEMBER 13 1 4
+  STR 16 "a"
+  STR 17 "b"
+  TY_DATA_MEMBER 14 3 4
+  TY_DATA_MEMBER 15 11 4
+  STR 18 "f"
+  STR 19 "s"
+  TY_PTR 16 13
+  TY_ARRAY 17 13 5 0
+  STR 20 "g_di"
+  DECL_VAR 18 17 0 0 0 20
+  TY_PTR 19 14
+  TY_ARRAY 20 14 2 0
+  STR 21 "g_dl"
+  DECL_VAR 21 20 0 0 0 21
+  TY_PTR 22 15
+  TY_ARRAY 23 15 1 0
+  STR 22 "g_dd"
+  DECL_VAR 24 23 0 0 0 22
+  TY_BOOL 25 1 1
+  FUNC_BEGIN 12 0
+  PARAM 1 5 5 13 0
+  BLOCK_BEGIN
+  LOCAL 2 13 16 0 0
+  LREF 2
+  C_DATA_MEMBER 13 0
+  INIT_CONST
+  LOCAL 3 13 17 0 0
+  LREF 3
+  C_DATA_MEMBER 13 20
+  INIT_CONST
+  LOCAL 4 14 9 0 0
+  LREF 4
+  C_DATA_MEMBER 14 8
+  INIT_CONST
+  LOCAL 5 15 18 0 0
+  LREF 5
+  C_DATA_MEMBER 15 24
+  INIT_CONST
+  LOCAL 6 3 19 0 0
+  LREF 6
+  C_INT 3 0
+  INIT_CONST
+  LOCAL 7 3 nil 0 0
+  LREF 7
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  PM_FIELD 13
+  LOAD 0
+  LREF 1
+  LOAD 0
+  LREF 3
+  LOAD 0
+  PM_FIELD 13
+  LOAD 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CONST_DATA_MEMBER 13 32
+  PM_FIELD 13
+  LOAD 0
+  ADD 1
+  CAST 0 3
+  LREF 1
+  LOAD 0
+  LREF 4
+  LOAD 0
+  PM_FIELD 14
+  LOAD 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  LREF 5
+  LOAD 0
+  PM_FIELD 15
+  LOAD 0
+  CAST 7 3
+  ADD 1
+  STORE 2 0
+  LREF 6
+  DUP
+  LOAD 0
+  LREF 7
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  LOCAL 8 3 nil 0 0
+  LREF 8
+  LREF 1
+  LOAD 0
+  GREF 18
+  ADDR
+  CAST 12 16
+  CONST_INT 1 0
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  PM_FIELD 13
+  LOAD 0
+  LREF 1
+  LOAD 0
+  GREF 18
+  ADDR
+  CAST 12 16
+  CONST_INT 1 1
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  PM_FIELD 13
+  LOAD 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  GREF 18
+  ADDR
+  CAST 12 16
+  CONST_INT 1 2
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  PM_FIELD 13
+  LOAD 0
+  ADD 1
+  CAST 0 3
+  LREF 1
+  LOAD 0
+  GREF 21
+  ADDR
+  CAST 12 19
+  CONST_INT 1 0
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  PM_FIELD 14
+  LOAD 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  GREF 24
+  ADDR
+  CAST 12 22
+  CONST_INT 1 0
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  PM_FIELD 15
+  LOAD 0
+  CAST 7 3
+  ADD 1
+  STORE 2 0
+  LREF 6
+  DUP
+  LOAD 0
+  LREF 8
+  LOAD 0
+  ADD 1
+  STORE 0 0
+  LREF 6
+  DUP
+  LOAD 0
+  GREF 18
+  ADDR
+  CAST 12 16
+  CONST_INT 1 3
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  CONST_DATA_MEMBER 13 nil
+  CMP 4
+  CAST 4 1
+  GREF 21
+  ADDR
+  CAST 12 19
+  CONST_INT 1 1
+  PTR_STRIDE 0
+  DEREF
+  LOAD 0
+  CONST_DATA_MEMBER 14 nil
+  CMP 4
+  CAST 4 1
+  ADD 1
+  CAST 0 3
+  ADD 1
+  STORE 0 0
+  LREF 6
+  DUP
+  LOAD 0
+  LREF 2
+  LOAD 0
+  CONST_DATA_MEMBER 13 0
+  CMP 4
+  CAST 4 1
+  LREF 3
+  LOAD 0
+  LREF 2
+  LOAD 0
+  CMP 5
+  CAST 4 1
+  ADD 1
+  CAST 0 3
+  ADD 1
+  STORE 0 0
+  LREF 6
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 18 17 0 1 0 20
+  C_AGG_BEGIN 17
+  C_SEL 0
+  C_DATA_MEMBER 13 0
+  C_SEL 1
+  C_DATA_MEMBER 13 20
+  C_SEL 2
+  C_DATA_MEMBER 13 32
+  C_SEL 3
+  C_DATA_MEMBER 13 nil
+  C_SEL 4
+  C_DATA_MEMBER 13 0
+  C_AGG_END
+  VAR_INIT 18
+  DECL_VAR 21 20 0 1 0 21
+  C_AGG_BEGIN 20
+  C_SEL 0
+  C_DATA_MEMBER 14 8
+  C_SEL 1
+  C_DATA_MEMBER 14 nil
+  C_AGG_END
+  VAR_INIT 21
+  DECL_VAR 24 23 0 1 0 22
+  C_AGG_BEGIN 23
+  C_SEL 0
+  C_DATA_MEMBER 15 24
+  C_AGG_END
+  VAR_INIT 24
+frame NAMES
+frame END
+  END 4 0

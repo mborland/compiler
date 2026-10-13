@@ -1,130 +1,20 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
-"Test_name.c", line 10: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
-  struct C3 : virtual C2, C1 { virtual int foo () { return 1; } };
-                                                              ^
-
-"Test_name.c", line 11: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
-  struct C4 : virtual C3, C1 { virtual int foo () { return 2; } };
-                                                              ^
-
-"Test_name.c", line 12: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
-  struct C5 : C4 { virtual int foo () { return 3; } };
-                                                  ^
-
-"Test_name.c", line 14: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
-  struct C7 : virtual C6, virtual C3, C1 { virtual int foo () { return 4; } };
-                                                                          ^
-
-"Test_name.c", line 15: warning: CIR back end: the body of "foo" uses a virtual function, which the CIR back end does not support; the function is dropped
-  struct C8 : C7 { virtual int foo () { return 5; } };
-                                                  ^
-
 "Test_name.c", line 17: warning: unknown attribute "noipa"
   __attribute__((noipa)) int
                  ^
-
-"Test_name.c", line 21: warning: CIR back end: the body of "bar" uses a virtual call, which the CIR back end does not support; the function is dropped
-  }
-  ^
 
 "Test_name.c", line 23: warning: unknown attribute "noipa"
   __attribute__((noipa)) int
                  ^
 
-"Test_name.c", line 27: warning: CIR back end: the body of "baz" uses a virtual call, which the CIR back end does not support; the function is dropped
-  }
-  ^
-
 "Test_name.c", line 29: warning: unknown attribute "noipa"
   __attribute__((noipa)) int
                  ^
 
-"Test_name.c", line 33: warning: CIR back end: the body of "qux" uses a virtual call, which the CIR back end does not support; the function is dropped
+"Test_name.c", line 47: warning: CIR back end: the body of "main" uses the builtin function __builtin_clear_padding, which the CIR back end does not support; the function is dropped
   }
   ^
 
-"Test_name.c", line 38: warning: CIR back end: the body of "C2" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-    C5 c5;
-         ^
-          detected during:
-            implicit generation of "C2::C2() noexcept" at line 38
-            implicit generation of "C5::C5() noexcept" at line 38
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_clear_padding
 
-"Test_name.c", line 38: warning: CIR back end: the body of "C3" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-    C5 c5;
-         ^
-          detected during:
-            implicit generation of "C3::C3() noexcept" at line 38
-            implicit generation of "C5::C5() noexcept" at line 38
-
-"Test_name.c", line 38: warning: CIR back end: the body of "C4" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-    C5 c5;
-         ^
-          detected during:
-            implicit generation of "C4::C4() noexcept" at line 38
-            implicit generation of "C5::C5() noexcept" at line 38
-
-"Test_name.c", line 38: warning: CIR back end: the body of "C5" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-    C5 c5;
-         ^
-          detected during implicit generation of "C5::C5() noexcept" at line 38
-
-"Test_name.c", line 39: warning: CIR back end: the body of "C7" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-    C8 c8;
-         ^
-          detected during:
-            implicit generation of "C7::C7() noexcept" at line 39
-            implicit generation of "C8::C8() noexcept" at line 39
-
-"Test_name.c", line 39: warning: CIR back end: the body of "C8" uses a constructor or destructor of a class with virtual functions or virtual bases, which the CIR back end does not support; the function is dropped
-    C8 c8;
-         ^
-          detected during implicit generation of "C8::C8() noexcept" at line 39
-
-"Test_name.c", line 47: warning: CIR back end: the body of "main" uses a variable of a record type that is not supported, which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-Warning: CIR back end: the unused definition of '_ZN2C33fooEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
-
-Warning: CIR back end: the unused definition of '_ZN2C43fooEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
-
-Warning: CIR back end: the unused definition of '_ZN2C53fooEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
-
-Warning: CIR back end: the unused definition of '_ZN2C73fooEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
-
-Warning: CIR back end: the unused definition of '_ZN2C83fooEv' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual function
-
-Warning: CIR back end: the unused definition of '_ZN2C2C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C2C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C3C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C3C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C4C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C4C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C5C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C5C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C7C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C7C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C8C1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZN2C8C2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Error: CIR back end: the definition of '_Z3barP2C5' was dropped: it uses a construct the CIR back end cannot express: a virtual call
-
-Error: CIR back end: the definition of '_Z3bazP2C3' was dropped: it uses a construct the CIR back end cannot express: a virtual call
-
-Error: CIR back end: the definition of '_Z3quxP2C8' was dropped: it uses a construct the CIR back end cannot express: a virtual call
-
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a variable of a record type that is not supported
-
-4 errors detected in the compilation of "Test_name.c".
+1 error detected in the compilation of "Test_name.c".

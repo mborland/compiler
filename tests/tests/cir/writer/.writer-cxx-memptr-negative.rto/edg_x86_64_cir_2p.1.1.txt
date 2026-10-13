@@ -1,0 +1,126 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 20: warning: CIR back end: the body of "bad1" uses a constant pointer to a member function with a this adjustment in a function body, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 24: warning: CIR back end: the body of "bad2" uses a constant pointer to a member function with a this adjustment in a function body, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+ecil 1.2 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FUNC 4 1 0 []
+  STR 5 "_Z3ok1v"
+  DECL_FUNC 5 4 0 0 5
+  DECL_FUNC 5 4 0 1 5
+  STR 6 "D"
+  TY_RECORD_DECL 6 0 6
+  TY_PTR 7 6
+  TY_FUNC 8 1 0 [7, 1]
+  TY_METHOD 9 8 6
+  STR 7 "B1"
+  TY_RECORD_DECL 10 0 7
+  STR 8 "b1"
+  TY_RECORD_BODY 10 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 8 0
+  STR 9 "B2"
+  TY_RECORD_DECL 11 0 9
+  STR 10 "b2"
+  TY_RECORD_BODY 11 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 10 0
+  STR 11 "d"
+  TY_RECORD_BODY 6 12 12 4 0 3
+  REC_FIELD 10 0 nil nil nil 17
+  REC_FIELD 11 4 nil nil nil 17
+  REC_FIELD 1 8 nil nil 11 0
+  STR 12 "m"
+  TY_PTR 12 11
+  TY_FUNC 13 1 0 [12, 1]
+  STR 13 "_ZN2B21gEi"
+  DECL_FUNC 14 13 0 0 13
+  TY_BOOL 15 1 1
+  FUNC_BEGIN 5 0
+  BLOCK_BEGIN
+  LOCAL 1 9 12 0 0
+  LREF 1
+  CONST_METHOD 9 14 4 0
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  CONST_METHOD 9 nil 0 0
+  CMP 4
+  CAST 4 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 14 "_Z4bad1v"
+  DECL_FUNC 16 4 0 0 14
+  DECL_FUNC 16 4 0 1 14
+  TY_ARRAY 17 9 2 0
+  STR 15 "arr"
+  DECL_FUNC 16 4 0 32 14 supp{13: "a constant pointer to a member function with a this adjustment in a function body"}
+frame REGION supp
+  STR 16 "_Z4bad2v"
+  DECL_FUNC 18 4 0 0 16
+  DECL_FUNC 18 4 0 1 16
+  STR 17 "SM"
+  TY_RECORD_DECL 19 0 17
+  STR 18 "n"
+  TY_RECORD_BODY 19 24 24 8 0 2
+  REC_FIELD 9 0 nil nil 12 0
+  REC_FIELD 1 16 nil nil 18 0
+  STR 19 "s"
+  DECL_FUNC 18 4 0 32 16 supp{13: "a constant pointer to a member function with a this adjustment in a function body"}
+frame REGION
+  STR 20 "_Z3ok2v"
+  DECL_FUNC 20 4 0 0 20
+  DECL_FUNC 20 4 0 1 20
+  TY_PTR 21 10
+  TY_FUNC 22 1 0 [21, 1]
+  STR 21 "_ZN2B11fEi"
+  DECL_FUNC 23 22 0 0 21
+  FUNC_BEGIN 20 0
+  BLOCK_BEGIN
+  LOCAL 1 19 19 0 0
+  LREF 1
+  C_AGG_BEGIN 19
+  C_SEL 0
+  C_METHOD 9 23 0 0
+  C_SEL 1
+  C_INT 1 1
+  C_AGG_END
+  INIT_CONST
+  LREF 1
+  FIELD 19 1
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  STR 22 "gs"
+  DECL_VAR 24 19 0 1 0 22
+  C_AGG_BEGIN 19
+  C_SEL 0
+  C_METHOD 9 14 4 0
+  C_SEL 1
+  C_INT 1 1
+  C_AGG_END
+  VAR_INIT 24
+frame NAMES
+frame END
+  END 7 0

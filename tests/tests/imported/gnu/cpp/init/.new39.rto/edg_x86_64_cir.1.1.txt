@@ -3,21 +3,6 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
       if (sz != -1)
                 ^
 
-"./init/new39.C", line 19: warning: CIR back end: the body of "operator new[]" uses the expression kind "throw expression", which the CIR back end does not support; the function is dropped
-    }
-    ^
-
-"./init/new39.C", line 68: warning: CIR back end: the body of "main" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"./init/new39.C", line 31: warning: CIR back end: the body of "test" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during:
-            instantiation of "void test<T>(size_t) [with T=without_new]" at line 49
-            instantiation of "void all_tests<T>() [with T=without_new]" at line 65
-
 "./init/new39.C", line 49: warning: integer conversion resulted in a change of sign
     test<T>(-1);
             ^
@@ -34,13 +19,6 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
     test_noopt<T>(-1);
                   ^
           detected during instantiation of "void all_tests<T>() [with T=without_new]" at line 65
-
-"./init/new39.C", line 31: warning: CIR back end: the body of "test" uses the statement "try statement", which the CIR back end does not support; the function is dropped
-  }
-  ^
-          detected during:
-            instantiation of "void test<T>(size_t) [with T=with_new]" at line 49
-            instantiation of "void all_tests<T>() [with T=with_new]" at line 66
 
 "./init/new39.C", line 49: warning: integer conversion resulted in a change of sign
     test<T>(-1);
@@ -59,74 +37,8 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
                   ^
           detected during instantiation of "void all_tests<T>() [with T=with_new]" at line 66
 
-Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+Error: CIR back end: the definition of '_Z10test_nooptI11without_newEvm' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
+Error: CIR back end: the definition of '_Z10test_nooptI8with_newEvm' was dropped: it uses a construct the CIR back end cannot express: inline assembly (and it is referenced)
 
-Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt13bad_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt9type_infoC1EPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt9type_infoC2EPKc' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt8bad_castC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt8bad_castC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt10bad_typeidC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt16nested_exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_ZNSt3pmr15memory_resource8allocateEmm' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
-
-Warning: CIR back end: the unused definition of '_ZNSt3pmr15memory_resource10deallocateEPvmm' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
-
-Warning: CIR back end: the unused definition of '_ZNKSt3pmr15memory_resource8is_equalERKS0_' was dropped and erased: it uses a construct the CIR back end cannot express: a virtual call
-
-Warning: CIR back end: the unused definition of '_ZN8with_newnaEm' was dropped and erased: it uses a construct the CIR back end cannot express: the expression kind "throw expression"
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPKcEEvT_S8_St20forward_iterator_tag' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EOS4_' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2EOS4_' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPcEEvT_S7_St20forward_iterator_tag' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIwSt11char_traitsIwESaIwEE12_M_constructIPKwEEvT_S8_St20forward_iterator_tag' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIwSt11char_traitsIwESaIwEE12_M_constructIPKcEEvT_S8_St20forward_iterator_tag' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIDsSt11char_traitsIDsESaIDsEE12_M_constructIPKDsEEvT_S8_St20forward_iterator_tag' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_ZNSt7__cxx1112basic_stringIDiSt11char_traitsIDiESaIDiEE12_M_constructIPKDiEEvT_S8_St20forward_iterator_tag' was dropped and erased: it uses a construct the CIR back end cannot express: the constant kind "void constant"
-
-Warning: CIR back end: the unused definition of '_Z4testI11without_newEvm' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Warning: CIR back end: the unused definition of '_Z10test_nooptI11without_newEvm' was dropped and erased: it uses a construct the CIR back end cannot express: inline assembly
-
-Warning: CIR back end: the unused definition of '_Z4testI8with_newEvm' was dropped and erased: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-Warning: CIR back end: the unused definition of '_Z10test_nooptI8with_newEvm' was dropped and erased: it uses a construct the CIR back end cannot express: inline assembly
-
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement"
-
-1 error detected in the compilation of "Test_name.c".
+2 errors detected in the compilation of "Test_name.c".

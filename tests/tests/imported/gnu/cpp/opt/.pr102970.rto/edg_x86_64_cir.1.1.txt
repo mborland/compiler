@@ -1,18 +1,4 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics --c++14 Test_name.c
-Warning: CIR back end: the unused definition of '_ZNSt9exceptionC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt9exceptionC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt9bad_allocC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC1Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Warning: CIR back end: the unused definition of '_ZNSt20bad_array_new_lengthC2Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a constructor or destructor of a class with virtual functions or virtual bases
-
-Error: CIR back end: the definition of '_ZNSt38__uninitialized_construct_buf_dispatchILb0EE5__ucrIP3boxN9__gnu_cxx17__normal_iteratorIS3_St6vectorIS2_SaIS2_EEEEEEvT_SA_T0_' was dropped: it uses a construct the CIR back end cannot express: the statement "try statement" (and it is referenced)
-
 Error: CIR back end: the definition of '_ZSt9__advanceIN9__gnu_cxx17__normal_iteratorIP3boxSt6vectorIS2_SaIS2_EEEElEvRT_T0_St26random_access_iterator_tag' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p (and it is referenced)
 
-2 errors detected in the compilation of "Test_name.c".
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,59 @@
+; C++ (ECIL 1.2): pointers to members of anonymous unions and structs.
+;   struct S { int pad; union { int a; float b; }; struct { int c; int d; }; };
+;   int S::*g_pa = &S::a; float S::*g_pb = &S::b; int S::*g_pc = &S::c; ...
+; The member path descends through the unnamed members.
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ %S/Inputs/s4_anon_mp_host.cpp %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK-DAG: @g_pa = #cir.data_member<[1, 0]>
+; CHECK-DAG: @g_pb = #cir.data_member<[1, 1]>
+; CHECK-DAG: @g_pc = #cir.data_member<[2, 0]>
+; CHECK-DAG: @g_pd = #cir.data_member<[2, 1]>
+
+frame DECLS
+  STR 100 "S"
+  STR 101 "pad"
+  STR 102 "a"
+  STR 103 "b"
+  STR 104 "c"
+  STR 105 "d"
+  STR 106 "U"
+  STR 107 "A"
+  STR 108 "g_pa"
+  STR 109 "g_pb"
+  STR 110 "g_pc"
+  STR 111 "g_pd"
+  TY_RECORD_DECL 201 1 106
+  TY_RECORD_BODY 201 4 4 4 0 2
+  REC_FIELD 1 0 nil nil 102 0
+  REC_FIELD 9 0 nil nil 103 0
+  TY_RECORD_DECL 202 0 107
+  TY_RECORD_BODY 202 8 8 4 0 2
+  REC_FIELD 1 0 nil nil 104 0
+  REC_FIELD 1 4 nil nil 105 0
+  TY_RECORD_DECL 203 0 100
+  TY_RECORD_BODY 203 16 16 4 0 3
+  REC_FIELD 1 0 nil nil 101 0
+  REC_FIELD 201 4 nil nil nil 1
+  REC_FIELD 202 8 nil nil nil 1
+  TY_DATA_MEMBER 231 1 203
+  TY_DATA_MEMBER 232 9 203
+  DECL_VAR 301 231 0 1 8 108
+  DECL_VAR 302 232 0 1 8 109
+  DECL_VAR 303 231 0 1 8 110
+  DECL_VAR 304 231 0 1 8 111
+frame GLOBALS
+  C_DATA_MEMBER 231 4
+  VAR_INIT 301
+  C_DATA_MEMBER 232 4
+  VAR_INIT 302
+  C_DATA_MEMBER 231 8
+  VAR_INIT 303
+  C_DATA_MEMBER 231 12
+  VAR_INIT 304
+frame END
+  END auto 0

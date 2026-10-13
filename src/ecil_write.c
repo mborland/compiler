@@ -257,6 +257,16 @@ environment variable EDG_CIR_WRAPV, for experiments.
 #endif /* ifndef ECIL_DEFAULT_WRAPV */
 a_boolean ecil_wrapv = ECIL_DEFAULT_WRAPV;
 
+
+a_boolean ecil_has_exceptions(void)
+/*
+Return TRUE if the stream is a C++ stream with exceptions (spec 12.6): the
+front end has them enabled (--no_exceptions turns them off).
+*/
+{
+  return !C_mode() && exceptions_enabled;
+}  /* ecil_has_exceptions */
+
 #if CHECKING
 /* What the first operand of a record introduces. */
 enum an_ecil_intro_kind {
@@ -722,6 +732,10 @@ Build the per-opcode tables of the record checks.
   ecil_intro_table[eop_ty_func] = (unsigned char)eik_gid;
   ecil_intro_table[eop_ty_record_decl] = (unsigned char)eik_gid;
   ecil_intro_table[eop_ty_opaque] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_vptr] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_data_member] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_ty_method] = (unsigned char)eik_gid;
+  ecil_intro_table[eop_decl_abi_data] = (unsigned char)eik_gid_or_reissue;
   ecil_intro_table[eop_decl_func] = (unsigned char)eik_gid_or_reissue;
   ecil_intro_table[eop_decl_var] = (unsigned char)eik_gid_or_reissue;
   ecil_intro_table[eop_ty_record_body] = (unsigned char)eik_gid_existing;
@@ -2192,8 +2206,9 @@ need, then HDR_TARGET, HDR_LANG, HDR_PRODUCER and HDR_TYPE_ROLE.
 #endif /* CHECKING */
   if (ecil_wrapv) lang_flags |= ECIL_LANG_WRAPV;
   if (!C_mode()) {
-    /* The stream is a no-exceptions stream whatever the front end does
-       with exceptions (spec 11.1): ECIL_LANG_EXCEPTIONS is never set. */
+    /* A C++ stream has exceptions when the front end does (spec 12.6): calls
+       may throw unless nothrow, and the eh and all cleanups are live. */
+    if (ecil_has_exceptions()) lang_flags |= ECIL_LANG_EXCEPTIONS;
     if (rtti_enabled) lang_flags |= ECIL_LANG_RTTI;
     /* The front end always has thread-safe initialization of function-local
        statics (__cpp_threadsafe_static_init). */

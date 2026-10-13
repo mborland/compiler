@@ -110,3 +110,27 @@ a_type_ptr partial_ordering_type(void) { abort(); }
 void initialize_ordering_constants(void) { abort(); }
 a_boolean f_identical_types(a_type_ptr a, a_type_ptr b, unsigned int f) {
   (void)a; (void)b; (void)f; abort(); }
+/* Class facts and the vtable decisions (not used by the C cases). */
+void set_class_assoc_operator_delete_routine(a_type_ptr t) { (void)t; abort(); }
+a_routine_ptr enclosing_routine_for_local_type_or_null(a_type_ptr t) {
+  (void)t; abort(); }
+a_boolean routine_might_exist_in_multiple_copies(a_routine_ptr r) {
+  (void)r; abort(); }
+a_routine_ptr final_overrider(a_routine_ptr f, an_expr_node_ptr n, a_type_ptr t) {
+  (void)f; (void)n; (void)t; abort(); }
+a_boolean is_empty_class_type(a_type_ptr t) { (void)t; abort(); }
+/* Member pointers, typeinfo (not used by the C cases). */
+a_boolean is_enum_type(a_type_ptr t) { (void)t; abort(); }
+a_type_ptr pm_class_type(a_type_ptr t) { (void)t; abort(); }
+a_type_ptr pm_member_type(a_type_ptr t) { (void)t; abort(); }
+a_boolean is_nothrow_type(a_type_ptr t) { (void)t; abort(); }
+a_boolean is_nullptr_type(a_type_ptr t) { (void)t; abort(); }
+a_type_ptr function_type_without_noexcept_exception_spec(a_type_ptr t) {
+  (void)t; abort(); }
+a_scope_depth depth_scope_stack;
+/* Exceptions (not used by the C cases). */
+a_boolean is_non_throwing_routine(a_routine_ptr r) { (void)r; abort(); }
+/* Placement operator delete (not used by the C cases). */
+a_boolean seq_is_in_system_header(a_seq_number s) { (void)s; abort(); }
+/* Pointer-to-member builtins (not used by the C cases). */
+a_targ_size_t common_initial_sequence_limit(a_type_ptr a, a_type_ptr b) { (void)a; (void)b; abort(); }

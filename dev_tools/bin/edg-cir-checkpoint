@@ -44,7 +44,9 @@ The default steps are:
 that is the C smoke and corpus (statuses against the recorded expectations),
 the C assembly against the M3.1 baseline (--asm-baseline, default
 ~/edg-cir-config/m31-base-asm: every difference is listed with its class and
-cause; --asm-normalize-cfi ignores the frame description directives), the ASan
+cause; the frame description directives (.cfi_*) are ignored from S1 on,
+when every function gets unwind tables: --no-asm-normalize-cfi shows them;
+personality, lsda and escape directives stay visible), the ASan
 debug front end with ECIL_GID_STRESS over the writer tests, the C++ smoke list
 in both configs (a crash fails; with --smoke-all-pass every test must pass),
 the crash sweep (every test type of both corpora, eh/, rtti/ and cir/ through
@@ -57,10 +59,20 @@ default ~/edg-cir-config/m31-base-cpp-asm, made with the corpus filter
 that includes eh/ and rtti/) are left for the gates; name them
 with --steps (they exist in the gate tool).
 
+Every run records a tree fingerprint (a hash of src, cir_src, dev_tools/bin,
+tests/.edgy and cmake, without build directories) of this tree and of the box
+tree in fingerprint.txt and at the top of summary.md of the evidence
+directory.  It syncs again (up to three times) if this tree changes while it
+is synced, and refuses to run (status 2) if the box tree is not this tree,
+which with --no-sync means a stale box tree; --allow-stale runs anyway and
+records "STALE".
+
 Exit status: 0 if every step passed, 1 otherwise (2 for a setup problem).
 '''
 
 import argparse
+import hashlib
+import os
 import re
 import shlex
 import subprocess
@@ -81,6 +93,40 @@ QUICK_STEPS = 'build,smoke,cpp-smoke'
 EXCLUDES = ['/build/', '/tests/runs/', '/.tmp/', '/cmake-build-debug/',
             '/.idea/', '/.mypy_cache/', '/dev-pref.json', '/.git/',
             '__pycache__/', '.DS_Store']
+
+
+# The tree fingerprint: a hash over the files that decide what a checkpoint
+# tests (src, cir_src, dev_tools/bin, tests/.edgy and cmake; not build
+# directories, caches or runs), so that a run on a stale tree is caught.
+FINGERPRINT_DIRS = ('src', 'cir_src', 'dev_tools/bin', 'tests/.edgy',
+                    'cmake')
+FINGERPRINT_SKIP = ('build', '.tmp', '__pycache__', '.git', '.DS_Store')
+FINGERPRINT_SOURCE = '''
+import hashlib, os, sys
+root = sys.argv[1]
+dirs = %r
+skip = %r
+lines = []
+for top in dirs:
+  for base, names, files in os.walk(os.path.join(root, top)):
+    names[:] = sorted(n for n in names if n not in skip)
+    for name in sorted(files):
+      path = os.path.join(base, name)
+      if name in skip or name.endswith('.pyc') or os.path.islink(path):
+        continue
+      digest = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+      lines.append('%%s %%s' %% (os.path.relpath(path, root), digest))
+lines.sort()
+print(hashlib.sha256('\\n'.join(lines).encode()).hexdigest(), len(lines))
+''' % (FINGERPRINT_DIRS, FINGERPRINT_SKIP)
+
+
+def local_fingerprint(root: Path) -> str:
+  '''"<hash> <number of files>" of a tree on this machine.'''
+  import subprocess as sp
+  proc = sp.run([sys.executable, '-c', FINGERPRINT_SOURCE, str(root)],
+                stdout = sp.PIPE, text = True, check = True)
+  return proc.stdout.strip()
 
 
 def ssh_options() -> List[str]:
@@ -183,6 +229,10 @@ def main() -> None:
                              'directories (never done by default)')
   parser.add_argument('--prune-only', action = 'store_true',
                       help = 'prune (--prune, default 3) and stop')
+  parser.add_argument('--allow-stale', action = 'store_true',
+                      help = 'with --no-sync: run although the fingerprint '
+                             'of the tree on the box differs from this '
+                             'tree\'s (the evidence then says so)')
   parser.add_argument('--incremental', action = 'store_true',
                       help = 'keep the CIR build directories')
   parser.add_argument('--no-sync', action = 'store_true',
@@ -192,7 +242,12 @@ def main() -> None:
   parser.add_argument('--cpp-asm-baseline', default = '~/edg-cir-config/'
                       'm31-base-cpp-asm')
   parser.add_argument('--asm-normalize-cfi', action = 'store_true',
-                      help = 'asm-diff steps ignore .cfi_* directives')
+                      default = True,
+                      help = 'asm-diff steps ignore .cfi_* directives '
+                             '(the default)')
+  parser.add_argument('--no-asm-normalize-cfi', dest = 'asm_normalize_cfi',
+                      action = 'store_false',
+                      help = 'asm-diff steps compare .cfi_* directives too')
   parser.add_argument('--identity-baseline',
                       default = '~/edg-cir-config/identity-m0c')
   parser.add_argument('--perf-baseline',
@@ -243,19 +298,56 @@ def main() -> None:
     print(f"WARNING: only {free} GB free on the box (< {LOW_DISK_GB} GB): a "
           f"checkpoint tree takes 10-15 GB; use --prune N or delete old "
           f"trees", file = sys.stderr, flush = True)
-  if not args.no_sync:
-    print(f"syncing to {args.tree} ...", flush = True)
-    command = ['rsync', '-a', '--checksum', '--no-times', '--delete',
-               '-e', 'ssh ' + ' '.join(ssh_options())]
-    for exclude in EXCLUDES:
-      command += ['--exclude', exclude]
-    command += ['./', f"{BOX}:edg-cir-config/{args.tree}/"]
-    if subprocess.run(command).returncode != 0:
-      print('rsync failed', file = sys.stderr)
-      sys.exit(2)
+  def box_fingerprint() -> str:
+    return ssh(f"cd {tree} && python3 -c {shlex.quote(FINGERPRINT_SOURCE)} "
+               f"\"$PWD\"", capture = True).stdout.strip()
+
+  # Sync (unless --no-sync) until this tree, before and after the sync, and
+  # the box tree have one fingerprint: other work can change this tree while
+  # rsync runs, and a tree that is not what was fingerprinted is not what
+  # was tested.
+  attempts = 1 if args.no_sync else 3
+  for attempt in range(attempts):
+    before = local_fingerprint(root)
+    if not args.no_sync:
+      print(f"syncing to {args.tree} ..." + (
+        f" (again: the tree changed while syncing)" if attempt else ''),
+            flush = True)
+      command = ['rsync', '-a', '--checksum', '--no-times', '--delete',
+                 '-e', 'ssh ' + ' '.join(ssh_options())]
+      for exclude in EXCLUDES:
+        command += ['--exclude', exclude]
+      command += ['./', f"{BOX}:edg-cir-config/{args.tree}/"]
+      if subprocess.run(command).returncode != 0:
+        print('rsync failed', file = sys.stderr)
+        sys.exit(2)
+    local = local_fingerprint(root)
+    remote = box_fingerprint()
+    stale = local != remote or local != before
+    print(f"tree fingerprint {local} (this tree); {remote} (box)"
+          + ("; DIFFERENT" if stale else "; equal"), flush = True)
+    if not stale:
+      break
+  if stale and not args.allow_stale:
+    why = ('it was not synced: drop --no-sync or sync it first'
+           if args.no_sync else
+           'this tree keeps changing while it is synced (is another agent '
+           'editing it?); wait and retry')
+    print(f"refusing to run: the box tree {args.tree} is not this tree "
+          f"({why}); --allow-stale runs anyway and records it",
+          file = sys.stderr)
+    sys.exit(2)
+  note = f"STALE (this tree {local})" if stale else 'equal to this tree'
+  fingerprint = f"{remote} ({note})"
+  ssh(f"mkdir -p {out} && printf '%s\\n' "
+      f"{shlex.quote('tree fingerprint: ' + fingerprint)} "
+      f"{shlex.quote('checkpoint started: ' + stamp)} "
+      f"{shlex.quote('synced: ' + ('no' if args.no_sync else 'yes'))} "
+      f"> {out}/fingerprint.txt")
 
   gate = [
     'python3', 'dev_tools/bin/edg-cir-gate-evidence', '--tree', '$T',
+    '--tree-fingerprint', fingerprint,
     '--jobs', str(args.jobs), '--only', steps, '--out', out,
     '--identity-baseline', args.identity_baseline,
     '--asm-baseline', args.asm_baseline,

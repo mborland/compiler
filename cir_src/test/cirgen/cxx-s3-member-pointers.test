@@ -1,0 +1,297 @@
+; C++ (ECIL 1.2, slice S3): pointers to data members and member functions.
+; The classes B1 { int a; f }, B2 { int b; g }, D : B1, B2 { int d; h } (B2 at 4,
+; d at 8) and Holder { int x; int D::*pm; }, Der : Holder { int z; }.  This unit
+; defines: global member pointer constants (paths through the bases [1, 0],
+; method constants of the function and of a base's function with a
+; this-adjustment in the lowered {i64, i64} form, an array of them with an
+; unlisted null element), globals of types with data member pointers that have no
+; initializer or only some members listed (null is -1: the expanded null
+; constants), and functions on member pointers passed by value ({i64, i64} in two
+; registers): .* and ->*, ->* calls, ==, bool conversion, base/derived
+; conversions, a method constant with an adjustment in a function (a run-time
+; derived_method), INIT_ZERO and INIT_ZERO_BASE of types with a data member
+; pointer.  A g++ unit and a clang unit (Inputs/s3_mp_host.cpp) define the
+; member functions and check everything, in both directions.
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil > %t.cir
+; RUN: %FileCheck %s < %t.cir
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -c %S/Inputs/s3_mp_host.cpp -o %t.host.o
+; RUN: g++ %t.host.o %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %clang -x c++ -std=c++17 -fno-exceptions -c %S/Inputs/s3_mp_host.cpp -o %t.hostclang.o
+; RUN: g++ %t.hostclang.o %t.o -o %t.clang.exe
+; RUN: %t.clang.exe
+; RUN: %edg-cir --emit=obj -O2 -o %t.o2.o %t.ecil
+; RUN: g++ %t.host.o %t.o2.o -o %t.o2.exe
+; RUN: %t.o2.exe
+
+; CHECK-DAG: cir.global external dso_local @g_pa = #cir.data_member<[0]> : !cir.data_member<!s32i in !rec_B1>
+; CHECK-DAG: cir.global external dso_local @g_pd = #cir.data_member<[2]> : !cir.data_member<!s32i in !rec_D>
+; CHECK-DAG: cir.global external dso_local @g_pdb = #cir.data_member<[1, 0]> : !cir.data_member<!s32i in !rec_D>
+; CHECK-DAG: cir.global external dso_local @g_pf = #cir.method<@_ZN2B11fEi> : !cir.method<
+; CHECK-DAG: cir.global external dso_local @g_pg = #cir.const_record<{#cir.global_view<@_ZN2B21gEi> : !s64i, #cir.int<4> : !s64i}> : !rec_anon_struct
+; CHECK-DAG: cir.global external dso_local @g_arr = #cir.const_array<[#cir.const_record<{#cir.global_view<@_ZN1D1hEi> : !s64i, #cir.int<0> : !s64i}> : !rec_anon_struct, #cir.const_record<{#cir.global_view<@_ZN2B21gEi> : !s64i, #cir.int<4> : !s64i}> : !rec_anon_struct
+; CHECK-DAG: cir.global external dso_local @g_null = #cir.data_member<null> : !cir.data_member<!s32i in !rec_D>
+; CHECK-DAG: cir.global external dso_local @g_holder = #cir.const_record<{#cir.int<0> : !s32i, #cir.data_member<null> : !cir.data_member<!s32i in !rec_D>
+; CHECK-DAG: cir.global external dso_local @g_holder2 = #cir.const_record<{#cir.int<7> : !s32i, #cir.data_member<null> : !cir.data_member<!s32i in !rec_D>
+; CHECK-LABEL: cir.func {{.*}}@get_dm(
+; CHECK: cir.get_runtime_member
+; CHECK-LABEL: cir.func {{.*}}@call_m(
+; CHECK: cir.get_method
+; CHECK: cir.call %{{.*}}(%{{.*}}, %{{.*}}) nothrow : (!cir.ptr<!cir.func<(!cir.ptr<!void>, !s32i) -> !s32i>>, !cir.ptr<!void>, !s32i) -> !s32i
+; CHECK-LABEL: cir.func {{.*}}@is_set(
+; CHECK: cir.cast member_ptr_to_bool
+; CHECK-LABEL: cir.func {{.*}}@same(
+; CHECK: cir.cmp eq
+; CHECK-LABEL: cir.func {{.*}}@to_derived(
+; CHECK: cir.derived_data_member %{{.*}}[4]
+; CHECK-LABEL: cir.func {{.*}}@to_base(
+; CHECK: cir.base_data_member %{{.*}}[4]
+; CHECK-LABEL: cir.func {{.*}}@mk_method(
+; CHECK: cir.derived_method %{{.*}}[4]
+; CHECK-LABEL: cir.func {{.*}}@zero_holder(
+; CHECK: cir.const #cir.const_record<{#cir.int<0> : !s32i, #cir.data_member<null>
+; CHECK-LABEL: cir.func {{.*}}@make_der(
+; CHECK: #cir.data_member<null>
+; CHECK-LABEL: cir.func {{.*}}@zero_big(
+; CHECK: cir.copy
+
+frame DECLS
+  STR 100 "B1"
+  STR 101 "a"
+  STR 102 "B2"
+  STR 103 "b"
+  STR 104 "D"
+  STR 105 "d"
+  STR 106 "Holder"
+  STR 107 "x"
+  STR 108 "pm"
+  STR 109 "Der"
+  STR 110 "z"
+  STR 111 "p"
+  STR 112 "m"
+  TY_RECORD_DECL 201 0 100
+  TY_RECORD_BODY 201 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 101 0
+  TY_RECORD_DECL 202 0 102
+  TY_RECORD_BODY 202 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 103 0
+  TY_RECORD_DECL 203 0 104
+  TY_RECORD_BODY 203 12 12 4 0 3
+  REC_FIELD 201 0 nil nil nil 16
+  REC_FIELD 202 4 nil nil nil 16
+  REC_FIELD 1 8 nil nil 105 0
+  TY_DATA_MEMBER 233 1 203
+  TY_RECORD_DECL 204 0 106
+  TY_RECORD_BODY 204 16 16 8 0 2
+  REC_FIELD 1 0 nil nil 107 0
+  REC_FIELD 233 8 nil nil 108 0
+  TY_RECORD_DECL 205 0 109
+  TY_RECORD_BODY 205 24 20 8 0 2
+  REC_FIELD 204 0 nil nil nil 16
+  REC_FIELD 1 16 nil nil 110 0
+  TY_PTR 211 201
+  TY_PTR 212 202
+  TY_PTR 213 203
+  TY_FUNC 221 1 0 [211, 1]
+  TY_FUNC 222 1 0 [212, 1]
+  TY_FUNC 223 1 0 [213, 1]
+  TY_DATA_MEMBER 231 1 201
+  TY_DATA_MEMBER 232 1 202
+  TY_METHOD 241 221 201
+  TY_METHOD 243 223 203
+  TY_ARRAY 251 243 3 0
+  TY_ARRAY 252 233 3 0
+  TY_ARRAY 253 204 2 0
+  TY_ARRAY 254 233 64 0
+  TY_PTR 214 254
+  STR 113 "_ZN2B11fEi"
+  DECL_FUNC 301 221 0 0 113
+  STR 114 "_ZN2B21gEi"
+  DECL_FUNC 302 222 0 0 114
+  STR 115 "_ZN1D1hEi"
+  DECL_FUNC 303 223 0 0 115
+  STR 116 "g_pa"
+  DECL_VAR 401 231 0 1 8 116
+  STR 117 "g_pb"
+  DECL_VAR 402 232 0 1 8 117
+  STR 118 "g_pd"
+  DECL_VAR 403 233 0 1 8 118
+  STR 119 "g_pdb"
+  DECL_VAR 404 233 0 1 8 119
+  STR 120 "g_pf"
+  DECL_VAR 405 241 0 1 8 120
+  STR 121 "g_ph"
+  DECL_VAR 406 243 0 1 8 121
+  STR 122 "g_pg"
+  DECL_VAR 407 243 0 1 8 122
+  STR 123 "g_arr"
+  DECL_VAR 408 251 0 1 8 123
+  STR 124 "g_null"
+  DECL_VAR 409 233 0 1 8 124
+  STR 125 "g_holder"
+  DECL_VAR 410 204 0 1 8 125
+  STR 126 "g_holder2"
+  DECL_VAR 411 204 0 1 8 126
+  STR 127 "g_dmarr"
+  DECL_VAR 412 252 0 1 8 127
+  STR 128 "g_harr"
+  DECL_VAR 413 253 0 1 8 128
+  TY_FUNC 261 1 0 [213, 233]
+  TY_FUNC 262 1 0 [213, 243, 1]
+  TY_FUNC 263 15 0 [233]
+  TY_FUNC 264 15 0 [233, 233]
+  TY_FUNC 265 233 0 [232]
+  TY_FUNC 266 232 0 [233]
+  TY_FUNC 267 243 0 []
+  TY_FUNC 268 204 0 []
+  TY_FUNC 269 205 0 []
+  TY_FUNC 270 11 0 [214]
+  STR 129 "get_dm"
+  DECL_FUNC 501 261 0 1 129
+  STR 130 "call_m"
+  DECL_FUNC 502 262 0 1 130
+  STR 131 "is_set"
+  DECL_FUNC 503 263 0 1 131
+  STR 132 "same"
+  DECL_FUNC 504 264 0 1 132
+  STR 133 "to_derived"
+  DECL_FUNC 505 265 0 1 133
+  STR 134 "to_base"
+  DECL_FUNC 506 266 0 1 134
+  STR 135 "mk_method"
+  DECL_FUNC 507 267 0 1 135
+  STR 136 "zero_holder"
+  DECL_FUNC 508 268 0 1 136
+  STR 137 "make_der"
+  DECL_FUNC 509 269 0 1 137
+  STR 138 "zero_big"
+  DECL_FUNC 510 270 0 1 138
+  C_DATA_MEMBER 231 0
+  VAR_INIT 401
+  C_DATA_MEMBER 232 0
+  VAR_INIT 402
+  C_DATA_MEMBER 233 8
+  VAR_INIT 403
+  C_DATA_MEMBER 233 4
+  VAR_INIT 404
+  C_METHOD 241 301 0 0
+  VAR_INIT 405
+  C_METHOD 243 303 0 0
+  VAR_INIT 406
+  C_METHOD 243 302 4 0
+  VAR_INIT 407
+  C_AGG_BEGIN 251
+  C_SEL 0
+  C_METHOD 243 303 0 0
+  C_SEL 1
+  C_METHOD 243 302 4 0
+  C_AGG_END
+  VAR_INIT 408
+  C_AGG_BEGIN 204
+  C_SEL 0
+  C_INT 1 7
+  C_AGG_END
+  VAR_INIT 411
+  C_AGG_BEGIN 253
+  C_SEL 0
+  C_AGG_BEGIN 204
+  C_SEL 0
+  C_INT 1 1
+  C_AGG_END
+  C_AGG_END
+  VAR_INIT 413
+frame REGION
+  FUNC_BEGIN 501 0
+  PARAM 1 213 213 111 0
+  PARAM 2 233 233 112 0
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  PM_FIELD 233
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 502 0
+  PARAM 1 213 213 111 0
+  PARAM 2 243 243 112 0
+  PARAM 3 1 1 107 0
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  LREF 3
+  LOAD 0
+  PM_CALL 223 2 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 503 0
+  PARAM 1 233 233 112 0
+  LREF 1
+  LOAD 0
+  TO_BOOL
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 504 0
+  PARAM 1 233 233 101 0
+  PARAM 2 233 233 103 0
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  CMP 4
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 505 0
+  PARAM 1 232 232 112 0
+  LREF 1
+  LOAD 0
+  PM_CAST 0 232 233 4
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 506 0
+  PARAM 1 233 233 112 0
+  LREF 1
+  LOAD 0
+  PM_CAST 1 233 232 4
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 507 0
+  CONST_METHOD 243 302 4 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 508 0
+  LOCAL 1 204 nil 8 0
+  LREF 1
+  INIT_ZERO
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 509 0
+  LOCAL 1 205 nil 8 0
+  LREF 1
+  ADDR
+  BASE_CAST 205 204 0 1
+  DEREF
+  INIT_ZERO_BASE
+  LREF 1
+  FIELD 205 1
+  CONST_INT 1 9
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 510 0
+  PARAM 1 214 214 111 0
+  LREF 1
+  LOAD 0
+  DEREF
+  INIT_ZERO
+  FUNC_END 1
+frame END
+  END auto 0

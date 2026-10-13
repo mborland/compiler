@@ -111,6 +111,35 @@ inline void complete_record(cir::RecordType record,
 /* Give an incomplete identified record its body. */
 { record.complete(members, packed, union_padding, kinds); }
 
+inline mlir::Type record_union_padding(cir::RecordType record)
+/* The tail-padding slot of a union (null for a struct). */
+{
+  mlir::Type result;
+
+  if (auto u = mlir::dyn_cast<cir::UnionType>(record))
+    result = u.getPadding();
+  return result;
+}
+
+inline cir::RecordType lowered_record(mlir::MLIRContext *ctx,
+                                      cir::RecordType like,
+                                      llvm::ArrayRef<mlir::Type> members)
+/*
+A complete identified record "<like>.lowered" of the same kind, packing,
+member kinds and union padding as like, with other member types (the lowered
+{i64, i64} form of the pointers to member functions in it).
+*/
+{
+  std::string name = like.getName().getValue().str() + ".lowered";
+  cir::RecordType result = like.isUnion()
+      ? incomplete_union(ctx, name)
+      : incomplete_struct(ctx, name, like.isClass());
+
+  result.complete(members, like.getPacked(), record_union_padding(like),
+                  like.getMemberKinds());
+  return result;
+}
+
 inline mlir::Type bitfield_unit(mlir::MLIRContext *ctx, mlir::Type storage,
                                 llvm::ArrayRef<cir::BitFieldDeclAttr> fields)
 /* Return the member type of a bit-field access unit (storage may be null). */
@@ -235,14 +264,16 @@ inline cir::IfOp open_if(a_builder &b, mlir::Location loc, mlir::Value cond)
                            no_op_body(), nullptr);
 }
 
-inline cir::CleanupScopeOp open_cleanup_scope(a_builder &b, mlir::Location loc)
+inline cir::CleanupScopeOp open_cleanup_scope(
+    a_builder &b, mlir::Location loc,
+    cir::CleanupKind kind = cir::CleanupKind::Normal)
 /*
-Create a cir.cleanup.scope normal with an empty body block and an empty
+Create a cir.cleanup.scope of the kind with an empty body block and an empty
 cleanup block (each is terminated when its region is finished).
 */
 {
-  return cir::CleanupScopeOp::create(b, loc, cir::CleanupKind::Normal,
-                                     no_op_body(), no_op_body());
+  return cir::CleanupScopeOp::create(b, loc, kind, no_op_body(),
+                                     no_op_body());
 }
 
 inline cir::LocalInitOp open_local_init(a_builder &b, mlir::Location loc,
@@ -288,12 +319,15 @@ the facts LoweringPrepare needs (tls_kind: 0 none, 1 static, 2 dynamic).
 inline void delete_array(a_builder &b, mlir::Location loc,
                          mlir::Value address, cir::FuncOp delete_fn,
                          bool size_param, uint64_t align_param,
-                         cir::FuncOp element_dtor, uint64_t element_align)
+                         cir::FuncOp element_dtor, uint64_t element_align,
+                         bool dtor_may_throw)
 /*
 Create cir.delete_array: the usual operator delete parameters (size, and the
 alignment when align_param is not zero) only when it takes any, the element
 destructor when the elements have one.  The element alignment is the one the
-new[] used to size the cookie.
+new[] used to size the cookie.  dtor_may_throw makes the lowering keep
+destroying the remaining elements and free the storage when an element
+destructor throws.
 */
 {
   mlir::MLIRContext *ctx = b.getContext();
@@ -310,7 +344,8 @@ new[] used to size the cookie.
       params,
       element_dtor ? mlir::FlatSymbolRefAttr::get(element_dtor.getSymNameAttr())
                    : mlir::FlatSymbolRefAttr(),
-      false, b.getI64IntegerAttr(static_cast<int64_t>(element_align)));
+      dtor_may_throw,
+      b.getI64IntegerAttr(static_cast<int64_t>(element_align)));
 }
 
 inline cir::ForOp open_for(a_builder &b, mlir::Location loc)
@@ -611,6 +646,344 @@ inline void clear_initial_value(cir::GlobalOp global)
 inline llvm::StringRef record_layouts_attr_name()
 /* The module attribute that carries the per-record ABI metadata. */
 { return cir::CIRDialect::getRecordLayoutsAttrName(); }
+
+/* Virtual functions, vtables and typeinfo (ECIL 1.2, M4). */
+
+inline cir::RecordType anonymous_record(mlir::MLIRContext *ctx,
+                                        llvm::ArrayRef<mlir::Type> members)
+/* An anonymous struct of data members (the type of a vtable or a typeinfo). */
+{
+  return cir::StructType::get(ctx, members, /*packed=*/false,
+                              /*is_class=*/false,
+                              cir::RecordType::getAllDataKinds(members));
+}
+
+inline mlir::Attribute vtable_attr(cir::RecordType type,
+                                   mlir::ArrayAttr arrays)
+/* #cir.vtable<{array, array...}> of the anonymous record type. */
+{ return cir::VTableAttr::get(type, arrays); }
+
+inline mlir::Attribute typeinfo_attr(cir::RecordType type,
+                                     mlir::ArrayAttr fields)
+/* #cir.typeinfo<{...}> of the anonymous record type. */
+{ return cir::TypeInfoAttr::get(type, fields); }
+
+inline mlir::Attribute global_view(mlir::Type type, mlir::StringAttr symbol,
+                                   mlir::ArrayAttr indices,
+                                   bool address_point)
+/* #cir.global_view<@symbol, [indices], address_point>. */
+{
+  return cir::GlobalViewAttr::get(type, mlir::FlatSymbolRefAttr::get(symbol),
+                                  indices, address_point);
+}
+
+inline mlir::Operation *vtable_address_point(a_builder &b, mlir::Location loc,
+                                             mlir::StringAttr symbol,
+                                             unsigned index, unsigned offset)
+/* cir.vtable.address_point(@symbol, address_point = <index, offset>). */
+{
+  mlir::MLIRContext *ctx = b.getContext();
+
+  return cir::VTableAddrPointOp::create(
+             b, loc, cir::VPtrType::get(ctx),
+             mlir::FlatSymbolRefAttr::get(symbol),
+             cir::AddressPointAttr::get(ctx, index, offset)).getOperation();
+}
+
+inline void set_vtable_address_point(mlir::Operation *op,
+                                     mlir::StringAttr symbol, unsigned index,
+                                     unsigned offset)
+/* Choose the vtable and the address point of an address_point op later. */
+{
+  auto point = mlir::cast<cir::VTableAddrPointOp>(op);
+  mlir::MLIRContext *ctx = op->getContext();
+
+  point.setNameAttr(mlir::FlatSymbolRefAttr::get(symbol));
+  point.setAddressPointAttr(cir::AddressPointAttr::get(ctx, index, offset));
+}
+
+inline mlir::Value vtable_get_vptr(a_builder &b, mlir::Location loc,
+                                   mlir::Value object)
+/* cir.vtable.get_vptr: the address of the vptr of the object. */
+{ return cir::VTableGetVPtrOp::create(b, loc, object); }
+
+inline mlir::Value vtable_function_slot(a_builder &b, mlir::Location loc,
+                                        mlir::Type result_type,
+                                        mlir::Value vptr, uint64_t index)
+/* cir.vtable.get_virtual_fn_addr: the address of slot `index`. */
+{
+  return cir::VTableGetVirtualFnAddrOp::create(b, loc, result_type, vptr,
+                                               index);
+}
+
+inline mlir::Operation *vtt_address_point(a_builder &b, mlir::Location loc,
+                                          mlir::Type result_type,
+                                          mlir::StringAttr symbol,
+                                          mlir::Value vtt, uint32_t offset)
+/* cir.vtt.address_point: the element at `offset` of the VTT global `symbol`
+   (the complete-object structors) or of the VTT the pointer `vtt` is (the
+   structors that take the VTT as a parameter). */
+{
+  return cir::VTTAddrPointOp::create(
+             b, loc, result_type,
+             symbol ? mlir::FlatSymbolRefAttr::get(symbol)
+                    : mlir::FlatSymbolRefAttr(),
+             vtt, offset).getOperation();
+}
+
+inline void set_vtt_address_point(mlir::Operation *op, mlir::StringAttr symbol,
+                                  uint32_t offset)
+/* Choose the VTT symbol (when the op has one) and the offset later. */
+{
+  auto point = mlir::cast<cir::VTTAddrPointOp>(op);
+
+  if (symbol)
+    point.setNameAttr(mlir::FlatSymbolRefAttr::get(symbol));
+  point.setOffset(offset);
+}
+
+inline void set_signed_constant(mlir::Operation *op, int64_t value)
+/* Choose the value of a 64-bit signed cir.const later. */
+{
+  auto constant = mlir::cast<cir::ConstantOp>(op);
+
+  constant.setValueAttr(cir::IntAttr::get(constant.getType(), value));
+}
+
+/* Pointers to members and RTTI (ECIL 1.2, M4 slice S3). */
+
+inline mlir::Type data_member_type(mlir::Type member, mlir::Type record)
+/* !cir.data_member<member in record>. */
+{
+  return cir::DataMemberType::get(member, mlir::cast<cir::RecordType>(record));
+}
+
+inline mlir::Type method_type(cir::FuncType with_this, mlir::Type record)
+/* !cir.method<func in record>: the function type with its `this`, as
+   CIRGen's arrangeCXXMethodType makes it. */
+{
+  return cir::MethodType::get(with_this, mlir::cast<cir::RecordType>(record));
+}
+
+inline mlir::Attribute data_member_attr(mlir::Type type,
+                                        llvm::ArrayRef<int32_t> path,
+                                        bool null)
+/* #cir.data_member<[path]> or #cir.data_member<null>. */
+{
+  auto member = mlir::cast<cir::DataMemberType>(type);
+
+  return null ? cir::DataMemberAttr::get(member)
+              : cir::DataMemberAttr::get(member, path);
+}
+
+inline mlir::Attribute data_member_offset_attr(mlir::Type type,
+                                               uint64_t offset)
+/* #cir.data_member_offset<N>: a member that has no CIR field. */
+{
+  return cir::DataMemberOffsetAttr::get(mlir::cast<cir::DataMemberType>(type),
+                                        offset);
+}
+
+inline mlir::Attribute method_attr_null(mlir::Type type)
+/* #cir.method<null>. */
+{ return cir::MethodAttr::get(mlir::cast<cir::MethodType>(type)); }
+
+inline mlir::Attribute method_attr_symbol(mlir::Type type,
+                                          mlir::StringAttr symbol)
+/* #cir.method<@symbol>. */
+{
+  return cir::MethodAttr::get(mlir::cast<cir::MethodType>(type),
+                              mlir::FlatSymbolRefAttr::get(symbol));
+}
+
+inline mlir::Attribute method_attr_virtual(mlir::Type type, uint64_t offset)
+/* #cir.method<vtable_offset = N>. */
+{ return cir::MethodAttr::get(mlir::cast<cir::MethodType>(type), offset); }
+
+inline mlir::Value get_runtime_member(a_builder &b, mlir::Location loc,
+                                      mlir::Value object, mlir::Value member)
+/* cir.get_runtime_member: the address of the member `member` designates in
+   the object (the .* and ->* operators). */
+{
+  auto type = mlir::cast<cir::DataMemberType>(member.getType());
+
+  return cir::GetRuntimeMemberOp::create(
+      b, loc, cir::PointerType::get(type.getMemberTy()), object, member);
+}
+
+inline mlir::Value convert_member_pointer(a_builder &b, mlir::Location loc,
+                                          bool to_derived, bool is_method,
+                                          mlir::Type result, mlir::Value src,
+                                          uint64_t offset)
+/* cir.derived_* and cir.base_* of a data member or method pointer: the
+   offset of the base subobject in the derived class is added or
+   subtracted. */
+{
+  mlir::IntegerAttr offset_attr = b.getIndexAttr(offset);
+  mlir::Value value;
+
+  if (is_method) {
+    value = to_derived
+        ? cir::DerivedMethodOp::create(b, loc, result, src, offset_attr)
+              .getResult()
+        : cir::BaseMethodOp::create(b, loc, result, src, offset_attr)
+              .getResult();
+  } else {
+    value = to_derived
+        ? cir::DerivedDataMemberOp::create(b, loc, result, src, offset_attr)
+              .getResult()
+        : cir::BaseDataMemberOp::create(b, loc, result, src, offset_attr)
+              .getResult();
+  }
+  return value;
+}
+
+inline mlir::Value member_pointer_to_bool(a_builder &b, mlir::Location loc,
+                                          mlir::Value value)
+/* The !cir.bool of a member pointer (non-null). */
+{
+  return b.createCast(loc, cir::CastKind::member_ptr_to_bool, value,
+                      b.getBoolTy());
+}
+
+inline mlir::Value vtable_get_type_info(a_builder &b, mlir::Location loc,
+                                        mlir::Type result_type,
+                                        mlir::Value vptr)
+/* cir.vtable.get_type_info: the address of the RTTI slot of the vtable. */
+{ return cir::VTableGetTypeInfoOp::create(b, loc, result_type, vptr); }
+
+inline mlir::Attribute dyn_cast_info(mlir::Attribute src_rtti,
+                                     mlir::Attribute dest_rtti,
+                                     mlir::StringAttr runtime_func,
+                                     mlir::StringAttr bad_cast_func,
+                                     mlir::Type ptrdiff, int64_t hint)
+/* #cir.dyn_cast_info<...>. */
+{
+  return cir::DynamicCastInfoAttr::get(
+      mlir::cast<cir::GlobalViewAttr>(src_rtti),
+      mlir::cast<cir::GlobalViewAttr>(dest_rtti),
+      mlir::FlatSymbolRefAttr::get(runtime_func),
+      mlir::FlatSymbolRefAttr::get(bad_cast_func),
+      cir::IntAttr::get(ptrdiff, hint));
+}
+
+inline void set_dyn_cast_hint(mlir::Operation *op, int64_t hint)
+/* Choose the offset hint of a cir.dyn_cast later. */
+{
+  auto cast = mlir::cast<cir::DynamicCastOp>(op);
+  cir::DynamicCastInfoAttr info = cast.getInfoAttr();
+
+  cast.setInfoAttr(cir::DynamicCastInfoAttr::get(
+      info.getSrcRtti(), info.getDestRtti(), info.getRuntimeFunc(),
+      info.getBadCastFunc(),
+      cir::IntAttr::get(info.getOffsetHint().getType(), hint)));
+}
+
+inline mlir::Value dynamic_cast_op(a_builder &b, mlir::Location loc,
+                                   mlir::Value src, mlir::Type result,
+                                   bool is_ref, mlir::Attribute info)
+/* cir.dyn_cast ptr|ref; with no info, the cast to the complete object
+   (void *). */
+{
+  return cir::DynamicCastOp::create(
+      b, loc, result,
+      is_ref ? cir::DynamicCastKind::Ref : cir::DynamicCastKind::Ptr, src,
+      info ? mlir::cast<cir::DynamicCastInfoAttr>(info)
+           : cir::DynamicCastInfoAttr(),
+      /*relative_layout=*/false);
+}
+
+/* Exceptions (ECIL 1.2, M4 slice S4). */
+
+inline void mark_catch_copy_thunk(cir::FuncOp fn)
+/* The unit attribute that tags a catch copy thunk. */
+{
+  fn->setAttr(cir::CIRDialect::getCatchCopyThunkAttrName(),
+              mlir::UnitAttr::get(fn->getContext()));
+}
+
+inline void set_hidden(cir::FuncOp fn)
+/* ELF hidden visibility of a function. */
+{
+  fn.setGlobalVisibility(cir::VisibilityKind::Hidden);
+}
+
+inline void construct_catch_param(a_builder &b, mlir::Location loc,
+                                  uint64_t kind, mlir::Value token,
+                                  mlir::Value param, mlir::Attribute copy_fn)
+/* cir.construct_catch_param (kinds 5 and 6): before cir.begin_catch. */
+{
+  cir::ConstructCatchParamOp::create(
+      b, loc, token, param,
+      cir::InitCatchKindAttr::get(b.getContext(),
+                                  static_cast<cir::InitCatchKind>(kind)),
+      copy_fn ? mlir::cast<mlir::FlatSymbolRefAttr>(
+                    mlir::FlatSymbolRefAttr::get(
+                        mlir::cast<mlir::StringAttr>(copy_fn)))
+              : mlir::FlatSymbolRefAttr());
+}
+
+inline void begin_catch(a_builder &b, mlir::Location loc, mlir::Value token,
+                        mlir::Type exception_pointer,
+                        mlir::Value &catch_token, mlir::Value &exception)
+/* cir.begin_catch: the catch token and the pointer to the exception. */
+{
+  cir::BeginCatchOp op = cir::BeginCatchOp::create(
+      b, loc, cir::CatchTokenType::get(b.getContext()), exception_pointer,
+      token);
+
+  catch_token = op.getCatchToken();
+  exception = op.getExnPtr();
+}
+
+inline void init_catch_param(a_builder &b, mlir::Location loc, uint64_t kind,
+                             mlir::Value exception, mlir::Value param)
+/* cir.init_catch_param: the catch parameter from the exception object. */
+{
+  cir::InitCatchParamOp::create(
+      b, loc, exception, param,
+      cir::InitCatchKindAttr::get(b.getContext(),
+                                  static_cast<cir::InitCatchKind>(kind)));
+}
+
+inline mlir::Value alloc_exception(a_builder &b, mlir::Location loc,
+                                   mlir::Type pointer, uint64_t size)
+/* cir.alloc.exception: __cxa_allocate_exception of size bytes. */
+{
+  return cir::AllocExceptionOp::create(b, loc, pointer, b.getI64IntegerAttr(
+                                           static_cast<int64_t>(size)));
+}
+
+inline void throw_op(a_builder &b, mlir::Location loc, mlir::Value object,
+                     mlir::StringAttr type_info, mlir::StringAttr dtor)
+/* cir.throw object, @type_info[, @dtor]; no operands: a rethrow. */
+{
+  cir::ThrowOp::create(
+      b, loc, object,
+      type_info ? mlir::FlatSymbolRefAttr::get(type_info)
+                : mlir::FlatSymbolRefAttr(),
+      dtor ? mlir::FlatSymbolRefAttr::get(dtor) : mlir::FlatSymbolRefAttr());
+}
+
+inline void eh_terminate(a_builder &b, mlir::Location loc, mlir::Value token)
+/* cir.eh.terminate: a handler that ends the program. */
+{ cir::EhTerminateOp::create(b, loc, token); }
+
+inline void eh_unexpected(a_builder &b, mlir::Location loc, mlir::Value token)
+/* cir.eh.unexpected: the exception violated the specification. */
+{ cir::EhUnexpectedOp::create(b, loc, token); }
+
+inline void set_must_tail(cir::CallOp call)
+/* Mark a call musttail (the variadic thunks). */
+{
+  call->setAttr(cir::CIRDialect::getMustTailAttrName(),
+                mlir::UnitAttr::get(call->getContext()));
+}
+
+inline void set_unwind_tables(cir::FuncOp fn)
+/* #cir.uwtable<async> on a function definition (every function: unwinding
+   passes through frames of C code too). */
+{ fn.setUwtable(cir::UnwindTableKind::Async); }
 
 }  /* namespace compat */
 }  /* namespace edg_cir */

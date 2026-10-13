@@ -1,0 +1,18 @@
+; C++ (ECIL 1.2): the typeinfo of a TU-local type has internal linkage and the
+; TU_LOCAL flag, and its _ZTS string starts with '*' (g++'s spelling: libstdc++
+; then compares such names by address, so equally named TU-local types of two
+; translation units never compare equal).  Without the flag the string is the
+; plain mangling; internal linkage alone does not add the '*'.
+; RUN: cat %S/Inputs/header12_cxx_rtti.txt %S/cxx-s1-virtual.test > %t.base.txt
+; RUN: sed 's/DECL_ABI_DATA 110 2 61 0 1 nil/DECL_ABI_DATA 110 2 61 1 5 nil/' %t.base.txt > %t.local.txt
+; RUN: %ecil-asm %t.local.txt -o %t.local.ecil
+; RUN: %edg-cir --emit=cir %t.local.ecil | %FileCheck %s --check-prefix=LOCAL
+; RUN: sed 's/DECL_ABI_DATA 110 2 61 0 1 nil/DECL_ABI_DATA 110 2 61 1 1 nil/' %t.base.txt > %t.plain.txt
+; RUN: %ecil-asm %t.plain.txt -o %t.plain.ecil
+; RUN: %edg-cir --emit=cir %t.plain.ecil | %FileCheck %s --check-prefix=PLAIN
+
+; LOCAL: cir.global {{.*}}internal {{.*}}@_ZTI1A = #cir.typeinfo<
+; LOCAL: cir.global {{.*}}internal {{.*}}@_ZTS1A = #cir.const_array<"*1A" : !cir.array<!s8i x 3>, trailing_zeros> : !cir.array<!s8i x 4>
+
+; PLAIN: cir.global {{.*}}internal {{.*}}@_ZTI1A = #cir.typeinfo<
+; PLAIN: cir.global {{.*}}internal {{.*}}@_ZTS1A = #cir.const_array<"1A" : !cir.array<!s8i x 2>, trailing_zeros> : !cir.array<!s8i x 3>

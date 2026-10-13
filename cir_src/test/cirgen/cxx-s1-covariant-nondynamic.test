@@ -1,0 +1,127 @@
+ecil 1.2 features=0x0000000a
+; C++ (ECIL 1.2, slice S1 review): a covariant result whose class is not dynamic:
+; D::get returns D2* (D2 : R1, R2, R2 at offset 4) for B1::get's R2*, so the
+; vtable entry of get in D is a return-adjusting thunk (_ZTch0_h4_N1D3getEv:
+; +4, null preserved).  Only the overrider is defined here; the other unit
+; has the key function and the vtable.
+;   struct D2 : R1, R2 { int c; };  struct B1 { virtual R2 *get(); };
+;   struct D : B1 { D2 *get() override; };
+; RUN: %ecil-asm %s -o %t.ecil
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -c %S/Inputs/s1_cov1_host.cpp -o %t.host.o
+; RUN: g++ %t.host.o %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %clang -x c++ -std=c++17 -fno-exceptions -c %S/Inputs/s1_cov1_host.cpp -o %t.hostclang.o
+; RUN: g++ %t.hostclang.o %t.o -o %t.clang.exe
+; RUN: %t.clang.exe
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
+
+; SYMS-DAG: T _ZTch0_h4_N1D3getEv
+
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "k1_lib.cpp"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  STR 5 "D2"
+  TY_RECORD_DECL 4 0 5
+  TY_PTR 5 4
+  STR 6 "D"
+  TY_RECORD_DECL 6 0 6
+  TY_PTR 7 6
+  TY_FUNC 8 5 0 [7]
+  STR 7 "R1"
+  TY_RECORD_DECL 9 0 7
+  STR 8 "a"
+  TY_RECORD_BODY 9 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 8 0
+  STR 9 "R2"
+  TY_RECORD_DECL 10 0 9
+  STR 10 "b"
+  TY_RECORD_BODY 10 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 10 0
+  STR 11 "c"
+  TY_RECORD_BODY 4 12 12 4 0 3
+  REC_FIELD 9 0 nil nil nil 17
+  REC_FIELD 10 4 nil nil nil 17
+  REC_FIELD 1 8 nil nil 11 0
+  STR 12 "B1"
+  TY_RECORD_DECL 11 0 12
+  TY_VPTR 12
+  STR 13 "pad"
+  TY_RECORD_BODY 11 16 12 8 12 2
+  REC_FIELD 12 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 13 0
+  STR 14 "2B1"
+  CLASS_MANGLE 11 14
+  CLASS_INFO 11 12 8 nil 3
+  CLASS_BASES 11 []
+  STR 15 "d2"
+  TY_RECORD_BODY 6 24 24 8 12 2
+  REC_FIELD 11 0 nil nil nil 17
+  REC_FIELD 4 12 nil nil 15 0
+  STR 16 "1D"
+  CLASS_MANGLE 6 16
+  CLASS_INFO 6 24 8 0 4
+  CLASS_BASES 6 [0, 1]
+  STR 17 "_ZN1D3getEv"
+  DECL_FUNC 13 8 0 0 17
+  DECL_FUNC 13 8 0 1 17
+  TY_PTR 14 10
+  TY_PTR 15 11
+  TY_FUNC 16 14 0 [15]
+  STR 18 "_ZN2B13getEv"
+  DECL_FUNC 17 16 0 0 18
+  TY_VOID 18
+  TY_FUNC 19 18 0 [15]
+  STR 19 "_ZN2B1D1Ev"
+  DECL_FUNC 20 19 0 0 19
+  STR 20 "_ZN2B1D2Ev"
+  DECL_FUNC 21 19 0 0 20
+  STRUCTOR 20 21 1
+  TY_PTR 22 18
+  TY_FUNC 23 18 0 [22, 2]
+  STR 21 "_ZdlPvm"
+  DECL_FUNC 24 23 0 0 21
+  STR 22 "_ZN2B1D0Ev"
+  DECL_FUNC 25 19 0 0 22
+  STRUCTOR_DELETING 25 20 24 1
+  CLASS_VFUNCS 11 [17, 0, 0, 1, 20, 1, 0, 0]
+  CLASS_OVERRIDES 11 []
+  TY_FUNC 26 18 0 [7]
+  STR 23 "_ZN1DD1Ev"
+  DECL_FUNC 27 26 0 0 23
+  STR 24 "_ZN1DD2Ev"
+  DECL_FUNC 28 26 0 0 24
+  STRUCTOR 27 28 1
+  STR 25 "_ZN1DD0Ev"
+  DECL_FUNC 29 26 0 0 25
+  STRUCTOR_DELETING 29 27 24 1
+  CLASS_VFUNCS 6 [27, 1, 0, 0, 13, 3, 0, 1]
+  CLASS_OVERRIDES 6 [17, 0, 13, 0, 20, 0, 27, 0]
+  STR 26 "this"
+  FUNC_BEGIN 13 0
+  PARAM 1 7 7 26 1
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 6 1
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 4 0

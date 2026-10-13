@@ -1,0 +1,43 @@
+; C++ (ECIL 1.2): the layout facts of a class that is not dynamic come only at
+; need (12.2).  Q is laid out with nvsize = data_size (5: its ".base" record has
+; 5 bytes) and R : Q uses that; a later CLASS_INFO gives Q an nvsize of 8 (the
+; size of Q), so S : Q, laid out after it, takes Q itself as its base member and
+; no new ".base" record is made.  The earlier R keeps its record.
+;   struct Q { int a; char c; };  struct R : Q { char r; };
+; (S is synthetic: nvsize 8 puts its member at 8.)
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+
+; CHECK-DAG: !rec_Q2Ebase = !cir.struct<"Q.base" packed {data !s32i, data !s8i}>
+; CHECK-DAG: !rec_R = !cir.struct<"R" {data !rec_Q2Ebase, data !s8i, pad !cir.array<!u8i x 2>}>
+; CHECK-DAG: !rec_S = !cir.struct<"S" {data !rec_Q, data !s8i, pad !cir.array<!u8i x 3>}>
+; CHECK-NOT: Q.base.1
+
+frame DECLS
+  STR 11 "Q"
+  STR 12 "R"
+  STR 13 "S"
+  STR 21 "1Q"
+  TY_RECORD_DECL 61 0 11
+  TY_RECORD_BODY 61 8 5 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 4 4 nil nil nil 0
+  TY_RECORD_DECL 62 0 12
+  TY_RECORD_BODY 62 8 6 4 0 2
+  REC_FIELD 61 0 nil nil nil 16
+  REC_FIELD 4 5 nil nil nil 0
+  CLASS_MANGLE 61 21
+  CLASS_INFO 61 8 4 nil 0
+  CLASS_BASES 61 []
+  TY_RECORD_DECL 63 0 13
+  TY_RECORD_BODY 63 12 9 4 0 2
+  REC_FIELD 61 0 nil nil nil 16
+  REC_FIELD 4 8 nil nil nil 0
+  STR 14 "gr"
+  STR 15 "gs"
+  DECL_VAR 301 62 0 1 4 14
+  DECL_VAR 302 63 0 1 4 15
+frame END
+  END auto 0

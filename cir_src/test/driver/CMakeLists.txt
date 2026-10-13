@@ -15,7 +15,7 @@ add_test(NAME capi_tests
     "${CMAKE_CURRENT_SOURCE_DIR}/../writer/golden/abort.hex"
     $<TARGET_FILE:edg-cir>)
 
-set_tests_properties(capi_tests PROPERTIES ENVIRONMENT
+set_tests_properties(capi_tests PROPERTIES TIMEOUT 300 ENVIRONMENT
   "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp")
 
 # Every bad_* format fixture must be rejected by edg-cir as FORMAT or VERSION.

@@ -1,0 +1,61 @@
+; C++11 (ECIL 1.2): delete[] of an array whose element destructor can throw.
+; cir.delete_array carries dtor_may_throw, so the lowering keeps destroying
+; the remaining elements and calls operator delete[] when one destructor
+; throws (clang's shape; g++ does the same).  With a nothrow destructor the
+; unit is absent.  The host fakes the array cookie and throws from chosen
+; elements.
+; RUN: cat %S/Inputs/header12_cxx_eh.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -std=c++17 %S/Inputs/s4_delete_array_throw_host.cpp %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %edg-cir --emit=obj -O2 -o %t2.o %t.ecil
+; RUN: g++ -std=c++17 %S/Inputs/s4_delete_array_throw_host.cpp %t2.o -o %t2.exe
+; RUN: %t2.exe
+
+; CHECK-LABEL: cir.func {{.*}}@c_del(
+; CHECK: cir.delete_array {{.*}} delete_fn(@_ZdaPv) element_dtor(@_ZN1TD1Ev) dtor_may_throw element_align(4)
+; CHECK-LABEL: cir.func {{.*}}@c_del_nothrow(
+; CHECK: cir.delete_array {{.*}} delete_fn(@_ZdaPv) element_dtor(@_ZN2UnD1Ev) element_align(4)
+; CHECK-NOT: dtor_may_throw
+
+frame DECLS
+  STR 100 "T"
+  STR 101 "Un"
+  STR 102 "_ZdaPv"
+  STR 103 "_ZN1TD1Ev"
+  STR 104 "_ZN2UnD1Ev"
+  STR 105 "c_del"
+  STR 106 "c_del_nothrow"
+  TY_RECORD_DECL 41 0 100
+  TY_RECORD_BODY 41 4 4 4 12 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 42 41
+  TY_RECORD_DECL 43 0 101
+  TY_RECORD_BODY 43 4 4 4 12 1
+  REC_FIELD 1 0 nil nil nil 0
+  TY_PTR 44 43
+  TY_FUNC 72 11 0 [12]
+  TY_FUNC 74 11 0 [42]
+  TY_FUNC 75 11 0 [44]
+  DECL_FUNC 102 72 0 0 102
+  DECL_FUNC 113 74 0 0 103
+  DECL_FUNC 114 75 0 128 104
+  DECL_FUNC 120 74 0 1 105
+  DECL_FUNC 121 75 0 1 106
+frame REGION
+  FUNC_BEGIN 120 0
+  PARAM 1 42 42 nil 0
+  LREF 1
+  LOAD 0
+  DELETE 102 113 41 1
+  FUNC_END 1
+  FUNC_BEGIN 121 0
+  PARAM 1 44 44 nil 0
+  LREF 1
+  LOAD 0
+  DELETE 102 114 43 1
+  FUNC_END 1
+frame END
+  END auto 0

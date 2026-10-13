@@ -1,4 +1,4 @@
-; expect: format DELETE operand 4: unknown flag bits 0x10
+; expect: format DELETE operand 4: unknown flag bits 0x40
 ecil 1.0 features=0x00000000
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
@@ -38,7 +38,7 @@ frame REGION
   DECL_VAR 26 1 1 273 4 nil
   FUNC_BEGIN 22 0
   CONST_NULL 7
-  DELETE 24 nil 2 16
+  DELETE 24 nil 2 64
   FUNC_END 0
 frame END
   END 2 0

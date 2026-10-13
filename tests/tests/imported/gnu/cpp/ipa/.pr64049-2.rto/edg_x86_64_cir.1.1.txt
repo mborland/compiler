@@ -1,14 +1,4 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics Test_name.c
-"./ipa/pr64049-2.C", line 17: warning: CIR back end: the body of "main" uses a call returning an unsupported type, which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-"./ipa/pr64049-2.C", line 23: warning: CIR back end: the body of "getInternHandle" uses a virtual function, which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: a call returning an unsupported type
-
-Error: CIR back end: the definition of '_ZN13LocalizedText15getInternHandleEv' was dropped: it uses a construct the CIR back end cannot express: a virtual function
-
-2 errors detected in the compilation of "Test_name.c".
+/usr/sbin/ld: Test_name.o: in function `main':
+Test_name.c:(.text+0xXX): undefined reference to `_ZN11ValueHelper16getLocalizedTextEPK11ValueStruct'
+collect2: error: ld returned 1 exit status

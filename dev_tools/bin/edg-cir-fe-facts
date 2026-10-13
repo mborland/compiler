@@ -445,6 +445,10 @@ def normalize_params(text: str, tail: str = '') -> str:
     text = ''
   text = re.sub(r'\b(?:struct|class|union|enum) ', '', text)
   text = re.sub(r'\b(?:\w+::)+', '', text)
+  # The front end spells a complex type "float __complex__", clang
+  # "_Complex float".
+  text = re.sub(r'\b((?:unsigned |signed |long )*\w+) __complex__\b',
+                r'_Complex \1', text)
   # Top-level cv-qualifiers of a by-value parameter are not part of the type.
   parts = []
   for part in split_top_level(text):
@@ -1083,8 +1087,11 @@ class Runner:
                f"-std={self.std}", '-fcxx-exceptions', '-fexceptions',
                *self.abi.include_options(self.clang), '-emit-llvm', '-o', '-',
                str(source)]
+    # A timeout raises subprocess.TimeoutExpired: an empty IR must not look
+    # like a file without vtables (check_one reports it as a failure).
     proc = subprocess.run(command, stdout = subprocess.PIPE,
-                          stderr = subprocess.DEVNULL, text = True)
+                          stderr = subprocess.DEVNULL, text = True,
+                          timeout = 600)
     return proc.stdout
 
 
@@ -1111,7 +1118,12 @@ def check_one(runner: Runner, source: Path) -> Tuple[Result, str]:
     if code != 0:
       return Result(str(source)), f"clang failed ({code})"
     records, vtables = parse_clang(runner.abi.canonical(dump))
-    linkage = ir_vtable_linkage(runner.clang_ir(source))
+    try:
+      ir = runner.clang_ir(source)
+    except subprocess.TimeoutExpired:
+      return Result(str(source)), 'clang -emit-llvm timed out (the vtable ' \
+        'linkage was not compared)'
+    linkage = ir_vtable_linkage(ir)
   return compare_file(str(source), facts, records, vtables, linkage), ''
 
 
@@ -1308,6 +1320,28 @@ SAMPLE_CLANG = '''## record struct A
 
 
 class SelfTest(unittest.TestCase):
+  def test_clang_ir_timeout_is_a_failure(self) -> None:
+    class Stub:
+      class abi:
+        @staticmethod
+        def canonical(text: str) -> str:
+          return text
+      def fe_il(self, source, work):
+        return SAMPLE_IL
+      def clang_dump(self, source):
+        return 0, ''
+      def clang_ir(self, source):
+        raise subprocess.TimeoutExpired('clang', 600)
+    result, message = check_one(Stub(), Path('t.cpp'))
+    self.assertIn('timed out', message)
+    self.assertIn('not compared', message)
+
+  def test_complex_spelling(self) -> None:
+    self.assertEqual(normalize_params('X, float __complex__, Small'),
+                     normalize_params('X, _Complex float, Small'))
+    self.assertEqual(normalize_params('double __complex__ *'),
+                     normalize_params('_Complex double *'))
+
   def test_parse_il(self) -> None:
     entries = parse_il(SAMPLE_IL)
     self.assertEqual(entries['a1'].get('size'), '8')

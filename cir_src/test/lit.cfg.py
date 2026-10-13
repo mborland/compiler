@@ -24,6 +24,8 @@ config.substitutions.append(("%not", os.path.join(llvm_bin, "not")))
 config.environment["LD_LIBRARY_PATH"] = os.path.join(
     config.edg_cir_binary_dir, "lib")
 config.substitutions.append(("%clang", os.path.join(llvm_bin, "clang")))
+config.substitutions.append(("%rtlibdir", os.path.join(
+    config.edg_cir_binary_dir, "lib")))
 config.substitutions.append(("%python", "python3"))
 config.substitutions.append(("%scripts", os.path.join(
     config.edg_cir_source_dir, "scripts")))

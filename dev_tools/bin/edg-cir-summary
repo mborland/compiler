@@ -201,6 +201,26 @@ _FEATURE_REGEXES = (
 # The feature families of the M4 milestone (see _FEATURE_REGEXES).
 M4_FAMILIES = ('vtables/virtual', 'rtti', 'exceptions', 'member pointers')
 
+# The slices of M4 that the families belong to (the plan's S1 to S5): the
+# virtual functions and vtables of classes without virtual bases, virtual
+# bases and VTTs, RTTI and member pointers, exceptions (the function-try
+# blocks and the dynamic cleanups of S5 are not told apart in a message).
+M4_SLICES = ('S1 polymorphism', 'S2 virtual bases',
+             'S3 rtti and member pointers', 'S4-S5 exceptions')
+
+
+def m4_slice(feature: str) -> str:
+  '''The M4 slice a feature (see cxx_feature) belongs to, or ''.'''
+  if feature == 'vtables/virtual: virtual bases':
+    return M4_SLICES[1]
+  if feature.startswith('vtables/virtual'):
+    return M4_SLICES[0]
+  if feature.startswith('rtti') or feature == 'member pointers':
+    return M4_SLICES[2]
+  if feature.startswith('exceptions'):
+    return M4_SLICES[3]
+  return ''
+
 
 class TestResult:
   def __init__(self, path: str, status: str, bucket: str,
@@ -422,12 +442,21 @@ def crash_signal(output: str) -> str:
   return ''
 
 
+# The sanitizer of the debug front end can crash again while it reports the
+# first crash; that trailer is not output of the compiler.
+_SANITIZER_TRAILER = re.compile(
+  r'^Segmentation fault\nAddressSanitizer: nested bug in the same thread, '
+  r'aborting\.\n', re.M)
+
+
 def non_cir_text(output: str) -> str:
-  '''The output without the paragraphs about the CIR back end and edg-cir:
-  the text that is compared with the reference's.'''
+  '''The output without the paragraphs about the CIR back end and edg-cir
+  and without a sanitizer's "nested bug" trailer: the text that is compared
+  with the reference's.'''
   paragraphs = re.split(r'(\n\s*\n)', output)
-  return ''.join(p for p in paragraphs
+  text = ''.join(p for p in paragraphs
                  if 'CIR back end' not in p and 'edg-cir' not in p)
+  return _SANITIZER_TRAILER.sub('', text)
 
 
 def crash_details(compile_output: str) -> Tuple[str, List[str]]:
@@ -574,6 +603,12 @@ def print_cxx_tables(results: List[TestResult], top: int) -> None:
       families[feature.split(':')[0]] += sum(sub.values())
     print('  M4 families (cases): ' + ', '.join(
       f"{family} {families[family]}" for family in M4_FAMILIES))
+    slices: Dict[str, int] = defaultdict(int)
+    for feature, sub in features.items():
+      if m4_slice(feature):
+        slices[m4_slice(feature)] += sum(sub.values())
+    print('  M4 slices (cases): ' + ', '.join(
+      f"{name} {slices[name]}" for name in M4_SLICES))
 
 
 def print_summary(config: str, results: List[TestResult], top: int) -> None:

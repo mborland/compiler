@@ -1,0 +1,237 @@
+ecil 1.2 features=0x0000000a
+; C++ (ECIL 1.2, slice S3): the typeinfo objects as the writer streams them for
+; typeid of non-polymorphic classes (P; Q : P is a __si_class_type_info), of a
+; pointer (P *), of a pointer to a const pointer to const (const Q *const *,
+; with the pbase masks), of a pointer to data member and to member function, of
+; a polymorphic class and of a fundamental type (an external declaration).
+; A g++ and a clang unit (Inputs/s3_typeinfo_host.cpp) compare them with their
+; own (names, the runtime classes, the masks, the pointee and context fields).
+;   const std::type_info *f3() { return &typeid(P *); }  (and f1..f8)
+; RUN: %ecil-asm %s -o %t.ecil
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ -c %S/Inputs/s3_typeinfo_host.cpp -o %t.host.o
+; RUN: g++ %t.host.o %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %clang -x c++ -std=c++17 -c %S/Inputs/s3_typeinfo_host.cpp -o %t.hostclang.o
+; RUN: g++ %t.hostclang.o %t.o -o %t.clang.exe
+; RUN: %t.clang.exe
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
+
+; SYMS-DAG: V _ZTI1P
+; SYMS-DAG: V _ZTI1Q
+; SYMS-DAG: V _ZTIP1P
+; SYMS-DAG: V _ZTIPKPK1Q
+; SYMS-DAG: V _ZTIM1Pi
+; SYMS-DAG: V _ZTIM1PFviE
+; SYMS-DAG: U _ZTId
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "s3g_lib.cpp"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  STR 5 "R"
+  TY_RECORD_DECL 5 0 5
+  TY_PTR 6 5
+  TY_FUNC 7 4 0 [6]
+  TY_VPTR 8
+  TY_RECORD_BODY 5 8 8 8 12 1
+  REC_FIELD 8 0 nil nil nil 1
+  STR 6 "1R"
+  CLASS_MANGLE 5 6
+  CLASS_INFO 5 8 8 nil 2
+  CLASS_BASES 5 []
+  STR 7 "_ZN1RD1Ev"
+  DECL_FUNC 9 7 0 2 7
+  STR 8 "_ZN1RD2Ev"
+  DECL_FUNC 10 7 0 2 8
+  STRUCTOR 9 10 1
+  DECL_FUNC 9 7 3 67 7
+  DECL_FUNC 10 7 3 67 8
+  TY_PTR 11 4
+  TY_FUNC 12 4 0 [11, 2]
+  STR 9 "_ZdlPvm"
+  DECL_FUNC 13 12 0 0 9
+  STR 10 "_ZN1RD0Ev"
+  DECL_FUNC 14 7 3 67 10
+  STRUCTOR_DELETING 14 9 13 1
+  CLASS_VFUNCS 5 [9, 0, 0, 0]
+  CLASS_OVERRIDES 5 []
+  STR 11 "this"
+  FUNC_BEGIN 10 0
+  PARAM 1 6 6 11 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 12 "type_info"
+  TY_RECORD_DECL 15 2 12
+  TY_PTR 16 15
+  TY_FUNC 17 16 0 []
+  TY_INT 18 8 true 1 1
+  TY_PTR 19 18
+  STR 13 "__type_name"
+  TY_RECORD_BODY 15 16 16 8 12 2
+  REC_FIELD 8 0 nil nil nil 1
+  REC_FIELD 19 8 nil nil 13 0
+  STR 14 "St9type_info"
+  CLASS_MANGLE 15 14
+  CLASS_INFO 15 16 8 nil 2
+  CLASS_BASES 15 []
+  STR 15 "_Z2f1v"
+  DECL_FUNC 20 17 0 0 15
+  DECL_FUNC 20 17 0 1 15
+  STR 16 "P"
+  TY_RECORD_DECL 21 0 16
+  STR 17 "x"
+  TY_RECORD_BODY 21 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 17 0
+  STR 18 "1P"
+  CLASS_MANGLE 21 18
+  CLASS_INFO 21 4 4 nil 0
+  CLASS_BASES 21 []
+  DECL_ABI_DATA 22 2 21 3 3 nil
+  FUNC_BEGIN 20 0
+  BLOCK_BEGIN
+  TYPEID 22 15 0
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 19 "_Z2f2v"
+  DECL_FUNC 23 17 0 0 19
+  DECL_FUNC 23 17 0 1 19
+  STR 20 "Q"
+  TY_RECORD_DECL 24 0 20
+  STR 21 "y"
+  TY_RECORD_BODY 24 8 8 4 0 2
+  REC_FIELD 21 0 nil nil nil 17
+  REC_FIELD 1 4 nil nil 21 0
+  STR 22 "1Q"
+  CLASS_MANGLE 24 22
+  CLASS_INFO 24 8 4 nil 0
+  CLASS_BASES 24 [0, 1]
+  DECL_ABI_DATA 25 2 24 3 3 nil
+  FUNC_BEGIN 23 0
+  BLOCK_BEGIN
+  TYPEID 25 15 0
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 23 "_Z2f3v"
+  DECL_FUNC 26 17 0 0 23
+  DECL_FUNC 26 17 0 1 23
+  STR 24 "_ZTIP1P"
+  TY_PTR 27 21
+  DECL_ABI_DATA 28 2 27 3 3 24
+  TYPEINFO_DEF 28 1 0 22 nil
+  FUNC_BEGIN 26 0
+  BLOCK_BEGIN
+  TYPEID 28 15 0
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 25 "_Z2f4v"
+  DECL_FUNC 29 17 0 0 25
+  DECL_FUNC 29 17 0 1 25
+  STR 26 "_ZTIPKPK1Q"
+  STR 27 "_ZTIPK1Q"
+  TY_PTR 30 24
+  DECL_ABI_DATA 31 2 30 3 3 27
+  TYPEINFO_DEF 31 1 1 25 nil
+  TY_PTR 32 30
+  DECL_ABI_DATA 33 2 32 3 3 26
+  TYPEINFO_DEF 33 1 1 31 nil
+  FUNC_BEGIN 29 0
+  BLOCK_BEGIN
+  TYPEID 33 15 0
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 28 "_Z2f5v"
+  DECL_FUNC 34 17 0 0 28
+  DECL_FUNC 34 17 0 1 28
+  STR 29 "_ZTIM1Pi"
+  STR 30 "_ZTIi"
+  DECL_ABI_DATA 35 2 1 0 0 30
+  TYPEINFO_DEF 35 0 0 nil nil
+  TY_DATA_MEMBER 36 1 21
+  DECL_ABI_DATA 37 2 36 3 3 29
+  TYPEINFO_DEF 37 2 0 35 22
+  FUNC_BEGIN 34 0
+  BLOCK_BEGIN
+  TYPEID 37 15 0
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 31 "_Z2f6v"
+  DECL_FUNC 38 17 0 0 31
+  DECL_FUNC 38 17 0 1 31
+  DECL_ABI_DATA 39 2 5 3 3 nil
+  FUNC_BEGIN 38 0
+  BLOCK_BEGIN
+  TYPEID 39 15 0
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 32 "_Z2f7v"
+  DECL_FUNC 40 17 0 0 32
+  DECL_FUNC 40 17 0 1 32
+  STR 33 "_ZTId"
+  TY_FLOAT 41 3 8 8
+  DECL_ABI_DATA 42 2 41 0 0 33
+  TYPEINFO_DEF 42 0 0 nil nil
+  FUNC_BEGIN 40 0
+  BLOCK_BEGIN
+  TYPEID 42 15 0
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 34 "_Z2f8v"
+  DECL_FUNC 43 17 0 0 34
+  DECL_FUNC 43 17 0 1 34
+  STR 35 "_ZTIM1PFviE"
+  STR 36 "_ZTIFviE"
+  TY_FUNC 44 4 0 [27, 1]
+  DECL_ABI_DATA 45 2 44 3 3 36
+  TYPEINFO_DEF 45 3 0 nil nil
+  TY_METHOD 46 44 21
+  DECL_ABI_DATA 47 2 46 3 3 35
+  TYPEINFO_DEF 47 2 0 45 22
+  FUNC_BEGIN 43 0
+  BLOCK_BEGIN
+  TYPEID 47 15 0
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_ABI_DATA 48 0 5 3 3 nil
+frame NAMES
+frame END
+  END 12 0

@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 add_executable(format_tests format_tests.cpp)
 target_link_libraries(format_tests PRIVATE ecil_format)
+add_executable(abi_decode_tests abi_decode_tests.cpp)
+target_link_libraries(abi_decode_tests PRIVATE ecil_format)
+add_test(NAME abi_decode_tests COMMAND abi_decode_tests)
 file(GLOB fixtures CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/*.txt")
 add_test(NAME format_tests

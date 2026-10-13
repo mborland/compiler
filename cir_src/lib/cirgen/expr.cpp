@@ -196,6 +196,24 @@ given) receives the value the object now holds.
           static_cast<uint64_t>(load.getAlignment().value_or(1)));
       load->erase();
     } else if (is_aggregate_type(value.getType()) &&
+               value.getDefiningOp<cir::CallOp>() && record != nullptr &&
+               record->data_size < record->size &&
+               pointee == value.getType() &&
+               target.value.getDefiningOp<cir::BaseClassAddrOp>() != nullptr) {
+      /* A call result stored into a base subobject: the callee may write
+         the whole object, tail padding included, where a virtual base or
+         another member can live (tail-padding1).  As CodeGen does for a
+         potentially overlapping destination, the result lands in a temporary
+         and only the data size is copied. */
+      uint32_t align = static_cast<uint32_t>(type_align(value.getType()));
+      mlir::Value temp = alloca_here(value.getType(), "agg.tmp.ensured",
+                                     align);
+
+      builder_.createStore(loc(), value, temp, false, false,
+                           alignment_attr(align));
+      compat::memcpy_bytes(builder_, loc(), target.value, temp,
+                           record->data_size, target.align, align);
+    } else if (is_aggregate_type(value.getType()) &&
                value.getDefiningOp<cir::CallOp>() &&
                pointee == value.getType() &&
                (store_flags & ECIL_STORE_INIT) == 0) {
@@ -345,7 +363,9 @@ Convert a scalar to !cir.bool (no-op on a bool).
     cir::CastKind kind =
         mlir::isa<cir::IntType>(t) ? cir::CastKind::int_to_bool
         : mlir::isa<cir::PointerType>(t) ? cir::CastKind::ptr_to_bool
-                                         : cir::CastKind::float_to_bool;
+        : mlir::isa<cir::DataMemberType, cir::MethodType>(t)
+              ? cir::CastKind::member_ptr_to_bool
+              : cir::CastKind::float_to_bool;
     result = builder_.createCast(loc(), kind, v, builder_.getBoolTy());
   }
   return result;
@@ -461,12 +481,21 @@ A cir.const of the (typed) attribute.
 void a_emitter::zero_fill(mlir::Value address, mlir::Type type, uint32_t align)
 /*
 Zero an object: a store of the zero constant for small ones, cir.libc.memset
-for the rest.
+for the rest.  An object with a pointer to a data member (12.7) gets its null
+constant instead: stored, or copied from a private constant when big.
 */
 {
   uint64_t size = type_size(type);
 
-  if (size <= 16) {
+  if (!zero_initializable(type)) {
+    a_const null_constant = {null_attribute(type), false};
+    a_value target;
+
+    target.kind = a_value_kind::glvalue;
+    target.value = address;
+    target.align = align;
+    materialize_constant_into(target, null_constant, type);
+  } else if (size <= 16) {
     builder_.createStore(loc(), builder_.getNullValue(type, loc()), address,
                          false, false, alignment_attr(align));
   } else {
@@ -615,11 +644,12 @@ and an indirect call with all arguments as variadic extras.
   a_entity *e = nullptr;
   a_type *call_type;
   llvm::SmallVector<mlir::Value> args;
+  mlir::Value vtt;
   mlir::Value callee;
   cir::CallOp op;
   bool noreturn;
+  bool with_vtt;
   mlir::NamedAttribute nothrow = nothrow_attr();
-  bool use_nothrow = !(session_.header.lang_flags & ECIL_LANG_EXCEPTIONS);
   llvm::SmallVector<mlir::NamedAttribute> attrs;
 
   if (indirect) {
@@ -633,6 +663,7 @@ and an indirect call with all arguments as variadic extras.
     uint_operand(r.ops[3], flags);
   }
   noreturn = (flags & ECIL_CALL_NORETURN) != 0;
+  with_vtt = !indirect && (flags & ECIL_CALL_VTT) != 0;
   call_type = type_at(t_call);
   if (call_type == nullptr || call_type->kind != a_type_kind::function_type)
     ok = format_error("CALL names a type that is not a function type");
@@ -645,22 +676,52 @@ and an indirect call with all arguments as variadic extras.
       ok = format_error("CALL with an incomplete record type as argument "
                         "or result");
   }
-  if (ok && nargs + (indirect ? 1u : 0u) > values_.size())
+  if (ok && nargs + (indirect ? 1u : 0u) + (with_vtt ? 1u : 0u) >
+                values_.size())
     /* Bound the allocation by what the value stack can supply. */
     ok = format_error("CALL needs " + std::to_string(nargs) +
                       " argument values but the value stack holds " +
                       std::to_string(values_.size()));
+  if (ok && with_vtt && nargs == 0)
+    ok = format_error("CALL VTT without an object argument");
   if (ok) {
-    args.resize(static_cast<size_t>(nargs));
-    for (size_t k = static_cast<size_t>(nargs); ok && k > 0; --k)
+    /* The VTT_ADDR operand sits between argument 0 and argument 1. */
+    args.resize(static_cast<size_t>(nargs) + (with_vtt ? 1u : 0u));
+    for (size_t k = args.size(); ok && k > 0; --k)
       ok = pop_prvalue(args[k - 1]);
+    if (ok && with_vtt) {
+      vtt = args[1];
+      args.erase(args.begin() + 1);
+    }
   }
   if (ok)
     ok = check_class_arguments(args);
+  if (ok && with_vtt) {
+    if (vtt.getType() != vtt_parameter_type())
+      ok = format_error("CALL VTT: the operand is not a VTT address");
+    else
+      args.insert(args.begin() + 1, vtt);
+  }
+  if (ok && !throws_.empty()) {
+    /* A call that can throw while a thrown object is being initialized: the
+       cleanup that frees the object starts here (materialize_throws). */
+    bool may_throw = !is_nothrow_call(flags, nullptr);
+
+    if (may_throw && !indirect) {
+      const a_entity *callee_entity = entity_for(gid, true);
+
+      if (callee_entity != nullptr && is_nothrow_call(0, callee_entity))
+        may_throw = false;
+    }
+    if (may_throw)
+      ok = materialize_throws();
+  }
   if (ok) {
-    if (use_nothrow)
+    if (is_nothrow_call(flags, nullptr))
       attrs.push_back(nothrow);
     cir::FuncType wanted = mlir::cast<cir::FuncType>(call_type->cir);
+    if (with_vtt)
+      wanted = with_vtt_parameter(wanted);
     bool prototyped = !call_type->no_proto;
     mlir::Type result_type = wanted.hasVoidReturn()
         ? static_cast<mlir::Type>(compat::void_type(ctx_))
@@ -685,13 +746,37 @@ and an indirect call with all arguments as variadic extras.
       return good;
     };
 
-    if (!indirect) {
+    if (!indirect && (flags & ECIL_CALL_VIRTUAL)) {
+      uint32_t slot = 0;
+
+      e = entity_for(gid, true);
+      if (e != nullptr && attrs.empty() && is_nothrow_call(0, e))
+        attrs.push_back(nothrow);
+      if (e == nullptr) {
+        ok = false;
+      } else if (!ids_.vslot_of(static_cast<uint32_t>(gid), slot)) {
+        ok = internal("CALL VIRTUAL of a function without a slot");
+      } else if (!args_match(mlir::cast<cir::FuncOp>(e->op)
+                                 .getFunctionType())) {
+        ok = format_error("CALL VIRTUAL: the call type differs from the "
+                          "function's");
+      } else {
+        ok = virtual_call(*e, args, slot, attrs, op);
+      }
+    } else if (!indirect) {
       e = entity_for(gid, true);
       if (e == nullptr) {
         ok = false;  /* entity_for reported the internal error. */
+      } else if (with_vtt != e->has_vtt) {
+        ok = format_error("CALL " + std::string(with_vtt ? "with" : "without")
+                          + " VTT of a function that " +
+                          (e->has_vtt ? "takes" : "does not take") +
+                          " a VTT parameter");
       } else {
         cir::FuncOp fn = mlir::cast<cir::FuncOp>(e->op);
         e->referenced = true;
+        if (attrs.empty() && is_nothrow_call(0, e))
+          attrs.push_back(nothrow);
         if (args_match(fn.getFunctionType())) {
           op = builder_.createCallOp(loc(), fn, args, attrs);
           e->calls.push_back(op);
@@ -813,6 +898,31 @@ INC_DEC: load, step by one (element for pointers), store, push the new
 
 /* Conditional expressions. */
 
+bool a_emitter::arm_terminated(size_t value_base)
+/*
+True when the arm of a conditional expression that is closing ended in
+THROW_END, RETHROW or UNREACHABLE with the value stack as at its start: the
+current block is the empty one the terminator left, nothing branches to it.
+It is erased (the arm ends in the cir.unreachable before it).
+*/
+{
+  bool result = false;
+  mlir::Block *block = builder_.getBlock();
+
+  if (values_.size() == value_base && block != &block->getParent()->front() &&
+      block->hasNoPredecessors()) {
+    result = true;
+    if (block->empty()) {
+      builder_.clearInsertionPoint();
+      block->erase();
+    } else {
+      builder_.setInsertionPointToEnd(block);
+      cir::UnreachableOp::create(builder_, loc());
+    }
+  }
+  return result;
+}  /* a_emitter::arm_terminated */
+
 bool a_emitter::tern_record(const ecil::a_record &r)
 /*
 TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
@@ -856,7 +966,9 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
       ok = false;
       break;
     }
-    if (f->result_type) {
+    if (arm_terminated(f->value_base)) {
+      /* A throwing arm contributes no value. */
+    } else if (f->result_type) {
       mlir::Value v;
       if (!pop_prvalue(v)) {
         ok = false;
@@ -882,7 +994,10 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
     }
     mlir::Operation *op = f->op;
     bool has_result = static_cast<bool>(f->result_type);
-    if (has_result) {
+    bool terminated = arm_terminated(f->value_base);
+    if (terminated) {
+      /* A throwing arm contributes no value. */
+    } else if (has_result) {
       mlir::Value v;
       if (!pop_prvalue(v)) {
         ok = false;
@@ -932,12 +1047,17 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
       break;
     }
     mlir::Operation *op = f->op;
-    mlir::Value rhs = pop_bool_condition();
-    if (!rhs) {
-      ok = false;
-      break;
+    mlir::Value rhs;
+    if (arm_terminated(f->value_base)) {
+      /* A throwing operand contributes no value. */
+    } else {
+      rhs = pop_bool_condition();
+      if (!rhs) {
+        ok = false;
+        break;
+      }
+      builder_.createYield(loc(), mlir::ValueRange{rhs});
     }
-    builder_.createYield(loc(), mlir::ValueRange{rhs});
     if (is_and) {
       builder_.createBlock(&op->getRegion(1));
       builder_.createYield(loc(), mlir::ValueRange{builder_.getFalse(loc())});
@@ -1038,6 +1158,7 @@ AGG_INIT_BEGIN / AGG_SEL / AGG_INIT_END / INIT_CONST / INIT_ZERO.
     mlir::Type type = target.kind == a_value_kind::bitfield
         ? target.bitfield->declared
         : mlir::cast<cir::PointerType>(target.value.getType()).getPointee();
+    resolve_vptr_markers(c, type);
     ok = materialize_constant_into(target, c, type);
     break;
   }
@@ -1122,6 +1243,12 @@ ZERO_BYTES: zero the first bytes bytes of the object a glvalue designates
     ok = false;
   } else if (target.kind != a_value_kind::glvalue) {
     ok = format_error("ZERO_BYTES of a bit-field");
+  } else if (!zero_initializable(
+                 mlir::cast<cir::PointerType>(target.value.getType())
+                     .getPointee())) {
+    ok = format_error("ZERO_BYTES of an object with a pointer to a data "
+                      "member (null is -1: use INIT_ZERO or "
+                      "INIT_ZERO_BASE)");
   } else if (target.omitted) {
     /* An empty class has at most one byte, which the object shares with
        another member: nothing is written for 0 or 1; more is an error. */
@@ -1129,8 +1256,20 @@ ZERO_BYTES: zero the first bytes bytes of the object a glvalue designates
       ok = format_error("ZERO_BYTES of more than one byte through an "
                         "omitted empty field");
   } else if (bytes != 0) {
-    compat::memset_zero(builder_, loc(), target.value, builder_.getUIntNTy(64),
-                        bytes, target.align);
+    uint64_t size = type_size(mlir::cast<cir::PointerType>(
+                                  target.value.getType()).getPointee());
+
+    /* The range lies inside the glvalue's object, or covers a whole number
+       of elements from the first one (`new T[n]()`, the glvalue designates
+       the first element). */
+    if (size != 0 && bytes > size && bytes % size != 0)
+      ok = format_error("ZERO_BYTES of " + std::to_string(bytes) +
+                        " bytes through a glvalue of a " +
+                        std::to_string(size) + "-byte type: neither inside "
+                        "it nor a whole number of elements");
+    else
+      compat::memset_zero(builder_, loc(), target.value,
+                          builder_.getUIntNTy(64), bytes, target.align);
   }
   return ok;
 }  /* a_emitter::zero_bytes */
@@ -1224,13 +1363,18 @@ p + cookie - sizeof(size_t), the elements start at p + cookie (Itanium).
   uint_operand(r.ops[0], tgid);
   uint_operand(r.ops[1], cookie);
   element = type_at(tgid);
-  if (element == nullptr || !pop_prvalue(count)) {
+  if (r.opcode == eop_new_array_size_throw && !throws_.empty())
+    ok = materialize_throws();
+  if (!ok) {
+    /* materialize_throws reported it. */
+  } else if (element == nullptr || !pop_prvalue(count)) {
     ok = false;
   } else if (!mlir::isa<cir::IntType>(count.getType())) {
     ok = format_error(std::string(r.info->name) + " needs an integer count");
   } else if (!type_is_complete(element->cir)) {
     ok = internal("array new of an incomplete record type");
-  } else if (r.opcode == eop_new_array_size) {
+  } else if (r.opcode == eop_new_array_size ||
+             r.opcode == eop_new_array_size_throw) {
     auto count_type = mlir::cast<cir::IntType>(count.getType());
     mlir::Value wide = count.getType() == word ? count
         : builder_.createCast(loc(), cir::CastKind::integral, count, word);
@@ -1261,8 +1405,32 @@ p + cookie - sizeof(size_t), the elements start at p + cookie (Itanium).
     }
     if (invalid)
       overflow = builder_.createOr(loc(), overflow, invalid);
-    mlir::Value limit = builder_.getConstantInt(loc(), word, -1);
-    push_prvalue(builder_.createSelect(loc(), overflow, limit, total));
+    if (r.opcode == eop_new_array_size_throw) {
+      /* A count that does not fit throws std::bad_array_new_length. */
+      a_entity *bad = library_entity(
+          "__cxa_throw_bad_array_new_length", true,
+          compat::function_type({}, compat::void_type(ctx_), false), false);
+
+      if (bad == nullptr) {
+        ok = false;
+      } else {
+        cir::IfOp guard = compat::open_if(builder_, loc(), overflow);
+        mlir::OpBuilder::InsertionGuard saved(builder_);
+
+        bad->referenced = true;
+        mlir::cast<cir::FuncOp>(bad->op)->setAttr(noreturn_name_,
+                                                  unit_attr_);
+        builder_.setInsertionPointToStart(&guard.getThenRegion().front());
+        builder_.createCallOp(loc(), mlir::cast<cir::FuncOp>(bad->op),
+                              llvm::ArrayRef<mlir::Value>());
+        cir::UnreachableOp::create(builder_, loc());
+      }
+      if (ok)
+        push_prvalue(total);
+    } else {
+      mlir::Value limit = builder_.getConstantInt(loc(), word, -1);
+      push_prvalue(builder_.createSelect(loc(), overflow, limit, total));
+    }
   } else {
     mlir::Value pointer;
     mlir::Type pointer_type = compat::pointer_to(element->cir);
@@ -1320,6 +1488,10 @@ when the flags say so.
   a_type *object;
   mlir::Value pointer;
 
+  /* A delete runs a destructor and an operator that can throw. */
+  if (!throws_.empty())
+    ok = materialize_throws();
+
   uint_operand(r.ops[0], g_fn);
   if (has_dtor)
     uint_operand(r.ops[1], g_dtor);
@@ -1334,14 +1506,29 @@ when the flags say so.
     ok = false;
   } else if (!mlir::isa<cir::PointerType>(pointer.getType())) {
     ok = format_error("DELETE of a value that is not a pointer");
-  } else if (!type_is_complete(object->cir)) {
-    ok = internal("DELETE of an incomplete record type");
+  } else if (!deletable_type(*object) &&
+             (has_dtor || (flags & (ECIL_DELETE_SIZED | ECIL_DELETE_ALIGNED |
+                                    ECIL_DELETE_VIRTUAL)) != 0)) {
+    /* A pointer to an incomplete class (C++23 allows the delete) or to void
+       (undefined, but compiled) has no destructor to call and no size or
+       alignment: only the plain operator delete or delete[] is possible. */
+    ok = format_error("DELETE of an incomplete class or void takes no "
+                      "destructor and none of the sized, aligned and "
+                      "virtual flags");
   } else {
     bool array = (flags & ECIL_DELETE_ARRAY) != 0;
+    bool destroying = (flags & ECIL_DELETE_DESTROYING) != 0;
     bool sized = (flags & ECIL_DELETE_SIZED) != 0;
     bool aligned = (flags & ECIL_DELETE_ALIGNED) != 0;
     cir::FuncOp delete_fn = mlir::cast<cir::FuncOp>(fn->op);
-    uint64_t align = type_align(object->cir);
+    bool plain = !deletable_type(*object);
+
+    if (destroying && (has_dtor || array || plain ||
+                       (flags & (ECIL_DELETE_VIRTUAL | ECIL_DELETE_GLOBAL)))) {
+      ok = format_error("DELETE DESTROYING takes a complete class and no "
+                        "destructor, and none of ARRAY, VIRTUAL and GLOBAL");
+    }
+    uint64_t align = plain ? 1 : type_align(object->cir);
     mlir::Value not_null = builder_.createPtrIsNotNull(pointer);
     cir::IfOp guard = compat::open_if(builder_, loc(), not_null);
     mlir::Value typed = builder_.createBitcast(
@@ -1349,24 +1536,86 @@ when the flags say so.
 
     fn->referenced = true;
     builder_.setInsertionPointToStart(&guard.getThenRegion().front());
-    if (array) {
+    if (array && !plain) {
       compat::delete_array(builder_, loc(), typed, delete_fn, sized,
                            aligned ? align : 0,
                            has_dtor ? mlir::cast<cir::FuncOp>(dtor->op)
                                     : cir::FuncOp(),
-                           align);
+                           align,
+                           exceptions_ && has_dtor &&
+                               !is_nothrow_call(0, dtor));
       if (has_dtor)
         dtor->referenced = true;
+    } else if ((flags & ECIL_DELETE_VIRTUAL) &&
+               !(flags & ECIL_DELETE_GLOBAL)) {
+      if (!has_dtor)
+        ok = format_error("DELETE VIRTUAL needs the virtual destructor");
+      else
+        ok = virtual_delete(g_dtor, pointer, object);
     } else {
       mlir::NamedAttribute nothrow = nothrow_attr();
-      llvm::SmallVector<mlir::NamedAttribute> attrs;
-      llvm::SmallVector<mlir::Value> args;
+      llvm::SmallVector<mlir::NamedAttribute> del_attrs;
+      llvm::SmallVector<mlir::NamedAttribute> dtor_attrs;
       cir::FuncType type = delete_fn.getFunctionType();
-      unsigned want = 1 + (sized ? 1 : 0) + (aligned ? 1 : 0);
+      /* The empty std::destroying_delete_t tag counts one. */
+      unsigned want = 1 + (sized ? 1 : 0) + (aligned ? 1 : 0) +
+                      (destroying ? 1 : 0);
+      /* A destructor that can throw: the operator delete is its cleanup
+         (clang's CallObjectDelete). */
+      bool wrap = exceptions_ && has_dtor && !is_nothrow_call(0, dtor);
+      cir::CleanupScopeOp scope;
+      /* ::delete of a polymorphic object (clang's emitVirtualObjectDelete):
+         the complete object's address is computed first (offset-to-top), D1
+         is called through the vtable and the global operator delete frees
+         the complete object, also when D1 throws. */
+      bool global_virtual = (flags & ECIL_DELETE_VIRTUAL) != 0;
+      mlir::Value delete_pointer = pointer;
+      uint32_t d1_slot = 0;
 
-      if (!(session_.header.lang_flags & ECIL_LANG_EXCEPTIONS))
-        attrs.push_back(nothrow);
-      if (has_dtor) {
+      if (global_virtual) {
+        if (!has_dtor || !ids_.vslot_of(static_cast<uint32_t>(g_dtor),
+                                        d1_slot)) {
+          ok = format_error("DELETE GLOBAL needs the virtual destructor");
+        } else {
+          mlir::Type word = compat::int_type(ctx_, 64, true);
+          mlir::Type byte_pointer = compat::pointer_to(
+              compat::int_type(ctx_, 8, false));
+          mlir::Value object_pointer = builder_.createBitcast(
+              loc(), pointer, compat::pointer_to(object->cir));
+          mlir::Value vptr_address = compat::vtable_get_vptr(
+              builder_, loc(), object_pointer);
+          mlir::Value vptr = builder_.createLoad(loc(), vptr_address, false,
+                                                 8);
+          mlir::Value vtable = builder_.createBitcast(loc(), vptr,
+                                                      byte_pointer);
+          mlir::Value slot_address = builder_.createPtrStride(
+              loc(), vtable, builder_.getConstantInt(loc(), word, -16));
+          mlir::Value offset = builder_.createLoad(
+              loc(), builder_.createBitcast(loc(), slot_address,
+                                            compat::pointer_to(word)),
+              false, 8);
+          mlir::Value bytes = builder_.createBitcast(loc(), pointer,
+                                                     byte_pointer);
+
+          delete_pointer = builder_.createPtrStride(loc(), bytes, offset);
+        }
+      }
+      if (is_nothrow_call(0, fn))
+        del_attrs.push_back(nothrow);
+      if (has_dtor && is_nothrow_call(0, dtor))
+        dtor_attrs.push_back(nothrow);
+      if (type.getNumInputs() != want) {
+        ok = format_error("DELETE: the operator delete takes " +
+                          std::to_string(type.getNumInputs()) +
+                          " arguments but the flags give " +
+                          std::to_string(want));
+      }
+      if (ok && wrap) {
+        scope = compat::open_cleanup_scope(builder_, loc(),
+                                           cir::CleanupKind::All);
+        builder_.setInsertionPointToStart(&scope.getBodyRegion().front());
+      }
+      if (ok && has_dtor) {
         cir::FuncOp dtor_fn = mlir::cast<cir::FuncOp>(dtor->op);
         mlir::Value self = pointer;
         if (dtor_fn.getFunctionType().getNumInputs() != 1)
@@ -1374,23 +1623,52 @@ when the flags say so.
         else if (self.getType() != dtor_fn.getFunctionType().getInput(0))
           self = builder_.createBitcast(
               loc(), pointer, dtor_fn.getFunctionType().getInput(0));
-        if (ok) {
+        if (ok && global_virtual) {
+          cir::FuncType dtor_type = dtor_fn.getFunctionType();
+          mlir::Value object_pointer = builder_.createBitcast(
+              loc(), pointer, compat::pointer_to(object->cir));
+          mlir::Value vptr = builder_.createLoad(
+              loc(), compat::vtable_get_vptr(builder_, loc(), object_pointer),
+              false, 8);
+          mlir::Value function = builder_.createLoad(
+              loc(), compat::vtable_function_slot(
+                  builder_, loc(),
+                  compat::pointer_to(compat::pointer_to(dtor_type)), vptr,
+                  d1_slot), false, 8);
+
+          builder_.createIndirectCallOp(loc(), function, dtor_type,
+                                        llvm::ArrayRef<mlir::Value>{self},
+                                        dtor_attrs);
+          dtor->referenced = true;
+        } else if (ok) {
           dtor->calls.push_back(builder_.createCallOp(loc(), dtor_fn, self,
-                                                      attrs));
+                                                      dtor_attrs));
           dtor->referenced = true;
         }
       }
-      if (ok && type.getNumInputs() != want) {
-        ok = format_error("DELETE: the operator delete takes " +
-                          std::to_string(type.getNumInputs()) +
-                          " arguments but the flags give " +
-                          std::to_string(want));
-      } else if (ok) {
+      if (ok && wrap) {
+        builder_.createYield(loc());
+        builder_.setInsertionPointToStart(&scope.getCleanupRegion().front());
+      }
+      if (ok) {
+        llvm::SmallVector<mlir::Value> args;
         unsigned k = 0;
-        mlir::Value first = pointer;
+        mlir::Value first = delete_pointer;
         if (first.getType() != type.getInput(0))
-          first = builder_.createBitcast(loc(), pointer, type.getInput(0));
+          first = builder_.createBitcast(loc(), delete_pointer,
+                                         type.getInput(0));
         args.push_back(first);
+        if (destroying && type.getNumInputs() > 1) {
+          /* The tag is an empty class passed by value: a temporary, as
+             clang's emitDeleteCall makes it. */
+          mlir::Type tag = type.getInput(1);
+          uint32_t tag_align = static_cast<uint32_t>(type_align(tag));
+          mlir::Value tag_slot = alloca_here(tag, "destroying.delete.tag",
+                                             tag_align);
+
+          args.push_back(builder_.createLoad(loc(), tag_slot, false,
+                                             tag_align));
+        }
         for (uint64_t value : {sized ? type_size(object->cir) : 0,
                                aligned ? align : 0}) {
           bool present = k == 0 ? sized : aligned;
@@ -1408,7 +1686,11 @@ when the flags say so.
         }
         if (ok)
           fn->calls.push_back(builder_.createCallOp(loc(), delete_fn, args,
-                                                    attrs));
+                                                    del_attrs));
+      }
+      if (wrap) {
+        builder_.createYield(loc());
+        builder_.setInsertionPointAfter(scope.getOperation());
       }
     }
     terminate_region(guard.getThenRegion());
@@ -1895,6 +2177,7 @@ Handle one expression record.
     ok = cmp3way(r);
     break;
   case eop_new_array_size:
+  case eop_new_array_size_throw:
   case eop_new_array_cookie:
     ok = new_array_record(r);
     break;

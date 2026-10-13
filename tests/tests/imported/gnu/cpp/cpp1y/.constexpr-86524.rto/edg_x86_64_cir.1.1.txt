@@ -3,12 +3,6 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-"Test_name.c", line 43: warning: CIR back end: the body of "main" uses the constant kind "void constant", which the CIR back end does not support; the function is dropped
-  }
-  ^
-
-Warning: CIR back end: the unused definition of '_Z3fooPKiS0_' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
-
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the constant kind "void constant"
+Error: CIR back end: the definition of '_Z3fooPKiS0_' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p (and it is referenced)
 
 1 error detected in the compilation of "Test_name.c".

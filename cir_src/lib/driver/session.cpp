@@ -232,14 +232,6 @@ Process one record.
     operand_uint(record.ops[2], n);
     h.lang_flags = static_cast<uint32_t>(n);
     h.have_lang = true;
-    /* The reader accepts exceptions = 1 (ECIL 1.2); the code generator
-       does not support them yet (M4 slice S4). */
-    if (h.language == elang_cxx && (h.lang_flags & ECIL_LANG_EXCEPTIONS)) {
-      s.fail(EDG_CIR_ERROR_UNSUPPORTED, edc_unsupported,
-             "HDR_LANG exceptions = 1 is not supported yet (ECIL 1.2 "
-             "exceptions arrive with M4 slice S4)");
-      result = false;
-    }
     break;
   }
   case eop_hdr_producer:
@@ -411,9 +403,9 @@ Set the sticky status (the first error wins) and report it.
 
 bool an_edg_cir_session::consume_guarded(const void *bytes, size_t length)
 /*
-Feed the reader under crash recovery: op construction happens here, on the
-caller's thread, and a fatal LLVM/MLIR error or a crash must not exit() or
-kill the front end.
+Feed the reader under crash recovery: op construction happens here, on a
+big-stack worker thread (joined before returning), and a fatal LLVM/MLIR error
+or a crash must not exit() or kill the front end.
 */
 {
   bool accepted = false;
@@ -428,6 +420,10 @@ kill the front end.
     edg_cir::hold_crash_recovery();
     crash_held = true;
   }
+  /* The MLIR type verifiers and walkers recurse once per level of nesting of
+     a record in a record (a base class chain), so the work runs on the
+     big-stack worker; diagnostics are queued and delivered after it. */
+  in_worker = true;
   bool completed = edg_cir::run_guarded(
       [this, bytes, length, &accepted] {
 #if EDG_CIR_TEST_HOOKS
@@ -443,7 +439,9 @@ kill the front end.
         }
 #endif
         accepted = reader->consume(bytes, length);
-      }, 0, reason);
+      }, static_cast<unsigned>(EDG_CIR_WORKER_STACK_MB), reason);
+  in_worker = false;
+  deliver_queue();
 
   if (!completed) {
     poisoned = true;

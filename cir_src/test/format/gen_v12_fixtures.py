@@ -79,7 +79,41 @@ eh('bad_v12_throw_in_cleanup_code', "  CLEANUP_BEGIN 2 nil 0\n  THROW_BEGIN 1\n"
 eh('bad_v12_rethrow_in_cleanup_code', "  CLEANUP_BEGIN 2 nil 0\n  RETHROW\n", "RETHROW is not allowed inside cleanup code")
 eh('bad_v12_throw_end_active_cleanup', "  FULLEXPR_BEGIN\n  THROW_BEGIN 1\n  CLEANUP_BEGIN 2 nil 1\n  CLEANUP_BODY\n  THROW_END 10 nil\n", "still active at THROW_END")
 eh('bad_v12_throw_end_other_bracket', "  THROW_BEGIN 1\n  BLOCK_BEGIN\n  THROW_END 10 nil\n", "THROW_END is in another bracket than its THROW_BEGIN")
+CLS_DECL = '''  STR 5 "C"
+  STR 6 "1C"
+  STR 7 "_ZN1CD1Ev"
+  STR 8 "D"
+  STR 9 "1D"
+  STR 10 "_ZN1DD1Ev"
+  TY_RECORD_DECL 5 0 5
+  TY_RECORD_BODY 5 4 4 4 12 1
+  REC_FIELD 1 0 nil nil nil 0
+  CLASS_MANGLE 5 6
+  CLASS_INFO 5 4 4 nil 0
+  CLASS_BASES 5 []
+  TY_PTR 6 5
+  TY_FUNC 7 2 0 [6]
+  DECL_FUNC 22 7 0 1 7
+  DECL_ABI_DATA 11 2 5 3 3 nil
+  TY_RECORD_DECL 8 0 8
+  TY_RECORD_BODY 8 4 4 4 12 1
+  REC_FIELD 1 0 nil nil nil 0
+  CLASS_MANGLE 8 9
+  CLASS_INFO 8 4 4 nil 0
+  CLASS_BASES 8 []
+  TY_PTR 9 8
+  TY_FUNC 12 2 0 [9]
+  DECL_FUNC 24 12 0 1 10
+'''
 eh('bad_v12_throw_end_typeinfo', "  THROW_BEGIN 1\n  THROW_END 20 nil\n", "is not a DECL_ABI_DATA typeinfo")
+eh('bad_v12_catch_param_reference_of_int', "  TRY_BEGIN 0\n  CATCH_BEGIN 10\n  LOCAL 1 1 nil 4 0\n  CATCH_PARAM 1 0 nil\n  TRY_END\n", "CATCH_PARAM reference and pointer kinds need a parameter of a pointer type")
+eh('bad_v12_catch_param_pointer_of_int', "  TRY_BEGIN 0\n  CATCH_BEGIN 10\n  LOCAL 1 1 nil 4 0\n  CATCH_PARAM 1 1 nil\n  TRY_END\n", "CATCH_PARAM reference and pointer kinds need a parameter of a pointer type")
+eh('bad_v12_catch_param_scalar_of_record', "  TRY_BEGIN 0\n  CATCH_BEGIN 10\n  LOCAL 1 5 nil 4 0\n  CATCH_PARAM 1 2 nil\n  TRY_END\n", "CATCH_PARAM scalar kind needs a parameter of a scalar type", decl=CLS_DECL)
+eh('bad_v12_throw_end_typeinfo_other_type', "  THROW_BEGIN 6\n  THROW_END 10 nil\n", "THROW_END typeinfo is not the typeinfo of the type of its THROW_BEGIN", decl=CLS_DECL)
+eh('bad_v12_throw_end_dtor_on_int', "  THROW_BEGIN 1\n  THROW_END 10 21\n", "THROW_END has a destructor if and only if the thrown class has a non-trivial destructor")
+eh('bad_v12_throw_end_class_without_dtor', "  THROW_BEGIN 5\n  THROW_END 11 nil\n", "THROW_END has a destructor if and only if the thrown class has a non-trivial destructor", decl=CLS_DECL)
+eh('bad_v12_throw_end_dtor_other_class', "  THROW_BEGIN 5\n  THROW_END 11 24\n", "THROW_END destructor is not the destructor of the thrown class", decl=CLS_DECL)
+eh('bad_v12_throw_end_typeinfo_other_class', "  THROW_BEGIN 8\n  THROW_END 11 24\n", "THROW_END typeinfo is not the typeinfo of the type of its THROW_BEGIN", decl=CLS_DECL)
 # CLEANUP_END
 eh('bad_v12_cleanup_end_none', "  FULLEXPR_BEGIN\n  CLEANUP_END\n", "CLEANUP_END without an active DEACTIVATABLE cleanup")
 eh('bad_v12_cleanup_end_twice', "  FULLEXPR_BEGIN\n  CLEANUP_BEGIN 2 nil 1\n  CLEANUP_BODY\n  CLEANUP_END\n  CLEANUP_END\n", "CLEANUP_END without an active DEACTIVATABLE cleanup")
@@ -145,7 +179,7 @@ bad('bad_v12_class_vfuncs_method_sig_zero','classes',[("[30, 0, 0, 0, 33, 2, 0, 
 bad('bad_v12_class_vfuncs_duplicate','classes',[("[42, 2, 0, 1, 43, 0, 4, 0]","[42, 2, 0, 1, 42, 2, 0, 1]")],"is listed by two CLASS_VFUNCS entries")
 bad('bad_v12_class_vfuncs_other_class','classes',[("[30, 0, 0, 0, 33, 2, 0, 1]","[30, 0, 0, 0, 42, 2, 0, 1]")],"is not a declared member function of G-id 10")
 bad('bad_v12_class_vfuncs_base_variant_dtor','classes',[("[30, 0, 0, 0, 33, 2, 0, 1]","[31, 0, 0, 0, 33, 2, 0, 1]")],"lists a destructor as its D1")
-bad('bad_v12_class_vfuncs_flag_bits','classes',[("[30, 0, 0, 0, 33, 2, 0, 1]","[30, 0, 8, 0, 33, 2, 0, 1]")],"CLASS_VFUNCS: unknown flag bits")
+bad('bad_v12_class_vfuncs_flag_bits','classes',[("[30, 0, 0, 0, 33, 2, 0, 1]","[30, 0, 16, 0, 33, 2, 0, 1]")],"CLASS_VFUNCS: unknown flag bits")
 bad('bad_v12_class_vfuncs_odd_array','classes',[("[30, 0, 0, 0, 33, 2, 0, 1]","[30, 0, 0, 0, 33, 2, 0]")],"CLASS_VFUNCS array length is not a multiple of 4")
 bad('bad_v12_class_overrides_unlisted','classes',[("[33, 0, 42, 0, 30, 0, 43, 0]","[33, 0, 70, 0, 30, 0, 43, 0]")],"names a function that no CLASS_VFUNCS lists")
 bad('bad_v12_class_overrides_self','classes',[("[33, 0, 42, 0, 30, 0, 43, 0]","[33, 0, 33, 0, 30, 0, 43, 0]")],"lists only entries with g_ovr != g_fn")
@@ -188,7 +222,7 @@ bad('bad_v12_structor_deleting_twice','classes',[("  STRUCTOR_DELETING 32 30 36 
 bad('bad_v12_structor_deleting_d0','classes',[("STRUCTOR_DELETING 32 30 36 0","STRUCTOR_DELETING 31 30 36 0")],"g_d0 is its own DECL_FUNC with the type and linkage of D1")
 bad('bad_v12_structor_deleting_not_dtor','classes',[("STRUCTOR_DELETING 32 30 36 0","STRUCTOR_DELETING 32 34 36 0")],"g_d1 is not the complete variant of a destructor STRUCTOR")
 bad('bad_v12_structor_deleting_d0_defined','classes',[("  DECL_FUNC 45 22 0 1 26\n","  DECL_FUNC 45 22 0 0 26\n")],"is defined here if and only if its D1")
-bad('bad_v12_structor_deleting_flags','classes',[("STRUCTOR_DELETING 32 30 36 0","STRUCTOR_DELETING 32 30 36 1")],"flags SIZED/ALIGNED do not match the parameters of g_delete")
+bad('bad_v12_structor_deleting_flags','classes',[("STRUCTOR_DELETING 32 30 36 0","STRUCTOR_DELETING 32 30 36 1")],"flags SIZED/ALIGNED/DESTROYING do not match the parameters of g_delete")
 bad('bad_v12_structor_deleting_delete','classes',[("STRUCTOR_DELETING 32 30 36 0","STRUCTOR_DELETING 32 30 10 0")],"g_delete is not a declared function")
 bad('bad_v12_abi_vtable_not_dynamic','classes',[("  CLASS_MANGLE 100 11\n","  CLASS_MANGLE 100 11\n  DECL_ABI_DATA 67 0 100 0 1 nil\n")],"which is not a dynamic class")
 bad('bad_v12_abi_vtt_no_vbases','classes',[("DECL_ABI_DATA 63 1 110 0 1 nil","DECL_ABI_DATA 63 1 10 0 1 nil")],"which has no virtual bases")
@@ -205,6 +239,11 @@ bad('bad_v12_call_vtt_extra','classes',[("CALL 51 102 1 0","CALL 51 102 1 32")],
 bad('bad_v12_call_flag_bits','classes',[("CALL 33 13 2 16","CALL 33 13 2 64")],"CALL operand 4: unknown flag bits 0x40")
 bad('bad_v12_delete_virtual_not_deleting','classes',[("  CONST_INT 1 1\n  CALL 33 13 2 16\n","  CONST_NULL 11\n  DELETE 36 34 10 8\n  CONST_INT 1 1\n  CALL 33 13 2 16\n")],"DELETE VIRTUAL needs the virtual destructor of a STRUCTOR_DELETING")
 bad('bad_v12_delete_virtual_other_function','classes',[("  CONST_INT 1 1\n  CALL 33 13 2 16\n","  CONST_NULL 11\n  DELETE 70 30 10 8\n  CONST_INT 1 1\n  CALL 33 13 2 16\n")],"and its g_delete as the function")
+bad('bad_v12_delete_global_novirtual','classes',[("  CONST_INT 1 1\n  CALL 33 13 2 16\n","  CONST_NULL 11\n  DELETE 36 34 10 16\n  CONST_INT 1 1\n  CALL 33 13 2 16\n")],"DELETE GLOBAL needs VIRTUAL")
+bad('bad_v12_delete_global_no_slot','classes',[("  CONST_INT 1 1\n  CALL 33 13 2 16\n","  CONST_NULL 11\n  DELETE 36 34 10 24\n  CONST_INT 1 1\n  CALL 33 13 2 16\n")],"DELETE GLOBAL needs the virtual destructor")
+bad('bad_v12_delete_destroying_virtual','classes',[("  CONST_INT 1 1\n  CALL 33 13 2 16\n","  CONST_NULL 11\n  DELETE 36 nil 10 40\n  CONST_INT 1 1\n  CALL 33 13 2 16\n")],"DELETE DESTROYING takes no destructor and none of VIRTUAL, GLOBAL and ARRAY")
+bad('bad_v12_delete_destroying_dtor','classes',[("  CONST_INT 1 1\n  CALL 33 13 2 16\n","  CONST_NULL 11\n  DELETE 36 34 10 32\n  CONST_INT 1 1\n  CALL 33 13 2 16\n")],"DELETE DESTROYING takes no destructor and none of VIRTUAL, GLOBAL and ARRAY")
+bad('bad_v12_structor_deleting_destroying_arity','classes',[("STRUCTOR_DELETING 32 30 36 0","STRUCTOR_DELETING 32 30 36 4")],"flags SIZED/ALIGNED/DESTROYING do not match the parameters of g_delete")
 bad('bad_v12_vbase_cast_not_vbase','classes',[("VBASE_CAST 110 100 3","VBASE_CAST 110 10 3")],"has no VIRTUAL_BASE field of G-id 10")
 bad('bad_v12_vbase_cast_flag_bits','classes',[("VBASE_CAST 110 100 3","VBASE_CAST 110 100 4")],"VBASE_CAST operand 3: unknown flag bits 0x4")
 bad('bad_v12_vtt_addr_kind','classes',[("VTT_ADDR 1 0","VTT_ADDR 2 0")],"VTT_ADDR idx is not a field of the right kind")
@@ -511,5 +550,22 @@ dyn('bad_v12_dynamic_through_base_facts_late', [(B_FACTS, "")], "follow its TY_R
 dyn('bad_v12_dynamic_through_base_facts_after_other_record', [(B_FACTS, ""), ("  TY_RECORD_DECL 30 0 nil\n  TY_RECORD_BODY 30 4 4 4 0 1\n  REC_FIELD 1 0 nil nil 7 0\n", "  TY_RECORD_DECL 30 0 nil\n  TY_RECORD_BODY 30 4 4 4 0 1\n  REC_FIELD 1 0 nil nil 7 0\n" + B_FACTS)], "follow its TY_RECORD_BODY directly")
 dyn('bad_v12_dynamic_through_base_without_info', [("  CLASS_INFO 20 8 8 0 1\n", "")], "follow its TY_RECORD_BODY directly")
 dyn('bad_v12_dynamic_through_base_primary', [("  CLASS_INFO 20 8 8 0 1\n", "  CLASS_INFO 20 8 8 nil 1\n")], "a dynamic class has either its own TY_VPTR field or a primary_idx, never neither")
+
+
+# --- STATIC_INIT in both bodies of a structor pair with virtual bases (K5a)
+k5a = open(f'{OUT}/good_v12_static_local_vbases_structors.txt').read().split('\n', 1)[1]
+blk = "  STATIC_INIT_BEGIN 26 0\n  GREF 26\n  GREF 27\n  INC_DEC 0 1\n  STORE 0 0\n  STATIC_INIT_END\n"
+assert k5a.count(blk) == 2
+emit('bad_v12_static_init_twice_one_body', 'format', "G-id 26 is initialized twice",
+     k5a.replace(blk, blk + blk, 1))
+emit('bad_v12_static_init_three_bodies', 'format', "G-id 26 is initialized twice",
+     k5a.replace("  CALL 21 20 1 0\n  MEMINIT_END\n", "  CALL 21 20 1 0\n  MEMINIT_END\n" + blk, 1))
+
+
+# the second STATIC_INIT in a has_vbases function of ANOTHER structor pair
+i2 = k5a.rfind(blk)
+moved = k5a[:i2] + k5a[i2 + len(blk):]
+emit('bad_v12_static_init_other_pair', 'format', "G-id 26 is initialized twice",
+     moved.replace("  CALL 21 20 1 0\n  MEMINIT_END\n", "  CALL 21 20 1 0\n  MEMINIT_END\n" + blk, 1))
 
 print(len(made),'fixtures (with function-try)')

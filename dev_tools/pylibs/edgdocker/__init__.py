@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import getpass
+import itertools
 import os
 import platform
 import re
@@ -363,6 +364,13 @@ def _get_group_id() -> int:
     return 1000
   return os.getgid()
 
+# Containers started by this process get a name when the environment variable
+# EDG_DOCKER_NAME_PREFIX is set: "<prefix>-<pid>-<n>" (n counts the containers
+# of this process), so that a job's containers can be found and stopped by
+# name, and not by a broad pattern.  The label edg.job holds the prefix.
+_container_counter = itertools.count(1)
+
+
 def exec_docker_cmd(image_name: str, workspace_dir: Path,
                     container_working_dir: PurePosixPath, command_string: str,
                     *, enable_x11: bool = False, memory_limit: str = '',
@@ -390,6 +398,13 @@ def exec_docker_cmd(image_name: str, workspace_dir: Path,
     '--env',
     f"EDG_USER_NAME={render_user_name()}"
   ]
+
+  prefix = os.environ.get('EDG_DOCKER_NAME_PREFIX', '')
+  if prefix:
+    docker_args.extend([
+      '--name', f"{prefix}-{os.getpid()}-{next(_container_counter)}",
+      '--label', f"edg.job={prefix}"
+    ])
 
   if os.isatty(sys.stdin.fileno()):
     # Make the container interactive.

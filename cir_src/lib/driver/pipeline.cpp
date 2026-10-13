@@ -15,14 +15,19 @@ EDG_CIR_ERROR_INTERNAL.  Diagnostics are queued and delivered by the caller
 after the worker has joined.
 */
 
+#include <condition_variable>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <new>
 #include <mutex>
 #include <string>
+#include <vector>
+
+#include <pthread.h>
 
 #include "clang/CIR/CIRToCIRPasses.h"
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
@@ -126,6 +131,52 @@ Queue an LLVM diagnostic raised during lowering or code generation.
     }
   }
 }  /* llvm_diagnostic */
+
+std::vector<mlir::StringAttr> guard_member_declarations(
+    mlir::ModuleOp module)
+/*
+The CXX ABI lowering of the pin reads the initial value of a global of a
+pointer-to-member type without a null check, so an external declaration of
+one (`extern int (Z::*m)();`) crashes it.  Give each such declaration the null
+constant for the CIR-to-CIR passes; unguard_member_declarations takes it away
+again.  Returns the symbols of the guarded globals.
+*/
+{
+  std::vector<mlir::StringAttr> guarded;
+
+  for (mlir::Operation &op : module.getBody()->getOperations()) {
+    auto global = mlir::dyn_cast<cir::GlobalOp>(&op);
+
+    if (global && !global.getInitialValue().has_value() &&
+        global.getCtorRegion().empty()) {
+      mlir::Type type = global.getSymType();
+
+      if (mlir::isa<cir::DataMemberType>(type)) {
+        global.setInitialValueAttr(cir::DataMemberAttr::get(
+            mlir::cast<cir::DataMemberType>(type)));
+        guarded.push_back(global.getSymNameAttr());
+      } else if (mlir::isa<cir::MethodType>(type)) {
+        global.setInitialValueAttr(cir::MethodAttr::get(
+            mlir::cast<cir::MethodType>(type)));
+        guarded.push_back(global.getSymNameAttr());
+      }
+    }
+  }
+  return guarded;
+}  /* guard_member_declarations */
+
+void unguard_member_declarations(mlir::ModuleOp module,
+                                 const std::vector<mlir::StringAttr> &guarded)
+/*
+Make the globals that guard_member_declarations gave a constant declarations
+again.
+*/
+{
+  for (mlir::StringAttr name : guarded) {
+    if (auto global = module.lookupSymbol<cir::GlobalOp>(name))
+      global->removeAttr("initial_value");
+  }
+}  /* unguard_member_declarations */
 
 void lower_and_emit(an_edg_cir_session &session, mlir::ModuleOp module,
                     llvm::raw_string_ostream &out)
@@ -306,11 +357,15 @@ body): verify, textual CIR, CIR-to-CIR passes, then lower_and_emit.
     a_stage_timer timer(session, &a_session_stats::passes_ns,
                         &a_session_stats::rss_passed_kib);
     bool verify_each = (session.flags & EDG_CIR_FLAG_VERIFY_EACH) != 0;
-    if (mlir::failed(cir::runCIRToCIRPasses(
+    std::vector<mlir::StringAttr> guarded = guard_member_declarations(module);
+    bool passed = mlir::succeeded(cir::runCIRToCIRPasses(
             module, cm.context, verify_each, /*enableIdiomRecognizer=*/false,
             /*enableCIRSimplify=*/session.opt_level > 0,
             /*enableLibOpt=*/false, /*libOptOptions=*/"",
-            /*enableCallConvLowering=*/true))) {
+            /*enableCallConvLowering=*/true));
+
+    unguard_member_declarations(module, guarded);
+    if (!passed) {
       session.fail(EDG_CIR_ERROR_PIPELINE, edc_pipeline,
                    "the CIR-to-CIR passes failed");
       go = false;
@@ -342,6 +397,161 @@ handler are process-global).
 
 unsigned crash_recovery_holders = 0;  /* Protected by guard_mutex(). */
 
+thread_local bool on_guard_worker = false;   /* This thread is the worker. */
+
+class a_guard_worker {
+/*
+A thread with a big stack that stays alive between guarded sections: the front
+end hands the library one frame at a time, and a thread (with its stack
+mapping) per frame cost 25 us each, 3% of a 6000-function translation unit.
+The body runs under its own crash recovery context on that thread, as
+CrashRecoveryContext::RunSafelyOnThread would run it on a fresh one.
+
+Nothing here waits at process exit: the thread is detached and its state is
+never destroyed (a static destructor, an exit() from the front end's error
+path or from the worker itself must not block on it); the handle's destructor
+only tells an idle worker to leave.
+*/
+public:
+  ~a_guard_worker()
+  { stop(); }
+
+  void forget()
+  /* After fork(): the child has no worker thread, so the next section starts
+     one (the old state is leaked). */
+  { state_ = nullptr; }
+
+  bool run(const std::function<void()> &body, unsigned stack_mb)
+  {
+    bool completed = false;
+
+    if (state_ != nullptr && stack_mb_ != stack_mb)
+      stop();
+    if (state_ == nullptr)
+      start(stack_mb);
+    if (state_ == nullptr) {
+      llvm::CrashRecoveryContext context;
+
+      completed = context.RunSafelyOnThread(body, stack_mb * 1024u * 1024u);
+    } else {
+      std::unique_lock<std::mutex> lock(state_->mutex);
+
+      state_->task = &body;
+      ++state_->requested;
+      state_->cv.notify_all();
+      state_->cv.wait(lock, [this] {
+        return state_->finished == state_->requested;
+      });
+      state_->task = nullptr;
+      completed = state_->completed;
+    }
+    return completed;
+  }
+
+private:
+  struct a_state {
+    std::mutex                    mutex;
+    std::condition_variable       cv;
+    const std::function<void()>  *task = nullptr;
+    unsigned long                 requested = 0;   /* Sections handed over. */
+    unsigned long                 finished = 0;    /* Sections completed. */
+    bool                          stopping = false;
+    bool                          completed = false;
+  };  /* a_state */
+
+  void start(unsigned stack_mb)
+  {
+    pthread_attr_t attr;
+
+    if (pthread_attr_init(&attr) == 0) {
+      /* The state lives in static storage that is never destroyed: it is
+         reachable from a global (no leak report), and nothing runs at exit
+         that could wait for the thread.  A slot is used once (the thread
+         owns it until the process ends); a few cover a stack size change or
+         forks, and after that sections run on a fresh thread each. */
+      static const size_t slot_count = 4;
+      alignas(a_state) static unsigned char slots[slot_count][sizeof(a_state)];
+      static size_t used = 0;
+      static bool at_fork_registered = false;
+      pthread_t thread;
+
+      if (!at_fork_registered) {
+        at_fork_registered = true;
+        pthread_atfork(nullptr, nullptr, &a_guard_worker::after_fork);
+      }
+      if (used < slot_count) {
+        a_state *state = new (slots[used++]) a_state;
+
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+        if (pthread_attr_setstacksize(
+                &attr, static_cast<size_t>(stack_mb) * 1024u * 1024u) == 0 &&
+            pthread_create(&thread, &attr, &a_guard_worker::entry, state) ==
+                0) {
+          state_ = state;
+          stack_mb_ = stack_mb;
+        }
+      }
+      pthread_attr_destroy(&attr);
+    }
+  }
+
+  void stop()
+  {
+    if (state_ != nullptr) {
+      std::lock_guard<std::mutex> lock(state_->mutex);
+
+      state_->stopping = true;
+      state_->cv.notify_all();
+      state_ = nullptr;     /* The thread owns the state from here on. */
+    }
+  }
+
+  static void after_fork();
+
+  static void *entry(void *state_pointer)
+  {
+    a_state *state = static_cast<a_state *>(state_pointer);
+    std::unique_lock<std::mutex> lock(state->mutex);
+
+    on_guard_worker = true;
+    for (;;) {
+      state->cv.wait(lock, [state] {
+        return state->stopping || state->finished != state->requested;
+      });
+      if (state->stopping && state->finished == state->requested)
+        break;
+      const std::function<void()> *task = state->task;
+
+      lock.unlock();
+      {
+        llvm::CrashRecoveryContext context;
+
+        state->completed = context.RunSafely(*task);
+      }
+      lock.lock();
+      state->finished = state->requested;
+      state->cv.notify_all();
+    }
+    return nullptr;
+  }
+
+  a_state  *state_ = nullptr;
+  unsigned  stack_mb_ = 0;
+};  /* a_guard_worker */
+
+a_guard_worker &guard_worker()
+/* The one worker of the process (a guarded section holds guard_mutex). */
+{
+  static a_guard_worker worker;
+
+  return worker;
+}  /* guard_worker */
+
+void a_guard_worker::after_fork()
+{
+  guard_worker().forget();
+}  /* a_guard_worker::after_fork */
+
 }  /* anonymous namespace */
 
 void hold_crash_recovery()
@@ -368,16 +578,18 @@ Drop one hold; the last one restores the previous signal handlers.
     llvm::CrashRecoveryContext::Disable();
 }  /* release_crash_recovery */
 
-bool run_guarded(const std::function<void()> &body, unsigned stack_mb,
-                 std::string &message)
+namespace {
+
+bool run_guarded_here(const std::function<void()> &body, unsigned stack_mb,
+                      std::string &message)
 /*
 Run body under LLVM crash recovery and a fatal-error handler.  Both are
 process-global, so one mutex serializes every guarded section of every
 session (one active session per process).  Crash recovery stays enabled while
 a session holds it (hold_crash_recovery); otherwise it is enabled for this
-call only.  stack_mb != 0 runs body on a fresh thread with that stack.
-Returns false (and the reason in message) when body crashed or hit a fatal
-error.
+call only.  stack_mb != 0 runs body on the persistent big-stack worker
+(a_guard_worker).  Returns false (and the reason in message) when body
+crashed or hit a fatal error.
 */
 {
   std::lock_guard<std::mutex> lock(guard_mutex());
@@ -390,14 +602,37 @@ error.
   llvm::install_fatal_error_handler(fatal_error_handler, &fatal);
   {
     llvm::CrashRecoveryContext context;
-    completed = stack_mb != 0
-        ? context.RunSafelyOnThread(body, stack_mb * 1024u * 1024u)
-        : context.RunSafely(body);
+    completed = stack_mb != 0 ? guard_worker().run(body, stack_mb)
+                              : context.RunSafely(body);
   }
   llvm::remove_fatal_error_handler();
   if (temporary)
     llvm::CrashRecoveryContext::Disable();
   message = fatal.message;
+  return completed;
+}  /* run_guarded_here */
+
+}  /* anonymous namespace */
+
+bool run_guarded(const std::function<void()> &body, unsigned stack_mb,
+                 std::string &message)
+/*
+run_guarded_here, except that a guarded section started from inside the
+worker (a callback that calls back into the library) runs on the worker as
+it is: the worker is busy with the section that started this one, and the
+guard mutex is held by the thread that waits for it.
+*/
+{
+  bool completed;
+
+  if (on_guard_worker) {
+    llvm::CrashRecoveryContext inner;
+
+    completed = inner.RunSafely(body);
+    message.clear();
+  } else {
+    completed = run_guarded_here(body, stack_mb, message);
+  }
   return completed;
 }  /* run_guarded */
 

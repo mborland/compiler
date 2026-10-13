@@ -1,0 +1,277 @@
+ecil 1.2 features=0x0000000a
+; C++ (ECIL 1.2): PR 9629.  The base initializer B(this) converts `this` to the
+;   virtual base A, reading its offset from the vptr, which nothing has set yet in C2.
+;   struct C : virtual A, B { C(); };  C::C() : B(this) {}  struct D : virtual C {};
+; Clang stores VTT[0] into the vptr at the entry of C2 and again at VPTR_INIT; so
+; does the library, when a base initializer needs the vbase offset.  The stream is
+; the ECIL writer's output.  The host's own derived classes (g++, clang) construct
+; through our C2 too.
+; RUN: %ecil-asm %s -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: objcopy --redefine-sym main=cir_main %t.o %t.m.o
+; RUN: g++ -std=c++17 -w %S/Inputs/s4_ctor2_host.cpp %t.m.o -o %t.gxx.exe
+; RUN: %t.gxx.exe
+; RUN: %clang -x c++ -std=c++17 -fno-exceptions -c %S/Inputs/s4_ctor2_host.cpp -o %t.host.o
+; RUN: g++ %t.host.o %t.m.o -o %t.clang.exe
+; RUN: %t.clang.exe
+; RUN: %edg-cir --emit=obj -O2 -o %t2.o %t.ecil
+; RUN: g++ %t2.o -o %t2.exe
+; RUN: %t2.exe
+
+; CHECK-LABEL: cir.func {{.*}}@_ZN1CC2Ev
+; CHECK: cir.vtt.address_point
+; CHECK: cir.vtable.get_vptr
+; CHECK: cir.store
+; CHECK: cir.vtable.get_vptr
+; CHECK: cir.call @_ZN1BC2EP1A
+
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "ctor2.cpp"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  STR 5 "A"
+  TY_RECORD_DECL 5 0 5
+  TY_PTR 6 5
+  TY_FUNC 7 4 0 [6]
+  TY_RECORD_BODY 5 1 0 1 0 0
+  STR 6 "_ZN1AC1Ev"
+  DECL_FUNC 8 7 0 0 6
+  STR 7 "_ZN1AC2Ev"
+  DECL_FUNC 9 7 0 0 7
+  STRUCTOR 8 9 0
+  DECL_FUNC 8 7 0 1 6
+  DECL_FUNC 9 7 0 1 7
+  STR 8 "this"
+  STR 9 "_ZN1A1aE"
+  DECL_VAR 10 6 0 0 0 9
+  FUNC_BEGIN 9 0
+  PARAM 1 6 6 8 1
+  BLOCK_BEGIN
+  GREF 10
+  LREF 1
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 10 "B"
+  TY_RECORD_DECL 11 0 10
+  TY_PTR 12 11
+  TY_FUNC 13 4 0 [12, 6]
+  TY_RECORD_BODY 11 1 0 1 0 0
+  STR 11 "_ZN1BC1EP1A"
+  DECL_FUNC 14 13 0 0 11
+  STR 12 "_ZN1BC2EP1A"
+  DECL_FUNC 15 13 0 0 12
+  STRUCTOR 14 15 0
+  DECL_FUNC 14 13 0 1 11
+  DECL_FUNC 15 13 0 1 12
+  STR 13 "a_"
+  STR 14 "_ZN1B1aE"
+  DECL_VAR 16 6 0 0 0 14
+  FUNC_BEGIN 15 0
+  PARAM 1 12 12 8 1
+  PARAM 2 6 6 13 0
+  BLOCK_BEGIN
+  GREF 16
+  LREF 2
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 15 "C"
+  TY_RECORD_DECL 17 0 15
+  TY_PTR 18 17
+  TY_FUNC 19 4 0 [18]
+  TY_VPTR 20
+  TY_RECORD_BODY 17 8 8 8 4 3
+  REC_FIELD 20 0 nil nil nil 1
+  REC_FIELD 11 0 nil nil nil 19
+  REC_FIELD 5 0 nil nil nil 67
+  STR 16 "1C"
+  CLASS_MANGLE 17 16
+  CLASS_INFO 17 8 8 nil 0
+  CLASS_BASES 17 [2, 1, 1, 1]
+  STR 17 "_ZN1CC1Ev"
+  DECL_FUNC 21 19 0 0 17
+  STR 18 "_ZN1CC2Ev"
+  DECL_FUNC 22 19 0 0 18
+  STRUCTOR 21 22 2
+  DECL_FUNC 21 19 0 1 17
+  DECL_FUNC 22 19 0 1 18
+  CLASS_VFUNCS 17 []
+  CLASS_OVERRIDES 17 []
+  FUNC_BEGIN 21 0
+  PARAM 1 18 18 8 1
+  MEMINIT_BEGIN 0 2 1
+  LREF 1
+  LOAD 0
+  VBASE_CAST 17 5 3
+  CALL 9 7 1 0
+  MEMINIT_END
+  MEMINIT_BEGIN 1 1 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 17 11 0 1
+  LREF 1
+  LOAD 0
+  VBASE_CAST 17 5 3
+  CALL 15 13 2 0
+  MEMINIT_END
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 22 0
+  PARAM 1 18 18 8 1
+  MEMINIT_BEGIN 1 1 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 17 11 0 1
+  LREF 1
+  LOAD 0
+  VBASE_CAST 17 5 1
+  CALL 15 13 2 0
+  MEMINIT_END
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 19 "D"
+  TY_RECORD_DECL 23 0 19
+  TY_PTR 24 23
+  TY_FUNC 25 4 0 [24]
+  TY_RECORD_BODY 23 8 8 8 4 2
+  REC_FIELD 5 0 nil nil nil 67
+  REC_FIELD 17 0 nil nil nil 67
+  STR 20 "1D"
+  CLASS_MANGLE 23 20
+  CLASS_INFO 23 8 8 1 0
+  CLASS_BASES 23 [1, 1]
+  STR 21 "_ZN1DC1Ev"
+  DECL_FUNC 26 25 0 2 21
+  STR 22 "_ZN1DC2Ev"
+  DECL_FUNC 27 25 0 2 22
+  STRUCTOR 26 27 2
+  DECL_FUNC 26 25 3 67 21
+  DECL_FUNC 27 25 3 67 22
+  CLASS_VFUNCS 23 []
+  CLASS_OVERRIDES 23 []
+  FUNC_BEGIN 26 0
+  PARAM 1 24 24 8 1
+  MEMINIT_BEGIN 0 0 1
+  LREF 1
+  LOAD 0
+  VBASE_CAST 23 5 3
+  CALL 9 7 1 0
+  MEMINIT_END
+  MEMINIT_BEGIN 0 1 1
+  LREF 1
+  LOAD 0
+  VBASE_CAST 23 17 3
+  VTT_ADDR 2 1
+  CALL 22 19 1 32
+  MEMINIT_END
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 27 0
+  PARAM 1 24 24 8 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 28 1 0 []
+  STR 23 "main"
+  DECL_FUNC 29 28 0 8 23
+  DECL_FUNC 29 28 0 9 23
+  TY_PTR 30 4
+  TY_FUNC 31 30 0 [2]
+  STR 24 "_Znwm"
+  DECL_FUNC 32 31 0 0 24
+  TY_FUNC 33 4 0 [30, 2]
+  STR 25 "_ZdlPvm"
+  DECL_FUNC 34 33 0 128 25
+  TY_BOOL 35 1 1
+  FUNC_BEGIN 29 0
+  BLOCK_BEGIN
+  LOCAL 1 2 nil 0 0
+  LREF 1
+  CONST_INT 2 8
+  STORE 2 0
+  LOCAL 2 30 nil 0 0
+  LREF 2
+  LREF 1
+  LOAD 0
+  CALL 32 31 1 0
+  STORE 2 0
+  CLEANUP_BEGIN 2 nil 1
+  LREF 2
+  LOAD 0
+  LREF 1
+  LOAD 0
+  CALL 34 33 2 0
+  CLEANUP_BODY
+  LREF 2
+  LOAD 0
+  CAST 11 24
+  DUP
+  CALL 26 25 1 0
+  CLEANUP_END
+  DROP
+  GREF 10
+  LOAD 0
+  GREF 16
+  LOAD 0
+  CMP 5
+  CAST 4 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 16 6 0 33 0 14
+  DECL_VAR 10 6 0 33 0 9
+  STR 26 "1A"
+  CLASS_MANGLE 5 26
+  CLASS_INFO 5 1 1 nil 0
+  CLASS_BASES 5 []
+  DECL_ABI_DATA 36 2 5 3 3 nil
+  STR 27 "1B"
+  CLASS_MANGLE 11 27
+  CLASS_INFO 11 1 1 nil 0
+  CLASS_BASES 11 []
+  DECL_ABI_DATA 37 2 11 3 3 nil
+  DECL_ABI_DATA 38 2 17 3 3 nil
+  DECL_ABI_DATA 39 0 17 3 3 nil
+  DECL_ABI_DATA 40 1 17 3 3 nil
+  DECL_ABI_DATA 41 2 23 3 3 nil
+  DECL_ABI_DATA 42 0 23 3 3 nil
+  DECL_ABI_DATA 43 1 23 3 3 nil
+frame NAMES
+frame END
+  END 8 0

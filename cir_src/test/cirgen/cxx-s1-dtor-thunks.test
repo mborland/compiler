@@ -1,0 +1,237 @@
+; C++ (ECIL 1.2, slice S1): virtual destructors and their thunks.  C derives
+; from A (primary) and P (at 16) and has a virtual destructor, so the vtable
+; group of C has, for the P subobject, the thunks _ZThn16_N1CD1Ev and
+; _ZThn16_N1CD0Ev (this - 16, then the complete or the deleting destructor of C),
+; emitted with C's destructors.  Deleting a C through a P* runs D0 through the
+; secondary vtable (slot 1 of P's table, the one after D1's): ~C (100), ~P (10),
+; ~A (1), then operator delete with the size of C.
+;   struct A { virtual ~A(); int a; A(); };  struct P { virtual ~P(); int p; P(); };
+;   struct C : A, P { ~C(); int c; C(); };
+;   int main() { C *c = new C; P *p = c; delete p; return g_d - 111; }
+; RUN: cat %S/Inputs/header12_cxx_rtti.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil > %t.cir
+; RUN: %FileCheck %s < %t.cir
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: g++ %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
+
+; CHECK-LABEL: cir.global {{.*}}@_ZTV1C = #cir.vtable<{#cir.const_array<[#cir.ptr<null> : !cir.ptr<!u8i>, #cir.global_view<@_ZTI1C> : !cir.ptr<!u8i>, #cir.global_view<@_ZN1CD1Ev> : !cir.ptr<!u8i>, #cir.global_view<@_ZN1CD0Ev> : !cir.ptr<!u8i>]> : !cir.array<!cir.ptr<!u8i> x 4>, #cir.const_array<[#cir.ptr<-16 : i64> : !cir.ptr<!u8i>, #cir.global_view<@_ZTI1C> : !cir.ptr<!u8i>, #cir.global_view<@_ZThn16_N1CD1Ev> : !cir.ptr<!u8i>, #cir.global_view<@_ZThn16_N1CD0Ev> : !cir.ptr<!u8i>]> : !cir.array<!cir.ptr<!u8i> x 4>}>
+; CHECK-LABEL: cir.func {{.*}}@main
+; CHECK: cir.vtable.get_virtual_fn_addr {{.*}}[1]
+; CHECK-DAG: cir.func {{.*}}@_ZThn16_N1CD1Ev(
+; CHECK-DAG: cir.func {{.*}}@_ZThn16_N1CD0Ev(
+
+; SYMS-DAG: T _ZThn16_N1CD1Ev
+; SYMS-DAG: T _ZThn16_N1CD0Ev
+; SYMS-DAG: T _ZN1CD0Ev
+
+frame DECLS
+  STR 11 "A"
+  STR 12 "P"
+  STR 13 "C"
+  STR 21 "1A"
+  STR 22 "1P"
+  STR 23 "1C"
+  STR 31 "_ZN1AD1Ev"
+  STR 32 "_ZN1AD2Ev"
+  STR 33 "_ZN1AD0Ev"
+  STR 34 "_ZN1AC1Ev"
+  STR 35 "_ZN1AC2Ev"
+  STR 41 "_ZN1PD1Ev"
+  STR 42 "_ZN1PD2Ev"
+  STR 43 "_ZN1PD0Ev"
+  STR 44 "_ZN1PC1Ev"
+  STR 45 "_ZN1PC2Ev"
+  STR 51 "_ZN1CD1Ev"
+  STR 52 "_ZN1CD2Ev"
+  STR 53 "_ZN1CD0Ev"
+  STR 54 "_ZN1CC1Ev"
+  STR 55 "_ZN1CC2Ev"
+  STR 60 "_ZdlPvm"
+  STR 61 "_Znwm"
+  STR 62 "main"
+  STR 63 "g_d"
+  STR 64 "a"
+  STR 65 "p"
+  STR 66 "c"
+  TY_VPTR 90
+  TY_FUNC 69 11 0 [12, 2]
+  TY_FUNC 68 12 0 [2]
+  TY_RECORD_DECL 71 0 11
+  TY_RECORD_BODY 71 16 12 8 12 2
+  REC_FIELD 90 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 64 0
+  CLASS_MANGLE 71 21
+  CLASS_INFO 71 12 8 nil 2
+  CLASS_BASES 71 []
+  TY_PTR 72 71
+  TY_FUNC 80 11 0 [72]
+  DECL_FUNC 100 80 0 1 31
+  DECL_FUNC 101 80 0 1 32
+  STRUCTOR 100 101 1
+  DECL_FUNC 102 80 0 1 33
+  DECL_FUNC 103 69 0 0 60
+  STRUCTOR_DELETING 102 100 103 1
+  DECL_FUNC 104 80 0 1 34
+  DECL_FUNC 105 80 0 1 35
+  STRUCTOR 104 105 0
+  CLASS_VFUNCS 71 [100, 0, 0, 0]
+  CLASS_OVERRIDES 71 []
+  TY_RECORD_DECL 73 0 12
+  TY_RECORD_BODY 73 16 12 8 12 2
+  REC_FIELD 90 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 65 0
+  CLASS_MANGLE 73 22
+  CLASS_INFO 73 12 8 nil 2
+  CLASS_BASES 73 []
+  TY_PTR 74 73
+  TY_FUNC 81 11 0 [74]
+  DECL_FUNC 120 81 0 1 41
+  DECL_FUNC 121 81 0 1 42
+  STRUCTOR 120 121 1
+  DECL_FUNC 122 81 0 1 43
+  STRUCTOR_DELETING 122 120 103 1
+  DECL_FUNC 124 81 0 1 44
+  DECL_FUNC 125 81 0 1 45
+  STRUCTOR 124 125 0
+  CLASS_VFUNCS 73 [120, 0, 0, 0]
+  CLASS_OVERRIDES 73 []
+  TY_RECORD_DECL 75 0 13
+  TY_RECORD_BODY 75 32 32 8 12 3
+  REC_FIELD 71 0 nil nil nil 16
+  REC_FIELD 73 16 nil nil nil 16
+  REC_FIELD 1 28 nil nil 66 0
+  CLASS_MANGLE 75 23
+  CLASS_INFO 75 32 8 0 2
+  CLASS_BASES 75 [0, 1, 1, 1]
+  TY_PTR 76 75
+  TY_FUNC 82 11 0 [76]
+  DECL_FUNC 140 82 0 1 51
+  DECL_FUNC 141 82 0 1 52
+  STRUCTOR 140 141 1
+  DECL_FUNC 142 82 0 1 53
+  STRUCTOR_DELETING 142 140 103 1
+  DECL_FUNC 144 82 0 1 54
+  DECL_FUNC 145 82 0 1 55
+  STRUCTOR 144 145 0
+  CLASS_VFUNCS 75 [140, 0, 0, 0]
+  CLASS_OVERRIDES 75 [100, 0, 140, 0, 120, 16, 140, 0]
+  DECL_FUNC 107 68 0 0 61
+  DECL_ABI_DATA 110 2 71 0 1 nil
+  DECL_ABI_DATA 111 0 71 0 1 nil
+  DECL_ABI_DATA 130 2 73 0 1 nil
+  DECL_ABI_DATA 131 0 73 0 1 nil
+  DECL_ABI_DATA 150 2 75 0 1 nil
+  DECL_ABI_DATA 151 0 75 0 1 nil
+  DECL_VAR 310 1 0 1 4 63
+  TY_FUNC 83 1 0 []
+  DECL_FUNC 203 83 0 9 62
+frame REGION
+  FUNC_BEGIN 105 0
+  PARAM 1 72 72 nil 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  BLOCK_END
+  FUNC_END 1
+  FUNC_BEGIN 125 0
+  PARAM 1 74 74 nil 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  BLOCK_END
+  FUNC_END 1
+  FUNC_BEGIN 145 0
+  PARAM 1 76 76 nil 1
+  MEMINIT_BEGIN 1 0 1
+  LREF 1
+  LOAD 0
+  BASE_CAST 75 71 0 1
+  CALL 105 80 1 0
+  MEMINIT_END
+  MEMINIT_BEGIN 1 1 1
+  LREF 1
+  LOAD 0
+  BASE_CAST 75 73 16 1
+  CALL 125 81 1 0
+  MEMINIT_END
+  VPTR_INIT
+  BLOCK_BEGIN
+  BLOCK_END
+  FUNC_END 1
+  FUNC_BEGIN 101 0
+  PARAM 1 72 72 nil 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  GREF 310
+  DUP
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  BLOCK_END
+  FUNC_END 1
+  FUNC_BEGIN 121 0
+  PARAM 1 74 74 nil 1
+  VPTR_INIT
+  BLOCK_BEGIN
+  GREF 310
+  DUP
+  LOAD 0
+  CONST_INT 1 10
+  ADD 1
+  STORE 0 0
+  BLOCK_END
+  FUNC_END 1
+  FUNC_BEGIN 141 0
+  PARAM 1 76 76 nil 1
+  CLEANUP_BEGIN 3 nil 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 75 71 0 1
+  CALL 101 80 1 0
+  CLEANUP_BODY
+  CLEANUP_BEGIN 3 nil 0
+  LREF 1
+  LOAD 0
+  BASE_CAST 75 73 16 1
+  CALL 121 81 1 0
+  CLEANUP_BODY
+  VPTR_INIT
+  BLOCK_BEGIN
+  GREF 310
+  DUP
+  LOAD 0
+  CONST_INT 1 100
+  ADD 1
+  STORE 0 0
+  BLOCK_END
+  FUNC_END 1
+  FUNC_BEGIN 203 0
+  LOCAL 1 76 nil 8 0
+  LOCAL 2 74 nil 8 0
+  LOCAL 3 76 nil 8 0
+  LREF 3
+  CONST_INT 2 32
+  CALL 107 68 1 0
+  CAST 11 76
+  STORE 0 0
+  LREF 3
+  LOAD 0
+  CALL 144 82 1 0
+  LREF 2
+  LREF 3
+  LOAD 0
+  BASE_CAST 75 73 16 1
+  STORE 0 0
+  LREF 2
+  LOAD 0
+  DELETE 103 120 73 10
+  GREF 310
+  LOAD 0
+  CONST_INT 1 111
+  SUB 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

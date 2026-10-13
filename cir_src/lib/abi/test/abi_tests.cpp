@@ -12,9 +12,12 @@ comparison is tools/compare_with_clang.py).  "deep" runs only the 5000-level
 inheritance chains (the CTest entry runs it under a 256 KB stack).
 */
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "abi_builder.h"
 #include "abi_names.h"
@@ -276,6 +279,57 @@ std::string build_diamond(a_class_db &db)
   vf.name = "V::f()"; vf.mangled = "_ZN1V1fEv"; vf.slot = 0; vf.sig = 1;
   fb.add_vfunc(kV, kf, vf);
   return fb.finish(db);
+}
+
+std::string build_empty_base_vbase(a_class_db &db, int64_t nv_data_end)
+/*
+struct E {}; struct E2 : E {}; struct A { int i; }; struct B { int j; };
+struct C : E, A, E2, virtual B {};  (clang: sizeof 16, nvsize 13, dsize of the
+non-virtual data 12; B at offset 12, over the byte that E2 counts.)
+*/
+{
+  a_fact_builder fb;
+  a_class_info ci;
+  const a_key kE = 1, kA = 2, kE2 = 3, kB = 4, kC = 5;
+
+  fb.add_base(kC, kE, false, true, 0);
+  fb.add_base(kC, kA, false, true, 8);
+  fb.add_base(kC, kE2, false, true, 12);
+  fb.add_base(kC, kB, true, true, 12);
+  fb.add_vbase(kC, kB, true, 12);
+  ci.name = "C"; ci.mangled = "1C"; ci.size = 16; ci.nvsize = 13;
+  ci.nv_data_end = nv_data_end; ci.is_dynamic = true;
+  fb.set_class(kC, ci);
+  ci = a_class_info();
+  ci.name = "E"; ci.mangled = "1E"; ci.size = 1; ci.nvsize = 1;
+  ci.is_empty = true;
+  fb.set_class(kE, ci);
+  ci.name = "E2"; ci.mangled = "2E2";
+  fb.set_class(kE2, ci);
+  ci = a_class_info();
+  ci.name = "A"; ci.mangled = "1A"; ci.size = 4; ci.nvsize = 4;
+  fb.set_class(kA, ci);
+  ci.name = "B"; ci.mangled = "1B";
+  fb.set_class(kB, ci);
+  return fb.finish(db);
+}
+
+void test_empty_base_vbase()
+/*
+A virtual base may start at the end of the non-virtual data, below nvsize
+(empty10), and not before it.
+*/
+{
+  a_class_db good;
+  a_class_db bad;
+  std::string problem = build_empty_base_vbase(good, 12);
+
+  check(problem.empty() && good.validate_deep().empty(),
+        "empty base then virtual base: accepted",
+        problem + good.validate_deep());
+  problem = build_empty_base_vbase(bad, 16);
+  check(problem.find("inside the non-virtual part") != std::string::npos,
+        "virtual base inside the non-virtual data: rejected", problem);
 }
 
 void test_builder()
@@ -671,6 +725,120 @@ and flat in stack: they ran in O(n^3) before.
   }
 }
 
+std::string build_diamond_lattice(a_class_db &db, int layers)
+/*
+2 * layers + 1 classes (the stress kind `diamond` of scripts/ecil-m4-stress-
+gen.py): the root V is a dynamic class with one virtual function; each class
+of layer k is virtually derived from both classes of layer k - 1, so it has
+every class of the layers below as a virtual base (reached by many paths).
+*/
+{
+  a_fact_builder fb;
+  std::vector<std::vector<int>> layer(1, std::vector<int>(1, 0));
+  std::vector<std::vector<int>> vb(1);   // virtual bases, postorder
+  std::vector<std::string> names(1, "V");
+  a_class_info ci;
+  a_vfunc_info vf;
+
+  for (int k = 1; k <= layers; ++k) {
+    layer.push_back({});
+    for (const char *side : {"A", "B"}) {
+      layer[k].push_back(static_cast<int>(names.size()));
+      names.push_back(side + std::to_string(k));
+      vb.push_back({});
+    }
+    for (int idx : layer[k]) {
+      std::vector<int> order;
+
+      for (int base : layer[k - 1]) {
+        std::vector<int> chain = vb[base];
+
+        chain.push_back(base);
+        for (int x : chain) {
+          if (std::find(order.begin(), order.end(), x) == order.end())
+            order.push_back(x);
+        }
+      }
+      vb[idx] = order;
+    }
+  }
+  for (size_t idx = 0; idx < names.size(); ++idx) {
+    a_key key = static_cast<a_key>(idx + 1);
+
+    ci = a_class_info();
+    ci.name = names[idx];
+    ci.mangled = std::to_string(names[idx].size()) + names[idx];
+    ci.is_dynamic = true;
+    ci.nvsize = 8;
+    ci.size = 8 + 8 * static_cast<int64_t>(vb[idx].size());
+    if (idx == 0) {
+      ci.nslots = 1;
+    } else {
+      int k = 1;
+
+      while (std::find(layer[k].begin(), layer[k].end(),
+                       static_cast<int>(idx)) == layer[k].end())
+        ++k;
+      for (int base : layer[k - 1]) {
+        auto at = std::find(vb[idx].begin(), vb[idx].end(), base);
+
+        fb.add_base(key, static_cast<a_key>(base + 1), true, true,
+                    8 + 8 * (at - vb[idx].begin()));
+      }
+      for (size_t i = 0; i < vb[idx].size(); ++i)
+        fb.add_vbase(key, static_cast<a_key>(vb[idx][i] + 1), true,
+                     8 + 8 * static_cast<int64_t>(i));
+    }
+    fb.set_class(key, ci);
+  }
+  vf.name = "V::f()";
+  vf.mangled = "_ZN1V1fEv";
+  vf.slot = 0;
+  vf.sig = 1;
+  fb.add_vfunc(1, 1000, vf);
+  return fb.finish(db);
+}
+
+void test_diamond_lattice(int layers, double limit)
+/*
+The vtable group, the VTT and the type_info layout of every class of a lattice of virtual bases.
+The path search of the vtable builder must visit each virtual base once per
+search (clang's CXXBasePaths): without that, the time doubles with every
+layer (25 layers took 15 s and 50 never finished); with it, 40 layers
+take well under a second.
+*/
+{
+  a_class_db db;
+  std::string problem = build_diamond_lattice(db, layers);
+
+  check(problem.empty(), "diamond lattice: finish", problem);
+  if (problem.empty()) {
+    auto start = std::chrono::steady_clock::now();
+    a_vtable_context ctx(db);
+    std::string error;
+    double seconds;
+
+    for (a_class_id c = 0; c < db.classes.size(); ++c) {
+      ctx.vtable_info(c, error);
+      if (error.empty())
+        ctx.vtt_layout(c, true, error);
+      if (error.empty()) {
+        a_rtti_layout lay;
+
+        rtti_layout(ctx, c, lay, error);
+      }
+      check(error.empty(), "diamond lattice: vtable and VTT", error);
+      if (!error.empty())
+        break;
+    }
+    seconds = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - start).count();
+    std::printf("diamond lattice of %d layers: vtables and VTTs %.2f s\n",
+                layers, seconds);
+    check(seconds < limit, "diamond lattice: time", std::to_string(seconds));
+  }
+}
+
 }  /* anonymous namespace */
 
 int main(int argc, char **argv)
@@ -685,12 +853,14 @@ int main(int argc, char **argv)
     test_cycle();
     test_builder();
     test_validate_deep();
+    test_empty_base_vbase();
     test_names();
     test_rtti();
     test_nearly_empty_primary_vbase();
     test_plain_bases();
     test_typeinfo_name_string();
     test_override_chain(100);
+    test_diamond_lattice(40, 20.0);
     test_deep(200);
   }
   std::printf("abi_tests: %s (%d failures)\n", failures == 0 ? "OK" : "BAD",

@@ -22,10 +22,11 @@ void operator delete(void *, int) noexcept;
 void use() {
   f3<char>(); f3<int>();
   try { f5(); } catch (int) {}
-  N n; W w; Y y;
+  N n; Y y;
   static_assert(noexcept(f0()), "");
   static_assert(!noexcept(f2()), "");
 }
-int main() { use(); return 0; }
+void use2() { W w; }
+int main() { use(); use2(); return 0; }
 void *operator new(unsigned long n, int) noexcept(false) { return ::operator new(n); }
 void operator delete(void *p, int) noexcept { ::operator delete(p); }

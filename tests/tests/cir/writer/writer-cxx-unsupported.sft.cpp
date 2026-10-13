@@ -11,8 +11,8 @@ V::V() : x(1) {}
 int V::f() { return x; }
 DV::DV() : d(2) {}
 int virt_call(V *v) { return v->f(); }
-int try_use(int v) { try { return v; } catch (...) { return 0; } }
-int throw_use(int v) { if (v) throw v; return 0; }
+int asm_use(int v) { asm("nop"); return v; }
+int asm_use2(int v) { asm("nop"); return v + 1; }
 int lam_use(int p) { auto l = [p](int z) { return z + p; }; return l(1); }
 int new_use() { int *p = new int(3); int r = *p; delete p; return r; }
 int g_dyn = fine(3);

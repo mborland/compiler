@@ -103,7 +103,8 @@ Return TRUE if the given attribute is unrecognized.
 Reclassify the given attribute as "unrecognized".
 */
 #define make_attr_unrecognized(ap)                                           \
-  { (ap)->kind = ak_unrecognized; }
+  { account_for_registered_attribute(ap);                                    \
+    (ap)->kind = ak_unrecognized; }
 
 /*
 Return TRUE if the given attribute is an af_gnu attribute or an af_std
@@ -229,6 +230,7 @@ also copy_of_attributes_list and copy_of_attributes_with_substitution.
   { (to) = alloc_attribute();                                                \
     *(to) = *(from);                                                         \
     (to)->next = NULL;                                                       \
+    note_attribute_copy((from), (to));                                       \
   }  /* copy_attribute */
 
 extern an_attribute_ptr copy_of_attributes_list(an_attribute_ptr  attributes);
@@ -380,6 +382,93 @@ a_host_large_integer validate_ext_vector_size(a_constant         *size_con,
                                               a_type_ptr         elem_type,
                                               a_source_position  *diag_pos,
                                               a_boolean          *p_err);
+
+/*
+Attributes registered by the program that embeds the front end.  A program can
+describe attributes in its own namespace, so that the front end scans their
+arguments, applies the signature and target constraints given here and records
+the attributes in the IL with kind ak_registered (instead of treating them as
+unrecognized attributes whose arguments are raw tokens).  The tables are owned
+by the caller and must remain valid for the life of the program.  The macro
+EDG_ATTRIBUTE_REGISTRATION lets a program test for this interface.
+*/
+#define EDG_ATTRIBUTE_REGISTRATION 1
+
+typedef unsigned int an_attr_registration_flag_set;
+/*
+Flag values that describe a registered attribute.
+*/
+#define RAF_NO_FLAGS  0x0
+
+typedef struct an_attr_registration {
+  /* The description of one registered attribute. */
+  a_const_char	*name;
+			/* The name of the attribute (e.g., "pre").  The table
+			   of attributes of a namespace ends with an entry
+			   whose name is NULL. */
+  a_const_char	*sig;
+			/* The signature of the attribute, in the form
+			   described for the sig field of an_attr_descr in
+			   attribute.c (e.g., "(Xb)"). */
+  a_const_char	*target;
+			/* The entities to which the attribute may be applied,
+			   in the form described for the target_constraints
+			   field of an_attr_appl_descr in attribute.c (e.g.,
+			   "r").  Every property switch must end in "!", the
+			   type-transforming code "T" is not allowed, and the
+			   codes for types, classes and enumerations are not
+			   allowed. */
+  an_attr_registration_flag_set
+		flags;	/* RAF_... flags. */
+} an_attr_registration;
+
+#define RANF_CLOSED  0x1
+	/* An attribute in this namespace that is not registered is an error
+	   (instead of an unrecognized attribute). */
+
+typedef struct an_attr_namespace_registration
+                   *an_attr_namespace_registration_ptr;
+typedef struct an_attr_namespace_registration {
+  /* The description of an attribute namespace and its attributes. */
+  a_const_char	*name;	/* The name of the namespace.  It may not be "gnu",
+			   "__gnu__", "clang", "_Clang" or "msvc". */
+  unsigned int	flags;	/* RANF_... flags. */
+  an_attr_registration const
+		*attributes;
+			/* The attributes of the namespace, terminated by an
+			   entry whose name is NULL. */
+  an_attr_namespace_registration_ptr
+		next;	/* Used by the front end (initialize to NULL). */
+} an_attr_namespace_registration;
+
+/*
+Register a namespace of attributes.  This can be called at any time before the
+front end is started (edg_main), and again if the front end is run again; it
+allocates nothing and registering the same entry more than once has no effect.
+The registrations are validated when the front end starts: an invalid one is
+an internal error.
+*/
+extern void register_attribute_namespace(
+                                    an_attr_namespace_registration_ptr  nsp);
+
+extern void attribute_early_init(void);
+
+extern void attribute_trans_unit_wrapup(void);
+
+extern a_boolean attributes_include_registered(an_attribute_ptr  attributes);
+
+extern void account_for_registered_attributes(an_attribute_ptr  attributes);
+
+extern void account_for_registered_attribute(an_attribute_ptr  ap);
+
+extern a_boolean registered_attribute_was_diagnosed(an_attribute_ptr  ap);
+
+extern void note_attribute_copy(an_attribute_ptr  from,
+                                an_attribute_ptr  to);
+
+extern void reject_registered_class_attributes(an_attribute_ptr  attributes);
+
+extern void dump_registered_attribute_namespaces(void);
 
 extern void attribute_one_time_init(void);
 

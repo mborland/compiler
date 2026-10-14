@@ -1,0 +1,10 @@
+fe_only -DTEST_NUMBER=17 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 72: warning: template parameter "T" may not be used in an elaborated type specifier
+  template <class T> void f17() { enum [[edg::r_fn]] T x; }
+                                                     ^
+
+"Test_name.c", line 72: error: attribute does not apply to any entity
+  template <class T> void f17() { enum [[edg::r_fn]] T x; }
+                                         ^
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,6 +1,44 @@
 Version 7.1
 
 10/14/26  [GH #?]
+Attribute namespaces and attributes registered by an embedding program
+
+A program that embeds the front end can now register a namespace of attributes
+(register_attribute_namespace in attribute.h), each with a name, a signature
+for its arguments and a description of the entities it applies to, in the same
+notation that attribute.c uses for the attributes the front end defines.  The
+front end then scans the arguments of such an attribute as typed expressions,
+types or constants (instead of raw tokens), checks where it is used, and
+records it in the IL with the new kind ak_registered.  A registered attribute
+is never dropped silently: when it is on the wrong kind of entity, on a class
+or a template, or on none (for example, on an empty declaration), that is an
+error even in clang and GNU modes, and so is any registered attribute that is
+neither applied nor diagnosed by the end of the translation unit (after the
+template instantiations).  A namespace registered as closed (RANF_CLOSED) makes an unregistered name in it an error.  An attribute
+in a declaration cannot refer to a function parameter pack or be a pack
+expansion, because the substitution of template arguments in the attributes of
+a declaration does not substitute function parameter packs, nor to a function
+parameter that follows a function parameter pack, because that parameter has
+another number in an instance.  Once an error has
+been issued for an argument of a registered attribute, the other arguments are
+skipped, so there is no second error.  For example:
+
+  static const an_attr_registration attrs[] = {
+    { "pre", "(Xb)", "r", RAF_NO_FLAGS },
+    { NULL, NULL, NULL, RAF_NO_FLAGS }
+  };
+  static an_attr_namespace_registration ns = {
+    "mine", RANF_CLOSED, attrs, NULL
+  };
+  register_attribute_namespace(&ns);   /* Before calling edg_main. */
+
+  [[mine::pre(true)]] void f();   // Recorded as a registered attribute.
+  [[mine::prex]] void g();        // Error: unknown attribute "mine::prex"
+
+The front end registers the closed namespace "edg" for its tests when
+INCLUDE_EDG_TEST_ATTRIBUTES is TRUE.
+
+10/14/26  [GH #?]
 Attribute namespaces that only start like a known one are not recognized
 
 An attribute namespace was treated as known if it was merely the first part

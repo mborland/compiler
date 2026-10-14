@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=11 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 50: error: attribute "edg::r_expr" cannot refer to a function parameter pack
+  template <class... Ts> int f11(Ts... args) [[edg::r_expr(sizeof...(args))]];
+                                                           ^
+
+1 error detected in the compilation of "Test_name.c".

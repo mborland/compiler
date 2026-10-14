@@ -3255,6 +3255,12 @@ the list).  E.g., the unrecognized C++ attribute ``[[ unrecog(x, y) ]]`` has
 three ``aak_raw_token`` argument entries for "``x``", "``,``", and "``y``"
 (followed by a ``aak_empty`` entry).
 
+An attribute that the program embedding the front end has registered (see
+"Registered Attributes" in the External Interface chapter) is recorded with
+kind ``ak_registered``, and its ``namespace_name`` and ``name`` identify it.
+Its arguments are interpreted as the signature of its registration says (for
+example, an expression argument is an ``aak_expression`` entry).
+
 Microsoft attributes (delimited by single brackets) are represented in the IL
 by entries of type ``an_ms_attribute``.  Depending on the configuration of the
 front end, a given Microsoft attribute may be either "recognized" or

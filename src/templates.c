@@ -27645,6 +27645,10 @@ friend_template_checks_done:
        template information to reflect this. */
     record_specialization(sym, tssp, &locator.source_position);
   }  /* if */
+  /* A registered attribute cannot apply to a class template.  Say so now,
+     because the attributes of a class template are checked only when it is
+     defined or instantiated, which may never happen. */
+  reject_registered_class_attributes(attributes);
   if (is_redecl) {
     /* For a redeclaration, verify that any attributes are consistent with
        the previous declaration. */
@@ -33484,6 +33488,10 @@ alias
   }  /* if */
   tssp = sym->variant.template_info;
   tssp->variant.class_template.is_alias_template = TRUE;
+  /* A registered attribute cannot apply to an alias template.  Say so now,
+     because the attributes of an alias template are checked only when it is
+     instantiated, which may never happen. */
+  reject_registered_class_attributes(attributes);
   tssp->attributes = attributes;
   tssp->is_variadic = decl_state->is_variadic;
   tssp->has_variadic_template_params =
@@ -41212,6 +41220,13 @@ translation unit.
       pop_translation_unit_stack();
     }  /* for */
   } while (additional_instantiation_wrapup_required);
+  /* Registered attributes must have been applied or diagnosed, which can
+     only be determined once all the instantiations have been done. */
+  for (tup = translation_units; tup != NULL; tup = tup->next) {
+    push_translation_unit_stack(tup);
+    attribute_trans_unit_wrapup();
+    pop_translation_unit_stack();
+  }  /* for */
   /* Do processing that is required after instantiation wrapup has been
      performed for all translation units. */
   finalize_instantiation_wrapup();

@@ -5048,6 +5048,129 @@ modes.  The format of the file and other information is described in
          and the global variable ``std_thread_local_storage_specifier_enabled``
          is TRUE).
 
+Registered Attributes
+=====================
+
+A program that embeds the front end (one that provides its own ``back_end``
+and calls ``edg_main``) can describe attributes of its own, so that the front
+end scans their arguments, checks where they are used and records them in the
+IL.  Without this, an attribute that the front end does not define is an
+unrecognized attribute: when ``record_unrecognized_attributes`` is TRUE it is
+recorded with its arguments as raw tokens, and otherwise it is dropped with a
+warning.
+
+A registered attribute is a standard-syntax attribute (``[[ns::name(...)]]``
+or, after a ``using`` prefix, ``[[using ns: name(...)]]``) in a namespace that
+the program registers.  It is recorded with the attribute kind
+``ak_registered`` and the ``namespace_name`` and ``name`` it was written with.
+Its arguments are described by a signature and are typed like the arguments of
+the attributes that the front end defines: an expression argument is looked up
+and checked in the context of the attribute, and is dependent in a template
+declaration and substituted in each instance.
+
+The interface is declared in ``attribute.h``, which defines the macro
+``EDG_ATTRIBUTE_REGISTRATION`` so that a program can test for it:
+
+.. code:: c++
+
+   static const an_attr_registration pre_attributes[] = {
+     { "pre", "(Xb)", "r", RAF_NO_FLAGS },
+     { "invariant", "(Xb)", "s", RAF_NO_FLAGS },
+     { NULL, NULL, NULL, RAF_NO_FLAGS }   /* the table ends with a NULL name */
+   };
+   static an_attr_namespace_registration my_namespace = {
+     "mine", RANF_CLOSED, pre_attributes, NULL   /* next: front end only */
+   };
+
+   register_attribute_namespace(&my_namespace);   /* before edg_main */
+
+The tables belong to the program and must remain valid while the front end
+runs.  ``register_attribute_namespace`` allocates nothing, can be called any
+time before ``edg_main`` (and again if ``edg_main`` is called again), and has
+no effect if the same entry is registered more than once.
+
+Each attribute is described by:
+
+* *name*: the attribute name.
+* *sig*: the signature of the arguments, in the notation used for the
+  attributes that the front end defines (for example ``""`` for no arguments,
+  ``"(Xb)"`` for one unevaluated expression that is converted to ``bool``,
+  ``"?(n)"`` for an optional identifier).  The notation is described with
+  ``an_attr_descr`` in ``attribute.c``.
+* *target*: the entities to which the attribute may be applied, in the
+  notation described with ``an_attr_appl_descr`` in ``attribute.c`` (for
+  example ``"r"`` for a routine, ``"v"`` for a variable, ``"s"`` for a
+  statement, and ``"r|v"`` for either).  An attribute on another kind of
+  entity is an error.
+* *flags*: ``RAF_...`` flags.  There are none yet.
+
+The namespace has ``RANF_CLOSED`` when a name that is not registered in it is
+to be an error (``unknown attribute``) instead of an unrecognized attribute.
+
+The front end treats a registered attribute more strictly than the attributes
+it defines:
+
+* A registered attribute is never ignored silently.  In clang and GNU modes
+  an attribute of the front end's on the wrong kind of entity gets only a
+  warning, and an attribute that appertains to nothing is ignored or dropped
+  (on an empty declaration, in front of a linkage specification or a
+  ``static_assert``, after a type specifier, on a class or an alias, and in
+  other places), but a registered attribute is an error in all of these cases,
+  whatever the dialect, and ``-w`` does not hide it.  So is a registered
+  attribute on a class template or an alias template, because the target of a
+  registered attribute cannot be a type.  As a last resort, a registered
+  attribute that is neither applied to an entity, statement or type nor
+  diagnosed where it is scanned is an error at the end of the translation
+  unit, after the template instantiations ("attribute does not apply to any
+  entity").  An attribute is accounted for once, however many times it is
+  scanned (for a template, and again for each of its instances, say): it is
+  applied or diagnosed if any of the scans is.  (In C this check is only a
+  backstop: no construct is known that reaches it, because every attribute
+  that is dropped is diagnosed where it is scanned.)  Once an error has been
+  issued for an argument of a registered attribute, the other arguments are
+  skipped, so there is no second error.
+* A registered namespace is a recognized attribute namespace, so it gets no
+  "attribute namespace is unrecognized" warning.
+* ``__has_cpp_attribute(ns::name)`` is 1 for a registered attribute.
+* An attribute outside a function body cannot refer to a function parameter
+  pack, and neither the attribute nor one of its arguments can be a pack
+  expansion: the front end substitutes the arguments of a declaration's
+  attributes when a template is instantiated, but does not substitute function
+  parameter packs there.  Nor can it refer to a function parameter that
+  follows a function parameter pack (``int f(Ts... a, int y)``): in an
+  instance the pack is expanded, the parameter has another number, and the
+  attribute, which is copied from the prototype, would refer to another
+  parameter.  That is an error in the prototype, not only in an instance.  (A
+  reference to a function parameter pack, or to a parameter after one, in an
+  attribute inside a function body, such as one on a statement, is
+  substituted, because the body is scanned again for each instance.)
+
+The registrations are checked when the front end starts, and an invalid one is
+an internal error in the program that made it:
+
+* a namespace name or an attribute name that is not an identifier, or is
+  longer than 100 characters;
+* a namespace named ``gnu``, ``__gnu__``, ``clang``, ``_Clang`` or ``msvc``,
+  or one that is registered twice, or an attribute that is registered twice in
+  a namespace or that the front end already defines in it;
+* a signature that is not well formed;
+* a target that is empty, uses the code ``T`` (type-transforming) or ``0``
+  (no entity) or one of the codes ``t``, ``c`` or ``e`` for types, classes and
+  enumerations (the attributes of a class template are kept one for each
+  attribute kind, so a second registered attribute would be lost), has the
+  ``W`` prefix (which makes a misplacement only a warning), or has a property
+  switch that is not followed by ``!`` (a failed switch without it is only a
+  warning, and the attribute would be ignored).
+
+When several translation units are compiled together, the registered
+attributes of corresponding entities are merged (kept, not compared) like the
+attributes that the front end defines with optional matching.
+
+The registered namespaces are listed in the output of ``--dump_configuration``.
+When the front end is built with ``INCLUDE_EDG_TEST_ATTRIBUTES``, it registers
+the closed namespace ``edg`` for its own tests (``r_fn``, ``r_stmt``,
+``r_expr`` and ``requires``).
+
 Pragmas
 =======
 

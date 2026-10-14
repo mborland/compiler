@@ -1,0 +1,114 @@
+fe_only -DTEST_NUMBER=3 --c++20 --clang_version=210000 -w Test_name.c
+"Test_name.c", line 43: error: attribute "edg::r_fn" does not apply here
+  [[edg::r_fn]] int v1;
+    ^
+
+"Test_name.c", line 46: error: attribute "edg::r_stmt" does not apply here
+  [[edg::r_stmt(true)]] int v2;
+    ^
+
+"Test_name.c", line 49: error: attribute "edg::requires" does not apply here
+  [[edg::requires(true)]];
+    ^
+
+"Test_name.c", line 52: error: attribute "edg::requires" does not apply here
+  struct [[edg::requires(true)]] S3 {};
+           ^
+
+"Test_name.c", line 55: error: attributes ignored here because they do not apply to a declared entity
+  struct S5 { [[edg::r_fn]]; };
+                ^
+
+"Test_name.c", line 58: error: attributes are not allowed here
+  [[edg::r_fn]] extern "C" int f6();
+  ^
+
+"Test_name.c", line 61: error: attribute "edg::r_fn" does not apply here
+  template <class T> struct [[edg::r_fn]] CT7;
+                              ^
+
+"Test_name.c", line 64: error: attribute "edg::r_fn" does not apply here
+  template <class T> using AL8 [[edg::r_fn]] = T;
+                                 ^
+
+"Test_name.c", line 67: error: attributes are not allowed here
+  [[edg::r_fn]] static_assert(true, "");
+  ^
+
+"Test_name.c", line 70: error: attributes are not allowed here
+  void f10() { [[edg::r_stmt(true)]] static_assert(true, ""); }
+               ^
+
+"Test_name.c", line 74: error: attribute "edg::r_fn" does not apply here
+  int [[edg::r_fn]] v11;
+        ^
+
+"Test_name.c", line 75: error: attribute "edg::r_fn" does not apply here
+  bool [[edg::r_fn]] f12();
+         ^
+
+"Test_name.c", line 76: error: attribute "edg::r_stmt" does not apply here
+  void f13(int x) { int [[edg::r_stmt(x > 0)]] y = x; (void)y; }
+                          ^
+
+"Test_name.c", line 77: error: attribute "edg::r_fn" does not apply here
+  struct S14 { int [[edg::r_fn]] m; };
+                     ^
+
+"Test_name.c", line 78: error: attribute "edg::r_fn" does not apply here
+  void f15(int [[edg::r_fn]] x);
+                 ^
+
+"Test_name.c", line 79: error: attribute "edg::r_fn" does not apply here
+  int sc16 = static_cast<int [[edg::r_fn]]>(1);
+                               ^
+
+"Test_name.c", line 80: error: attribute "edg::r_fn" does not apply here
+  using T17 = int [[edg::r_fn]];
+                    ^
+
+"Test_name.c", line 81: error: attribute "edg::r_fn" does not apply here
+  unsigned long sz18 = sizeof(int [[edg::r_fn]]);
+                                    ^
+
+"Test_name.c", line 83: error: attribute "edg::r_fn" does not apply here
+  XX19<int [[edg::r_fn]]> xx19;
+             ^
+
+"Test_name.c", line 84: error: attribute "edg::r_fn" does not apply here
+  auto tr20() -> int [[edg::r_fn]];
+                       ^
+
+"Test_name.c", line 85: error: attribute "edg::r_fn" does not apply here
+  struct CV21 { operator int [[edg::r_fn]] (); };
+                               ^
+
+"Test_name.c", line 92: error: function "tf3(T) [with T=int]" cannot be instantiated -- no template definition was supplied
+  template void [[edg::r_fn]] tf3<int>(int);
+           ^
+
+"Test_name.c", line 95: error: function "tf4(T) [with T=int]" cannot be instantiated -- no template definition was supplied
+  template [[edg::r_fn]] void tf4<int>(int);
+           ^
+
+"Test_name.c", line 90: error: attribute does not apply to any entity
+  template <[[edg::r_fn]] int N22> void tf22();
+              ^
+
+"Test_name.c", line 92: error: attribute does not apply to any entity
+  template void [[edg::r_fn]] tf3<int>(int);
+                  ^
+
+"Test_name.c", line 93: error: attribute does not apply to any entity
+  int *np24 = new int [[edg::r_fn]];
+                        ^
+
+"Test_name.c", line 95: error: attribute does not apply to any entity
+  template [[edg::r_fn]] void tf4<int>(int);
+             ^
+
+"Test_name.c", line 100: error: attribute does not apply to any entity
+  struct C26 : B26 { [[edg::r_fn]] using A26::A26; };
+                       ^
+
+28 errors detected in the compilation of "Test_name.c".

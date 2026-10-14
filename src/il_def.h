@@ -3131,6 +3131,11 @@ enum an_attribute_kind : a_byte {
   ak_using_if_exists,	/* "using_if_exists" */
   ak_exclude_from_explicit_instantiation,
 			/* "exclude_from_explicit_instantiation" (clang). */
+  ak_registered,	/* An attribute registered by the program embedding
+			   the front end (see register_attribute_namespace in
+			   attribute.h).  Its namespace and name are in the
+			   namespace_name and name fields of the an_attribute
+			   entry. */
 
   /* Other attributes. */
   ak_annotation,	/* An attribute-like user-defined value that can be

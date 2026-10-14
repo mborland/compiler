@@ -3298,6 +3298,7 @@ an error if a default argument expression is encountered.
     a_pack_expansion_descr_ptr        pedp = NULL;
     a_boolean                         any_variadic_params = FALSE;
     uint32_t                          param_number = 0;
+    a_boolean                         pack_seen = FALSE;
     if (any_params && !disallow_default_args) {
       /* In C++ mode a default argument may be declared with the parameter
          unless the function is a user-defined overloaded operator or a
@@ -3856,6 +3857,11 @@ an error if a default argument expression is encountered.
             if (ptp->is_parameter_pack) {
               last_param_id->is_parameter_pack = TRUE;
             }  /* if */
+          }  /* if */
+          last_param_id->follows_parameter_pack = pack_seen;
+          if (param_state.has_pack_ellipsis || ptp->is_parameter_pack ||
+              ptp->is_pack_element) {
+            pack_seen = TRUE;
           }  /* if */
           if (ptp->is_parameter_pack &&
               pesep != NULL && pesep->instantiation_descr == NULL &&

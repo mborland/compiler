@@ -1769,6 +1769,7 @@ line processing is done.
   host_envir_early_init();
   target_early_init();
   cmd_line_early_init();
+  attribute_early_init();
   error_early_init();
   pch_early_init();
   modules_early_init();

@@ -1,0 +1,18 @@
+fe_only -DTEST_NUMBER=2 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 32: error: expected a declaration
+  M2(m2a)
+  ^
+
+"Test_name.c", line 33: error: expected a declaration
+  M2(m2b)
+  ^
+
+"Test_name.c", line 32: error: attribute does not apply to any entity
+  M2(m2a)
+  ^
+
+"Test_name.c", line 33: error: attribute does not apply to any entity
+  M2(m2b)
+  ^
+
+4 errors detected in the compilation of "Test_name.c".

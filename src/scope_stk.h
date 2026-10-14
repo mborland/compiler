@@ -2593,6 +2593,12 @@ extern a_boolean any_packs_referenced(void);
 
 extern a_boolean any_packs_referenced_in_curr_context(void);
 
+extern unsigned long num_function_pack_references(void);
+
+extern void note_parameter_after_pack_reference(void);
+
+extern unsigned long num_parameter_after_pack_references(void);
+
 extern a_boolean begin_rescan_pack_expansion_context(
 		a_pack_expansion_descr_ptr		pedp,
 		a_template_param_ptr			templ_param_list,

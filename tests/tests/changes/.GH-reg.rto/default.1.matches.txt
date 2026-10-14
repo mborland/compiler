@@ -1,0 +1,305 @@
+Matches for "^kind:\s+registered\nnext:\s+file-scope attribute@X+\nfamily:\s+std\nsyntactic_location:\s+prefix\nname:\s+file-scope other-text@X+: "r_fn"\nnamespace_name:\s+file-scope other-text@X+: "edg"":
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    file-scope attribute@XXXXXXXX
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "r_fn"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  ----------------------------------------------------------------------------->
+Matches for "^kind:\s+registered\nnext:\s+NULL\nfamily:\s+std\nsyntactic_location:\s+prefix\nname:\s+file-scope other-text@X+: "requires"\nnamespace_name:\s+file-scope other-text@X+: "edg"\narguments:\s+file-scope attribute-arg@X+":
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "requires"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "requires"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "requires"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "requires"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "requires"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "requires"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "requires"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "requires"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      prefix
+  name:                    file-scope other-text@XXXXXXXX: "requires"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+Matches for "^file-scope attribute-arg@X+\nkind:\s+expression\nnext:\s+NULL(\n.+?)+?\nexpr:\s+file-scope expr-node@X+":
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            40
+  position.column:         17
+  end_position.seq:        40
+  end_position.column:     22
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            42
+  position.column:         36
+  end_position.seq:        42
+  end_position.column:     48
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            42
+  position.column:         36
+  end_position.seq:        42
+  end_position.column:     48
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            47
+  position.column:         40
+  end_position.seq:        47
+  end_position.column:     56
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            48
+  position.column:         40
+  end_position.seq:        48
+  end_position.column:     62
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            49
+  position.column:         38
+  end_position.seq:        49
+  end_position.column:     54
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            50
+  position.column:         38
+  end_position.seq:        50
+  end_position.column:     55
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            47
+  position.column:         40
+  end_position.seq:        47
+  end_position.column:     56
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            48
+  position.column:         40
+  end_position.seq:        48
+  end_position.column:     62
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            49
+  position.column:         38
+  end_position.seq:        49
+  end_position.column:     54
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  file-scope attribute-arg@XXXXXXXX
+  kind:                    expression
+  next:                    NULL
+  position.seq:            50
+  position.column:         38
+  end_position.seq:        50
+  end_position.column:     55
+  expr:                    file-scope expr-node@XXXXXXXX
+  ----------------------------------------------------------------------------->
+Matches for "^operation\.kind:\s+eok_gt\noperation\.type_kind:\s+tk_integer":
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_gt
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+Matches for "^constant:\s+file-scope constant@X+: sizeof\(T#\(1,1\)\)":
+  <-----------------------------------------------------------------------------
+  constant:                file-scope constant@XXXXXXXX: sizeof(T#(1,1))
+  ----------------------------------------------------------------------------->
+Matches for "^constant:\s+file-scope constant@X+: 4UL$":
+  <-----------------------------------------------------------------------------
+  constant:                file-scope constant@XXXXXXXX: 4UL
+  ----------------------------------------------------------------------------->
+Matches for "^kind:\s+enk_sizeof_pack$":
+  <-----------------------------------------------------------------------------
+  kind:                    enk_sizeof_pack
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    enk_sizeof_pack
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    enk_sizeof_pack
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    enk_sizeof_pack
+  ----------------------------------------------------------------------------->
+Matches for "^constant:\s+file-scope constant@X+: sizeof\(Ts#\(1,1\)\)":
+  <-----------------------------------------------------------------------------
+  constant:                file-scope constant@XXXXXXXX: sizeof(Ts#(1,1))
+  ----------------------------------------------------------------------------->
+Matches for "^constant:\s+file-scope constant@X+: 5$":
+  <-----------------------------------------------------------------------------
+  constant:                file-scope constant@XXXXXXXX: 5
+  ----------------------------------------------------------------------------->
+Matches for "^constant:\s+file-scope constant@X+: 7$":
+  <-----------------------------------------------------------------------------
+  constant:                file-scope constant@XXXXXXXX: 7
+  ----------------------------------------------------------------------------->
+Matches for "^constant:\s+file-scope constant@X+: 5UL$":
+  <-----------------------------------------------------------------------------
+  constant:                file-scope constant@XXXXXXXX: 5UL
+  ----------------------------------------------------------------------------->
+Matches for "^constant:\s+file-scope constant@X+: 3UL$":
+  <-----------------------------------------------------------------------------
+  constant:                file-scope constant@XXXXXXXX: 3UL
+  ----------------------------------------------------------------------------->
+Matches for "^operation\.kind:\s+eok_land\noperation\.type_kind:\s+tk_integer":
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_land
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  operation.kind:          eok_land
+  operation.type_kind:     tk_integer
+  ----------------------------------------------------------------------------->

@@ -6394,6 +6394,7 @@ Display the indicated attribute entry.
     case ak_using_if_exists:     kind_name = "using_if_exists";     break;
     case ak_exclude_from_explicit_instantiation:
                  kind_name = "exclude_from_explicit_instantiation"; break;
+    case ak_registered:          kind_name = "registered";          break;
     case ak_annotation:          kind_name = "annotation";          break;
     case ak_conditional_explicit:kind_name = "conditional_explicit";break;
     case ak_pragma_pack_state:   kind_name = "pragma_pack_state";   break;

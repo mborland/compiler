@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=4 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 28: error: attribute "edg::r_fn" does not apply here
+  [[edg::r_fn]] int v4;
+    ^
+
+1 error detected in the compilation of "Test_name.c".

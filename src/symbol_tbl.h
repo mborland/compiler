@@ -1734,6 +1734,11 @@ typedef struct a_param_id {
 			                                 ->decltype(f(p...));
 			     };
 			   Parameter p will have this flag set. */
+  a_bit_field	follows_parameter_pack:1;
+			/* TRUE for a parameter of a function declaration that
+			   follows a function parameter pack: in an instance
+			   its number is not that of the prototype, because
+			   the pack is expanded. */
   a_bit_field	is_empty_pack_parameter:1;
 			/* TRUE for "dummy" parameters created as placeholders
 			   for empty pack expansions.  For example:

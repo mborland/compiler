@@ -1,0 +1,4 @@
+Matches for "(line 15: error: unknown\s+attribute\s+"edg::r_stmtx"|line 18: error: identifier\s+"undeclared_c2"\s+is\s+undefined|line 21: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here|line 24: error: attribute\s+"edg::r_fn"\s+does\s+not\s+take\s+arguments|line 28: error: attribute\s+"edg::requires"\s+does\s+not\s+apply\s+here)":
+  <-----------------------------------------------------------------------------
+  line 18: error: identifier "undeclared_c2" is undefined
+  ----------------------------------------------------------------------------->

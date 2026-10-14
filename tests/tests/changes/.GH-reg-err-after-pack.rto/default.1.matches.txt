@@ -1,0 +1,4 @@
+Matches for "(line 21: error: attribute\s+"edg::r_expr"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+that\s+follows\s+a\s+function\s+parameter\s+pack|line 24: error: attribute\s+"edg::r_expr"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+that\s+follows\s+a\s+function\s+parameter\s+pack|line 27: error: attribute\s+"edg::r_expr"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+that\s+follows\s+a\s+function\s+parameter\s+pack)":
+  <-----------------------------------------------------------------------------
+  line 21: error: attribute "edg::r_expr" cannot refer to a function parameter that follows a function parameter pack
+  ----------------------------------------------------------------------------->

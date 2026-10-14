@@ -56,6 +56,21 @@ STATIC_THREAD a_function_shareable_constants_table_ptr
 			   that have been freed and are available for
 			   reuse. */
 
+STATIC_THREAD unsigned long
+		function_pack_references_noted;
+			/* The number of references to packs other than
+			   template parameter packs (e.g., function
+			   parameter packs) that
+			   record_potential_pack_reference_full has
+			   recorded. */
+
+STATIC_THREAD unsigned long
+		after_pack_param_references_noted;
+			/* The number of references to parameters that follow a
+			   function parameter pack (see the field
+			   follows_parameter_pack of a_param_id) that
+			   note_parameter_after_pack_reference has recorded. */
+
 STATIC_THREAD a_pack_reference_ptr
 		avail_pack_references;
 			/* A list of pack reference entries that have
@@ -14489,6 +14504,39 @@ pack expansion stack must be popped.
 }  /* abandon_potential_pack_expansion_context */
 
 
+unsigned long num_function_pack_references(void)
+/*
+Return the number of references to function parameter packs (and other packs
+that are not template parameter packs) that have been recorded.  A caller can
+compare two values of this count to find out whether a construct contains any
+such reference.
+*/
+{
+  return function_pack_references_noted;
+}  /* num_function_pack_references */
+
+
+void note_parameter_after_pack_reference(void)
+/*
+Record a reference to a function parameter that follows a function parameter
+pack.
+*/
+{
+  after_pack_param_references_noted++;
+}  /* note_parameter_after_pack_reference */
+
+
+unsigned long num_parameter_after_pack_references(void)
+/*
+Return the number of references to function parameters that follow a function
+parameter pack that have been recorded.  A caller can compare two values of
+this count to find out whether a construct contains any such reference.
+*/
+{
+  return after_pack_param_references_noted;
+}  /* num_parameter_after_pack_references */
+
+
 a_boolean any_packs_referenced(void)
 /*
 Return TRUE if the current pack expansion context contains any pack
@@ -14618,6 +14666,9 @@ form.
           kind = prk_init_capture;
         } else {
           kind = prk_template_param;
+        }  /* if */
+        if (kind != prk_template_param && kind != prk_bases) {
+          function_pack_references_noted++;
         }  /* if */
         prp = alloc_pack_reference(kind);
         prp->symbol = pack_symbol;

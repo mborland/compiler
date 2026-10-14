@@ -16630,6 +16630,7 @@ locator_for_curr_id.
   pip->is_pack_element = FALSE;
   pip->uses_only_enclosing_pack = FALSE;
   pip->is_empty_pack_parameter = FALSE;
+  pip->follows_parameter_pack = FALSE;
 #if GENERATE_SOURCE_SEQUENCE_LISTS
   pip->is_decl_after_first_in_comma_list = FALSE;
   pip->source_sequence_entry = NULL;

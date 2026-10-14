@@ -859,6 +859,11 @@ STATIC_THREAD an_attr_appl_descr known_attr_appl_table[(int)ak_last+1] = {
   { ak_exclude_from_explicit_instantiation, "r:+m|v|c",
     apply_exclude_from_explicit_instantiation_attr },
 
+  /* Attributes registered by the program embedding the front end.  The target
+     constraints are those of the registration (see
+     registered_attribute_target). */
+  { ak_registered, "", NO_APPL_FN },
+
   /* Internal attributes. */
   { ak_annotation, "", NO_APPL_FN },
   { ak_conditional_explicit, "", apply_conditional_explicit },
@@ -912,6 +917,7 @@ STATIC_THREAD an_attr_corresp_descr attr_corresp_table[] = {
             NO_CHECKING_FN },
   { ak_deprecated, af_last, iek_last, ACF_MATCH_OPTIONAL, NO_CHECKING_FN },
   { ak_maybe_unused, af_last, iek_last, ACF_MATCH_OPTIONAL, NO_CHECKING_FN },
+  { ak_registered, af_last, iek_last, ACF_MATCH_OPTIONAL, NO_CHECKING_FN },
 #if GNU_EXTENSIONS_ALLOWED || MICROSOFT_EXTENSIONS_ALLOWED
   { ak_noinline, af_last, iek_last, ACF_MATCH_OPTIONAL, NO_CHECKING_FN },
   { ak_nothrow, af_last, iek_last, ACF_MATCH_OPTIONAL, NO_CHECKING_FN },
@@ -1081,6 +1087,590 @@ in diagnostic messages that may be delayed).
 }  /* attribute_display_name */
 
 
+/*
+The namespaces registered by the program embedding the front end (see
+register_attribute_namespace in attribute.h).  The list is not reset between
+translation units, or between runs of the front end in one process.
+*/
+static an_attr_namespace_registration_ptr
+		registered_attribute_namespaces;
+
+
+void register_attribute_namespace(an_attr_namespace_registration_ptr  nsp)
+/*
+Register the namespace of attributes described by *nsp.  Registering the same
+entry again has no effect.
+*/
+{
+  an_attr_namespace_registration_ptr
+         *p_nsp = &registered_attribute_namespaces;
+
+  while (*p_nsp != NULL && *p_nsp != nsp) {
+    p_nsp = &(*p_nsp)->next;
+  }  /* while */
+  if (*p_nsp == NULL) {
+    nsp->next = NULL;
+    *p_nsp = nsp;
+  }  /* if */
+}  /* register_attribute_namespace */
+
+
+static an_attr_namespace_registration_ptr find_registered_namespace(
+                                                         a_const_char  *name,
+                                                         size_t        length)
+/*
+Return the registered namespace whose name is the first length characters of
+name (all of name if length is zero), or NULL if there is none.
+*/
+{
+  an_attr_namespace_registration_ptr  nsp;
+
+  if (length == 0) {
+    length = strlen(name);
+  }  /* if */
+  for (nsp = registered_attribute_namespaces; nsp != NULL; nsp = nsp->next) {
+    if (strncmp(nsp->name, name, length) == 0 && nsp->name[length] == '\0') {
+      break;
+    }  /* if */
+  }  /* for */
+  return nsp;
+}  /* find_registered_namespace */
+
+
+static an_attr_registration const *find_registered_attribute(
+                           a_const_char                        *namespace_name,
+                           a_const_char                        *name,
+                           an_attr_namespace_registration_ptr  *p_nsp)
+/*
+Return the description of the registered attribute with the given namespace
+name and name, or NULL if there is none.  If the namespace is registered,
+*p_nsp is set to it (even when the attribute is not registered); otherwise it
+is set to NULL.
+*/
+{
+  an_attr_registration const          *result = NULL, *rp;
+  an_attr_namespace_registration_ptr  nsp = NULL;
+
+  if (namespace_name != NULL) {
+    nsp = find_registered_namespace(namespace_name, (size_t)0);
+  }  /* if */
+  if (nsp != NULL && name != NULL && nsp->attributes != NULL) {
+    for (rp = nsp->attributes; rp->name != NULL; rp++) {
+      if (strcmp(rp->name, name) == 0) {
+        result = rp;
+        break;
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  *p_nsp = nsp;
+  return result;
+}  /* find_registered_attribute */
+
+
+/*
+An account of the registered attributes that have been scanned (see
+note_registered_attribute_scanned), and whether each has been applied to an
+entity, statement or type, or diagnosed.  A registered attribute must never be
+dropped silently, whatever the dialect: one that has been neither is an error
+at the end of the translation unit (after the template instantiations).  Each
+attribute that is scanned has an entry; a copy of an attribute (for an
+instance of a template, for example) has an entry that refers to the entry of
+the attribute it is a copy of, which is accounted for when the copy is.  An
+attribute that is scanned more than once (when a declaration is parsed again,
+for an instance of a template, for example) is accounted for when any of its
+scans is: they have the same token sequence number.  The entries have no pointers to the attributes (which can be freed
+before the end of the translation unit) other than to identify them.
+*/
+typedef struct a_registered_attr_account_entry
+                                   *a_registered_attr_account_entry_ptr;
+typedef struct a_registered_attr_account_entry {
+  a_registered_attr_account_entry_ptr
+		next;	/* The next entry for the same bucket. */
+  a_registered_attr_account_entry_ptr
+		all_next;
+			/* The next entry in the list of all entries. */
+  an_attribute_ptr
+		ap;	/* The attribute (only to be compared). */
+  a_registered_attr_account_entry_ptr
+		original;
+			/* The entry of the attribute this is a copy of, or NULL
+			   if this is the entry of an attribute that was
+			   scanned. */
+  a_token_sequence_number
+		tsn;	/* The token sequence number of the attribute. */
+  a_source_position
+		position;
+  a_boolean	accounted;
+  a_boolean	diagnosed;
+			/* TRUE if an error was issued for the attribute because
+			   it does not apply to its target. */
+} a_registered_attr_account_entry;
+
+#define REGISTERED_ATTR_ACCOUNT_BUCKETS 1024
+
+STATIC_THREAD a_registered_attr_account_entry_ptr
+		*registered_attr_buckets;
+			/* The entries, by attribute. */
+STATIC_THREAD a_registered_attr_account_entry_ptr
+		registered_attr_account;
+			/* All the entries, the latest first. */
+
+
+static a_registered_attr_account_entry_ptr add_registered_attr_account_entry(
+                                                         an_attribute_ptr  ap)
+/*
+Add an entry for the attribute ap to the account, and return it.
+*/
+{
+  a_registered_attr_account_entry_ptr  ep, *bucket;
+
+  if (registered_attr_buckets == NULL) {
+    registered_attr_buckets = (a_registered_attr_account_entry_ptr*)alloc_fe(
+          REGISTERED_ATTR_ACCOUNT_BUCKETS *
+                                  sizeof(a_registered_attr_account_entry_ptr));
+    memzero((char*)registered_attr_buckets,
+            REGISTERED_ATTR_ACCOUNT_BUCKETS *
+                                  sizeof(a_registered_attr_account_entry_ptr));
+  }  /* if */
+  ep = alloc_fe_of_type(a_registered_attr_account_entry);
+  ep->ap = ap;
+  ep->original = NULL;
+  ep->tsn = curr_token_sequence_number;
+  ep->position = ap->position;
+  ep->accounted = FALSE;
+  ep->diagnosed = FALSE;
+  bucket = &registered_attr_buckets[((size_t)ap >> 4) %
+                                    REGISTERED_ATTR_ACCOUNT_BUCKETS];
+  ep->next = *bucket;
+  *bucket = ep;
+  ep->all_next = registered_attr_account;
+  registered_attr_account = ep;
+  return ep;
+}  /* add_registered_attr_account_entry */
+
+
+static a_registered_attr_account_entry_ptr find_registered_attr_account_entry(
+                                                         an_attribute_ptr  ap)
+/*
+Return the latest entry of the account for the attribute ap, or NULL.
+*/
+{
+  a_registered_attr_account_entry_ptr  ep = NULL;
+
+  if (registered_attr_buckets != NULL) {
+    for (ep = registered_attr_buckets[((size_t)ap >> 4) %
+                                      REGISTERED_ATTR_ACCOUNT_BUCKETS];
+         ep != NULL && ep->ap != ap; ep = ep->next) {
+    }  /* for */
+  }  /* if */
+  return ep;
+}  /* find_registered_attr_account_entry */
+
+
+static void note_registered_attribute_scanned(
+                                    an_attribute_ptr         ap,
+                                    a_token_sequence_number  tsn)
+/*
+ap is a registered attribute that has just been scanned (its first token had
+the sequence number tsn): Add it to the account of attributes that must be
+applied or diagnosed.
+*/
+{
+  a_registered_attr_account_entry_ptr  ep = add_registered_attr_account_entry(
+                                                                          ap);
+
+  ep->tsn = tsn;
+}  /* note_registered_attribute_scanned */
+
+
+void note_attribute_copy(an_attribute_ptr  from,
+                         an_attribute_ptr  to)
+/*
+The attribute "to" has just been made as a copy of the attribute "from".  If it
+is a registered attribute, the copy is accounted for when it is applied (or
+diagnosed), and then so is the attribute it is a copy of.
+*/
+{
+  if (from->kind == (an_attribute_kind)ak_registered) {
+    a_registered_attr_account_entry_ptr  from_ep =
+                                    find_registered_attr_account_entry(from);
+    if (from_ep != NULL) {
+      a_registered_attr_account_entry_ptr  ep =
+                                       add_registered_attr_account_entry(to);
+      ep->original = from_ep;
+    }  /* if */
+  }  /* if */
+}  /* note_attribute_copy */
+
+
+void account_for_registered_attribute(an_attribute_ptr  ap)
+/*
+ap is an attribute that has been applied to an entity or diagnosed, or is about
+to be made unrecognized after a diagnostic.  If it is a registered attribute
+(or a copy of one), record that it has been accounted for.
+*/
+{
+  if (ap->kind == (an_attribute_kind)ak_registered) {
+    a_registered_attr_account_entry_ptr  ep =
+                                    find_registered_attr_account_entry(ap);
+    for (; ep != NULL; ep = ep->original) {
+      ep->accounted = TRUE;
+    }  /* for */
+  }  /* if */
+}  /* account_for_registered_attribute */
+
+
+static int compare_registered_attr_account_entries(const void  *p1,
+                                                   const void  *p2)
+/*
+Compare two entries of the account by token sequence number (for qsort).
+*/
+{
+  const a_registered_attr_account_entry *e1 =
+                  *(const a_registered_attr_account_entry * const *)p1;
+  const a_registered_attr_account_entry *e2 =
+                  *(const a_registered_attr_account_entry * const *)p2;
+  int result = 0;
+
+  if (e1->tsn != e2->tsn) {
+    result = e1->tsn < e2->tsn ? -1 : 1;
+  }  /* if */
+  return result;
+}  /* compare_registered_attr_account_entries */
+
+
+static void note_registered_attribute_diagnosed(an_attribute_ptr  ap)
+/*
+An error has been issued saying that the registered attribute ap does not apply
+to its target, and the attribute (which is accounted for) is about to be made
+unrecognized.
+*/
+{
+  if (ap->kind == (an_attribute_kind)ak_registered) {
+    a_registered_attr_account_entry_ptr  ep =
+                                    find_registered_attr_account_entry(ap);
+    for (; ep != NULL; ep = ep->original) {
+      ep->diagnosed = TRUE;
+    }  /* for */
+  }  /* if */
+}  /* note_registered_attribute_diagnosed */
+
+
+a_boolean registered_attribute_was_diagnosed(an_attribute_ptr  ap)
+/*
+Return TRUE if ap is an attribute that was a registered attribute for which
+note_registered_attribute_diagnosed was called, so that no more diagnostics
+should be issued for it.
+*/
+{
+  a_registered_attr_account_entry_ptr  ep = find_registered_attr_account_entry(
+                                                                          ap);
+  return ep != NULL && ep->diagnosed;
+}  /* registered_attribute_was_diagnosed */
+
+
+void account_for_registered_attributes(an_attribute_ptr  attributes)
+/*
+An error has been issued for the given list of attributes, which is being
+dropped: Account for the registered attributes in it.
+*/
+{
+  an_attribute_ptr  ap;
+
+  for (ap = attributes; ap != NULL; ap = ap->next) {
+    account_for_registered_attribute(ap);
+  }  /* for */
+}  /* account_for_registered_attributes */
+
+
+void attribute_trans_unit_wrapup(void)
+/*
+At the end of a translation unit, issue an error for each registered attribute
+that was neither applied to an entity (or statement or type) nor diagnosed.
+*/
+{
+  a_registered_attr_account_entry_ptr  ep, *entries;
+  size_t                               count = 0, k, j;
+
+  for (ep = registered_attr_account; ep != NULL; ep = ep->all_next) {
+    if (ep->original == NULL) ++count;
+  }  /* for */
+  if (count != 0) {
+    entries = (a_registered_attr_account_entry_ptr*)alloc_fe(
+                      count * sizeof(a_registered_attr_account_entry_ptr));
+    for (ep = registered_attr_account, k = 0; ep != NULL; ep = ep->all_next) {
+      if (ep->original == NULL) entries[k++] = ep;
+    }  /* for */
+    qsort(entries, count, sizeof(entries[0]),
+          compare_registered_attr_account_entries);
+    /* Look at the entries for each attribute (the scans of it). */
+    for (k = 0; k < count; k = j) {
+      a_boolean  accounted = FALSE;
+      for (j = k; j < count &&
+                  compare_registered_attr_account_entries(&entries[k],
+                                                          &entries[j]) == 0;
+           ++j) {
+        if (entries[j]->accounted) accounted = TRUE;
+      }  /* for */
+      if (!accounted) {
+        pos_error(ec_unattached_attribute, &entries[k]->position);
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  registered_attr_account = NULL;
+  registered_attr_buckets = NULL;
+}  /* attribute_trans_unit_wrapup */
+
+
+static a_const_char *registered_attribute_target(an_attribute_ptr  ap)
+/*
+Return the target constraints (in the form used by known_attr_appl_table) of
+the given attribute.  An ak_registered attribute has the constraints given in
+its registration.
+*/
+{
+  a_const_char *result = known_attr_appl_table[ap->kind].target_constraints;
+
+  if (ap->kind == (an_attribute_kind)ak_registered) {
+    an_attr_namespace_registration_ptr  nsp;
+    an_attr_registration const          *rp =
+          find_registered_attribute(ap->namespace_name, ap->name, &nsp);
+    check_assertion(rp != NULL);
+    result = rp->target;
+  }  /* if */
+  return result;
+}  /* registered_attribute_target */
+
+
+static void check_registration(a_boolean                           ok,
+                               an_attr_namespace_registration_ptr  nsp,
+                               an_attr_registration const          *rp,
+                               a_const_char                        *msg)
+/*
+If ok is FALSE, issue an internal error saying that the registration of the
+attribute described by rp (or, if rp is NULL, of the namespace *nsp) is
+invalid for the reason given by msg.
+*/
+{
+  if (!ok) {
+    Small_string<MAX_ATTRIBUTE_NAME_LENGTH * 2 + 120>
+          text("invalid attribute registration for ",
+               nsp->name == NULL ? "<null>" : nsp->name,
+               rp == NULL ? "" : "::",
+               rp == NULL || rp->name == NULL ? "" : rp->name,
+               ": ", msg);
+    internal_error(text.as_temp_characters());
+  }  /* if */
+}  /* check_registration */
+
+
+static a_boolean registered_sig_is_valid(a_const_char  *sig)
+/*
+Return TRUE if sig is a well-formed attribute signature (see an_attr_descr)
+that can be used in a registration.
+*/
+{
+  a_const_char *p = sig;
+  a_boolean    ok = sig != NULL;
+
+  if (ok && *p != '\0') {
+    if (*p == '?') ++p;
+    if (*p != '(') {
+      ok = FALSE;
+    } else {
+      ++p;
+      for (;;) {
+        if (*p == '?') ++p;
+        switch (*p++) {
+          case 'c':
+            if (*p == 't' || *p == 'i') {
+              ++p;
+            } else {
+              ok = FALSE;
+            }  /* if */
+            break;
+          case 's':
+            if (*p == 'n' || *p == 'x') {
+              ++p;
+            } else {
+              ok = FALSE;
+            }  /* if */
+            break;
+          case 'X':
+            if (*p == 'c') ++p;
+            if (*p == 'e') ++p;
+            if (*p == 'b') ++p;
+            break;
+          case 'n':
+          case 't':
+          case '*':
+            break;
+          default:
+            ok = FALSE;
+            break;
+        }  /* switch */
+        if (!ok) break;
+        if (*p == '+') ++p;
+        if (*p == '?') ++p;
+        if (*p != ',') break;
+        ++p;
+      }  /* for */
+      ok = ok && *p == ')' && p[1] == '\0';
+    }  /* if */
+  }  /* if */
+  return ok;
+}  /* registered_sig_is_valid */
+
+
+static a_boolean registered_target_is_valid(a_const_char  *target)
+/*
+Return TRUE if target is a well-formed attribute target description (see
+an_attr_appl_descr) that can be used in a registration.  The description may
+not be empty (which would mean that the attribute applies to anything), may
+not use the codes for types, classes and enumerations (an attribute of a
+class template would be dropped when only one is kept for each attribute
+kind), may not use the "W" prefix, and every property switch must end in "!"
+(a failure to meet them would otherwise just be a warning, and the attribute
+would be ignored).
+*/
+{
+  a_const_char *p = target;
+  a_boolean    ok = target != NULL && *target != '\0';
+
+  while (ok) {
+    a_const_char  *props = "";
+    if (*p == 'W') {
+      /* A "W" prefix would make a misplacement only a warning (and the
+         attribute would be ignored). */
+      ok = FALSE;
+      break;
+    }  /* if */
+    switch (*p++) {
+      case 'r': props = "mipvx"; break;
+      case 'v': props = "ahlrx"; break;
+      case 'd': props = "b"; break;
+      case 's': case 'p': case 'u': case 'n': case 'l': case 'a': case 'C':
+      case 'E':
+        break;
+      default:
+        ok = FALSE;
+        break;
+    }  /* switch */
+    if (!ok) break;
+    if (*p == ':') {
+      /* One or more property switches, each ending in "!". */
+      ++p;
+      do {
+        if ((*p != '+' && *p != '-') || *++p == '\0' ||
+            strchr(props, *p) == NULL || p[1] != '!') {
+          ok = FALSE;
+          break;
+        }  /* if */
+        p += 2;
+      } while (*p == '+' || *p == '-');
+      if (!ok) break;
+    }  /* if */
+    if (*p == '|') {
+      ++p;
+    } else {
+      ok = (*p == '\0');
+      break;
+    }  /* if */
+  }  /* while */
+  return ok;
+}  /* registered_target_is_valid */
+
+
+static a_boolean is_attribute_identifier_string(a_const_char  *str)
+/*
+Return TRUE if str is a nonempty string of letters, digits and underscores
+that does not start with a digit and is not too long to be an attribute name.
+*/
+{
+  a_boolean  ok = str != NULL && str[0] != '\0' &&
+                  strlen(str) <= MAX_ATTRIBUTE_NAME_LENGTH &&
+                  !(str[0] >= '0' && str[0] <= '9');
+  a_const_char  *p;
+
+  for (p = str; ok && *p != '\0'; p++) {
+    ok = (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+         (*p >= '0' && *p <= '9') || *p == '_';
+  }  /* for */
+  return ok;
+}  /* is_attribute_identifier_string */
+
+
+static a_boolean is_static_attribute_in_namespace(
+                                              a_const_char  *namespace_name,
+                                              a_const_char  *name)
+/*
+Return TRUE if known_attr_table has an attribute with the given name that
+requires or accepts the given namespace name.
+*/
+{
+  unsigned int  k;
+  a_boolean     result = FALSE;
+  sizeof_t      len = strlen(namespace_name);
+
+  for (k = 0; k < KNOWN_ATTR_TABLE_LENGTH && !result; ++k) {
+    a_const_char *p = strchr(known_attr_table[k].cond, '[');
+    if (p == NULL) p = strchr(known_attr_table[k].cond, '{');
+    if (p != NULL && strcmp(known_attr_table[k].name, name) == 0 &&
+        strncmp(p + 1, namespace_name, len) == 0 &&
+        (p[1 + len] == ']' || p[1 + len] == '}')) {
+      result = TRUE;
+    }  /* if */
+  }  /* for */
+  return result;
+}  /* is_static_attribute_in_namespace */
+
+
+static void validate_registered_attributes(void)
+/*
+Check the namespaces and attributes registered by the embedding program (see
+register_attribute_namespace).  An invalid registration is an internal error
+in that program.
+*/
+{
+  an_attr_namespace_registration_ptr  nsp, nsp2;
+  an_attr_registration const          *rp, *rp2;
+  static constexpr a_const_char       *reserved[] = {
+                                  "gnu", "__gnu__", "clang", "_Clang", "msvc",
+                                  NULL };
+  a_const_char * const                *p_name;
+
+  for (nsp = registered_attribute_namespaces; nsp != NULL; nsp = nsp->next) {
+    check_registration(is_attribute_identifier_string(nsp->name), nsp, NULL,
+                       "the namespace name is not a valid name");
+    for (p_name = reserved; *p_name != NULL; p_name++) {
+      check_registration(strcmp(nsp->name, *p_name) != 0, nsp, NULL,
+                         "the namespace is one that the front end defines");
+    }  /* for */
+    for (nsp2 = nsp->next; nsp2 != NULL; nsp2 = nsp2->next) {
+      check_registration(strcmp(nsp->name, nsp2->name) != 0, nsp, NULL,
+                         "the namespace is registered twice");
+    }  /* for */
+    if (nsp->attributes == NULL) continue;
+    for (rp = nsp->attributes; rp->name != NULL; rp++) {
+      check_registration(is_attribute_identifier_string(rp->name), nsp, rp,
+                         "the attribute name is not a valid name");
+      for (rp2 = rp + 1; rp2->name != NULL; rp2++) {
+        check_registration(strcmp(rp->name, rp2->name) != 0, nsp, rp,
+                           "the attribute is registered twice");
+      }  /* for */
+      check_registration(!is_static_attribute_in_namespace(nsp->name,
+                                                           rp->name),
+                         nsp, rp,
+                         "the front end already defines the attribute");
+      check_registration(registered_sig_is_valid(rp->sig), nsp, rp,
+                         "the signature is not valid");
+      check_registration(registered_target_is_valid(rp->target), nsp, rp,
+                         "the target is not valid");
+    }  /* for */
+  }  /* for */
+}  /* validate_registered_attributes */
+
+
 static a_boolean attribute_namespace_is_recognized(a_const_char *name,
                                                    size_t       length)
 /*
@@ -1103,6 +1693,9 @@ namespace.  If non-zero, length represents the number of characters in name
       break;
     }  /* if */
   }  /* for */
+  if (!result && find_registered_namespace(name, length) != NULL) {
+    result = TRUE;
+  }  /* if */
   return result;
 }  /* attribute_namespace_is_recognized */
 
@@ -2058,6 +2651,47 @@ such cases an error is issued and ap->kind is set to ak_unrecognized.
 }  /* scan_attr_remaining_arg_tokens */
 
 
+static void check_registered_attribute_packs(
+                                  an_attribute_ptr      ap,
+                                  an_attribute_arg_ptr  aap,
+                                  unsigned long         refs_before,
+                                  unsigned long         after_pack_refs_before)
+/*
+aap is a newly-scanned argument of the registered attribute ap, and refs_before
+and after_pack_refs_before are the values that num_function_pack_references and
+num_parameter_after_pack_references returned before it was scanned.  Issue an
+error (and make the attribute unrecognized) if the argument is a pack
+expansion, or if it refers to a function parameter pack or to a parameter that
+follows one in a declaration.  The substitution of template arguments in a
+declaration's attributes does not substitute a function parameter pack, so
+such a reference would be replaced silently by an empty pack in each instance,
+and a parameter that follows a pack has another number in an instance, where
+the pack is expanded (the attribute would refer to another parameter).  (A
+reference in a statement is substituted when the statement is scanned again
+for each instance.)
+*/
+{
+  if (aap->is_pack_expansion) {
+    pos_st_error(ec_attr_pack_expansion, &aap->position,
+                 attribute_display_name(ap));
+    note_registered_attribute_diagnosed(ap);
+    make_attr_unrecognized(ap);
+  } else if (innermost_function_scope == NULL &&
+             num_function_pack_references() != refs_before) {
+    pos_st_error(ec_attr_function_parameter_pack, &aap->position,
+                 attribute_display_name(ap));
+    note_registered_attribute_diagnosed(ap);
+    make_attr_unrecognized(ap);
+  } else if (innermost_function_scope == NULL &&
+             num_parameter_after_pack_references() != after_pack_refs_before) {
+    pos_st_error(ec_attr_parameter_after_pack, &aap->position,
+                 attribute_display_name(ap));
+    note_registered_attribute_diagnosed(ap);
+    make_attr_unrecognized(ap);
+  }  /* if */
+}  /* check_registered_attribute_packs */
+
+
 static void scan_attr_arg_list(an_attribute_ptr  ap,
                                a_const_char      *sig)
 /*
@@ -2071,6 +2705,7 @@ ak_unrecognized.
   an_attribute_arg_ptr  *p_aap = &ap->arguments;
   a_const_char          *saved_sig;
   a_boolean             may_terminate, requirements_met = FALSE;
+  unsigned long         function_pack_refs, after_pack_refs;
 
   /* Loop for each argument in the argument list. */
   do {
@@ -2088,6 +2723,8 @@ ak_unrecognized.
     }  /* if */
     requirements_met = FALSE;
     saved_sig = sig;
+    function_pack_refs = num_function_pack_references();
+    after_pack_refs = num_parameter_after_pack_references();
     any_more = begin_potential_pack_expansion_context(&pesep);
     while (any_more) {
       switch (*sig++) {
@@ -2171,9 +2808,20 @@ ak_unrecognized.
           (*p_aap)->pack_expansion_descr = pedep;
           (*p_aap)->is_pack_expansion = TRUE;
         }  /* if */
+        if (ap->kind == (an_attribute_kind)ak_registered && *p_aap != NULL) {
+          check_registered_attribute_packs(ap, *p_aap, function_pack_refs,
+                                           after_pack_refs);
+        }  /* if */
       }
       while (*p_aap != NULL) p_aap = &(*p_aap)->next;
       any_more = advance_to_next_pack_element(pesep);
+      if (ap->kind == (an_attribute_kind)ak_unrecognized &&
+          registered_attribute_was_diagnosed(ap)) {
+        /* An error was issued for this registered attribute: Skip the other
+           arguments, which could only give more errors. */
+        *p_aap = scan_attr_remaining_arg_tokens(ap);
+        goto done;
+      }  /* if */
       if (*sig == '+') {
         /* A repeated signature. */
         if (curr_token == tok_rparen) {
@@ -2286,13 +2934,17 @@ a_boolean equivalent_attributes(an_attribute_ptr  ap1,
 Return TRUE if the two given attributes are equivalent.  Two attributes are
 equivalent if they have the same kind, equal arguments (if any), and if they
 are of the same family (af_std, af_gnu, ...).  If ignore_family is TRUE, the
-families need not be equal.
+families need not be equal.  Registered attributes also need the same
+namespace and name.
 */
 {
   a_boolean  result = FALSE;
 
   if (ap1->kind == ap2->kind &&
-      (ignore_family || ap1->family == ap2->family)) {
+      (ignore_family || ap1->family == ap2->family) &&
+      (ap1->kind != ak_registered ||
+       (strcmp(ap1->namespace_name, ap2->namespace_name) == 0 &&
+        strcmp(ap1->name, ap2->name) == 0))) {
     /* If the arguments to the attributes are equal, the attributes are
        equivalent. */
     an_attribute_arg_ptr  aap1 = ap1->arguments, aap2 = ap2->arguments;
@@ -2422,8 +3074,9 @@ attribute namespace name specified by a preceding "using" prefix that is to
 be used as the implicit attribute namespace name for this attribute.
 */
 {
-  an_attribute_ptr   ap = NULL;
-  a_boolean          err = FALSE;
+  an_attribute_ptr         ap = NULL;
+  a_boolean                err = FALSE;
+  a_token_sequence_number  first_tsn = curr_token_sequence_number;
 
   if (!is_valid_attribute_identifier(curr_token)) {
     syntax_error(ec_exp_identifier);
@@ -2470,8 +3123,21 @@ be used as the implicit attribute namespace name for this attribute.
       ap->is_invalid_namespace = using_ns_ap->is_invalid_namespace;
     }  /* if */
     if (!err) {
+      an_attr_namespace_registration_ptr  nsp = NULL;
+      an_attr_registration const          *rap = NULL;
       adp = get_attr_descr_for_attribute(ap);
-      if (adp == NULL) {
+      if (adp == NULL && af == af_std) {
+        /* Not one of the attributes the front end defines: See whether the
+           program embedding the front end registered it. */
+        rap = find_registered_attribute(ap->namespace_name, ap->name, &nsp);
+      }  /* if */
+      if (rap != NULL) {
+        /* A registered attribute: Use the signature of its registration. */
+        ap->kind = ak_registered;
+        ap->transforms_type_specifier = FALSE;
+        note_registered_attribute_scanned(ap, first_tsn);
+        sig = rap->sig;
+      } else if (adp == NULL) {
         /* An unrecognized attribute.  Use "?(*)" as its signature, indicating
            that an argument list is optional, and if it is present, it will
            just be recorded as a sequence of tokens. */
@@ -2496,16 +3162,23 @@ be used as the implicit attribute namespace name for this attribute.
           pos_diagnostic(err ? es_error : es_remark, ec_attr_twice_in_group,
                          &ap->position);
         }  /* if */
+      } else if (rap != NULL) {
+        /* A registered attribute is never a duplicate of another attribute
+           (a sequence of them is meaningful). */
       } else if (!record_unrecognized_attributes ||
-                 ap->family == af_ms_declspec) {
+                 ap->family == af_ms_declspec ||
+                 (nsp != NULL && (nsp->flags & RANF_CLOSED) != 0)) {
         /* If we are not recording unrecognized attributes, drop unrecognized
            attributes with a warning.  Always issue a discretionary error for
-           unrecognized Microsoft __declspec attributes. */
+           unrecognized Microsoft __declspec attributes, and an error for an
+           attribute that is not registered in a closed namespace. */
         an_error_severity  sev = es_warning;
         if (ap->family == af_ms_declspec) {
           sev = es_discretionary_error;
         }  /* if */
-        if (ap->is_invalid_namespace) {
+        if (nsp != NULL && (nsp->flags & RANF_CLOSED) != 0) {
+          sev = es_error;
+        } else if (ap->is_invalid_namespace) {
           /* If we've already diagnosed the namespace as being unrecognized,
              it's probably not helpful to give a second warning, so downgrade
              this to a remark. */
@@ -2652,6 +3325,11 @@ that appeared in a previous "using" prefix.  Can return NULL on error.
           } else {
             (*p_attribute)->is_pack_expansion = TRUE;
             (*p_attribute)->pack_expansion_descr = pedep;
+            if ((*p_attribute)->kind == (an_attribute_kind)ak_registered) {
+              pos_st_error(ec_attr_pack_expansion, &(*p_attribute)->position,
+                           attribute_display_name(*p_attribute));
+              make_attr_unrecognized(*p_attribute);
+            }  /* if */
           }  /* if */
         }  /* if */
       }
@@ -2938,16 +3616,56 @@ is made.
 }  /* scan_attributes */
 
 
+a_boolean attributes_include_registered(an_attribute_ptr  attributes)
+/*
+Return TRUE if the given list of attributes contains an attribute registered
+by the embedding program.  Such an attribute is never dropped silently:
+a diagnostic about discarding the list must be an error.
+*/
+{
+  an_attribute_ptr  ap;
+
+  for (ap = attributes; ap != NULL && ap->kind != ak_registered;
+       ap = ap->next) {
+  }  /* for */
+  return ap != NULL;
+}  /* attributes_include_registered */
+
+
+void reject_registered_class_attributes(an_attribute_ptr  attributes)
+/*
+Issue an error for each registered attribute in the given list, which is the
+list of attributes of a class template or an alias template that is being
+declared.  (A registered attribute cannot apply to a class or an alias, and the
+attributes of such a template are not checked until it is defined or
+instantiated, which may never happen.)
+*/
+{
+  an_attribute_ptr  ap;
+
+  for (ap = attributes; ap != NULL; ap = ap->next) {
+    if (ap->kind == ak_registered) {
+      report_bad_attribute_target(es_error, ap);
+    }  /* if */
+  }  /* for */
+}  /* reject_registered_class_attributes */
+
+
 void scan_and_discard_attributes(an_error_severity sev,
                                  an_error_code     err_code)
 /*
 If any attributes exist at the current position, scan and discard them
-reporting the specified error with the specified severity.  A single message
-is given though multiple attributes may be dropped.
+reporting the specified error with the specified severity (an error, if one of
+them is a registered attribute).  A single message is given though multiple
+attributes may be dropped.
 */
 {
   an_attribute_ptr ap = scan_attributes(al_implicit);
   if (ap != NULL) {
+    if (attributes_include_registered(ap)) {
+      sev = es_error;
+      account_for_registered_attributes(ap);
+    }  /* if */
     pos_diagnostic(sev, err_code, &ap->position);
   }  /* if */
 }  /* scan_and_discard_attributes */
@@ -3048,6 +3766,12 @@ doesn't apply to the entity on which it is specified.  The given attribute is
 turned into an ak_unrecognized attribute.
 */
 {
+  if (ap->kind == (an_attribute_kind)ak_registered) {
+    /* A registered attribute is never dropped with only a warning. */
+    sev = es_error;
+    account_for_registered_attribute(ap);
+    note_registered_attribute_diagnosed(ap);
+  }  /* if */
   if (ap->family == af_alignas) {
     pos_diagnostic(sev, ec_wrong_entity_for_alignas, &ap->position);
   } else {
@@ -3683,6 +4407,9 @@ appropriate and set ap->kind to ak_unrecognized).
     an_error_severity  sev = es_error;
     if (match_found && weak_mismatch) {
       sev = es_warning;
+    } else if (ap->kind == (an_attribute_kind)ak_registered) {
+      /* An attribute registered by the embedding program is always an error
+         when it is misplaced (otherwise it would be dropped silently). */
     } else if (ap->family == af_ms_declspec &&
                ap->syntactic_location == al_tag_name) {
       /* Microsoft compilers ignore recognized attributes on tag names.
@@ -3977,9 +4704,15 @@ or not, its argument expressions are made retrievable from the file scope
 memory region in which the attribute itself resides.
 */
 {
-  a_const_char *constr = known_attr_appl_table[ap->kind].target_constraints;
+  a_const_char *constr = registered_attribute_target(ap);
   an_attr_application_fn
                *appl_fn = known_attr_appl_table[(int)ap->kind].appl_fn;
+
+  if (ap->kind == (an_attribute_kind)ak_registered) {
+    /* The attribute is now applied or diagnosed (see check_target_entity_
+       match). */
+    account_for_registered_attribute(ap);
+  }  /* if */
 
   if (check_target_entity_match(constr, ap, entity, entity_kind) &&
       !is_unrecognized_attr(ap)) {
@@ -10701,6 +11434,14 @@ with standard attributes given preference.
       }  /* if */
     }  /* for */
   }  /* if */
+  if (!supported && namespace_name != NULL) {
+    /* Attributes registered by the embedding program are standard-syntax
+       attributes of a namespace. */
+    an_attr_namespace_registration_ptr  nsp;
+    supported = (family == af_std || family == af_has_attribute ||
+                 family == af_internal) &&
+                find_registered_attribute(namespace_name, name, &nsp) != NULL;
+  }  /* if */
   return supported;
 }  /* attribute_is_supported */
 
@@ -10997,6 +11738,53 @@ attributes from new_list are applied to tssp->attributes.
 }  /* apply_attributes_to_prototype_instantiation */
 
 
+#if INCLUDE_EDG_TEST_ATTRIBUTES
+/*
+The attributes of the "edg" namespace that are registered for testing the
+registration interface.  (The attributes of this namespace that are in
+known_attr_table are tested differently and are not described here.)
+*/
+static constexpr an_attr_registration edg_test_attributes[] = {
+  { "r_fn", "", "r", RAF_NO_FLAGS },
+  { "r_stmt", "(Xb)", "s", RAF_NO_FLAGS },
+  { "r_expr", "(X)", "s", RAF_NO_FLAGS },
+  { "requires", "(Xb)", "r", RAF_NO_FLAGS },
+  { NULL, NULL, NULL, RAF_NO_FLAGS }
+};
+
+static an_attr_namespace_registration edg_test_namespace = {
+  "edg", RANF_CLOSED, edg_test_attributes, NULL
+};
+#endif /* INCLUDE_EDG_TEST_ATTRIBUTES */
+
+
+void attribute_early_init(void)
+/*
+Do initialization related to attributes that needs to be done very early,
+before command line processing (so that --dump_configuration can show it).
+*/
+{
+#if INCLUDE_EDG_TEST_ATTRIBUTES
+  register_attribute_namespace(&edg_test_namespace);
+#endif /* INCLUDE_EDG_TEST_ATTRIBUTES */
+}  /* attribute_early_init */
+
+
+void dump_registered_attribute_namespaces(void)
+/*
+Output a description of the registered attribute namespaces as part of the
+output of the --dump_configuration option.
+*/
+{
+  an_attr_namespace_registration_ptr  nsp;
+
+  for (nsp = registered_attribute_namespaces; nsp != NULL; nsp = nsp->next) {
+    fprintf(f_error, "/*      registered attribute namespace %s%s */\n",
+            nsp->name, (nsp->flags & RANF_CLOSED) != 0 ? " (closed)" : "");
+  }  /* for */
+}  /* dump_registered_attribute_namespaces */
+
+
 void attribute_one_time_init(void)
 /*
 Do one-time initialization of variables related to the processing of
@@ -11004,6 +11792,7 @@ attributes.
 */
 {
   init_attr_name_map();
+  validate_registered_attributes();
   /* Save variables from attribute.h and attribute.c that are needed for
      precompiled headers */
   if (precompiled_header_processing_required) {
@@ -11041,6 +11830,8 @@ attributes.
   register_trans_unit_variable(asm_name_map);
 #endif /* GNU_EXTENSIONS_ALLOWED */
   register_trans_unit_variable(unscanned_attributes);
+  register_trans_unit_variable(registered_attr_account);
+  register_trans_unit_variable(registered_attr_buckets);
   register_trans_unit_variable(already_diagnosed_using);
 }  /* attribute_one_time_init */
 
@@ -11058,6 +11849,8 @@ translation unit.
                                   fn_for_function(compare_for_asm_name_map));
 #endif /* GNU_EXTENSIONS_ALLOWED */
   unscanned_attributes = NULL;
+  registered_attr_account = NULL;
+  registered_attr_buckets = NULL;
 #if USE_X86_FUNCTION_MULTIVERSIONING && DO_IL_LOWERING
   mv_builtins_loaded = FALSE;
 #endif /* USE_X86_FUNCTION_MULTIVERSIONING && DO_IL_LOWERING */

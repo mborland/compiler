@@ -40163,6 +40163,10 @@ by param_sym (sk_parameter).
   node->is_lvalue = TRUE;
   node->variant.param_ref.param_num = param_sym->variant.param_id->param_num;
   node->variant.param_ref.levels_up = levels_up;
+  if (param_sym->variant.param_id->follows_parameter_pack) {
+    /* The number of the parameter is not the same in an instance. */
+    note_parameter_after_pack_reference();
+  }  /* if */
   make_glvalue_expression_operand(node, result);
   result->is_id_expression = TRUE;
   /* If the parameter has a reference type, add an implicit indirection. */

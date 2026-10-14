@@ -3312,7 +3312,10 @@ missing).
     /* We can get here in some nonstandard cases like "enum [[]] T x;" where T
        is a template parameter.  Ignore the attributes (with a warning). */
     if (attributes != NULL) {
-      pos_warning(ec_attributes_ignored, &attributes->position);
+      pos_diagnostic(attributes_include_registered(attributes) ?
+                       es_error : es_warning,
+                     ec_attributes_ignored, &attributes->position);
+      account_for_registered_attributes(attributes);
     }  /* if */
   } else {
     check_assertion(is_immediate_class_type(type) ||

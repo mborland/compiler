@@ -7701,6 +7701,8 @@ is TRUE, do not generate attributes associated with the primary declaration.
   for (ap = attributes; ap != NULL; ap = ap->next) {
     /* Internal attributes didn't appear in the source: Don't render them. */
     if (ap->family == af_internal) continue;
+    /* Attributes registered by an embedding program are not rendered. */
+    if (ap->kind == ak_registered) continue;
     /* Don't render attributes that the target compiler will not parse. */
     if (msvc_is_generated_code_target &&
         ap->family == af_gnu) {

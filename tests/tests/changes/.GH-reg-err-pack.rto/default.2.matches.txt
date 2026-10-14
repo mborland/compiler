@@ -1,0 +1,8 @@
+Matches for "(line 17: error: attribute\s+"edg::r_stmt"\s+cannot\s+be\s+a\s+pack\s+expansion|line 20: error: attribute\s+"edg::r_stmt"\s+cannot\s+be\s+a\s+pack\s+expansion)":
+  <-----------------------------------------------------------------------------
+  line 20: error: attribute "edg::r_stmt" cannot be a pack expansion
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*error:\s+expected\s+a\s+"\)")":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

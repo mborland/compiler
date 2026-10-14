@@ -656,11 +656,17 @@ If *p_attributes is non-NULL, issue an error message indicating that
 attributes are not allowed at the location in which the associated attribute
 appeared, and set *p_attributes to NULL.  Use sev as the severity of the
 diagnostic, unless sev is es_default in which case the severity is determined
-locally based on the emulation mode and attribute.
+locally based on the emulation mode and attribute.  (It is always an error
+if one of the attributes is a registered attribute.)
 */
 {
   if (*p_attributes != NULL) {
-    if (sev == es_default) {
+    if (attributes_include_registered(*p_attributes)) {
+      /* An attribute registered by the embedding program is always an error
+         here (instead of being dropped with a warning or silently). */
+      sev = es_error;
+      account_for_registered_attributes(*p_attributes);
+    } else if (sev == es_default) {
       sev = es_discretionary_error;
       if (clang_mode) {
         /* clang issues an error on standard attributes in incorrect locations
@@ -694,9 +700,20 @@ entity.  Issue diagnostics as appropriate.
     /* Look for a standard attribute: It would elicit an error (whereas GNU
        attributes only trigger a warning). */
     for (; ap != NULL; ap = ap->next) {
-      if (is_std_attribute(ap) &&
-          ap->kind != ak_empty_attr &&
-          !gnu_mode) {
+      if (ap->kind == ak_unrecognized &&
+          registered_attribute_was_diagnosed(ap)) {
+        /* A registered attribute that was diagnosed already (as not
+           applying to its target): Do not diagnose it twice. */
+      } else if (ap->kind == ak_registered) {
+        /* An attribute registered by the embedding program is never ignored
+           silently. */
+        sev = es_error;
+        err_ap = ap;
+        account_for_registered_attributes(attributes);
+        break;
+      } else if (is_std_attribute(ap) &&
+                 ap->kind != ak_empty_attr &&
+                 !gnu_mode) {
         sev = es_error;
         err_ap = ap;
         break;
@@ -21235,6 +21252,10 @@ processing should proceed after the call.
     if (scope_stack_top().exporting_decl) {
       pos_error(ec_export_must_introduce_name, &pos_curr_token);
     }  /* if */
+    if (attributes_include_registered(state->prefix_attributes)) {
+      /* A registered attribute is never ignored silently. */
+      disallow_attributes(&state->prefix_attributes, es_error);
+    }  /* if */
     static_assert_declaration(/*leave_semicolon=*/TRUE);
     state->decl_okay_in_constexpr_body = TRUE;
     end_of_decl_action = eoda_check_semicolon;
@@ -21247,13 +21268,16 @@ processing should proceed after the call.
       if (state->prefix_attributes != NULL) {
         /* Attributes can normally not precede a linkage specification, but
            Microsoft and clang compilers appear to just ignore them instead of
-           issuing an error. */
-        if (microsoft_mode || clang_mode) {
+           issuing an error (but an attribute registered by the embedding
+           program is never ignored silently). */
+        if ((microsoft_mode || clang_mode) &&
+            !attributes_include_registered(state->prefix_attributes)) {
           pos_warning(ec_attributes_ignored,
                       &state->prefix_attributes->group->position);
         } else {
           pos_error(ec_invalid_attribute_location,
                     &state->prefix_attributes->group->position);
+          account_for_registered_attributes(state->prefix_attributes);
         }  /* if */
         state->prefix_attributes = NULL;
       }  /* if */

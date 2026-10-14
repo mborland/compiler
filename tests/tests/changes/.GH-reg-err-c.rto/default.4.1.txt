@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=4 --c23 Test_name.c
+"Test_name.c", line 24: error: attribute "edg::r_fn" does not take arguments
+  [[edg::r_fn(1)]] int f4(void);
+             ^
+
+1 error detected in the compilation of "Test_name.c".

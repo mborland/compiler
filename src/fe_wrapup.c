@@ -769,6 +769,11 @@ and before the back end (if any) is executed.
     if (collect_top_templates) {
       show_top_templates(top_templates_count);
     }  /* if */
+  } else {
+    /* Registered attributes must have been applied or diagnosed.  (For C++
+       this is done after the instantiations, by
+       template_and_inline_entity_wrapup.) */
+    attribute_trans_unit_wrapup();
   }  /* if */
 #if CHECKING && DEBUG
   check_all_init_component_entries_freed();

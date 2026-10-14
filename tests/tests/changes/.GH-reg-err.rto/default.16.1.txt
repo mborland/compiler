@@ -1,0 +1,7 @@
+fe_only -DTEST_NUMBER=16 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 67: error: expression must have class type but it has type "int"
+  template <class... Ts> void f16(Ts... a) { [[edg::r_stmt((a.x && ...))]]; }
+                                                            ^
+          detected during instantiation of "void f16(Ts...) [with Ts=<int>]" at line 68
+
+1 error detected in the compilation of "Test_name.c".

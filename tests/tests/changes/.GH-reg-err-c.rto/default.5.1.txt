@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=5 --c23 Test_name.c
+"Test_name.c", line 28: error: attribute "edg::requires" does not apply here
+  int f5(int x) [[edg::requires(x > 0)]];
+                  ^
+
+1 error detected in the compilation of "Test_name.c".

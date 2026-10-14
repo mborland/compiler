@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=3 --c23 Test_name.c
+"Test_name.c", line 21: error: attribute "edg::r_fn" does not apply here
+  [[edg::r_fn]] int v3;
+    ^
+
+1 error detected in the compilation of "Test_name.c".

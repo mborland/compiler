@@ -10442,6 +10442,8 @@ file.
 #undef define_numeric_valued_macro
 #undef comment_string_valued_macro
 #undef define_string_valued_macro
+  /* Dump the registered attribute namespaces (if any). */
+  dump_registered_attribute_namespaces();
   /* Dump target configurations (if any). */
   dump_target_configurations();
 }  /* dump_configuration_macros */

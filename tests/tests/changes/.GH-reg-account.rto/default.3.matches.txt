@@ -1,0 +1,4 @@
+Matches for "(line 25: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity|line 32: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity|line 33: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity|line 40: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity|line 46: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity|line 51: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity)":
+  <-----------------------------------------------------------------------------
+  line 40: error: attribute does not apply to any entity
+  ----------------------------------------------------------------------------->

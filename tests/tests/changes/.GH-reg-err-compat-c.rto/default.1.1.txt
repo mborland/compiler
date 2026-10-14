@@ -1,0 +1,26 @@
+fe_only -DTEST_NUMBER=1 --c23 --clang_version=210000 Test_name.c
+"Test_name.c", line 20: error: attribute "edg::r_fn" does not apply here
+  [[edg::r_fn]] int v1;
+    ^
+
+"Test_name.c", line 23: error: attributes ignored here because they do not apply to a declared entity
+  struct S2 { [[edg::r_fn]]; int a; };
+                ^
+
+"Test_name.c", line 26: error: attribute "edg::r_fn" does not apply here
+  void f3(void) { [[edg::r_fn]]; }
+                    ^
+
+"Test_name.c", line 29: error: attributes are not allowed here
+  [[edg::r_fn]] static_assert(1, "");
+  ^
+
+"Test_name.c", line 32: error: attributes are not allowed here
+  void f5(void) { [[edg::r_stmt(1)]] static_assert(1, ""); }
+                  ^
+
+"Test_name.c", line 35: error: attribute "edg::r_fn" does not apply here
+  void f6(void) { int [[edg::r_fn]] x = 0; (void)x; }
+                        ^
+
+6 errors detected in the compilation of "Test_name.c".

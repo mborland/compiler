@@ -1,0 +1,104 @@
+Matches for "line 43: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 43: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 46: error: attribute\s+"edg::r_stmt"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 46: error: attribute "edg::r_stmt" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 49: error: attribute\s+"edg::requires"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 49: error: attribute "edg::requires" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 52: error: attribute\s+"edg::requires"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 52: error: attribute "edg::requires" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 55: error: attributes\s+ignored\s+here\s+because\s+they\s+do\s+not\s+apply\s+to\s+a\s+declared\s+entity":
+  <-----------------------------------------------------------------------------
+  line 55: error: attributes ignored here because they do not apply to a declared entity
+  ----------------------------------------------------------------------------->
+Matches for "line 58: error: attributes\s+are\s+not\s+allowed\s+here":
+  <-----------------------------------------------------------------------------
+  line 58: error: attributes are not allowed here
+  ----------------------------------------------------------------------------->
+Matches for "line 61: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 61: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 64: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 64: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 67: error: attributes\s+are\s+not\s+allowed\s+here":
+  <-----------------------------------------------------------------------------
+  line 67: error: attributes are not allowed here
+  ----------------------------------------------------------------------------->
+Matches for "line 70: error: attributes\s+are\s+not\s+allowed\s+here":
+  <-----------------------------------------------------------------------------
+  line 70: error: attributes are not allowed here
+  ----------------------------------------------------------------------------->
+Matches for "line 74: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 74: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 75: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 75: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 76: error: attribute\s+"edg::r_stmt"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 76: error: attribute "edg::r_stmt" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 77: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 77: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 78: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 78: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 79: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 79: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 80: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 80: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 81: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 81: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 83: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 83: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 84: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 84: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 85: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here":
+  <-----------------------------------------------------------------------------
+  line 85: error: attribute "edg::r_fn" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "line 90: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity":
+  <-----------------------------------------------------------------------------
+  line 90: error: attribute does not apply to any entity
+  ----------------------------------------------------------------------------->
+Matches for "line 92: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity":
+  <-----------------------------------------------------------------------------
+  line 92: error: attribute does not apply to any entity
+  ----------------------------------------------------------------------------->
+Matches for "line 93: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity":
+  <-----------------------------------------------------------------------------
+  line 93: error: attribute does not apply to any entity
+  ----------------------------------------------------------------------------->
+Matches for "line 95: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity":
+  <-----------------------------------------------------------------------------
+  line 95: error: attribute does not apply to any entity
+  ----------------------------------------------------------------------------->
+Matches for "line 100: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity":
+  <-----------------------------------------------------------------------------
+  line 100: error: attribute does not apply to any entity
+  ----------------------------------------------------------------------------->

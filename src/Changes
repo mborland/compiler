@@ -1,6 +1,25 @@
 Version 7.1
 
 10/14/26  [GH #?]
+Substituting the template arguments of a class in the attributes of its members
+
+When the attributes of a member of a class template are instantiated (an
+attribute with an expression argument, such as a registered attribute after the
+parameter list of a member function), the template parameters of the enclosing
+class are now substituted as well as those of the member itself, so a
+contract such as "int get(T x) [[mine::pre(x > 0)]]" in a class template has
+the type of the instance in the instance.  Previously the template parameters
+of the class remained in the expression.  A registered attribute of the
+declaration of a member of a class template that is written after the
+instance was created, or on the definition outside the class, now also
+reaches the members of the instances of the class.  For example:
+
+  template <class T> struct S { int m(T x); };
+  S<int> s;
+  template <class T> int S<T>::m(T x) [[mine::pre(x > 0)]] { return 0; }
+  // S<int>::m has the attribute, with x of type int.
+
+10/14/26  [GH #?]
 Registered attributes after a function's parameter list
 
 A registered attribute (see the entry for attribute registration) can have the

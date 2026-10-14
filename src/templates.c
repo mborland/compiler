@@ -7268,19 +7268,23 @@ in one-instantiation-per-object mode.
 
 #endif /* ONE_INSTANTIATION_PER_OBJECT */
 
-static a_boolean routine_includes_definition_attribute(a_routine_ptr  rp)
+static a_boolean routine_includes_definition_attribute(
+                                         a_routine_ptr  rp,
+                                         a_boolean      ignore_registered)
 /*
 Return TRUE if the given routine entry has an attribute whose
-on_primary_declaration flag is TRUE.  (A registered attribute does not count:
-those are given to the existing instances when they are attached to the
-template; see attach_registered_attributes_to_existing_instances.)
+on_primary_declaration flag is TRUE.  If ignore_registered is TRUE, a
+registered attribute does not count: those of an instance of a function
+template are given to the existing instances when they are attached to the
+template (see attach_registered_attributes_to_existing_instances).
 */
 {
   
   an_attribute_ptr  ap;
 
   for (ap = rp->source_corresp.attributes; ap != NULL; ap = ap->next) {
-    if (ap->on_primary_declaration && ap->kind != ak_registered) break;
+    if (ap->on_primary_declaration &&
+        !(ignore_registered && ap->kind == ak_registered)) break;
   }  /* for */
   return ap != NULL;
 }  /* routine_includes_definition_attribute */
@@ -7324,9 +7328,10 @@ void attach_registered_attributes_to_existing_instances(
 /*
 The registered attributes among the given list of attributes (which may be
 NULL) have just been attached to the prototype of the function template
-template_sym.  Attach a substituted copy of each to every instance of the
-template that has been created already, whether or not it has a definition.
-(An instance that is created later gets them when it is created.)
+template_sym (which can be a member function of a class template).  Attach a
+substituted copy of each to every instance of the template that has been
+created already, whether or not it has a definition.  (An instance that is
+created later gets them when it is created.)
 */
 {
   an_attribute_ptr                  ap, list = NULL, *p_list = &list;
@@ -7377,6 +7382,30 @@ on_primary_declaration flag is TRUE.
                     rp->template_arg_list, parent_class_or_null(rp),
                     /*is_partial_instantiation=*/FALSE,
                     (a_boolean*)NULL);
+  if (primary_only && inst_attr != NULL) {
+    /* The attributes of the definition may have been given to rp already
+       (when the declaration of a member template of a class that is an
+       instance was instantiated, for example): A registered attribute that
+       must match those of the declarations is not attached again. */
+    a_boolean         has_must_match = FALSE;
+    an_attribute_ptr  ap, *pp;
+    for (ap = rp->source_corresp.attributes; ap != NULL; ap = ap->next) {
+      if (is_must_match_registered_attribute(ap)) {
+        has_must_match = TRUE;
+        break;
+      }  /* if */
+    }  /* for */
+    if (has_must_match) {
+      for (pp = &inst_attr; *pp != NULL; ) {
+        if (is_must_match_registered_attribute(*pp)) {
+          account_for_registered_attribute(*pp);
+          *pp = (*pp)->next;
+        } else {
+          pp = &(*pp)->next;
+        }  /* if */
+      }  /* for */
+    }  /* if */
+  }  /* if */
   if (inst_attr != NULL) {
     attach_attributes(inst_attr, (char*)rp, iek_routine);
   }  /* if */
@@ -7558,8 +7587,14 @@ cases).
     rout_ptr->source_corresp.name_linkage = nlk_cplusplus_external;
   }  /* if */
   if (proto_rout_ptr->source_corresp.attributes != NULL &&
-      !routine_includes_definition_attribute(rout_ptr) &&
-      routine_includes_definition_attribute(proto_rout_ptr)) {
+      !routine_includes_definition_attribute(
+                rout_ptr,
+                template_sym->kind == (a_symbol_kind)sk_function_template &&
+                  template_sym == proto_sym) &&
+      routine_includes_definition_attribute(
+                proto_rout_ptr,
+                template_sym->kind == (a_symbol_kind)sk_function_template &&
+                  template_sym == proto_sym)) {
     /* Attributes were specified on the template definition after this instance
        was created by make_template_function.  Attach the definition attributes
        now. */

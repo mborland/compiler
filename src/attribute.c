@@ -5365,38 +5365,91 @@ instantiation.
 }  /* attribute_applies_to_partial_instantiation */
 
 
-static an_expr_node_ptr substitute_attribute_expr(
+static an_expr_node_ptr substitute_attribute_expr_full(
                                               an_expr_node_ptr     expr,
                                               a_template_arg_ptr   t_args,
                                               a_template_param_ptr t_params,
+                                              a_type_ptr           parent_class,
                                               a_source_position    *position,
+                                              a_ctws_options_set   options,
                                               a_boolean            *p_error,
                                               a_ctws_state         *ctws_state)
 /*
 Do template argument substitution for the given expression (which appears as
 an argument in an attribute) and return the substituted expression.  t_args
 represents the template arguments for that specialization and t_params the
-associated template parameters.  *position is the position of the expression.
-If p_error is non-NULL, *p_error is set to TRUE if the substitution results in
-an invalid entity.  If p_error is NULL, a substitution error is diagnosed as
-an error.  ctws_state is the state information for the substitution.
+associated template parameters (t_args is NULL if the entity to which the
+attribute applies is a non-template member of a class template instance).  If
+that entity is a class member, parent_class is the enclosing class: That
+parent class may itself be a template instance, and its substitutions are also
+applied first (as for the type arguments of an attribute; they may leave
+parameters of the entity itself, those of a member template, unsubstituted).
+*position is the position of the expression.  options is the set of
+substitution options.  If p_error is non-NULL, *p_error is set to TRUE if the
+substitution results in an invalid entity.  If p_error is NULL, a substitution
+error is diagnosed as an error.  ctws_state is the state information for the
+substitution.
 */
 {
   a_constant_ptr constant = local_constant();
   a_constant_ptr alloc_con;
 
-  expr = copy_template_param_expr(expr, t_args, t_params, (a_type_ptr)NULL,
-                                  position, CTWS_NON_CONSTANT_EXPR, p_error,
-                                  ctws_state, constant, &alloc_con);
-  if (expr == NULL) {
-    if (alloc_con != NULL) {
-      expr = alloc_node_for_allocated_constant(alloc_con);
-    } else {
-      expr = alloc_node_for_constant(constant);
+  if (parent_class != NULL &&
+      parent_class->variant.class_struct_union.is_template_class &&
+      !parent_class->variant.class_struct_union.is_specialized) {
+    /* If the parent class is itself a template instance (but not an explicit
+       specialization), first recursively substitute any parameters that it is
+       associated with. */
+    a_template_arg_ptr    parent_t_args = NULL;
+    a_template_param_ptr  parent_t_params;
+    a_ctws_state          parent_ctws_state;
+    init_ctws_state(&parent_ctws_state);
+    parent_ctws_state.in_parent_substitution = TRUE;
+    get_substitution_pairs_for_template_class(parent_class, &parent_t_params,
+                                              &parent_t_args);
+    expr = substitute_attribute_expr_full(
+                   expr, parent_t_args, parent_t_params,
+                   parent_class_or_null(parent_class), position,
+                   options | CTWS_PARTIAL_ARG_LIST_OKAY |
+                                                  CTWS_IN_PARENT_SUBSTITUTION,
+                   p_error, &parent_ctws_state);
+  }  /* if */
+  if (t_args != NULL && (p_error == NULL || !*p_error)) {
+    an_expr_node_ptr  copy;
+    copy = copy_template_param_expr(expr, t_args, t_params, (a_type_ptr)NULL,
+                                    position, options, p_error,
+                                    ctws_state, constant, &alloc_con);
+    if (copy == NULL) {
+      if (alloc_con != NULL) {
+        copy = alloc_node_for_allocated_constant(alloc_con);
+      } else {
+        copy = alloc_node_for_constant(constant);
+      }  /* if */
     }  /* if */
+    expr = copy;
   }  /* if */
   release_local_constant(&constant);
   return expr;
+}  /* substitute_attribute_expr_full */
+
+
+static an_expr_node_ptr substitute_attribute_expr(
+                                              an_expr_node_ptr     expr,
+                                              a_template_arg_ptr   t_args,
+                                              a_template_param_ptr t_params,
+                                              a_type_ptr           parent_class,
+                                              a_source_position    *position,
+                                              a_boolean            *p_error,
+                                              a_ctws_state         *ctws_state)
+/*
+Do template argument substitution for the given expression (which appears as
+an argument in an attribute) and return the substituted expression (see
+substitute_attribute_expr_full).
+*/
+{
+  return substitute_attribute_expr_full(expr, t_args, t_params, parent_class,
+                                        position, CTWS_NON_CONSTANT_EXPR,
+                                        p_error, ctws_state);
 }  /* substitute_attribute_expr */
 
 
@@ -5455,10 +5508,13 @@ an error.
     a_pack_expansion_stack_entry_ptr  apesep;
     a_boolean                         more_attributes;
     if (primary_only &&
-        (!ap->on_primary_declaration || ap->kind == ak_registered)) {
-      /* (A registered attribute of a definition is given to the instances
-         that already exist when it is attached to the template; see
-         attach_registered_attributes_to_existing_instances.) */
+        (!ap->on_primary_declaration ||
+         (ap->kind == ak_registered &&
+          symbol_is(template_sym, sk_function_template) &&
+          prototype_template_of(template_sym) == template_sym))) {
+      /* (A registered attribute of the definition of a function template is
+         given to the instances that already exist when it is attached to the
+         template; see attach_registered_attributes_to_existing_instances.) */
       continue;
     }  /* if */
     if (symbol_is(template_sym, sk_class_template) &&
@@ -5553,6 +5609,7 @@ an error.
                   (*p_aap)->local_expr_ref = FALSE;
                   (*p_aap)->variant.expr = substitute_attribute_expr(
                                             expr, t_args, t_params,
+                                            parent_class,
                                             &((*p_aap)->position),
                                             &err, &ctws_state);
                 }

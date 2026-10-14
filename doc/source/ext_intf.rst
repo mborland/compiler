@@ -5143,7 +5143,13 @@ the function (``int (*f(int))(double) [[...]]``), a template argument, a
 lambda, the parameters of a requires-expression and a deduction guide.  For a
 function template, the attribute is attached to the template, to every
 instance that exists, and to the instances created later, with the template
-arguments substituted.
+arguments substituted.  The same holds for a member function of a class
+template (the member of every instance of the class gets the attribute, with
+the template arguments of the class substituted, whether the attribute is
+written in the class or on the definition outside it, and whether the
+instance of the class exists before or after it).  The instances of a member
+template of a class template get the attributes when they are created (from the
+definition of the member template, when that has them).
 
 An attribute with the flag ``RAF_MUST_MATCH`` (in addition to
 ``RAF_ENTITY_ATTACHED``) is attached once: the attributes with the flag that

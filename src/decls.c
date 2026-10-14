@@ -855,9 +855,13 @@ set to TRUE before they are attached.
     }  /* if */
     attach_decl_attributes_to_entity(dps, entity_kind, entity, primary_decl);
     if (dps->sym != NULL &&
-        dps->sym->kind == (a_symbol_kind)sk_function_template) {
-      /* The instances of the template that were created before these
-         attributes were attached do not have them yet. */
+        (dps->sym->kind == (a_symbol_kind)sk_function_template ||
+         (dps->sym->kind == (a_symbol_kind)sk_member_function &&
+          dps->sym->variant.routine.instance_ptr != NULL &&
+          dps->sym->variant.routine.instance_ptr->template_info != NULL))) {
+      /* The instances of the template (or of the member of a class template)
+         that were created before these attributes were attached do not have
+         them yet. */
       attach_registered_attributes_to_existing_instances(
                           dps->sym, dps->id_attributes != NULL ?
                                       dps->id_attributes :

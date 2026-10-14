@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=12 --gnu_version=150000 --c23 Test_name.c
+"Test_name.c", line 33: error: attribute "edg::r_nonull" does not apply to a null statement
+  void f4(void) { [[edg::r_nonull(1)]]; }
+                    ^
+
+1 error detected in the compilation of "Test_name.c".

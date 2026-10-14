@@ -4134,9 +4134,17 @@ scope.  This routine is called at the beginning of such statements,
 and pushes a generated block statement.
 */
 {
+  /* Attributes that were scanned in front of the statement belong to the
+     iteration or selection statement itself, not to the generated block
+     that surrounds it.  Keep them out of the way while the block is added,
+     and attach them to the statement that will be added inside the block. */
+  an_attribute_ptr  attributes = struct_stmt_stack_top().prefix_attributes;
+
+  struct_stmt_stack_top().prefix_attributes = NULL;
   (void)start_block_statement(/*generated_statement=*/TRUE,
                               /*is_statement_expr=*/FALSE,
                               (an_object_lifetime_ptr)NULL);
+  struct_stmt_stack_top().prefix_attributes = attributes;
   /* Move any pragmas for the statement (previously selected in
      "statement") to the new level in the scope stack. */
   scope_stack[depth_scope_stack].curr_construct_pragmas =

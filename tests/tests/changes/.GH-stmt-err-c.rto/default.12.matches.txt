@@ -1,0 +1,4 @@
+Matches for "(line 24: error: attribute\s+"edg::r_loop"\s+requires\s+an\s+iteration\s+statement|line 27: error: attribute\s+"edg::r_null"\s+requires\s+a\s+null\s+statement|line 30: error: attribute\s+"edg::r_noloop"\s+does\s+not\s+apply\s+to\s+an\s+iteration\s+statement|line 33: error: attribute\s+"edg::r_nonull"\s+does\s+not\s+apply\s+to\s+a\s+null\s+statement)":
+  <-----------------------------------------------------------------------------
+  line 33: error: attribute "edg::r_nonull" does not apply to a null statement
+  ----------------------------------------------------------------------------->

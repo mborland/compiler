@@ -5104,6 +5104,17 @@ Each attribute is described by:
   entity is an error.
 * *flags*: ``RAF_...`` flags.  There are none yet.
 
+A target for statements can also name a property of the statement: ``s:+n!``
+applies to a null statement only, ``s:+i!`` to an iteration statement
+(``while``, ``do``, ``for`` or range-based ``for``) only, and ``s:-n!`` and
+``s:-i!`` to any statement except those.  An attribute in front of an
+iteration or selection statement applies to that statement (in C99 and later
+too, where the front end surrounds it with an implicit block).  The names in the
+arguments of an attribute in front of a ``for`` statement are looked up before
+the init-statement is scanned, so they never denote the variables that the
+init-statement declares (a variable of an enclosing scope with the same name is
+the one that is found).
+
 The namespace has ``RANF_CLOSED`` when a name that is not registered in it is
 to be an error (``unknown attribute``) instead of an unrecognized attribute.
 

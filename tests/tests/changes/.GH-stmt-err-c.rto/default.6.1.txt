@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=6 --clang_version=210000 --c23 Test_name.c
+"Test_name.c", line 27: error: attribute "edg::r_null" requires a null statement
+  void f2(int n) { [[edg::r_null(n > 0)]] while (n) { --n; } }
+                     ^
+
+1 error detected in the compilation of "Test_name.c".

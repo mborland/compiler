@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=33 --instantiate=used --gnu_version=150000 --c++20 Test_name.c
+"Test_name.c", line 53: error: attribute "edg::r_loop" requires an iteration statement
+  template <class T> void f11(T v) { [[edg::r_loop(v > 0)]] if (v) { } }
+                                       ^
+
+1 error detected in the compilation of "Test_name.c".

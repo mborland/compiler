@@ -1,6 +1,25 @@
 Version 7.1
 
 10/14/26  [GH #?]
+Attribute target constraints for null statements and iteration statements
+
+The target description of an attribute (see an_attr_appl_descr in
+attribute.c) can now constrain a statement: "s:+n" requires a null statement,
+"s:-n" excludes one, "s:+i" requires an iteration statement (a while, do, for
+or range-based for statement) and "s:-i" excludes one.  Like the other
+property switches, a switch followed by "!" is an error when it is not met.
+(The names in the arguments of an attribute in front of a for statement are
+looked up before its init-statement, so they do not denote its variables.)
+In C99 and later, an attribute in front of an iteration or selection
+statement used to be attached to the block that the front end generates around
+the statement; it is now attached to the statement itself.  For example, for
+an attribute that is registered with the target "s:+i!":
+
+  [[mine::loop(true)]] while (b) { }   // OK.
+  [[mine::loop(true)]] if (b) { }      // Error: attribute "mine::loop"
+                                       //   requires an iteration statement
+
+10/14/26  [GH #?]
 Attribute namespaces and attributes registered by an embedding program
 
 A program that embeds the front end can now register a namespace of attributes

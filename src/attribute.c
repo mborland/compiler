@@ -523,7 +523,9 @@ typedef struct an_attr_appl_descr {
 			     "n"  : namespaces
 			       (no property switches)
 			     "s"  : statements
-			       (no property switches)
+			       "n"  : null statement
+			       "i"  : iteration statement ("while", "do",
+			              "for" or range-based "for")
 			     "l"  : labels
 			       (no property switches)
 			     "a"  : asm declarations/statements
@@ -1549,8 +1551,8 @@ would be ignored).
       case 'r': props = "mipvx"; break;
       case 'v': props = "ahlrx"; break;
       case 'd': props = "b"; break;
-      case 's': case 'p': case 'u': case 'n': case 'l': case 'a': case 'C':
-      case 'E':
+      case 's': props = "ni"; break;
+      case 'p': case 'u': case 'n': case 'l': case 'a': case 'C': case 'E':
         break;
       default:
         ok = FALSE;
@@ -4021,16 +4023,96 @@ attribute ap applied to the given routine matches those constraints.
 }  /* check_simple_routine_constraints */
 
 
+static a_boolean is_iteration_statement(a_statement_ptr  statement)
+/*
+Return TRUE if the given statement is a "while", "do", "for" or range-based
+"for" statement (or the equivalent in a dialect that has more of them).
+*/
+{
+  a_boolean  result;
+
+  switch (statement->kind) {
+    case stmk_while:
+    case stmk_end_test_while:
+    case stmk_for:
+    case stmk_range_based_for:
+#if MICROSOFT_EXTENSIONS_ALLOWED
+    case stmk_for_each:
+#endif /* MICROSOFT_EXTENSIONS_ALLOWED */
+#if UPC_EXTENSIONS_ALLOWED
+    case stmk_upc_forall:
+#endif /* UPC_EXTENSIONS_ALLOWED */
+      result = TRUE;
+      break;
+    default:
+      result = FALSE;
+      break;
+  }  /* switch */
+  return result;
+}  /* is_iteration_statement */
+
+
 static void check_simple_statement_constraints(
                                          a_const_char                *constr,
-                                         ARG_UNUSED an_attribute_ptr ap,
-                                         ARG_UNUSED a_statement_ptr  statement)
+                                         an_attribute_ptr            ap,
+                                         a_statement_ptr             statement)
 /*
 constr encodes a simple target constraint for a statement.  Check that the
 attribute ap applied to the given statement matches those constraints.
 */
 {
   check_assertion(constr[0] == 's');
+  if (constr[1] == ':') {
+    /* Statement property switches follow.  E.g., "s:+i" indicates the
+       statement must be an iteration statement. */
+    an_error_code  err = ec_no_error;
+    constr += 2;
+    for (;;) {
+      if (*constr == '\0' || *constr == '|') break;
+      check_attr_config(constr[0] == '-' || constr[0] == '+',
+                        ap, "invalid attribute constraint configuration");
+      if (constr[1] == 'n') {
+        /* Check for a null statement. */
+        if (statement->kind == stmk_empty) {
+          if (constr[0] == '-') {
+            err = ec_attr_disallows_null_statement;
+          }  /* if */
+        } else {
+          if (constr[0] == '+') {
+            err = ec_attr_requires_null_statement;
+          }  /* if */
+        }  /* if */
+        constr += 2;
+      } else if (constr[1] == 'i') {
+        /* Check for an iteration statement. */
+        if (is_iteration_statement(statement)) {
+          if (constr[0] == '-') {
+            err = ec_attr_disallows_iteration_statement;
+          }  /* if */
+        } else {
+          if (constr[0] == '+') {
+            err = ec_attr_requires_iteration_statement;
+          }  /* if */
+        }  /* if */
+        constr += 2;
+      } else {
+        unexpected_condition_str2(
+           "invalid property code for constraint configuration of attribute",
+           attribute_display_name(ap));
+      }  /* if */
+      if (err != ec_no_error) break;
+      if (*constr == '!') {
+        ++constr;
+      }  /* if */
+    }  /* for */
+    if (err != ec_no_error) {
+      /* Issue the diagnostic. */
+      an_error_severity  sev = *constr == '!' ? es_error : es_warning;
+      pos_st_diagnostic(sev, err, &ap->position, attribute_display_name(ap));
+      /* Treat the attribute as unrecognized for error recovery purposes. */
+      make_attr_unrecognized(ap);
+    }  /* if */
+  }  /* if */
 }  /* check_simple_statement_constraints */
 
 
@@ -11747,7 +11829,11 @@ known_attr_table are tested differently and are not described here.)
 static constexpr an_attr_registration edg_test_attributes[] = {
   { "r_fn", "", "r", RAF_NO_FLAGS },
   { "r_stmt", "(Xb)", "s", RAF_NO_FLAGS },
-  { "r_expr", "(X)", "s", RAF_NO_FLAGS },
+  { "r_expr", "(X)", "s:+n!", RAF_NO_FLAGS },
+  { "r_null", "(Xb)", "s:+n!", RAF_NO_FLAGS },
+  { "r_loop", "(Xb)", "s:+i!", RAF_NO_FLAGS },
+  { "r_nonull", "(Xb)", "s:-n!", RAF_NO_FLAGS },
+  { "r_noloop", "(Xb)", "s:-i!", RAF_NO_FLAGS },
   { "requires", "(Xb)", "r", RAF_NO_FLAGS },
   { NULL, NULL, NULL, RAF_NO_FLAGS }
 };

@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=9 --gnu_version=150000 --c23 Test_name.c
+"Test_name.c", line 24: error: attribute "edg::r_loop" requires an iteration statement
+  void f1(int n) { [[edg::r_loop(n > 0)]] if (n) { } }
+                     ^
+
+1 error detected in the compilation of "Test_name.c".

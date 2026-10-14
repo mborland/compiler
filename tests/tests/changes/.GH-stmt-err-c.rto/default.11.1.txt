@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=11 --gnu_version=150000 --c23 Test_name.c
+"Test_name.c", line 30: error: attribute "edg::r_noloop" does not apply to an iteration statement
+  void f3(int n) { [[edg::r_noloop(n > 0)]] for (int i = 0; i < n; ++i) { } }
+                     ^
+
+1 error detected in the compilation of "Test_name.c".

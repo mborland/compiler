@@ -3682,5 +3682,9 @@ ec_tag_redefined_differently;;"this declaration of %n does not declare the same 
 ec_attr_function_parameter_pack;;"attribute %sq cannot refer to a function parameter pack"
 ec_attr_parameter_after_pack;;"attribute %sq cannot refer to a function parameter that follows a function parameter pack"
 ec_attr_pack_expansion;;"attribute %sq cannot be a pack expansion or have an argument that is one"
+ec_attr_requires_null_statement;;"attribute %sq requires a null statement"
+ec_attr_disallows_null_statement;;"attribute %sq does not apply to a null statement"
+ec_attr_requires_iteration_statement;;"attribute %sq requires an iteration statement"
+ec_attr_disallows_iteration_statement;;"attribute %sq does not apply to an iteration statement"
  ###############################################################################
 

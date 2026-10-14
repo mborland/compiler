@@ -1,6 +1,21 @@
 Version 7.1
 
 10/14/26  [GH #?]
+Attributes after the parameter list of an abbreviated function template
+
+An attribute after the parameter list of a function declaration that has a
+parameter of type "auto" (an abbreviated function template) was not scanned
+when the declaration was first parsed: the front end took the opening "[[" for
+an array declarator and issued an error.  The attribute is now skipped there
+and scanned when the declaration is parsed again as a template.  For example,
+with --gnu_version=150000:
+
+  void f(auto x) [[gnu::noinline]];   // Previously an error:
+                                      // "two consecutive left square
+                                      // brackets always introduce an
+                                      // attribute list ..."
+
+10/14/26  [GH #?]
 Attribute target constraints for null statements and iteration statements
 
 The target description of an attribute (see an_attr_appl_descr in

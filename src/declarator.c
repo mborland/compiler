@@ -4509,7 +4509,10 @@ an error if a default argument expression is encountered.
          "auto" parameters in ways that cannot be resolved at this time.  E.g.:
              void f(auto ... ps)->decltype((0 + ... + ps));
          Here the pack expansion in the trailing return type cannot be
-         performed until the template declaration context is set up. */
+         performed until the template declaration context is set up.  For the
+         same reason, skip attributes that follow the parameter list (they
+         are scanned when the declarator is scanned again). */
+      skip_over_attributes();
       goto done;
     } else if (state->for_requires_expr_params && extra_info->has_ellipsis) {
       pos_error(ec_requires_expr_ellipsis_param, &ellipsis_pos);

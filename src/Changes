@@ -1,6 +1,33 @@
 Version 7.1
 
 10/14/26  [GH #?]
+Registered attributes after a function's parameter list
+
+A registered attribute (see the entry for attribute registration) can have the
+flag RAF_ENTITY_ATTACHED.  When it is written after the parameter list of the
+top-level declarator of a function declaration, it is now attached to the
+function (with syntactic location al_post_func) instead of to the function
+type, so the attributes of all the declarations of the function are kept, in
+order; a function template gives them to its instances, including those that
+already exist.  After any other function declarator (pointer to function,
+typedef, returned function type, lambda, requires-expression parameters,
+deduction guide, template argument) the attribute is an error, and so it is
+at block scope and after the identifier list of an old-style function
+definition.  With the flag
+RAF_MUST_MATCH too, the attributes of that kind on a declaration must be
+equivalent to those that the function already has, or it is an error, and
+identical ones are not attached again (a declaration with none is fine).  An
+explicit specialization of a function template must have the same attributes
+as the template, in whichever order they are declared.  For example, for
+"pre" registered with both flags:
+
+  int f(int x) [[mine::pre(x > 0)]];
+  int f(int y) [[mine::pre(y > 0)]] { return y; }   // OK; one attribute.
+  int f(int z) [[mine::pre(z > 1)]];   // Error: attribute "mine::pre" does not
+                                       // match the attributes of an earlier
+                                       // declaration
+
+10/14/26  [GH #?]
 Attributes after the parameter list of an abbreviated function template
 
 An attribute after the parameter list of a function declaration that has a

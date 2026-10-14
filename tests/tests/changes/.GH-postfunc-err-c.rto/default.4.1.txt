@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=4 --c23 Test_name.c
+"Test_name.c", line 25: error: attribute "edg::r_pre" does not apply here
+  int (*e4(int x))(double d) [[edg::r_pre(d > 0)]];
+                               ^
+
+1 error detected in the compilation of "Test_name.c".

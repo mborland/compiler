@@ -7271,17 +7271,85 @@ in one-instantiation-per-object mode.
 static a_boolean routine_includes_definition_attribute(a_routine_ptr  rp)
 /*
 Return TRUE if the given routine entry has an attribute whose
-on_primary_declaration flag is TRUE.
+on_primary_declaration flag is TRUE.  (A registered attribute does not count:
+those are given to the existing instances when they are attached to the
+template; see attach_registered_attributes_to_existing_instances.)
 */
 {
   
   an_attribute_ptr  ap;
 
   for (ap = rp->source_corresp.attributes; ap != NULL; ap = ap->next) {
-    if (ap->on_primary_declaration) break;
+    if (ap->on_primary_declaration && ap->kind != ak_registered) break;
   }  /* for */
   return ap != NULL;
 }  /* routine_includes_definition_attribute */
+
+
+static void attach_registered_list_to_instance(
+                               a_routine_ptr                     rp,
+                               a_symbol_ptr                      template_sym,
+                               a_template_symbol_supplement_ptr  tssp,
+                               an_attribute_ptr                  list)
+/*
+rp represents an instance of the template associated with template_sym; tssp
+is the supplement of the template whose prototype has the attributes in list
+(which are all registered attributes), and whose parameters they use.  Attach
+a copy of the attributes with the template arguments substituted to rp.
+*/
+{
+  an_attribute_ptr  inst_attr;
+
+  inst_attr = copy_of_attributes_with_substitution(
+                    list, /*primary_only=*/FALSE, template_sym,
+                    decl_cache_for_function_template(tssp)->
+                                                     decl_info->parameters,
+                    rp->template_arg_list, parent_class_or_null(rp),
+                    /*is_partial_instantiation=*/FALSE, (a_boolean*)NULL);
+  if (inst_attr != NULL) {
+    /* An instance (an explicit specialization, say) that has such attributes
+       already must have the same ones. */
+    an_attribute_ptr  no_prefix_attrs = NULL;
+    reconcile_must_match_attributes(rp, &inst_attr, &no_prefix_attrs);
+    if (inst_attr != NULL) {
+      attach_attributes(inst_attr, (char*)rp, iek_routine);
+    }  /* if */
+  }  /* if */
+}  /* attach_registered_list_to_instance */
+
+
+void attach_registered_attributes_to_existing_instances(
+                                          a_symbol_ptr      template_sym,
+                                          an_attribute_ptr  attributes)
+/*
+The registered attributes among the given list of attributes (which may be
+NULL) have just been attached to the prototype of the function template
+template_sym.  Attach a substituted copy of each to every instance of the
+template that has been created already, whether or not it has a definition.
+(An instance that is created later gets them when it is created.)
+*/
+{
+  an_attribute_ptr                  ap, list = NULL, *p_list = &list;
+  a_template_symbol_supplement_ptr  tssp;
+  a_template_instance_ptr           tip;
+
+  for (ap = attributes; ap != NULL; ap = ap->next) {
+    if (ap->kind == ak_registered) {
+      copy_attribute(ap, *p_list);
+      p_list = &(*p_list)->next;
+    }  /* if */
+  }  /* for */
+  if (list != NULL) {
+    tssp = template_supplement_for_symbol(template_sym);
+    for (tip = tssp->variant.function.instantiations; tip != NULL;
+         tip = tip->next) {
+      a_routine_ptr  rp = tip->instance_sym->variant.routine.ptr;
+      if (rp != NULL) {
+        attach_registered_list_to_instance(rp, template_sym, tssp, list);
+      }  /* if */
+    }  /* for */
+  }  /* if */
+}  /* attach_registered_attributes_to_existing_instances */
 
 
 static void attach_attributes_to_routine_instance(

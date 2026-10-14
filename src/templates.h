@@ -886,6 +886,10 @@ extern a_type_ptr wrapup_function_template_argument_deduction(
 				a_ctws_options_set   ctws_options,
 				uint32_t	     param_count);
 
+extern void attach_registered_attributes_to_existing_instances(
+                                          a_symbol_ptr      template_sym,
+                                          an_attribute_ptr  attributes);
+
 extern a_symbol_ptr find_template_function(
 			a_symbol_ptr		templ_sym,
                         a_template_arg_ptr	*new_list,

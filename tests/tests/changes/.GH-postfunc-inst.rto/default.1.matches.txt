@@ -1,0 +1,21 @@
+Matches for "^kind:\s+registered\nnext:\s+NULL\nfamily:\s+std\nsyntactic_location:\s+post func\non_primary_declaration:\s+TRUE\nname:\s+file-scope other-text@X+: "r_pre"":
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      post func
+  on_primary_declaration:  TRUE
+  name:                    file-scope other-text@XXXXXXXX: "r_pre"
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      post func
+  on_primary_declaration:  TRUE
+  name:                    file-scope other-text@XXXXXXXX: "r_pre"
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*\nkind:\s+registered\nnext:\s+file-scope attribute@X+\nfamily:\s+std\nsyntactic_location:\s+post func\n(on_primary_declaration:\s+TRUE\n)?name:\s+file-scope other-text@X+: "r_pre")":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

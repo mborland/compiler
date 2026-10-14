@@ -1,0 +1,8 @@
+Matches for "(line 18: error: attribute\s+"edg::r_pre"\s+does\s+not\s+apply\s+here|line 22: error: attribute\s+"edg::r_pre"\s+does\s+not\s+apply\s+here|line 30: error: attribute\s+"edg::r_pre"\s+does\s+not\s+match\s+the\s+attributes\s+of\s+an\s+earlier\s+declaration|line 36: error: attribute\s+"edg::r_pre"\s+does\s+not\s+match\s+the\s+attributes\s+of\s+an\s+earlier\s+declaration|line 44: error: attribute\s+"edg::r_pre"\s+does\s+not\s+match\s+the\s+attributes\s+of\s+an\s+earlier\s+declaration|line 48: error: (expression\s+must\s+have\s+class\s+type\s+but\s+it\s+has\s+type\s+"int"|bad\s+attribute\s+argument\s+substitution)|line 55: error: bad\s+attribute\s+argument\s+substitution|line 60: error: attribute\s+"edg::r_pre"\s+does\s+not\s+match\s+the\s+attributes\s+of\s+an\s+earlier\s+declaration|line 64: error: attribute\s+"edg::r_pre"\s+does\s+not\s+apply\s+here)":
+  <-----------------------------------------------------------------------------
+  line 18: error: attribute "edg::r_pre" does not apply here
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*line 64: error: attribute\s+does\s+not\s+apply\s+to\s+any\s+entity)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

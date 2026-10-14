@@ -3,7 +3,7 @@
 //remark:[GH #?] Errors in registered attributes in C
 //require:INCLUDE_EDG_TEST_ATTRIBUTES 1
 //cases:5
-//match_regex:(line 15: error: unknown\s+attribute\s+"edg::r_stmtx"|line 18: error: identifier\s+"undeclared_c2"\s+is\s+undefined|line 21: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here|line 24: error: attribute\s+"edg::r_fn"\s+does\s+not\s+take\s+arguments|line 28: error: attribute\s+"edg::requires"\s+does\s+not\s+apply\s+here)
+//match_regex:(line 15: error: unknown\s+attribute\s+"edg::r_stmtx"|line 18: error: identifier\s+"undeclared_c2"\s+is\s+undefined|line 21: error: attribute\s+"edg::r_fn"\s+does\s+not\s+apply\s+here|line 24: error: attribute\s+"edg::r_fn"\s+does\s+not\s+take\s+arguments|line 28: error: attribute\s+"edg::r_stmt"\s+does\s+not\s+apply\s+here)
 // 10/14/26  [GH #?]
 //
 // Registered attributes are scanned in C23 as in C++ (see GH-reg-err).  Every
@@ -23,7 +23,7 @@ void f2(void) { [[edg::r_stmt(undeclared_c2)]]; }
 // Arguments on an attribute that takes none.
 [[edg::r_fn(1)]] int f4(void);
 #elif TEST_NUMBER == 5
-// The attribute of a function after its parameter list (the attribute is on
-// the function type, which a routine attribute does not accept).
-int f5(int x) [[edg::requires(x > 0)]];
+// The attribute of a function after its parameter list (a statement
+// attribute is on the function type, where it does not apply).
+int f5(int x) [[edg::r_stmt(x > 0)]];
 #endif

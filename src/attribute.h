@@ -399,6 +399,23 @@ typedef unsigned int an_attr_registration_flag_set;
 Flag values that describe a registered attribute.
 */
 #define RAF_NO_FLAGS  0x0
+#define RAF_ENTITY_ATTACHED  0x1
+	/* The attribute appertains to a function (its target must include
+	   "r").  When it is written after the parameter list of the top-level
+	   declarator of a function declaration, it is attached to the function
+	   (and not to the function type), with syntactic location
+	   al_post_func, and is recorded again on every redeclaration of the
+	   function (the attributes accumulate in declaration order). */
+#define RAF_MUST_MATCH  0x2
+	/* The attribute is an entity-attached attribute (RAF_ENTITY_ATTACHED
+	   is also required) that must be the same on every declaration of the
+	   function that has any such attribute: the attributes with this flag
+	   on one declaration form an ordered list, the first declaration that
+	   has such a list gives the list to the function, and the list on each
+	   later declaration must be equivalent to it (attributes with the same
+	   name and equivalent arguments, compared by position of parameters),
+	   or it is an error.  A declaration that has no such attribute is
+	   always fine. */
 
 typedef struct an_attr_registration {
   /* The description of one registered attribute. */
@@ -465,6 +482,15 @@ extern a_boolean registered_attribute_was_diagnosed(an_attribute_ptr  ap);
 
 extern void note_attribute_copy(an_attribute_ptr  from,
                                 an_attribute_ptr  to);
+
+extern a_boolean attribute_is_entity_attached(an_attribute_ptr  ap);
+
+extern a_boolean is_must_match_registered_attribute(an_attribute_ptr  ap);
+
+extern void reconcile_must_match_attributes(
+                                          a_routine_ptr     rp,
+                                          an_attribute_ptr  *p_id_attrs,
+                                          an_attribute_ptr  *p_prefix_attrs);
 
 extern void reject_registered_class_attributes(an_attribute_ptr  attributes);
 

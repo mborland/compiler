@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=2 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 25: error: attribute "edg::r_pre" cannot refer to a function parameter that follows a function parameter pack
+  int f2(auto... a, int y) [[edg::r_pre(y >= 0)]];
+                                        ^
+
+1 error detected in the compilation of "Test_name.c".

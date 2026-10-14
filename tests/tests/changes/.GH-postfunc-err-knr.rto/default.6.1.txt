@@ -1,0 +1,10 @@
+fe_only -DTEST_NUMBER=6 --c23 --gnu_version=150000 Test_name.c
+"Test_name.c", line 19: warning: identifier-only parameters can only be used in old-style function definitions, which are nonstandard since C23
+  int f2(x) [[edg::r_pre(x > 0)]] int x; { return x; }
+         ^
+
+"Test_name.c", line 19: error: attribute "edg::r_pre" does not apply here
+  int f2(x) [[edg::r_pre(x > 0)]] int x; { return x; }
+              ^
+
+1 error detected in the compilation of "Test_name.c".

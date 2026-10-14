@@ -35,7 +35,8 @@ declarator.c -- Scanning of declarators.
 BEGIN_EDG_NAMESPACE
 
 static void scan_declarator_attributes(a_decl_parse_state  *dps,
-                                       a_type_ptr          *p_type)
+                                       a_type_ptr          *p_type,
+                                       a_boolean           is_function_decl)
 /*
 Scan attributes that appear after a declarator component other than the
 declarator-id.  *p_type is the type formed by the particular declarator
@@ -46,7 +47,13 @@ GCC allows attributes after array and function declarators only for non-nested
 declarators.  Such attributes are placed on the state->id_attributes list
 (i.e., they are treated as appertaining to the declared entity, rather than to
 the type formed by the declarator component as would be the case with
-standard-attribute syntax).
+standard-attribute syntax).  An entity-attached registered attribute (see
+RAF_ENTITY_ATTACHED in attribute.h) after the parameter list is treated like
+that too, if is_function_decl is TRUE (the declarator that was just scanned is
+the top-level declarator of the declaration of a function that is not in a
+function body, and has a prototyped parameter list, not a list of identifiers):
+it is recorded on the id_attributes list (and later attached to the function)
+with its syntactic location al_post_func.
 */
 {
   a_type_ptr                      type = *p_type;
@@ -99,10 +106,24 @@ standard-attribute syntax).
     p_to = last_attribute_link(&dps->id_attributes);
     do {
       ap = *p_from;
-      if ((is_gcc_attribute(ap) ||
-           ((gnu_mode || ms_extensions) && ap->family == af_alignas)) &&
-          !is_type_transforming_attribute(ap) &&
-          ap->kind != ak_enable_if) {
+      if (ap->kind == ak_registered && syn_loc == al_post_func &&
+          is_function_decl && !dps->in_nested_declarator &&
+          !dps->is_lambda && !dps->for_requires_expr_params &&
+          !dps->is_deduction_guide &&
+          innermost_function_scope == NULL &&
+          skip_typerefs_not_typedefs(type)->variant.routine.extra_info->
+                                                              prototyped &&
+          attribute_is_entity_attached(ap)) {
+        /* The attribute is the function's (not its type's). */
+        *p_from = ap->next;
+        *p_to = ap;
+        p_to = &ap->next;
+        ap->next = NULL;
+      } else if ((is_gcc_attribute(ap) ||
+                  ((gnu_mode || ms_extensions) &&
+                   ap->family == af_alignas)) &&
+                 !is_type_transforming_attribute(ap) &&
+                 ap->kind != ak_enable_if) {
         /* GNU attributes following nested array or function declarators elicit
            an error in GCC. */
         if (dps->in_nested_declarator && !error_issued &&
@@ -4542,7 +4563,8 @@ an error if a default argument expression is encountered.
       }  /* if */
     }  /* if */
   }  /* if */
-  scan_declarator_attributes(state, new_type_ptr);
+  scan_declarator_attributes(state, new_type_ptr,
+                             is_top_level_declarator && !is_typedef_decl);
 done:
   /* Pop the function prototype scope if needed. */
   if (must_pop_function_prototype_scope) pop_scope();
@@ -5101,7 +5123,7 @@ constant.
   (void)required_token(tok_rbracket, ec_exp_rbracket);
   remove_stop_token(tok_rbracket);
   copy_source_position(start_pos, error_position);
-  scan_declarator_attributes(dps, new_type_ptr);
+  scan_declarator_attributes(dps, new_type_ptr, /*is_function_decl=*/FALSE);
   release_local_constant(&constant);
   db_exit();
 }  /* array_declarator */
@@ -6225,7 +6247,8 @@ Microsoft extended decl modifiers are also scanned, but they are ignored
         scan_and_discard_attributes(severity, ec_attribute_not_allowed);
       }  /* if */
     }  /* if */
-    scan_declarator_attributes(state, &complete_type);
+    scan_declarator_attributes(state, &complete_type,
+                               /*is_function_decl=*/FALSE);
     ref_to_ref_allowed = FALSE;
     /* Keep looping as long as there are pointer declarators. */
   }  /* for */

@@ -5102,7 +5102,8 @@ Each attribute is described by:
   example ``"r"`` for a routine, ``"v"`` for a variable, ``"s"`` for a
   statement, and ``"r|v"`` for either).  An attribute on another kind of
   entity is an error.
-* *flags*: ``RAF_...`` flags.  There are none yet.
+* *flags*: ``RAF_...`` flags: ``RAF_NO_FLAGS``, ``RAF_ENTITY_ATTACHED`` and
+  ``RAF_MUST_MATCH`` (see below).
 
 A target for statements can also name a property of the statement: ``s:+n!``
 applies to a null statement only, ``s:+i!`` to an iteration statement
@@ -5117,6 +5118,49 @@ the one that is found).
 
 The namespace has ``RANF_CLOSED`` when a name that is not registered in it is
 to be an error (``unknown attribute``) instead of an unrecognized attribute.
+
+An attribute written after the parameter list of a function declaration
+appertains, in the standard, to the function type.  The type does not
+survive a redeclaration of the function: the attributes of only one
+declaration are kept on the function type.  An attribute with the flag
+``RAF_ENTITY_ATTACHED`` (its target must include ``r``, for a routine) written
+there is attached to the function itself instead, with the syntactic location
+``al_post_func``, so the attributes of every declaration of the function are
+kept, in the order of the declarations.  The parameters of the function are in
+scope in its arguments (they are denoted by their position, so a
+redeclaration can rename them), and so is ``this`` in a member function.  The
+attribute is attached to the function only when it follows the parameter list
+of the top-level declarator of a function declaration that is not a block-scope
+declaration (a function declared in a function body) and whose parameter list
+is a parameter-declaration clause (an attribute on a block-scope declaration,
+or after the identifier list of an old-style function definition, is an
+error; the member functions of a class defined in a function body are not
+block-scope declarations, and get the attribute).  After any other
+function declarator it is an error (as for any registered attribute whose
+target does not match): that is the case for a pointer to function, a
+typedef or alias declaration of a function type, a function type returned by
+the function (``int (*f(int))(double) [[...]]``), a template argument, a
+lambda, the parameters of a requires-expression and a deduction guide.  For a
+function template, the attribute is attached to the template, to every
+instance that exists, and to the instances created later, with the template
+arguments substituted.
+
+An attribute with the flag ``RAF_MUST_MATCH`` (in addition to
+``RAF_ENTITY_ATTACHED``) is attached once: the attributes with the flag that
+are written on a declaration form a list, the first declaration that has such
+a list gives it to the function, and the list of every later declaration
+that has one must be equivalent to it, element by element (the same
+attributes in the same order, with equivalent arguments, in which a parameter
+is its position), or it is an error that names the earlier declaration.  An
+identical list is not attached again, so the function has no duplicates, and
+a declaration that has no such attribute is fine.  The other flagged
+attributes accumulate.  An explicit specialization of a function template is
+a declaration of an instance of the template: it has the template's
+attributes with the template arguments substituted, and the attributes it is
+declared with must be equivalent to those, whichever of the template's
+declarations and the specialization come first.  A function with C language
+linkage declared in two namespaces is one function; in GNU emulation the front
+end has a routine for each declaration, and they are not compared.
 
 The front end treats a registered attribute more strictly than the attributes
 it defines:

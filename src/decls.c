@@ -784,6 +784,13 @@ be unnamed).
     if (dps->secondary_declarator) {
       dps->prefix_attributes = copy_of_attributes_list(dps->prefix_attributes);
     }  /* if */
+    if (entity_kind == iek_routine && entity != NULL) {
+      /* Registered attributes that must be the same on every declaration are
+         attached only on the first declaration that has any. */
+      reconcile_must_match_attributes((a_routine_ptr)entity,
+                                      &dps->id_attributes,
+                                      &dps->prefix_attributes);
+    }  /* if */
     attach_parse_state_to_attributes(dps);
     if (primary_decl) mark_primary_decl_attributes(dps->id_attributes);
     attach_attributes(dps->id_attributes, entity, entity_kind);
@@ -847,6 +854,15 @@ set to TRUE before they are attached.
       entity = il_entry_for_symbol(dps->sym, &entity_kind);
     }  /* if */
     attach_decl_attributes_to_entity(dps, entity_kind, entity, primary_decl);
+    if (dps->sym != NULL &&
+        dps->sym->kind == (a_symbol_kind)sk_function_template) {
+      /* The instances of the template that were created before these
+         attributes were attached do not have them yet. */
+      attach_registered_attributes_to_existing_instances(
+                          dps->sym, dps->id_attributes != NULL ?
+                                      dps->id_attributes :
+                                      dps->prefix_attributes);
+    }  /* if */
   }  /* if */
 done:;
 }  /* attach_decl_attributes */

@@ -3686,5 +3686,6 @@ ec_attr_requires_null_statement;;"attribute %sq requires a null statement"
 ec_attr_disallows_null_statement;;"attribute %sq does not apply to a null statement"
 ec_attr_requires_iteration_statement;;"attribute %sq requires an iteration statement"
 ec_attr_disallows_iteration_statement;;"attribute %sq does not apply to an iteration statement"
+ec_attr_redeclaration_mismatch;;"attribute %sq does not match the attributes of an earlier declaration"
  ###############################################################################
 

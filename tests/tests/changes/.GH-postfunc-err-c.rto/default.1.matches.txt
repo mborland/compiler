@@ -1,0 +1,4 @@
+Matches for "(line 16: error: attribute\s+"edg::r_pre"\s+does\s+not\s+match\s+the\s+attributes\s+of\s+an\s+earlier\s+declaration|line 19: error: attribute\s+"edg::r_pre"\s+does\s+not\s+apply\s+here|line 22: error: attribute\s+"edg::r_pre"\s+does\s+not\s+apply\s+here|line 25: error: attribute\s+"edg::r_pre"\s+does\s+not\s+apply\s+here|line 28: error: identifier\s+"x5"\s+is\s+undefined)":
+  <-----------------------------------------------------------------------------
+  line 16: error: attribute "edg::r_pre" does not match the attributes of an earlier declaration
+  ----------------------------------------------------------------------------->

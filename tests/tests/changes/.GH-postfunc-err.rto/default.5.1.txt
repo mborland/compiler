@@ -1,0 +1,7 @@
+fe_only -DTEST_NUMBER=5 --c++20 Test_name.c
+"Test_name.c", line 39: error: attribute "edg::r_pre" does not match the attributes of an earlier declaration
+            the other declaration is at line 38
+  int M5::mm(int a) [[edg::r_pre(a > 1)]] { return a; }
+                      ^
+
+1 error detected in the compilation of "Test_name.c".

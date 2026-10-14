@@ -1,0 +1,8 @@
+Matches for "line 19: error: (expected\s+an\s+expression|attribute\s+"edg::r_pre"\s+does\s+not\s+apply\s+here|identifier-only\s+parameters\s+can\s+only\s+be\s+used\s+in\s+old-style\s+function\s+definitions)":
+  <-----------------------------------------------------------------------------
+  line 19: error: expected an expression
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*internal\s+error)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

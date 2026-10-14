@@ -1,0 +1,41 @@
+Matches for "^kind:\s+registered\nnext:\s+NULL\nfamily:\s+std\nsyntactic_location:\s+post func\n(on_primary_declaration:\s+TRUE\n)?name:\s+file-scope other-text@X+: "r_pre"\nnamespace_name:\s+file-scope other-text@X+: "edg"\narguments:\s+file-scope attribute-arg@X+":
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      post func
+  name:                    file-scope other-text@XXXXXXXX: "r_pre"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    NULL
+  family:                  std
+  syntactic_location:      post func
+  on_primary_declaration:  TRUE
+  name:                    file-scope other-text@XXXXXXXX: "r_pre"
+  namespace_name:          file-scope other-text@XXXXXXXX: "edg"
+  arguments:               file-scope attribute-arg@XXXXXXXX
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*\nkind:\s+registered\nnext:\s+file-scope attribute@X+\nfamily:\s+std\nsyntactic_location:\s+post func\n(on_primary_declaration:\s+TRUE\n)?name:\s+file-scope other-text@X+: "r_pre")":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->
+Matches for "^kind:\s+registered\nnext:\s+file-scope attribute@X+\nfamily:\s+std\nsyntactic_location:\s+post func\n(on_primary_declaration:\s+TRUE\n)?name:\s+file-scope other-text@X+: "r_fn"":
+  <-----------------------------------------------------------------------------
+  kind:                    registered
+  next:                    file-scope attribute@XXXXXXXX
+  family:                  std
+  syntactic_location:      post func
+  name:                    file-scope other-text@XXXXXXXX: "r_fn"
+  ----------------------------------------------------------------------------->
+Matches for "^param_ref\.param_num:\s+1\nparam_ref\.levels_up:\s+0":
+  <-----------------------------------------------------------------------------
+  param_ref.param_num:     1
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  param_ref.param_num:     1
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->

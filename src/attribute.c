@@ -1444,6 +1444,43 @@ its registration.
 }  /* registered_attribute_target */
 
 
+static an_attr_registration_flag_set registered_attribute_flags(
+                                                         an_attribute_ptr  ap)
+/*
+Return the flags of the registration of the given registered attribute.
+*/
+{
+  an_attr_namespace_registration_ptr  nsp;
+  an_attr_registration const          *rp =
+          find_registered_attribute(ap->namespace_name, ap->name, &nsp);
+
+  check_assertion(ap->kind == (an_attribute_kind)ak_registered && rp != NULL);
+  return rp->flags;
+}  /* registered_attribute_flags */
+
+
+a_boolean attribute_is_entity_attached(an_attribute_ptr  ap)
+/*
+Return TRUE if the given attribute is a registered attribute with the flag
+RAF_ENTITY_ATTACHED (see attribute.h).
+*/
+{
+  return ap->kind == (an_attribute_kind)ak_registered &&
+         (registered_attribute_flags(ap) & RAF_ENTITY_ATTACHED) != 0;
+}  /* attribute_is_entity_attached */
+
+
+static a_boolean attribute_must_match(an_attribute_ptr  ap)
+/*
+Return TRUE if the given attribute is a registered attribute with the flag
+RAF_MUST_MATCH (see attribute.h).
+*/
+{
+  return ap->kind == (an_attribute_kind)ak_registered &&
+         (registered_attribute_flags(ap) & RAF_MUST_MATCH) != 0;
+}  /* attribute_must_match */
+
+
 static void check_registration(a_boolean                           ok,
                                an_attr_namespace_registration_ptr  nsp,
                                an_attr_registration const          *rp,
@@ -1583,6 +1620,21 @@ would be ignored).
 }  /* registered_target_is_valid */
 
 
+static a_boolean registered_target_includes_routine(a_const_char  *target)
+/*
+Return TRUE if the (valid) target description includes the code for a routine.
+*/
+{
+  a_const_char  *p = target;
+
+  while (*p != '\0' && *p != 'r') {
+    while (*p != '\0' && *p != '|') ++p;
+    if (*p == '|') ++p;
+  }  /* while */
+  return *p == 'r';
+}  /* registered_target_includes_routine */
+
+
 static a_boolean is_attribute_identifier_string(a_const_char  *str)
 /*
 Return TRUE if str is a nonempty string of letters, digits and underscores
@@ -1640,6 +1692,8 @@ in that program.
                                   "gnu", "__gnu__", "clang", "_Clang", "msvc",
                                   NULL };
   a_const_char * const                *p_name;
+  const an_attr_registration_flag_set all_registration_flags =
+                                    RAF_ENTITY_ATTACHED | RAF_MUST_MATCH;
 
   for (nsp = registered_attribute_namespaces; nsp != NULL; nsp = nsp->next) {
     check_registration(is_attribute_identifier_string(nsp->name), nsp, NULL,
@@ -1668,6 +1722,16 @@ in that program.
                          "the signature is not valid");
       check_registration(registered_target_is_valid(rp->target), nsp, rp,
                          "the target is not valid");
+      check_registration((rp->flags & ~all_registration_flags) == 0,
+                         nsp, rp, "the flags are not valid");
+      check_registration((rp->flags & RAF_ENTITY_ATTACHED) == 0 ||
+                         registered_target_includes_routine(rp->target),
+                         nsp, rp,
+                         "an entity-attached attribute must apply to a "
+                         "routine");
+      check_registration((rp->flags & RAF_MUST_MATCH) == 0 ||
+                         (rp->flags & RAF_ENTITY_ATTACHED) != 0, nsp, rp,
+                         "a must-match attribute must be entity-attached");
     }  /* for */
   }  /* for */
 }  /* validate_registered_attributes */
@@ -2929,6 +2993,20 @@ ak_unrecognized.
 }  /* scan_attribute_args */
 
 
+static a_boolean attribute_arg_expr_is_available(an_attribute_arg_ptr  aap)
+/*
+Return TRUE if the expression of the given aak_expression attribute argument
+can be retrieved.  The expression of an attribute on a declaration in a
+function body is in the memory region of that function, which may be gone.
+*/
+{
+  return !aap->local_expr_ref ||
+         scope_for_routine_or_null(
+                      aap->variant.sexpr->source_corresp.enclosing_routine) !=
+                                                                        NULL;
+}  /* attribute_arg_expr_is_available */
+
+
 a_boolean equivalent_attributes(an_attribute_ptr  ap1,
                                 an_attribute_ptr  ap2,
                                 a_boolean         ignore_family)
@@ -2972,7 +3050,11 @@ namespace and name.
             result = identical_types(aap1->variant.type, aap2->variant.type);
             break;
           case aak_expression:
-            result = compare_expressions(expr_node_from_attribute_arg(aap1),
+            /* (The expression of an attribute on a declaration in a function
+               body cannot be retrieved once that function is complete.) */
+            result = attribute_arg_expr_is_available(aap1) &&
+                     attribute_arg_expr_is_available(aap2) &&
+                     compare_expressions(expr_node_from_attribute_arg(aap1),
                                          expr_node_from_attribute_arg(aap2),
                                          CC_NO_OPTIONS);
             break;
@@ -3616,6 +3698,119 @@ is made.
   }  /* if */
   return attributes;
 }  /* scan_attributes */
+
+
+a_boolean is_must_match_registered_attribute(an_attribute_ptr  ap)
+/*
+Return TRUE if ap is a registered attribute with the flag RAF_MUST_MATCH.
+(An attribute that has been made unrecognized no longer counts.)
+*/
+{
+  return ap->kind == (an_attribute_kind)ak_registered &&
+         attribute_must_match(ap);
+}  /* is_must_match_registered_attribute */
+
+
+void reconcile_must_match_attributes(a_routine_ptr     rp,
+                                     an_attribute_ptr  *p_id_attrs,
+                                     an_attribute_ptr  *p_prefix_attrs)
+/*
+A declaration of the routine rp has the attributes *p_id_attrs (written
+after the parameter list) and *p_prefix_attrs (written in front of the
+declaration), which are about to be attached to rp (in that order).  The
+registered attributes with the flag RAF_MUST_MATCH among them form the list of
+this declaration.  If this list is empty, or the routine has no such
+attributes yet, there is nothing to do (the first declaration with such
+attributes gives them to the routine).  Otherwise the two lists must be
+equivalent, element by element: if they are, the new attributes are not
+attached (they would be duplicates), and if they are not, an error is issued.
+Either way they are removed from the lists that are about to be attached.
+*/
+{
+  an_attribute_ptr  *pp, ap, old_ap, new_ap, err_ap = NULL, first_new = NULL;
+  an_attribute_ptr  first_old = NULL;
+  a_boolean         any_new = FALSE;
+  int               pass;
+
+  /* Find the first new attribute that must match, and the first one that the
+     routine already has. */
+  for (pass = 0; pass < 2; pass++) {
+    for (ap = pass == 0 ? *p_id_attrs : *p_prefix_attrs;
+         ap != NULL; ap = ap->next) {
+      if (is_must_match_registered_attribute(ap)) {
+        any_new = TRUE;
+        if (first_new == NULL) first_new = ap;
+      }  /* if */
+    }  /* for */
+  }  /* for */
+  for (ap = rp->source_corresp.attributes; ap != NULL; ap = ap->next) {
+    if (is_must_match_registered_attribute(ap)) {
+      first_old = ap;
+      break;
+    }  /* if */
+  }  /* for */
+  if (any_new && first_old != NULL) {
+    /* Compare the two lists, element by element. */
+    an_attribute_ptr  id_ap = *p_id_attrs;
+    an_attribute_ptr  prefix_ap = *p_prefix_attrs;
+    old_ap = first_old;
+    for (;;) {
+      /* The next new attribute that must match (the attributes of both lists
+         are attached in that order). */
+      for (;;) {
+        if (id_ap != NULL) {
+          new_ap = id_ap;
+          id_ap = id_ap->next;
+        } else if (prefix_ap != NULL) {
+          new_ap = prefix_ap;
+          prefix_ap = prefix_ap->next;
+        } else {
+          new_ap = NULL;
+        }  /* if */
+        if (new_ap == NULL || is_must_match_registered_attribute(new_ap)) {
+          break;
+        }  /* if */
+      }  /* for */
+      while (old_ap != NULL && !is_must_match_registered_attribute(old_ap)) {
+        old_ap = old_ap->next;
+      }  /* while */
+      if (new_ap == NULL && old_ap == NULL) break;
+      if (new_ap == NULL || old_ap == NULL ||
+          !equivalent_attributes(new_ap, old_ap, /*ignore_family=*/FALSE)) {
+        /* A difference.  If the new list is a prefix of the old list, the
+           error is at its first attribute. */
+        err_ap = new_ap != NULL ? new_ap : first_new;
+        break;
+      }  /* if */
+      old_ap = old_ap->next;
+    }  /* for */
+    if (err_ap != NULL) {
+      a_diagnostic_ptr  dp;
+      dp = pos_st_start_error(ec_attr_redeclaration_mismatch,
+                              &err_ap->position,
+                              attribute_display_name(err_ap));
+      add_diag_info_with_pos_insert(dp, ec_corresp_decl_at,
+                                    &first_old->position);
+      end_diagnostic(dp);
+    }  /* if */
+  }  /* if */
+  if (any_new && first_old != NULL) {
+    /* Drop the new attributes that must match. */
+    for (pass = 0; pass < 2; pass++) {
+      pp = pass == 0 ? p_id_attrs : p_prefix_attrs;
+      while (*pp != NULL) {
+        if (is_must_match_registered_attribute(*pp)) {
+          /* Not attached (it duplicates an attribute that the routine has, or
+             an error was issued for it), but not dropped silently either. */
+          account_for_registered_attribute(*pp);
+          *pp = (*pp)->next;
+        } else {
+          pp = &(*pp)->next;
+        }  /* if */
+      }  /* while */
+    }  /* for */
+  }  /* if */
+}  /* reconcile_must_match_attributes */
 
 
 a_boolean attributes_include_registered(an_attribute_ptr  attributes)
@@ -5259,7 +5454,13 @@ an error.
     a_pack_expansion_descr_ptr        apedep;
     a_pack_expansion_stack_entry_ptr  apesep;
     a_boolean                         more_attributes;
-    if (primary_only && !ap->on_primary_declaration) continue;
+    if (primary_only &&
+        (!ap->on_primary_declaration || ap->kind == ak_registered)) {
+      /* (A registered attribute of a definition is given to the instances
+         that already exist when it is attached to the template; see
+         attach_registered_attributes_to_existing_instances.) */
+      continue;
+    }  /* if */
     if (symbol_is(template_sym, sk_class_template) &&
         is_partial_instantiation !=
                        attribute_applies_to_partial_instantiation(ap->kind)) {
@@ -11827,14 +12028,16 @@ registration interface.  (The attributes of this namespace that are in
 known_attr_table are tested differently and are not described here.)
 */
 static constexpr an_attr_registration edg_test_attributes[] = {
-  { "r_fn", "", "r", RAF_NO_FLAGS },
+  { "r_fn", "", "r", RAF_ENTITY_ATTACHED },
   { "r_stmt", "(Xb)", "s", RAF_NO_FLAGS },
   { "r_expr", "(X)", "s:+n!", RAF_NO_FLAGS },
   { "r_null", "(Xb)", "s:+n!", RAF_NO_FLAGS },
   { "r_loop", "(Xb)", "s:+i!", RAF_NO_FLAGS },
   { "r_nonull", "(Xb)", "s:-n!", RAF_NO_FLAGS },
   { "r_noloop", "(Xb)", "s:-i!", RAF_NO_FLAGS },
-  { "requires", "(Xb)", "r", RAF_NO_FLAGS },
+  { "requires", "(Xb)", "r", RAF_ENTITY_ATTACHED },
+  { "r_pre", "(Xb)", "r", RAF_ENTITY_ATTACHED | RAF_MUST_MATCH },
+  { "r_pre2", "(Xb)", "r", RAF_ENTITY_ATTACHED | RAF_MUST_MATCH },
   { NULL, NULL, NULL, RAF_NO_FLAGS }
 };
 

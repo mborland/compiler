@@ -2604,6 +2604,10 @@ extern unsigned long num_function_pack_references(void);
 
 extern void note_parameter_after_pack_reference(void);
 
+extern a_scope_number set_attr_arg_first_new_scope(a_scope_number  number);
+
+extern a_boolean is_declared_in_attribute_argument(a_symbol_ptr  sym);
+
 extern unsigned long num_parameter_after_pack_references(void);
 
 extern a_boolean begin_rescan_pack_expansion_context(

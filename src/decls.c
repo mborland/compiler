@@ -784,7 +784,26 @@ be unnamed).
     if (dps->secondary_declarator) {
       dps->prefix_attributes = copy_of_attributes_list(dps->prefix_attributes);
     }  /* if */
-    if (entity_kind == iek_routine && entity != NULL) {
+    if (entity_kind == iek_routine && entity != NULL &&
+        is_member_template_specialization((a_routine_ptr)entity)) {
+      /* The attributes that must match of an explicit specialization of a
+         member template of a class template are not compared with those of the
+         template, because the specialization is an error when the template has
+         any (see check_specialization_attributes): they are not attached. */
+      an_attribute_ptr  *pp;
+      int               pass;
+      for (pass = 0; pass < 2; pass++) {
+        pp = pass == 0 ? &dps->id_attributes : &dps->prefix_attributes;
+        while (*pp != NULL) {
+          if (is_must_match_registered_attribute(*pp)) {
+            account_for_registered_attribute(*pp);
+            *pp = (*pp)->next;
+          } else {
+            pp = &(*pp)->next;
+          }  /* if */
+        }  /* while */
+      }  /* for */
+    } else if (entity_kind == iek_routine && entity != NULL) {
       /* Registered attributes that must be the same on every declaration are
          attached only on the first declaration that has any. */
       reconcile_must_match_attributes((a_routine_ptr)entity,
@@ -821,15 +840,17 @@ set to TRUE before they are attached.
     inherit_must_match_attributes_of_template(rp);
     note_specialization_attributes(rp, dps->id_attributes,
                                    dps->prefix_attributes,
-                                   dps->is_explicit_specialization);
+                                   dps->is_explicit_specialization,
+                                   &dps->declarator_pos);
   } else if (dps->sym != NULL &&
              dps->sym->kind == (a_symbol_kind)sk_function_template &&
              dps->sym->variant.template_info->prototype_template != NULL) {
     /* A declaration of a member template of a class that is an instance of a
        class template, other than the one made for the class (an explicit
        specialization of the member template, say). */
-    inherit_must_match_attributes_of_member_template_decl(
-                  dps->sym, dps->id_attributes, dps->prefix_attributes);
+    note_member_template_specialization(dps->sym, dps->id_attributes,
+                                        dps->prefix_attributes,
+                                        &dps->declarator_pos);
   }  /* if */
   if (dps->id_attributes != NULL || dps->prefix_attributes != NULL) {
     an_il_entry_kind  entity_kind;

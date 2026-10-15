@@ -1,0 +1,11 @@
+fe_only -DTEST_NUMBER=10 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 56: error: attribute "edg::r_post" cannot name the result of a function that returns void
+  template <class T> T g10() E(r, true);
+                             ^
+          detected during instantiation of "g10" based on template argument <void> at line 57
+
+"Test_name.c", line 57: error: function "g10<T>() [with T=void]" cannot be instantiated -- no template definition was supplied
+  template void g10<void>();
+           ^
+
+2 errors detected in the compilation of "Test_name.c".

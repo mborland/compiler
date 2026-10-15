@@ -7841,6 +7841,11 @@ Return TRUE if "tp" is a proxy class.
 
 extern a_scope_number take_next_scope_number(void);
 
+extern a_scope_number next_scope_number_to_be_taken(void);
+
+extern a_template_decl_info_ptr set_lambda_rescan_decl_info(
+                                               a_template_decl_info_ptr  di);
+
 extern a_boolean symbol_is_from_trans_unit(a_symbol_ptr			sym,
 					   a_translation_unit_ptr	tup);
 

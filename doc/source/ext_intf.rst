@@ -5172,15 +5172,14 @@ cannot have any: that is an error at the end of the translation unit (the
 template may get them after the specialization).  The members of an explicit
 specialization or a partial specialization of a class template are members of
 another class and have attributes of their own.  An explicit specialization of
-a member template for one instance of the class (``template <> template
-<class U> int S<int>::g(U)``) is compared with the member template of the
-class template, and gets its attributes, at the end of the translation unit
-(a copy made earlier could not be substituted again when the specialization is
-instantiated), so an instance of it that is created before has none.  (A
-limitation: the member template of an instance of a class template that exists
-when the definition is seen, ``S<long>::g``, does not have the attributes of
-the member template of the class template, which its instances get from the
-definition when it is instantiated.)  A function with C language
+a member template of a class template for one instance of the class (``template
+<> template <class U> int S<int>::g(U)``, and the specialization of one
+instance of it, ``template <> template <> int S<int>::g<long>(long)``) is not
+supported when the member template has an attribute that must match, on any of
+its declarations (in the class or on a definition outside it), whether the
+specialization has the attribute or not and whichever comes first: that is an
+error at the end of the translation unit (when the member template has none,
+the specialization cannot add one).  A function with C language
 linkage declared in two namespaces is one function; in GNU emulation the front
 end has a routine for each declaration, and they are not compared.
 

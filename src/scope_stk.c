@@ -64,6 +64,16 @@ STATIC_THREAD unsigned long
 			   record_potential_pack_reference_full has
 			   recorded. */
 
+STATIC_THREAD a_scope_number
+		attr_arg_first_new_scope;
+			/* While the arguments of a registered attribute are
+			   scanned (set_attr_arg_first_new_scope), the number
+			   of the first scope created since: a pack or a
+			   parameter of a scope with a number that is not less
+			   is declared inside the argument (in a lambda, say),
+			   not an entity that the attribute refers to.  Zero
+			   otherwise. */
+
 STATIC_THREAD unsigned long
 		after_pack_param_references_noted;
 			/* The number of references to parameters that follow a
@@ -14516,6 +14526,32 @@ such reference.
 }  /* num_function_pack_references */
 
 
+a_scope_number set_attr_arg_first_new_scope(a_scope_number  number)
+/*
+Set the number of the first scope that is created while the arguments of a
+registered attribute are scanned (zero when they are not), and return the
+previous one.
+*/
+{
+  a_scope_number  previous = attr_arg_first_new_scope;
+
+  attr_arg_first_new_scope = number;
+  return previous;
+}  /* set_attr_arg_first_new_scope */
+
+
+a_boolean is_declared_in_attribute_argument(a_symbol_ptr  sym)
+/*
+Return TRUE if sym (a parameter) is declared in a scope that was created while
+the arguments of a registered attribute are being scanned (see
+set_attr_arg_first_new_scope).
+*/
+{
+  return attr_arg_first_new_scope != 0 &&
+         sym->decl_scope >= attr_arg_first_new_scope;
+}  /* is_declared_in_attribute_argument */
+
+
 void note_parameter_after_pack_reference(void)
 /*
 Record a reference to a function parameter that follows a function parameter
@@ -14667,7 +14703,8 @@ form.
         } else {
           kind = prk_template_param;
         }  /* if */
-        if (kind != prk_template_param && kind != prk_bases) {
+        if (kind != prk_template_param && kind != prk_bases &&
+            !is_declared_in_attribute_argument(pack_symbol)) {
           function_pack_references_noted++;
         }  /* if */
         prp = alloc_pack_reference(kind);

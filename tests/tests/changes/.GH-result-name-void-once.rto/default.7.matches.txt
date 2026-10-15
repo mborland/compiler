@@ -1,0 +1,8 @@
+Matches for "(line 25: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void|line 28: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void|line 32: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void|line 35: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void|line 39: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void|line 44: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void|line 46: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void|line 50: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void|line 53: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void|line 56: error: attribute\s+"edg::r_post"\s+cannot\s+name\s+the\s+result\s+of\s+a\s+function\s+that\s+returns\s+void)":
+  <-----------------------------------------------------------------------------
+  line 46: error: attribute "edg::r_post" cannot name the result of a function that returns void
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*(error:\s+attribute\s+"edg::r_post"\s+cannot\s+name[\s\S]*){2})(?![\s\S]*does\s+not\s+apply\s+here)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

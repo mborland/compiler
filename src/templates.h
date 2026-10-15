@@ -888,15 +888,22 @@ extern a_type_ptr wrapup_function_template_argument_deduction(
 
 extern void inherit_must_match_attributes_of_template(a_routine_ptr  rp);
 
-extern void note_specialization_attributes(a_routine_ptr     rp,
-                                           an_attribute_ptr  id_attrs,
-                                           an_attribute_ptr  prefix_attrs,
-                                           a_boolean         is_explicit_spec);
+extern void note_specialization_attributes(a_routine_ptr      rp,
+                                           an_attribute_ptr   id_attrs,
+                                           an_attribute_ptr   prefix_attrs,
+                                           a_boolean          is_explicit_spec,
+                                           a_source_position  *decl_pos);
 
-extern void inherit_must_match_attributes_of_member_template_decl(
-                                          a_symbol_ptr      ft_sym,
-                                          an_attribute_ptr  id_attrs,
-                                          an_attribute_ptr  prefix_attrs);
+extern void note_explicit_specialization(a_routine_ptr      rp,
+                                         a_source_position  *decl_pos);
+
+extern a_boolean is_member_template_specialization(a_routine_ptr  rp);
+
+extern void note_member_template_specialization(
+                                          a_symbol_ptr       ft_sym,
+                                          an_attribute_ptr   id_attrs,
+                                          an_attribute_ptr   prefix_attrs,
+                                          a_source_position  *decl_pos);
 
 extern void check_specialization_attributes(void);
 

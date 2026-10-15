@@ -17566,6 +17566,16 @@ Allocate a new function instantiation entry and return a pointer to it.
 }  /* alloc_template_instance */
 
 
+a_scope_number next_scope_number_to_be_taken(void)
+/*
+Return the number that take_next_scope_number will return next (the scopes
+that are created from now on have numbers that are not less).
+*/
+{
+  return next_scope_number;
+}  /* next_scope_number_to_be_taken */
+
+
 a_scope_number take_next_scope_number(void)
 /*
 Assign the next scope number in sequence, and return it.

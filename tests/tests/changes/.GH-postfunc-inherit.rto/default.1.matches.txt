@@ -43,15 +43,6 @@ Matches for "type:\s+file-scope type@X+: wchar_t\n(?:[^\n]*\n){0,3}kind:\s+enk_p
   param_ref.param_num:     1
   param_ref.levels_up:     0
   ----------------------------------------------------------------------------->
-Matches for "type:\s+file-scope type@X+: unsigned long long\nnext:\s+file-scope expr-node@X+\nis_lvalue:\s+TRUE\nkind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+0":
-  <-----------------------------------------------------------------------------
-  type:                    file-scope type@XXXXXXXX: unsigned long long
-  next:                    file-scope expr-node@XXXXXXXX
-  is_lvalue:               TRUE
-  kind:                    enk_param_ref
-  param_ref.param_num:     1
-  param_ref.levels_up:     0
-  ----------------------------------------------------------------------------->
 Matches for "\A(?![\s\S]*\nkind:\s+registered\nnext:\s+file-scope attribute@X+\nfamily:\s+std\nsyntactic_location:\s+post func\n(on_primary_declaration:\s+TRUE\n)?name:\s+file-scope other-text@X+: "r_pre")":
   <-----------------------------------------------------------------------------
   

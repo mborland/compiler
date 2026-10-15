@@ -3952,7 +3952,9 @@ an error if a default argument expression is encountered.
               last_param_id->is_parameter_pack = TRUE;
             }  /* if */
           }  /* if */
-          last_param_id->follows_parameter_pack = pack_seen;
+          /* (An element of a pack does not follow it.) */
+          last_param_id->follows_parameter_pack = pack_seen &&
+                                                  !ptp->is_pack_element;
           if (param_state.has_pack_ellipsis || ptp->is_parameter_pack ||
               ptp->is_pack_element) {
             pack_seen = TRUE;

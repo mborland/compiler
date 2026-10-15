@@ -1,0 +1,8 @@
+Matches for "(line 23: error: attribute\s+"edg::r_(pre|post)"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+pack|line 26: error: attribute\s+"edg::r_(pre|post)"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+pack|line 29: error: attribute\s+"edg::r_(pre|post)"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+pack|line 32: error: attribute\s+"edg::r_(pre|post)"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+pack|line 35: error: attribute\s+"edg::r_(pre|post)"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+pack|line 38: error: attribute\s+"edg::r_(pre|post)"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+pack|line 41: error: attribute\s+"edg::r_(pre|post)"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+pack|line 44: error: attribute\s+"edg::r_(pre|post)"\s+cannot\s+refer\s+to\s+a\s+function\s+parameter\s+pack)":
+  <-----------------------------------------------------------------------------
+  line 44: error: attribute "edg::r_pre" cannot refer to a function parameter pack
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*cannot\s+refer\s+to\s+a\s+function\s+parameter[\s\S]*cannot\s+refer\s+to\s+a\s+function\s+parameter)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

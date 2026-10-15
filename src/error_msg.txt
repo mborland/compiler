@@ -3688,6 +3688,7 @@ ec_attr_requires_iteration_statement;;"attribute %sq requires an iteration state
 ec_attr_disallows_iteration_statement;;"attribute %sq does not apply to an iteration statement"
 ec_attr_redeclaration_mismatch;;"attribute %sq does not match the attributes of an earlier declaration"
 ec_attr_specialization_without_template_attribute;;"attribute %sq is on an explicit specialization but the template does not have it"
+ec_attr_member_template_specialization;;"an explicit specialization of a member template of a class template is not supported when the member template has the attribute %sq"
 ec_attr_result_name_not_allowed;;"attribute %sq can name the result only after the parameter list of a function declaration"
 ec_attr_result_name_void_function;;"attribute %sq cannot name the result of a function that returns void"
 ec_attr_result_name_deduced_type;;"attribute %sq cannot name the result of a function whose return type is deduced or is a trailing return type"

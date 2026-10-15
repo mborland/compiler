@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=13 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 96: error: attribute "edg::r_pre" is on an explicit specialization but the template does not have it
+  template <> template <class U> int S13<int>::g(U y) [[edg::r_pre(y > 0)]] { return 1; }
+                                                        ^
+
+1 error detected in the compilation of "Test_name.c".

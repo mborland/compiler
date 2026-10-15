@@ -40163,7 +40163,8 @@ by param_sym (sk_parameter).
   node->is_lvalue = TRUE;
   node->variant.param_ref.param_num = param_sym->variant.param_id->param_num;
   node->variant.param_ref.levels_up = levels_up;
-  if (param_sym->variant.param_id->follows_parameter_pack) {
+  if (param_sym->variant.param_id->follows_parameter_pack &&
+      !is_declared_in_attribute_argument(param_sym)) {
     /* The number of the parameter is not the same in an instance. */
     note_parameter_after_pack_reference();
   }  /* if */

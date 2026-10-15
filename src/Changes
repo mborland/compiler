@@ -1,6 +1,28 @@
 Version 7.1
 
 10/15/26  [GH #?]
+Explicit specializations of member templates, packs, lambdas and duplicate errors
+
+An explicit specialization of a member template of a class template for one
+instance of the class (template <> template <class U> int S<int>::g(U), and
+template <> template <> int S<int>::g<long>(long)) is now an error when the
+member template has a registered attribute that must match those of every
+declaration (RAF_MUST_MATCH), on any of its declarations, whether the
+specialization has the attribute or not: such an attribute cannot be compared
+with the attribute of the specialization or inherited by it reliably (and a
+specialization cannot add one that the member template does not have).  The
+reference to a function parameter pack in an attribute after a parameter list
+is one error (there was a second one for each instance, and a reference to
+the pack itself was taken for a reference to a parameter that follows a
+pack); the pack of a generic lambda written in the argument is not a function
+parameter pack of the declaration.  A lambda in the attribute of a function
+template whose parameter has the type of a template parameter ([](T y) ...)
+could not be copied to an instance (it was an error that T is undefined); now
+it can.  A registered attribute for which an error was issued (that it cannot
+name the result of a function that returns void) no longer gets the error that
+it does not apply, for a friend defined in a class template.
+
+10/15/26  [GH #?]
 Result-name scope of an attribute in the definition of a member function outside its class
 
 The attribute of a member function defined outside its class that is scanned
@@ -32,16 +54,12 @@ the class when the member is created, even when the definition of the member is
 never instantiated (an explicit instantiation declaration, an explicit
 specialization), and a member of an instance that exists when the definition
 is seen has it too.  An explicit specialization of a function template or of a
-member of a class template (a member function or a member function template)
-has the attributes of the template if it has none of its own, and the
+member function of a class template has the attributes of the template if it has none of its own, and the
 attributes that it has must match those of the template, whichever of the
 template and the specialization is declared first (before, only a member whose
 attributes were written in the class was checked).  An explicit
 specialization cannot have such an attribute when the template has none: that
-is an error at the end of the translation unit.  An explicit specialization
-of a member template for one instance of the class (template <> template
-<class U> int S<int>::g(U)) is compared with the member template of the class
-template the same way, at the end of the translation unit.  For example, for
+is an error at the end of the translation unit.  For example, for
 "pre" with both flags:
 
   template <class T> struct S { int m(T x); };

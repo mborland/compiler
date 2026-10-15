@@ -20500,6 +20500,32 @@ TRUE.
 }  /* substituted_cast_is_valid */
 
 
+STATIC_THREAD a_template_decl_info_ptr  lambda_rescan_decl_info_fallback;
+			/* The declaration information of the function template
+			   whose attributes are being copied for an instance,
+			   or NULL (see set_lambda_rescan_decl_info). */
+
+
+a_template_decl_info_ptr set_lambda_rescan_decl_info(
+                                               a_template_decl_info_ptr  di)
+/*
+The expressions of the attributes of a function template are copied for an
+instance with its template arguments substituted; a lambda in one is scanned
+again, and that needs the declaration information of the template to make
+its template parameters visible, which the list of the parameters of a
+function template does not have (it is not the list of a template template
+parameter or of a class template).  Set the declaration information to be used
+for that (NULL when the attributes are not being copied), and return the
+previous one.
+*/
+{
+  a_template_decl_info_ptr  previous = lambda_rescan_decl_info_fallback;
+
+  lambda_rescan_decl_info_fallback = di;
+  return previous;
+}  /* set_lambda_rescan_decl_info */
+
+
 static an_expr_node_ptr copy_template_param_lambda_expr(
                                   an_expr_node_ptr       expr,
                                   a_template_arg_ptr     template_arg_list,
@@ -20540,6 +20566,7 @@ copy_template_param_expr for the parameter descriptions.
     an_expr_stack_entry         expr_stack_entry;
     an_expr_stack_entry_ptr     saved_expr_stack;
     a_boolean                   pushed_template_decl_scope = FALSE;
+    a_template_decl_info_ptr    rescan_decl_info = NULL;
     a_scope_ptr                 lambda_enclosing_scope = NULL;
     a_scope_depth               scope_depth_before_local_reactivation =
                                                                 NO_SCOPE_DEPTH;
@@ -20554,15 +20581,23 @@ copy_template_param_expr for the parameter descriptions.
     expr_stack_entry.suppress_diagnostics = TRUE;
     expr_stack_entry.possible_rescan_context = TRUE;
     push_lexical_state_stack();
+    if (template_param_list != NULL) {
+      rescan_decl_info = template_param_list->cache.decl_info;
+      if (rescan_decl_info == NULL) {
+        /* The list of the template parameters of a function template does
+           not have the information (see set_lambda_rescan_decl_info). */
+        rescan_decl_info = lambda_rescan_decl_info_fallback;
+      }  /* if */
+    }  /* if */
     if (template_param_list != NULL &&
-        template_param_list->cache.decl_info != NULL &&
+        rescan_decl_info != NULL &&
         template_param_list->param_symbol != NULL) {
       /* Make the template parameters being substituted visible during the
          rescan so that names that refer to them can be resolved.  The scope
          is pushed reusing the original declaration scope number so that the
          template parameter symbols are visible to ordinary name lookup. */
       push_template_declaration_scope_full(
-                            template_param_list->cache.decl_info,
+                            rescan_decl_info,
                             template_param_list->param_symbol->decl_scope,
                             /*is_template_template_param=*/FALSE,
                             /*is_template_param_rescan=*/FALSE);

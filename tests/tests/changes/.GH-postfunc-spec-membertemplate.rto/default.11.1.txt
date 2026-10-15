@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=11 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 84: error: an explicit specialization of a member template of a class template is not supported when the member template has the attribute "edg::r_pre"
+  template <> template <> int S11<int>::g<long>(long y) [[edg::r_pre(y > 0)]] { return 1; }
+                                        ^
+
+1 error detected in the compilation of "Test_name.c".

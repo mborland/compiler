@@ -1390,7 +1390,13 @@ should be issued for it.
 {
   a_registered_attr_account_entry_ptr  ep = find_registered_attr_account_entry(
                                                                           ap);
-  return ep != NULL && ep->diagnosed;
+  a_boolean                            result = FALSE;
+
+  /* (Also if the attribute it is a copy of was.) */
+  for (; ep != NULL && !result; ep = ep->original) {
+    result = ep->diagnosed;
+  }  /* for */
+  return result;
 }  /* registered_attribute_was_diagnosed */
 
 
@@ -2816,6 +2822,7 @@ for each instance.)
     note_registered_attribute_diagnosed(ap);
     make_attr_unrecognized(ap);
   } else if (innermost_function_scope == NULL &&
+             is_template_dependent_context() &&
              num_parameter_after_pack_references() != after_pack_refs_before) {
     pos_st_error(ec_attr_parameter_after_pack, &aap->position,
                  attribute_display_name(ap));
@@ -3034,6 +3041,9 @@ ak_unrecognized.
   unsigned long         function_pack_refs, after_pack_refs;
   a_result_binder       binder;
 
+  a_scope_number        saved_first_new_scope = set_attr_arg_first_new_scope(
+                                          next_scope_number_to_be_taken());
+
   binder.pushed = FALSE;
   if (*sig == 'R') {
     /* The arguments may start with the name of the result of the function. */
@@ -3216,6 +3226,7 @@ done:
     pop_scope();
     done_with_func_info(binder.func_info);
   }  /* if */
+  (void)set_attr_arg_first_new_scope(saved_first_new_scope);
 }  /* scan_attr_arg_list */
 
 
@@ -4286,6 +4297,28 @@ template).
 }  /* skip_over_attributes */
 
 
+static a_boolean attribute_void_result_error_issued(an_attribute_ptr  ap)
+/*
+Return TRUE if ap is an attribute with a name for the result of a function (see
+the signature code "R", whatever its kind is now) for which the error that it
+cannot name the result of a function that returns void has been issued.
+*/
+{
+  a_boolean                           result = FALSE;
+  an_attr_namespace_registration_ptr  nsp;
+  an_attr_registration const          *rp;
+
+  if (ap->namespace_name != NULL && ap->name != NULL &&
+      ap->arguments != NULL &&
+      ap->arguments->kind == (an_attribute_arg_kind)aak_token) {
+    rp = find_registered_attribute(ap->namespace_name, ap->name, &nsp);
+    result = rp != NULL && registered_sig_names_result(rp->sig) &&
+             void_result_error_was_issued(&ap->arguments->position);
+  }  /* if */
+  return result;
+}  /* attribute_void_result_error_issued */
+
+
 void report_bad_attribute_target(an_error_severity  sev,
                                  an_attribute_ptr   ap)
 /*
@@ -4294,6 +4327,8 @@ doesn't apply to the entity on which it is specified.  The given attribute is
 turned into an ak_unrecognized attribute.
 */
 {
+  a_boolean  diagnosed_already = registered_attribute_was_diagnosed(ap);
+
   if (ap->kind == (an_attribute_kind)ak_registered) {
     /* A registered attribute is never dropped with only a warning. */
     sev = es_error;
@@ -4302,6 +4337,11 @@ turned into an ak_unrecognized attribute.
   }  /* if */
   if (ap->family == af_alignas) {
     pos_diagnostic(sev, ec_wrong_entity_for_alignas, &ap->position);
+  } else if (diagnosed_already || attribute_void_result_error_issued(ap)) {
+    /* A registered attribute for which an error has been issued already (that
+       it cannot name the result of a function that returns void, in the
+       declaration of an instance of a template that is scanned again, for
+       example): that is the only error that it needs. */
   } else {
     pos_st_diagnostic(sev, ec_wrong_entity_for_attribute, &ap->position,
                       attribute_display_name(ap));

@@ -8,7 +8,6 @@
 //match_regex:type:\s+file-scope type@X+: signed char\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+0
 //match_regex:type:\s+file-scope type@X+: unsigned char\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+0
 //match_regex:type:\s+file-scope type@X+: wchar_t\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+0
-//match_regex:type:\s+file-scope type@X+: unsigned long long\nnext:\s+file-scope expr-node@X+\nis_lvalue:\s+TRUE\nkind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+0
 //match_regex:\A(?![\s\S]*\nkind:\s+registered\nnext:\s+file-scope attribute@X+\nfamily:\s+std\nsyntactic_location:\s+post func\n(on_primary_declaration:\s+TRUE\n)?name:\s+file-scope other-text@X+: "r_pre")
 // 10/14/26  [GH #?]
 //
@@ -53,11 +52,3 @@ template <class T> struct E { template <class U> int g(U y); };
 E<wchar_t> e;
 template <class T> template <class U> int E<T>::g(U y) [[edg::r_pre(y > 0)]] { return 0; }
 int ue() { return e.g((wchar_t)1); }
-
-// An explicit specialization of a member template of the class for one
-// instance, without a contract, has the contract of the member template of the
-// class template.
-template <class T> struct F { template <class U> int g(T x, U y); };
-template <class T> template <class U> int F<T>::g(T x, U y) [[edg::r_pre(x > y)]] { return 0; }
-template <> template <class U> int F<unsigned long long>::g(unsigned long long x, U y) { return 1; }
-int uf() { F<unsigned long long> f; return f.g(1ULL, 1) + f.g(2ULL, 2L); }

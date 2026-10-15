@@ -7304,12 +7304,16 @@ a copy of the attributes with the template arguments substituted to rp.
 {
   an_attribute_ptr  inst_attr;
 
-  inst_attr = copy_of_attributes_with_substitution(
+  { a_template_decl_info_ptr  saved_di = set_lambda_rescan_decl_info(
+                          decl_cache_for_function_template(tssp)->decl_info);
+    inst_attr = copy_of_attributes_with_substitution(
                     list, /*primary_only=*/FALSE, template_sym,
                     decl_cache_for_function_template(tssp)->
                                                      decl_info->parameters,
                     rp->template_arg_list, parent_class_or_null(rp),
                     /*is_partial_instantiation=*/FALSE, (a_boolean*)NULL);
+    (void)set_lambda_rescan_decl_info(saved_di);
+  }
   check_named_results_of_instance(&inst_attr, rp);
   if (inst_attr != NULL) {
     /* An instance (an explicit specialization, say) that has such attributes
@@ -7400,15 +7404,22 @@ typedef struct a_specialization_attr_entry {
   a_boolean	compared;	/* TRUE if the attributes of the template have
 				   been compared with those of the routine
 				   (or given to it) already. */
-  a_boolean	at_end_only;	/* TRUE if the routine is the member template
-				   of an instance of a class template (an
-				   explicit specialization of it): a copy of the
-				   attributes of the template, with the template
-				   arguments of the class substituted, cannot
-				   be substituted again when the member template
-				   is instantiated, so it is compared with the
-				   attributes of the routine only at the end of
-				   the translation unit. */
+  a_boolean	member_template;
+				/* TRUE if the routine is (or may be) an explicit
+				   specialization of a member template of an
+				   instance of a class template: that is not
+				   supported when the member template has
+				   attributes that must match (see
+				   check_specialization_attributes). */
+  a_boolean	always_specialization;
+				/* TRUE if the declaration is known to be an
+				   explicit specialization (otherwise the
+				   routine is one if it is flagged
+				   is_specialized at the end of the translation
+				   unit). */
+  a_source_position
+		decl_position;	/* The position of the declaration (for the
+				   error about a member template). */
   a_source_position
 		position;
   a_const_char	*display_name;
@@ -7456,10 +7467,23 @@ RAF_MUST_MATCH of the routine of a template.
 }  /* copy_of_must_match_attributes */
 
 
-void note_specialization_attributes(a_routine_ptr     rp,
-                                    an_attribute_ptr  id_attrs,
-                                    an_attribute_ptr  prefix_attrs,
-                                    a_boolean         is_explicit_spec)
+static a_boolean is_member_template_of_class_instance(a_symbol_ptr  sym)
+/*
+Return TRUE if sym is the symbol of a member template of a class that is an
+instance of a class template (it has a member template of the class template as
+its prototype template).
+*/
+{
+  return sym != NULL && sym->kind == (a_symbol_kind)sk_function_template &&
+         sym->variant.template_info->prototype_template != NULL;
+}  /* is_member_template_of_class_instance */
+
+
+void note_specialization_attributes(a_routine_ptr      rp,
+                                    an_attribute_ptr   id_attrs,
+                                    an_attribute_ptr   prefix_attrs,
+                                    a_boolean          is_explicit_spec,
+                                    a_source_position  *decl_pos)
 /*
 A declaration of the routine rp has the attributes id_attrs and prefix_attrs
 (which can be NULL).  If rp is an instance of a function template or of a
@@ -7499,7 +7523,9 @@ translation unit (see check_specialization_attributes).
       ep->template_sym = template_sym;
       ep->proto_tssp = proto_tssp;
       ep->has_attribute = FALSE;
-      ep->at_end_only = FALSE;
+      ep->member_template = FALSE;
+      ep->always_specialization = FALSE;
+      ep->decl_position = *decl_pos;
       /* If the template has such attributes already, they have been given
          to the routine or compared with its attributes just now. */
       ep->compared = template_rout != NULL &&
@@ -7512,82 +7538,140 @@ translation unit (see check_specialization_attributes).
       ep->position = ap->position;
       ep->display_name = attribute_display_name(ap);
     }  /* if */
+    if (is_member_template_of_class_instance(ep->template_sym)) {
+      ep->member_template = TRUE;
+    }  /* if */
   }  /* if */
 }  /* note_specialization_attributes */
 
 
-void inherit_must_match_attributes_of_member_template_decl(
-                                          a_symbol_ptr      ft_sym,
-                                          an_attribute_ptr  id_attrs,
-                                          an_attribute_ptr  prefix_attrs)
+void note_explicit_specialization(a_routine_ptr      rp,
+                                  a_source_position  *decl_pos)
 /*
-A declaration of the member template ft_sym of a class that is an instance of a
-class template has the attributes id_attrs and prefix_attrs (an explicit
-specialization of the member template, for example), and the member template of
-the class template has the registered attributes that must match those of every
-declaration of it (on any of its declarations, including a definition outside
-the class).  Remember the declaration, as note_specialization_attributes does:
-at the end of the translation unit the attributes of the routine are compared
-with those of the member template of the class template (with the template
-arguments of the class substituted), and the routine gets them if it has none.
+rp is a routine that is being declared as an explicit specialization of a
+function template or of a member of a class template.  If it is an instance of
+a member template of an instance of a class template, remember it (see
+note_member_template_specialization).
 */
 {
-  a_template_symbol_supplement_ptr  tssp = ft_sym->variant.template_info;
-  a_symbol_ptr                      proto_sym = tssp->prototype_template;
-  a_routine_ptr                     rp = tssp->variant.function.routine;
+  a_symbol_ptr                      template_sym;
   a_template_symbol_supplement_ptr  proto_tssp;
-  a_routine_ptr                     proto_rout;
+  a_routine_ptr                     template_rout;
 
-  if (proto_sym == NULL || proto_sym->variant.template_info == NULL) return;
-  proto_tssp = proto_sym->variant.template_info;
-  proto_rout = proto_tssp->variant.function.routine;
-  if (rp == NULL || proto_rout == NULL ||
-      (proto_tssp->variant.function.decl_cache == NULL &&
-       proto_tssp->prototype_template == NULL)) {
-    return;
-  }  /* if */
-  { an_attribute_ptr  ap = NULL;
-    int               pass;
+  template_rout = prototype_routine_of_template_instance(rp, &template_sym,
+                                                         &proto_tssp);
+  if (template_rout != NULL &&
+      is_member_template_of_class_instance(template_sym)) {
     a_specialization_attr_entry_ptr  ep;
-    for (pass = 0; pass < 2 && ap == NULL; pass++) {
-      for (ap = pass == 0 ? id_attrs : prefix_attrs; ap != NULL;
-           ap = ap->next) {
-        if (is_must_match_registered_attribute(ap)) break;
-      }  /* for */
-    }  /* for */
     for (ep = specialization_attr_entries; ep != NULL; ep = ep->next) {
       if (ep->rout == rp) break;
     }  /* for */
     if (ep == NULL) {
       ep = alloc_fe_of_type(a_specialization_attr_entry);
       ep->rout = rp;
-      ep->template_rout = proto_rout;
-      ep->template_sym = ft_sym;
+      ep->template_rout = template_rout;
+      ep->template_sym = template_sym;
       ep->proto_tssp = proto_tssp;
       ep->has_attribute = FALSE;
-      ep->compared = FALSE;
-      ep->at_end_only = TRUE;
+      ep->compared = TRUE;
+      ep->decl_position = *decl_pos;
       ep->next = specialization_attr_entries;
       specialization_attr_entries = ep;
     }  /* if */
+    ep->member_template = TRUE;
+    ep->always_specialization = TRUE;
+  }  /* if */
+}  /* note_explicit_specialization */
+
+
+a_boolean is_member_template_specialization(a_routine_ptr  rp)
+/*
+Return TRUE if rp has been noted as an explicit specialization of a member
+template of an instance of a class template (see
+note_explicit_specialization and note_member_template_specialization).
+*/
+{
+  a_specialization_attr_entry_ptr  ep;
+
+  for (ep = specialization_attr_entries; ep != NULL; ep = ep->next) {
+    if (ep->rout == rp) break;
+  }  /* for */
+  return ep != NULL && ep->member_template && ep->always_specialization;
+}  /* is_member_template_specialization */
+
+
+void note_member_template_specialization(a_symbol_ptr       ft_sym,
+                                         an_attribute_ptr    id_attrs,
+                                         an_attribute_ptr    prefix_attrs,
+                                         a_source_position   *decl_pos)
+/*
+A declaration of the member template ft_sym of a class that is an instance of a
+class template, other than the one made for the class (an explicit
+specialization of the member template, for example), is being scanned.  Remember
+it: it is an error at the end of the translation unit if the member template of
+the class template has registered attributes that must match those of every
+declaration (see check_specialization_attributes): an explicit specialization
+of a member template of a class template is not supported then.
+*/
+{
+  a_template_symbol_supplement_ptr  tssp = ft_sym->variant.template_info;
+  a_symbol_ptr                      proto_sym = tssp->prototype_template;
+  a_routine_ptr                     rp = tssp->variant.function.routine;
+  a_specialization_attr_entry_ptr   ep;
+
+  if (proto_sym == NULL || proto_sym->variant.template_info == NULL ||
+      rp == NULL ||
+      proto_sym->variant.template_info->variant.function.routine == NULL) {
+    return;
+  }  /* if */
+  for (ep = specialization_attr_entries; ep != NULL; ep = ep->next) {
+    if (ep->rout == rp) break;
+  }  /* for */
+  if (ep == NULL) {
+    ep = alloc_fe_of_type(a_specialization_attr_entry);
+    ep->rout = rp;
+    ep->template_rout = proto_sym->variant.template_info->variant.function.
+                                                                     routine;
+    ep->template_sym = ft_sym;
+    ep->proto_tssp = proto_sym->variant.template_info;
+    ep->has_attribute = FALSE;
+    ep->compared = TRUE;
+    ep->member_template = TRUE;
+    ep->always_specialization = TRUE;
+    ep->decl_position = *decl_pos;
+    ep->next = specialization_attr_entries;
+    specialization_attr_entries = ep;
+  }  /* if */
+  { an_attribute_ptr  ap = NULL;
+    int               pass;
+    for (pass = 0; pass < 2 && ap == NULL; pass++) {
+      for (ap = pass == 0 ? id_attrs : prefix_attrs; ap != NULL;
+           ap = ap->next) {
+        if (is_must_match_registered_attribute(ap)) break;
+      }  /* for */
+    }  /* for */
     if (ap != NULL && !ep->has_attribute) {
       ep->has_attribute = TRUE;
       ep->position = ap->position;
       ep->display_name = attribute_display_name(ap);
     }  /* if */
   }
-}  /* inherit_must_match_attributes_of_member_template_decl */
+}  /* note_member_template_specialization */
 
 
 void check_specialization_attributes(void)
 /*
-At the end of the translation unit (after the instantiations), give the
-explicit specializations that were declared without the registered attributes
-that must match those of every declaration of their template (see
-RAF_MUST_MATCH) the attributes of the template, compare them with the
-attributes of those that have them, unless that has been done, and issue an
-error for each explicit specialization that has such an attribute when the
-template has none (see note_specialization_attributes).
+At the end of the translation unit (after the instantiations):
+- Issue an error for each explicit specialization of a member template of an
+  instance of a class template when the member template of the class template
+  has a registered attribute that must match those of every declaration (see
+  RAF_MUST_MATCH): that is not supported (its attributes cannot be compared
+  with or inherited from those of the template reliably).
+- Give the other explicit specializations that were declared without those
+  attributes the attributes of their template, compare them with the
+  attributes of those that have them, unless that has been done, and issue an
+  error for each explicit specialization that has such an attribute when the
+  template has none (see note_specialization_attributes).
 */
 {
   a_specialization_attr_entry_ptr  ep;
@@ -7595,6 +7679,27 @@ template has none (see note_specialization_attributes).
   for (ep = specialization_attr_entries; ep != NULL; ep = ep->next) {
     a_routine_ptr  template_rout = resolve_specialization_entry(ep);
     if (template_rout != NULL) {
+      if (is_member_template_of_class_instance(ep->template_sym)) {
+        ep->member_template = TRUE;
+      }  /* if */
+      if (ep->member_template) {
+        an_attribute_ptr  ap;
+        for (ap = template_rout->source_corresp.attributes; ap != NULL;
+             ap = ap->next) {
+          if (is_must_match_registered_attribute(ap)) break;
+        }  /* for */
+        if (ap != NULL &&
+            (ep->always_specialization || ep->rout->is_specialized)) {
+          pos_st_error(ec_attr_member_template_specialization,
+                       &ep->decl_position, attribute_display_name(ap));
+        } else if (ap == NULL && ep->has_attribute) {
+          /* A specialization cannot add an attribute that the template does
+             not have. */
+          pos_st_error(ec_attr_specialization_without_template_attribute,
+                       &ep->position, ep->display_name);
+        }  /* if */
+        continue;
+      }  /* if */
       if (!ep->compared && routine_has_must_match_attribute(template_rout)) {
         an_attribute_ptr  list = copy_of_must_match_attributes(template_rout);
         ep->compared = TRUE;
@@ -7633,6 +7738,13 @@ attach_registered_attributes_to_existing_instances.)
 
   proto_rout = prototype_routine_of_template_instance(rp, &template_sym,
                                                       &proto_tssp);
+  if (proto_rout != NULL && is_member_template_of_class_instance(template_sym)) {
+    /* An instance of a member template of an instance of a class template:
+       an explicit specialization of it is not supported when the member
+       template has attributes that must match (see
+       check_specialization_attributes). */
+    proto_rout = NULL;
+  }  /* if */
   if (proto_rout != NULL && !routine_has_must_match_attribute(rp)) {
     an_attribute_ptr  list = copy_of_must_match_attributes(proto_rout);
     if (list != NULL) {
@@ -7696,9 +7808,10 @@ created later gets them when it is created.)
        are instances that were handled above). */
     { a_specialization_attr_entry_ptr  ep;
       for (ep = specialization_attr_entries; ep != NULL; ep = ep->next) {
-        if (!ep->at_end_only &&
+        if (!ep->member_template &&
             resolve_specialization_entry(ep) ==
-                                         tssp->variant.function.routine) {
+                                         tssp->variant.function.routine &&
+            !is_member_template_of_class_instance(ep->template_sym)) {
           if (!routine_is_listed_instance(tssp, ep->rout)) {
             attach_registered_list_to_instance(ep->rout, ep->template_sym,
                                                ep->proto_tssp, list);
@@ -7727,7 +7840,9 @@ on_primary_declaration flag is TRUE.
   an_attribute_ptr  inst_attr;
 
   /* First get a substituted copy of the attributes list. */
-  inst_attr = copy_of_attributes_with_substitution(
+  { a_template_decl_info_ptr  saved_di = set_lambda_rescan_decl_info(
+                          decl_cache_for_function_template(tssp)->decl_info);
+    inst_attr = copy_of_attributes_with_substitution(
                     tssp->variant.function.routine->source_corresp.attributes,
                     primary_only,
                     template_sym,
@@ -7736,6 +7851,8 @@ on_primary_declaration flag is TRUE.
                     rp->template_arg_list, parent_class_or_null(rp),
                     /*is_partial_instantiation=*/FALSE,
                     (a_boolean*)NULL);
+    (void)set_lambda_rescan_decl_info(saved_di);
+  }
   check_named_results_of_instance(&inst_attr, rp);
   if (primary_only && inst_attr != NULL) {
     /* The attributes of the definition may have been given to rp already
@@ -36109,6 +36226,7 @@ that follows.
           sym->decl_position = saved_sym_pos;
         }  /* if */
         rp->is_specialized = TRUE;
+        note_explicit_specialization(rp, &dps->declarator_pos);
         rp->trailing_requires_clause = NULL;
         /* Except in Microsoft and GNU modes, an explicitly specified storage
            class is disallowed.  In Microsoft mode, it is allowed on in-class

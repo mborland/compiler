@@ -4,10 +4,11 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import asyncio
+import hmac
 import os
 import uuid
 
-from functools import wraps
+from functools import lru_cache, wraps
 from http import HTTPStatus
 from typing import (
   Any, AsyncGenerator, Awaitable, Callable, Dict, Optional, TypeVar
@@ -145,7 +146,23 @@ class NoTestEditSocket(Exception):
 class NoBenchEditSocket(Exception):
   pass
 
+API_KEY_CREDENTIAL = 'api-key'
+
+@lru_cache(maxsize = None)
 def _configured_api_key() -> Optional[str]:
+  '''Return the API key protecting write-capable routes, if any.
+
+  A systemd credential named ``api-key`` (``LoadCredential=`` or
+  ``LoadCredentialEncrypted=``) takes precedence, so deployments can keep the
+  key out of the process environment. Otherwise ``EDG_ACKNOWLEDG_API_KEY`` is
+  used. The key is read once and cached.
+  '''
+  credentials_dir = os.environ.get('CREDENTIALS_DIRECTORY')
+  if credentials_dir is not None:
+    path = os.path.join(credentials_dir, API_KEY_CREDENTIAL)
+    if os.path.isfile(path):
+      with open(path, encoding = 'utf-8') as credential:
+        return credential.read().rstrip('\r\n')
   return os.environ.get('EDG_ACKNOWLEDG_API_KEY')
 
 def _extract_request_api_key() -> Optional[str]:
@@ -154,9 +171,9 @@ def _extract_request_api_key() -> Optional[str]:
 def require_api_key(func: F) -> F:
   '''Authenticate write-capable websocket routes with a shared API key.
 
-  When ``EDG_ACKNOWLEDG_API_KEY`` is unset, authentication is skipped (local
-  development). Otherwise the key must be supplied via the
-  ``X-AcknowlEDG-API-Key`` header.
+  When no key is configured (see ``_configured_api_key``), authentication is
+  skipped (local development). Otherwise the key must be supplied via the
+  ``X-AcknowlEDG-API-Key`` header; it is compared in constant time.
 
   The websocket is accepted before authentication so it can be closed with an
   application close code on failure.
@@ -167,7 +184,8 @@ def require_api_key(func: F) -> F:
     expected = _configured_api_key()
     if expected is not None:
       provided = _extract_request_api_key()
-      if provided != expected:
+      if provided is None or not hmac.compare_digest(
+          provided.encode('utf-8'), expected.encode('utf-8')):
         await websocket.close(WS_CLOSE_UNAUTHORIZED)
         abort(HTTPStatus.UNAUTHORIZED)
     return await func(*args, **kwargs)

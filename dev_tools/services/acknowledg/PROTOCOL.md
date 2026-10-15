@@ -42,9 +42,10 @@ server's current `r`).
 
 `<uuid>` is the shared review id. `<slug>` selects one section of that kind.
 
-When `EDG_ACKNOWLEDG_API_KEY` is set, `/source`, `/edit`, and `/batch` require
+When the server has an API key configured (a systemd `api-key` credential, or
+else `EDG_ACKNOWLEDG_API_KEY`), `/source`, `/edit`, and `/batch` require
 header `X-AcknowlEDG-API-Key`. The server accepts the WebSocket, then closes
-with code **3000** if the key is missing or wrong. When the env var is unset,
+with code **3000** if the key is missing or wrong. When no key is configured,
 authentication is skipped (local development).
 
 ## Roles and occupancy

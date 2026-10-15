@@ -54501,6 +54501,7 @@ is TRUE if the expression is the immediate operand of an "&" operator.
   a_boolean                     is_template_id = FALSE;
   a_template_arg_ptr            expl_templ_arg_list = NULL;
   a_type_ptr                    new_type = NULL;
+  a_param_type_ptr              curr_ptp;
   an_expr_node_ptr              expr_copy, op1, op2;
 
   /* We pass the second argument as NULL because we require explicit
@@ -54519,24 +54520,26 @@ is TRUE if the expression is the immediate operand of an "&" operator.
       }  /* if */
       /* See if this is a reference to a pack element.  This routine will
          return NULL if this is not a pack reference. */
-      new_type = get_curr_variadic_param_type(expr_copy);
-      if (new_type == NULL) {
-        /* If no type was returned above, do substitution on the original
+      curr_ptp = get_curr_variadic_param(expr_copy);
+      if (curr_ptp != NULL) {
+        new_type = curr_ptp->type;
+      } else {
+        /* If no parameter was returned above, do substitution on the original
            type. */
         new_type = do_type_substitution_for_rescan(expr->type, rcblock, eriep);
-        if (rcblock->ctws_state != NULL &&
-            rcblock->ctws_state->instance_param_types != NULL &&
-            !renumber_param_ref_for_instance(expr_copy,
-                                             rcblock->ctws_state)) {
-          /* The condition of an enable_if is being evaluated for an instance
-             of a function template, and the parameter is not one of the
-             instance's: the evaluation would use some other parameter's
-             argument, so the substitution fails instead. */
-          subst_fail(rcblock->error_detected);
-          make_error_operand(result);
-          copy_operand_position(&eriep->saved_operand, result);
-          break;
-        }  /* if */
+      }  /* if */
+      if (rcblock->ctws_state != NULL &&
+          rcblock->ctws_state->instance_param_types != NULL &&
+          !renumber_param_ref_for_instance(expr_copy, rcblock->ctws_state,
+                                           curr_ptp)) {
+        /* The condition of an enable_if is being evaluated for an instance
+           of a function template, and the parameter is not one of the
+           instance's: the evaluation would use some other parameter's
+           argument, so the substitution fails instead. */
+        subst_fail(rcblock->error_detected);
+        make_error_operand(result);
+        copy_operand_position(&eriep->saved_operand, result);
+        break;
       }  /* if */
       if (!is_glvalue_node(expr_copy)) {
         expr_copy->orig_lvalue_type = new_type;

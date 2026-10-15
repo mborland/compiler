@@ -1,0 +1,168 @@
+Matches for "line 66: error: no\ instance\ of\ function\ template\ "two"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 66: error: no instance of function template "two" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 67: error: no\ instance\ of\ function\ template\ "two"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 67: error: no instance of function template "two" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 69: error: no\ instance\ of\ function\ template\ "two"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 69: error: no instance of function template "two" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 71: error: no\ instance\ of\ function\ template\ "two"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 71: error: no instance of function template "two" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 75: error: no\ instance\ of\ function\ template\ "none"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 75: error: no instance of function template "none" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 82: error: no\ instance\ of\ function\ template\ "positive"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 82: error: no instance of function template "positive" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 84: error: no\ instance\ of\ function\ template\ "positive"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 84: error: no instance of function template "positive" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 85: error: no\ instance\ of\ function\ template\ "positive"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 85: error: no instance of function template "positive" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 87: error: no\ instance\ of\ function\ template\ "positive"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 87: error: no instance of function template "positive" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 88: error: no\ instance\ of\ function\ template\ "positive"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 88: error: no instance of function template "positive" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 89: error: no\ instance\ of\ function\ template\ "positive"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 89: error: no instance of function template "positive" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 94: error: no\ instance\ of\ function\ template\ "anyneg"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 94: error: no instance of function template "anyneg" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 95: error: no\ instance\ of\ function\ template\ "anyneg"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 95: error: no instance of function template "anyneg" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 102: error: no\ instance\ of\ function\ template\ "bigsum"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 102: error: no instance of function template "bigsum" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 103: error: no\ instance\ of\ function\ template\ "bigsum"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 103: error: no instance of function template "bigsum" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 109: error: no\ instance\ of\ function\ template\ "bigsum1"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 109: error: no instance of function template "bigsum1" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 115: error: no\ instance\ of\ function\ template\ "sum6"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 115: error: no instance of function template "sum6" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 121: error: no\ instance\ of\ function\ template\ "three_big"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 121: error: no instance of function template "three_big" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 130: error: no\ instance\ of\ function\ template\ "after_first"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 130: error: no instance of function template "after_first" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 135: error: no\ instance\ of\ function\ template\ "head_gt_rest"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 135: error: no instance of function template "head_gt_rest" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 137: error: no\ instance\ of\ function\ template\ "head_gt_rest"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 137: error: no instance of function template "head_gt_rest" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 138: error: no\ instance\ of\ function\ template\ "head_gt_rest"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 138: error: no instance of function template "head_gt_rest" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 142: error: no\ instance\ of\ function\ template\ "head_and_count"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 142: error: no instance of function template "head_and_count" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 143: error: no\ instance\ of\ function\ template\ "head_and_count"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 143: error: no instance of function template "head_and_count" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 144: error: no\ instance\ of\ function\ template\ "head_and_count"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 144: error: no instance of function template "head_and_count" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 152: error: no\ instance\ of\ function\ template\ "packs"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 152: error: no instance of function template "packs" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 154: error: no\ instance\ of\ function\ template\ "packs"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 154: error: no instance of function template "packs" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 159: error: no\ instance\ of\ function\ template\ "pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 159: error: no instance of function template "pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 160: error: no\ instance\ of\ function\ template\ "pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 160: error: no instance of function template "pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 162: error: no\ instance\ of\ function\ template\ "pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 162: error: no instance of function template "pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 164: error: no\ instance\ of\ function\ template\ "pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 164: error: no instance of function template "pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 168: error: no\ instance\ of\ function\ template\ "pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 168: error: no instance of function template "pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 169: error: no\ instance\ of\ function\ template\ "pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 169: error: no instance of function template "pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 185: error: no\ instance\ of\ overloaded\ function\ "count"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 185: error: no instance of overloaded function "count" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 203: error: no\ instance\ of\ function\ template\ "S::n"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 203: error: no instance of function template "S::n" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 205: error: no\ instance\ of\ function\ template\ "S::cn"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 205: error: no instance of function template "S::cn" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 207: error: no\ instance\ of\ function\ template\ "S::sn"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 207: error: no instance of function template "S::sn" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 215: error: no\ instance\ of\ function\ template\ "W<T>::m\ \[with\ T=int\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 215: error: no instance of function template "W<T>::m [with T=int]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 216: error: no\ instance\ of\ function\ template\ "W<T>::m\ \[with\ T=int\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 216: error: no instance of function template "W<T>::m [with T=int]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 217: error: no\ instance\ of\ function\ template\ "W<T>::m\ \[with\ T=int\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 217: error: no instance of function template "W<T>::m [with T=int]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 222: error: no\ instance\ of\ function\ template\ "lambda\ \[\]\(auto\.\.\.\)\->auto"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 222: error: no instance of function template "lambda [](auto...)->auto" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*line (?!(?:66|67|69|71|75|82|84|85|87|88|89|94|95|102|103|109|115|121|130|135|137|138|142|143|144|152|154|159|160|162|164|168|169|185|203|205|207|215|216|217|222)\b)\d+: error)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

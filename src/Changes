@@ -1,6 +1,42 @@
 Version 7.1
 
 10/15/26  [GH #?]
+Function parameter packs in enable_if conditions
+
+A function parameter pack named in the condition of a Clang enable_if
+attribute on a function template (sizeof...(args), a fold expression over the
+pack, an expansion of the pack in a call) was substituted as an empty pack when
+the condition was evaluated for a call: sizeof...(args) was always zero and a
+fold had the value of an empty fold, whatever the arguments, and a fold such as
+(args + ...) > 5 gave the error "empty expansion not valid for this fold
+expression" on the template.  The condition is now evaluated with the elements
+of the pack in the parameter list of the instance, and a reference to an
+element of the pack is numbered by its position in that list, as the
+references to the other parameters are (see the entry on parameters after a
+function parameter pack, on which this depends).  For example:
+
+  template <class... Ts>
+  int positive(Ts... args)
+      __attribute__((enable_if(((args > 0) && ...), "all positive")));
+  int a = positive(1, -2);  // Was accepted (the fold was empty)
+  int b = positive(1, 2);   // Accepted
+
+The same change makes sizeof...(args) and the folds work for overloads that
+differ only in the condition.  A requires-expression in the condition is not
+covered: when the declaration of an instance is scanned, the pack is still
+empty inside the requires-expression, and a fold over it
+(requires { (args + ...); }) is still an error, for calls with arguments as
+well.
+
+Known limitations: every call is rejected when the condition names the
+elements of a reference or forwarding pack (Ts&&... args), as it is when the
+condition names a reference parameter without a pack (such calls were accepted
+only because the pack was empty); and a parameter of a function type
+nested in the condition that has the number of a function parameter pack, named
+in an expansion of that pack in the type's trailing return type, can take the
+type of the element of the pack.
+
+10/15/26  [GH #?]
 Parameters after a function parameter pack in enable_if conditions
 
 The condition of a Clang enable_if attribute that names a function parameter

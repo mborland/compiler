@@ -5711,6 +5711,13 @@ is used in the constraint, its evaluation will fail.
       a_template_ptr  templ = rp->assoc_template;
       check_assertion(templ != NULL);
       init_ctws_state(&ctws_state);
+      /* A reference to a function parameter pack of the template is expanded
+         by the rescan using the elements of the pack in the parameter list of
+         the instance, which are given to it as variadic parameter
+         information. */
+      create_variadic_param_info_for_instance_params(
+                    &ctws_state, function_type_params(skip_typerefs(rp->type)),
+                    instance_params);
       /* The references to parameters in the condition have the numbers of
          the parameters of the template, but the arguments are indexed below
          by position in the parameter list of the instance, which differs
@@ -5721,6 +5728,7 @@ is used in the constraint, its evaluation will fail.
                                           templ_params_of(symbol_for(templ)),
                                           CTWS_NO_OPTIONS, &failed,
                                           &ctws_state);
+      free_list_of_variadic_param_info(ctws_state.variadic_param_info);
       if (failed) {
         /* If substitution failed, the function is discarded as a candidate.
            No need to try another attribute. */

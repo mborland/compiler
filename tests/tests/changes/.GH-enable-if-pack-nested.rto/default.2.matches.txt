@@ -1,0 +1,20 @@
+Matches for "line 34: error: no\ instance\ of\ function\ template\ "g2"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 34: error: no instance of function template "g2" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 37: error: no\ instance\ of\ function\ template\ "g3"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 37: error: no instance of function template "g3" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 46: error: no\ instance\ of\ function\ template\ "k3"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 46: error: no instance of function template "k3" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 49: error: no\ instance\ of\ function\ template\ "k4"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 49: error: no instance of function template "k4" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*line (?!(?:34|37|46|49)\b)\d+: error)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

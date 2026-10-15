@@ -12947,16 +12947,16 @@ pack expansion stack entry for which the symbols are to be updated.
 }  /* update_parameter_pack_symbol_values */
 
 
-a_type_ptr get_curr_variadic_param_type(an_expr_node_ptr	expr)
+a_param_type_ptr get_curr_variadic_param(an_expr_node_ptr	expr)
 /*
-This routine is called during rescan contexts to find the current type
-for the enk_param_ref specified by expr.  If no matching parameter
-is found, NULL is returned.
+This routine is called during rescan contexts to find the current parameter
+type entry (the current element of the pack) for the enk_param_ref specified by
+expr.  If no matching parameter is found, NULL is returned.
 */
 {
   a_pack_reference_ptr			arg_prp = NULL;
   a_pack_expansion_stack_entry_ptr	pesep;
-  a_type_ptr				result_type = NULL;
+  a_param_type_ptr			result_ptp = NULL;
 
   check_assertion(expr->kind == (an_expr_node_kind)enk_param_ref);
   /* A reference to "this" can't match. */
@@ -12977,20 +12977,21 @@ is found, NULL is returned.
               vpip->orig_param_type->param_num ==
                                  (uint32_t)expr->variant.param_ref.param_num &&
               (unsigned int)vpip->level == expr->variant.param_ref.levels_up) {
-            result_type = arg_prp->curr_argument.param_type->type;
+            result_ptp = arg_prp->curr_argument.param_type;
             break;
           }  /* if */
         }  /* if */
       }  /* for */
-      if (result_type != NULL) break;
+      if (result_ptp != NULL) break;
     }  /* for */
   }  /* if */
-  return result_type;
-}  /* get_curr_variadic_param_type */
+  return result_ptp;
+}  /* get_curr_variadic_param */
 
 
 a_boolean renumber_param_ref_for_instance(an_expr_node_ptr  expr,
-                                          a_ctws_state_ptr  ctws_state)
+                                          a_ctws_state_ptr  ctws_state,
+                                          a_param_type_ptr  element)
 /*
 expr is a copy of an enk_param_ref node made while rescanning an expression
 for ctws_state, and ctws_state->instance_param_types is non-NULL, so the
@@ -13002,7 +13003,11 @@ elements of a function parameter pack share the number of the pack, so a
 parameter after a pack has a different position than number.
 
 Replace the number of a reference to a parameter of the instance by the
-position (1, 2, ...) of the parameter that has that number.  References to
+position (1, 2, ...) of that parameter.  If element is non-NULL, the reference
+is to the current element of a function parameter pack of the function being
+expanded (found by get_curr_variadic_param), which is identified by its entry
+in the list: the elements of a pack have no number of their own.  Otherwise the
+parameter is the first one that has the number of the node.  References to
 "this" (number zero) are left alone, and so are the references that are not to
 the parameters of the function itself: those with levels_up other than zero,
 and those made while another parameter list is being rescanned (substituting a
@@ -13010,15 +13015,14 @@ nested routine type, whose return type and exception specification name its own
 parameters, changes routine_type_levels; the parameters of a
 requires-expression are made with instance_param_types cleared, see
 requires_expr_satisfied_full).  A number that is the one of elements of a
-function parameter pack of the instance is the reference to an element of the
-pack of a class template (a member template of an instance of the class, whose
-condition names the class pack): the elements of such a pack all have the
-number of the pack, so which one is meant cannot be told, and the first one is
-used (the limitation of bug 0010: the other elements are read as the first).
-Return FALSE if no parameter of the instance has the number, because a node
-that cannot be mapped must not be left with a number that would name some other
-parameter.  (A reference to an element of a pack of the function being expanded
-is not handled here; see get_curr_variadic_param_type.)
+function parameter pack of the instance, with no element given, is the
+reference to an element of the pack of a class template (a member template of
+an instance of the class, whose condition names the class pack): the elements
+of such a pack all have the number of the pack, so which one is meant cannot be
+told, and the first one is used (the limitation of bug 0010: the other
+elements are read as the first).  Return FALSE if no parameter of the
+instance matches, because a node that cannot be mapped must not be left with a
+number that would name some other parameter.
 */
 {
   a_param_type_ptr  ptp;
@@ -13035,7 +13039,7 @@ is not handled here; see get_curr_variadic_param_type.)
   } else {
     for (ptp = ctws_state->instance_param_types; ptp != NULL;
          ptp = ptp->next, ++position) {
-      if (ptp->param_num == num) {
+      if (element != NULL ? ptp == element : ptp->param_num == num) {
         expr->variant.param_ref.param_num = position;
         found = TRUE;
         break;

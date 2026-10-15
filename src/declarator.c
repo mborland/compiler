@@ -34,9 +34,65 @@ declarator.c -- Scanning of declarators.
 /* Conditionally open the "edg" namespace. */
 BEGIN_EDG_NAMESPACE
 
+static a_boolean post_func_attributes_are_attached_to_function(
+                                           a_decl_parse_state  *dps,
+                                           a_type_ptr          routine_type,
+                                           a_boolean           is_function_decl)
+/*
+Return TRUE if an entity-attached registered attribute (see RAF_ENTITY_ATTACHED
+in attribute.h) after the parameter list of the function declarator that has
+just been scanned (the type of which is routine_type) is attached to the
+function rather than to the function type: The declarator is the top-level
+declarator of the declaration of a function (is_function_decl) that is not in
+a function body, and has a prototyped parameter list, not a list of
+identifiers.
+*/
+{
+  return is_function_decl && !dps->in_nested_declarator &&
+         !dps->is_lambda && !dps->for_requires_expr_params &&
+         !dps->is_deduction_guide && innermost_function_scope == NULL &&
+         skip_typerefs_not_typedefs(routine_type)->variant.routine.extra_info->
+                                                              prototyped;
+}  /* post_func_attributes_are_attached_to_function */
+
+
+static void init_post_func_attr_context(
+                                    a_post_func_attr_context  *ctx,
+                                    a_decl_parse_state        *dps,
+                                    a_func_info_block_ptr     func_info,
+                                    a_type_ptr                routine_type,
+                                    a_boolean                 is_function_decl,
+                                    a_boolean                 has_no_result_type)
+/*
+Set *ctx to the context in which the attributes after the parameter list of the
+function declarator of the declaration with the state *dps are scanned (see
+set_post_func_attr_context): An attribute can name the result of the function
+only if it is attached to the function, and the function has a return type
+that is not deduced.  has_no_result_type is TRUE for a constructor, a
+destructor or a conversion function.
+*/
+{
+  ctx->dps = dps;
+  ctx->func_info = func_info;
+  ctx->rout_type = routine_type;
+  if (!post_func_attributes_are_attached_to_function(dps, routine_type,
+                                                     is_function_decl)) {
+    ctx->error = ec_attr_result_name_not_allowed;
+  } else if (has_no_result_type) {
+    ctx->error = ec_attr_result_name_no_result_type;
+  } else if (dps->has_deducible_return_type || dps->has_deduced_type ||
+             dps->has_trailing_return_type) {
+    ctx->error = ec_attr_result_name_deduced_type;
+  } else {
+    ctx->error = ec_no_error;
+  }  /* if */
+}  /* init_post_func_attr_context */
+
+
 static void scan_declarator_attributes(a_decl_parse_state  *dps,
                                        a_type_ptr          *p_type,
-                                       a_boolean           is_function_decl)
+                                       a_boolean           is_function_decl,
+                                       a_func_info_block_ptr  func_info)
 /*
 Scan attributes that appear after a declarator component other than the
 declarator-id.  *p_type is the type formed by the particular declarator
@@ -95,7 +151,16 @@ with its syntactic location al_post_func.
       }  /* if */
   }  /* switch */
   /* Scan the attributes. */
-  attributes = scan_attributes(syn_loc);
+  if (syn_loc == al_post_func) {
+    a_post_func_attr_context  ctx, *previous_ctx;
+    init_post_func_attr_context(&ctx, dps, func_info, type, is_function_decl,
+                                /*has_no_result_type=*/FALSE);
+    previous_ctx = set_post_func_attr_context(&ctx);
+    attributes = scan_attributes(syn_loc);
+    (void)set_post_func_attr_context(previous_ctx);
+  } else {
+    attributes = scan_attributes(syn_loc);
+  }  /* if */
   /* Reclassify attributes if necessary. */
   if (attributes != NULL) {
     /* Move any non-type-transforming GNU attributes to the dps->id_declarator
@@ -107,12 +172,8 @@ with its syntactic location al_post_func.
     do {
       ap = *p_from;
       if (ap->kind == ak_registered && syn_loc == al_post_func &&
-          is_function_decl && !dps->in_nested_declarator &&
-          !dps->is_lambda && !dps->for_requires_expr_params &&
-          !dps->is_deduction_guide &&
-          innermost_function_scope == NULL &&
-          skip_typerefs_not_typedefs(type)->variant.routine.extra_info->
-                                                              prototyped &&
+          post_func_attributes_are_attached_to_function(dps, type,
+                                                        is_function_decl) &&
           attribute_is_entity_attached(ap)) {
         /* The attribute is the function's (not its type's). */
         *p_from = ap->next;
@@ -2979,11 +3040,23 @@ this is a helper function.
   }  /* if */
   /* Scan any attributes now, but delay attaching them until we know if a
      trailing return type follows. */
-  attributes = composite_attributes(attributes, scan_attributes(al_post_func));
+  { a_post_func_attr_context  ctx, *previous_ctx;
+    init_post_func_attr_context(&ctx, state, func_info, rout_type,
+                                top_level && !is_typedef_decl,
+                                is_constructor || is_destructor ||
+                                is_finalizer ||
+                                (locator != NULL &&
+                                 locator->is_conversion_name));
+    previous_ctx = set_post_func_attr_context(&ctx);
+    attributes = composite_attributes(attributes,
+                                      scan_attributes(al_post_func));
+    (void)set_post_func_attr_context(previous_ctx);
+  }
   if (curr_token == tok_arrow &&
       (trailing_return_types_enabled || state->is_lambda ||
        state->is_deduction_guide)) {
-    /* A trailing return type. */
+    /* A trailing return type (the return type is "auto", so an attribute that
+       names the result has been diagnosed already). */
     scan_trailing_return_type(state, rout_type);
   } else {
     state->return_type_pos = state->specifiers_pos;
@@ -4564,7 +4637,8 @@ an error if a default argument expression is encountered.
     }  /* if */
   }  /* if */
   scan_declarator_attributes(state, new_type_ptr,
-                             is_top_level_declarator && !is_typedef_decl);
+                             is_top_level_declarator && !is_typedef_decl,
+                             func_info);
 done:
   /* Pop the function prototype scope if needed. */
   if (must_pop_function_prototype_scope) pop_scope();
@@ -5123,7 +5197,8 @@ constant.
   (void)required_token(tok_rbracket, ec_exp_rbracket);
   remove_stop_token(tok_rbracket);
   copy_source_position(start_pos, error_position);
-  scan_declarator_attributes(dps, new_type_ptr, /*is_function_decl=*/FALSE);
+  scan_declarator_attributes(dps, new_type_ptr, /*is_function_decl=*/FALSE,
+                             (a_func_info_block_ptr)NULL);
   release_local_constant(&constant);
   db_exit();
 }  /* array_declarator */
@@ -6248,7 +6323,8 @@ Microsoft extended decl modifiers are also scanned, but they are ignored
       }  /* if */
     }  /* if */
     scan_declarator_attributes(state, &complete_type,
-                               /*is_function_decl=*/FALSE);
+                               /*is_function_decl=*/FALSE,
+                               (a_func_info_block_ptr)NULL);
     ref_to_ref_allowed = FALSE;
     /* Keep looping as long as there are pointer declarators. */
   }  /* for */

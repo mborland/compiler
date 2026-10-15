@@ -5168,6 +5168,37 @@ declarations and the specialization come first.  A function with C language
 linkage declared in two namespaces is one function; in GNU emulation the front
 end has a routine for each declaration, and they are not compared.
 
+A signature that starts with ``R`` (``"(R,Xb)"``, for a postcondition) lets the
+attribute name the result of the function.  The name is optional: when the
+arguments start with an identifier followed by a comma, the identifier is the
+name, and it is in scope in the arguments that follow, in which it denotes the
+result, an object of the type that the function returns (a reference if the
+function returns one; ``this`` is available as usual).  Otherwise the
+attribute has no name for the result, and what follows is the condition (an
+identifier that is not followed by a comma, such as the name of a parameter,
+is the start of the condition).  An attribute with such a signature must be
+entity-attached.  A name for the result is allowed only after the parameter
+list of a function declaration that is attached to the function (see above)
+and returns a type that is neither ``void`` nor deduced: after any other
+declarator, for a function that returns ``void``, whose return type is deduced
+(``auto``, ``decltype(auto)``) or a trailing return type, for a constructor, a
+destructor and a conversion function, it is an error, as it is when the name is
+the name of a parameter or of a template parameter, and when the return type
+is dependent and is ``void`` in an instance (the member of a class template
+whose definition outside the class has the attribute, say).  Without a name the
+attribute is allowed wherever it can be attached.  The name of the result is the first argument of the
+attribute (an ``aak_token``) and is not compared when the attributes of two
+declarations are compared (the attributes of a function with a must-match flag
+are compared by position, not by name).  In the IL, the result is a function
+parameter reference (``enk_param_ref``) with ``param_num`` 1 and ``levels_up``
+0, of the return type, and the parameters of the function, which are one level
+further away, have ``levels_up`` 1 (as for any reference to a parameter from a
+nested function prototype scope), with their own ``param_num``; ``this`` is as
+in an attribute without a result name.  The parameters have ``levels_up`` 1
+also when there is no name for the result, so the form of the references does
+not depend on it.  The result type is substituted in the instances of a
+template like the parameter types.
+
 The front end treats a registered attribute more strictly than the attributes
 it defines:
 

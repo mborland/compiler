@@ -1,6 +1,36 @@
 Version 7.1
 
 10/14/26  [GH #?]
+Naming the result of a function in a registered attribute
+
+The signature of a registered attribute can start with the new code "R", as in
+"(R,Xb)": the arguments may start with an identifier and a comma, and then the
+identifier names the result of the function, and is in scope in the arguments
+that follow, in which it denotes the result (an object of the type that the
+function returns, a reference if the function returns one).  Without an
+identifier and a comma first there is no name: the same attribute is
+"ensures(r, r > 0)" or "ensures(x > 0)".  Such an attribute must be
+entity-attached (RAF_ENTITY_ATTACHED).  A name for the result is allowed only
+after the parameter list of a function declaration that is not in a function
+body, for a function that does not return void and whose return type is not
+deduced (it is an error for a trailing return type, a constructor, a
+destructor and a conversion function, when the name is the name of a
+parameter or of a template parameter, and for an instance that returns void);
+without a name there is no such restriction.  In the IL the result
+is a parameter reference with number 1 and 0 levels up, and the parameters of
+the function are 1 level up, with or without a name.  The name of the result is not compared when the
+attributes of two declarations of a function are compared.  Also, once an
+error has been issued for a registered attribute that is then ignored, no
+other error is issued for it.  For example, with "post" registered with
+"(R,Xb)":
+
+  int f(int x) [[mine::post(r, r > x)]];
+  int g(int x) [[mine::post(r, r > x)]] { return x + 1; }
+  void h() [[mine::post(r, true)]];   // Error: attribute "mine::post" cannot
+                                      // name the result of a function that
+                                      // returns void
+
+10/14/26  [GH #?]
 Substituting the template arguments of a class in the attributes of its members
 
 When the attributes of a member of a class template are instantiated (an

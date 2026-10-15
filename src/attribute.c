@@ -131,8 +131,19 @@ typedef struct an_attr_descr {
 			     "ct": an integer constant or a type is expected
 			           (similar to a "sizeof(...)" argument)
 			     "n": an identifier is expected
-			     "sn": a narrow string literal is expected
-			     "sx": a string literal is expected (wide/narrow)
+			     "R": an optional name for the result of the function
+			          (an identifier followed by a comma); only for a
+			          registered attribute that is entity-attached,
+			          and only as the first code, followed by a comma:
+			          "(R,Xb)".  The same signature is used with and
+			          without the name: "ensures(r, r > 0)" and
+			          "ensures(x > 0)" (an identifier that is not
+			          followed by a comma is the start of the next
+			          argument).  The name is in scope in the other
+			          arguments (in which it denotes the result, an
+			          object of the type that the function returns).
+			          In either case a function parameter is a
+			          parameter of the level above.
 			     "X": an unevaluated expression
 			     "Xc": an unevaluated conditional-expression
 			     "Xe": an evaluated expression
@@ -1358,6 +1369,18 @@ unrecognized.
 }  /* note_registered_attribute_diagnosed */
 
 
+void note_registered_attribute_dropped(an_attribute_ptr  ap)
+/*
+The attribute ap is about to be made unrecognized (see make_attr_unrecognized),
+after an error was issued for it: If it is a registered attribute, it is
+accounted for, and no other error is to be issued for it.
+*/
+{
+  account_for_registered_attribute(ap);
+  note_registered_attribute_diagnosed(ap);
+}  /* note_registered_attribute_dropped */
+
+
 a_boolean registered_attribute_was_diagnosed(an_attribute_ptr  ap)
 /*
 Return TRUE if ap is an attribute that was a registered attribute for which
@@ -1470,6 +1493,27 @@ RAF_ENTITY_ATTACHED (see attribute.h).
 }  /* attribute_is_entity_attached */
 
 
+static a_boolean registered_sig_names_result(a_const_char  *sig);
+
+static a_boolean attribute_names_result(an_attribute_ptr  ap)
+/*
+Return TRUE if the given attribute is a registered attribute whose signature
+starts with "R": the first argument is the name that it gives to the result
+of the function.
+*/
+{
+  a_boolean                           result = FALSE;
+  an_attr_namespace_registration_ptr  nsp;
+  an_attr_registration const          *rp;
+
+  if (ap->kind == (an_attribute_kind)ak_registered) {
+    rp = find_registered_attribute(ap->namespace_name, ap->name, &nsp);
+    result = rp != NULL && registered_sig_names_result(rp->sig);
+  }  /* if */
+  return result;
+}  /* attribute_names_result */
+
+
 static a_boolean attribute_must_match(an_attribute_ptr  ap)
 /*
 Return TRUE if the given attribute is a registered attribute with the flag
@@ -1519,8 +1563,14 @@ that can be used in a registration.
     } else {
       ++p;
       for (;;) {
+        a_boolean  first = (p == sig + (*sig == '?' ? 2 : 1));
         if (*p == '?') ++p;
         switch (*p++) {
+          case 'R':
+            /* The name of the result: first, and followed by more
+               arguments. */
+            if (!first || *p != ',') ok = FALSE;
+            break;
           case 'c':
             if (*p == 't' || *p == 'i') {
               ++p;
@@ -1559,6 +1609,17 @@ that can be used in a registration.
   }  /* if */
   return ok;
 }  /* registered_sig_is_valid */
+
+
+static a_boolean registered_sig_names_result(a_const_char  *sig)
+/*
+Return TRUE if the (valid) signature starts with the code "R", which names the
+result of a function.
+*/
+{
+  if (sig != NULL && *sig == '?') ++sig;
+  return sig != NULL && sig[0] == '(' && sig[1] == 'R';
+}  /* registered_sig_names_result */
 
 
 static a_boolean registered_target_is_valid(a_const_char  *target)
@@ -1732,6 +1793,10 @@ in that program.
       check_registration((rp->flags & RAF_MUST_MATCH) == 0 ||
                          (rp->flags & RAF_ENTITY_ATTACHED) != 0, nsp, rp,
                          "a must-match attribute must be entity-attached");
+      check_registration(!registered_sig_names_result(rp->sig) ||
+                         (rp->flags & RAF_ENTITY_ATTACHED) != 0, nsp, rp,
+                         "an attribute that names the result must be "
+                         "entity-attached");
     }  /* for */
   }  /* for */
 }  /* validate_registered_attributes */
@@ -2758,8 +2823,161 @@ for each instance.)
 }  /* check_registered_attribute_packs */
 
 
-static void scan_attr_arg_list(an_attribute_ptr  ap,
-                               a_const_char      *sig)
+typedef struct a_result_binder {
+  /* The scope in which the name of the result of a function (see the
+     signature code "R") is declared while the arguments of an attribute are
+     scanned. */
+  a_boolean          pushed;
+  a_func_info_block  func_info;
+} a_result_binder;
+
+
+STATIC_THREAD a_post_func_attr_context  *post_func_attr_ctx;
+			/* The context in which the next attribute after the
+			   parameter list of a function declarator is scanned,
+			   or NULL. */
+
+
+a_post_func_attr_context *set_post_func_attr_context(
+                                              a_post_func_attr_context  *ctx)
+/*
+Set the context in which the attributes after the parameter list of a function
+declarator are scanned (NULL if they are not: the default), and return the
+previous one.  An attribute that names the result of the function (see the
+signature code "R") needs the context.
+*/
+{
+  a_post_func_attr_context  *previous = post_func_attr_ctx;
+
+  post_func_attr_ctx = ctx;
+  return previous;
+}  /* set_post_func_attr_context */
+
+
+static void push_result_binder_scope(a_post_func_attr_context  *ctx,
+                                     a_result_binder           *binder)
+/*
+Push the function prototype scope for the result of the function (see the
+signature code "R"): the parameters of the function are in the scope of the
+level above (their references have 1 level up), whether the result is named
+or not.  The scope is popped by scan_attr_arg_list.
+*/
+{
+  clear_func_info(&binder->func_info);
+  (void)push_scope((a_scope_kind)sck_func_prototype, NO_SCOPE_NUMBER,
+                   ctx->rout_type, (a_routine_ptr)NULL);
+  scope_stack_top().decl_parse_state = ctx->dps;
+  scope_stack_top().outside_parameter_list = TRUE;
+  binder->pushed = TRUE;
+}  /* push_result_binder_scope */
+
+
+static a_boolean is_template_parameter_name(a_symbol_locator  *loc)
+/*
+Return TRUE if the identifier of the locator is the name of a template parameter
+of a template that is being declared or instantiated here.
+*/
+{
+  a_boolean                result = FALSE;
+  a_scope_stack_entry_ptr  ssep;
+
+  for (ssep = &scope_stack[depth_scope_stack]; !result; ssep -= 1) {
+    if ((ssep->kind == (a_scope_kind)sck_template_instantiation ||
+         ssep->kind == (a_scope_kind)sck_template_declaration) &&
+        ssep->template_decl_info != NULL) {
+      a_template_param_ptr  tpp;
+      for (tpp = ssep->template_decl_info->parameters; tpp != NULL;
+           tpp = tpp->next) {
+        if (tpp->param_symbol != NULL &&
+            tpp->param_symbol->header == loc->symbol_header) {
+          result = TRUE;
+          break;
+        }  /* if */
+      }  /* for */
+    }  /* if */
+    if (ssep == scope_stack) break;
+  }  /* for */
+  return result;
+}  /* is_template_parameter_name */
+
+
+static an_attribute_arg_ptr scan_attr_result_binder(
+                                        an_attribute_ptr          ap,
+                                        a_post_func_attr_context  *ctx,
+                                        a_result_binder           *binder,
+                                        a_boolean                 *p_error)
+/*
+The signature of the attribute ap starts with the code "R": The arguments may
+start with a name for the result of the function, an identifier followed by a
+comma (otherwise, the first argument is a condition: "ensures(x > 0)" and
+"ensures(x)" have no name for the result).  If there is a name, return an
+aak_token entry for it, and consume it and the comma.  A function prototype
+scope is pushed (see push_result_binder_scope) when the attribute can be
+attached to the function; when there is a name, it is declared in it as a
+parameter (numbered 1, of the type that the function returns) so that it can
+be used in the arguments that follow.  Pop the scope (and free *binder) when
+the arguments have been scanned.  Issue an error and set *p_error (and
+ap->kind to ak_unrecognized) if there is a name but the attribute cannot name
+the result here.
+*/
+{
+  an_attribute_arg_ptr  aap = NULL;
+
+  if (curr_token == tok_identifier && next_token() == tok_comma) {
+    a_symbol_locator  loc = locator_for_curr_id;
+    an_error_code     err = ec_no_error;
+    aap = scan_attr_identifier_arg(ap);
+    if (ctx == NULL) {
+      err = ec_attr_result_name_not_allowed;
+    } else if (ctx->error != ec_no_error) {
+      err = ctx->error;
+    } else if (is_void_type(skip_typerefs(ctx->dps->type))) {
+      err = ec_attr_result_name_void_function;
+    }  /* if */
+    if (err != ec_no_error) {
+      pos_st_error(err, &aap->position, attribute_display_name(ap));
+      make_attr_unrecognized(ap);
+      *p_error = TRUE;
+    } else if (ctx->func_info != NULL &&
+               param_id_on_list(&loc, ctx->func_info->param_id_list) != NULL) {
+      /* The name of the result would hide the parameter. */
+      pos_st_error(ec_decl_hides_function_parameter, &aap->position,
+                   loc.symbol_header->identifier);
+      make_attr_unrecognized(ap);
+      *p_error = TRUE;
+    } else if (is_template_parameter_name(&loc)) {
+      /* The name of the result would hide the template parameter (in clang
+         mode that is only a warning for another declaration). */
+      pos_st_error(ec_decl_hides_template_parameter, &aap->position,
+                   loc.symbol_header->identifier);
+      make_attr_unrecognized(ap);
+      *p_error = TRUE;
+    } else {
+      a_param_id_ptr  last_param_id = NULL;
+      push_result_binder_scope(ctx, binder);
+      add_to_param_id_list(&loc, ctx->dps->type, &aap->position, sc_auto,
+                           &binder->func_info,
+                           (a_source_sequence_entry_ptr)NULL, &last_param_id,
+                           /*is_pack_element=*/FALSE);
+      last_param_id->declared_type = ctx->dps->type;
+      last_param_id->param_num = 1;
+      if (last_param_id->symbol != NULL) {
+        last_param_id->symbol->is_invisible = FALSE;
+      }  /* if */
+      /* The comma after the name. */
+      (void)get_token();
+    }  /* if */
+  } else if (ctx != NULL && ctx->error != ec_attr_result_name_not_allowed) {
+    /* No name for the result. */
+    push_result_binder_scope(ctx, binder);
+  }  /* if */
+  return aap;
+}  /* scan_attr_result_binder */
+
+
+static void scan_attr_arg_list(an_attribute_ptr          ap,
+                               a_const_char              *sig,
+                               a_post_func_attr_context  *ctx)
 /*
 A non-empty attribute argument list for the given attribute is next.  The
 current token is the first token after the left parenthesis, and sig points
@@ -2772,6 +2990,23 @@ ak_unrecognized.
   a_const_char          *saved_sig;
   a_boolean             may_terminate, requirements_met = FALSE;
   unsigned long         function_pack_refs, after_pack_refs;
+  a_result_binder       binder;
+
+  binder.pushed = FALSE;
+  if (*sig == 'R') {
+    /* The arguments may start with the name of the result of the function. */
+    a_boolean  err = FALSE;
+    ++sig;
+    *p_aap = scan_attr_result_binder(ap, ctx, &binder, &err);
+    if (err) {
+      /* Skip the other arguments: They could refer to the name. */
+      if (*p_aap != NULL) p_aap = &(*p_aap)->next;
+      *p_aap = scan_attr_remaining_arg_tokens(ap);
+      goto done;
+    }  /* if */
+    while (*p_aap != NULL) p_aap = &(*p_aap)->next;
+    if (*sig == ',') ++sig;
+  }  /* if */
 
   /* Loop for each argument in the argument list. */
   do {
@@ -2934,7 +3169,11 @@ ak_unrecognized.
                  attribute_display_name(ap));
     make_attr_unrecognized(ap);
   }  /* if */
-done:;
+done:
+  if (binder.pushed) {
+    pop_scope();
+    done_with_func_info(binder.func_info);
+  }  /* if */
 }  /* scan_attr_arg_list */
 
 
@@ -2948,8 +3187,12 @@ not match the pattern indicated by sig; in that case, ap->kind is set to
 ak_unrecognized.
 */
 {
-  a_source_position  lparen_pos;
+  a_source_position         lparen_pos;
+  a_post_func_attr_context  *ctx = post_func_attr_ctx;
 
+  /* The context is for this attribute only, not for the attributes that its
+     arguments may contain. */
+  post_func_attr_ctx = NULL;
   add_stop_token(tok_rparen);
   if (curr_token == tok_lparen) {
     lparen_pos = pos_curr_token;
@@ -2971,7 +3214,7 @@ ak_unrecognized.
     /* Skip over the left parenthesis. */
     (void)get_token();
     /* Scan the non-empty argument list. */
-    scan_attr_arg_list(ap, sig);
+    scan_attr_arg_list(ap, sig, ctx);
     if (ap->arguments == NULL) {
       /* An empty attribute argument "()". */
       record_empty_attribute_argument(ap, sig, &lparen_pos);
@@ -2990,6 +3233,7 @@ ak_unrecognized.
     }  /* if */
   }  /* if */
   remove_stop_token(tok_rparen);
+  post_func_attr_ctx = ctx;
 }  /* scan_attribute_args */
 
 
@@ -3005,6 +3249,40 @@ function body is in the memory region of that function, which may be gone.
                       aap->variant.sexpr->source_corresp.enclosing_routine) !=
                                                                         NULL;
 }  /* attribute_arg_expr_is_available */
+
+
+void check_named_results_of_instance(an_attribute_ptr  *p_attributes,
+                                     a_routine_ptr     rp)
+/*
+*p_attributes is a list of copies, with template arguments substituted, of
+attributes of a template for the instance rp.  A registered attribute that names
+the result of the function (see the signature code "R") is an error for an
+instance that returns void (the type of the result was dependent when the
+attribute was scanned): issue it and remove the attribute from the list.
+*/
+{
+  an_attribute_ptr  *pp = p_attributes;
+  a_type_ptr        return_type = NULL;
+
+  if (rp->type != NULL &&
+      skip_typerefs(rp->type)->kind == (a_type_kind)tk_routine) {
+    return_type = skip_typerefs(rp->type)->variant.routine.return_type;
+  }  /* if */
+  while (*pp != NULL) {
+    an_attribute_ptr  ap = *pp;
+    if (return_type != NULL && attribute_names_result(ap) &&
+        ap->arguments != NULL &&
+        ap->arguments->kind == (an_attribute_arg_kind)aak_token &&
+        is_void_type(skip_typerefs(return_type))) {
+      pos_st_error(ec_attr_result_name_void_function,
+                   &ap->arguments->position, attribute_display_name(ap));
+      make_attr_unrecognized(ap);
+      *pp = ap->next;
+    } else {
+      pp = &ap->next;
+    }  /* if */
+  }  /* while */
+}  /* check_named_results_of_instance */
 
 
 a_boolean equivalent_attributes(an_attribute_ptr  ap1,
@@ -3029,6 +3307,14 @@ namespace and name.
        equivalent. */
     an_attribute_arg_ptr  aap1 = ap1->arguments, aap2 = ap2->arguments;
     result = TRUE;
+    if (attribute_names_result(ap1) && aap1 != NULL && aap2 != NULL &&
+        aap1->kind == (an_attribute_arg_kind)aak_token &&
+        aap2->kind == (an_attribute_arg_kind)aak_token) {
+      /* The name that the attributes give to the result of the function does
+         not matter. */
+      aap1 = aap1->next;
+      aap2 = aap2->next;
+    }  /* if */
     while (aap1 != NULL && aap2 != NULL && result) {
       if (aap1->kind != aap2->kind) {
         result = FALSE;
@@ -12095,6 +12381,7 @@ static constexpr an_attr_registration edg_test_attributes[] = {
   { "requires", "(Xb)", "r", RAF_ENTITY_ATTACHED },
   { "r_pre", "(Xb)", "r", RAF_ENTITY_ATTACHED | RAF_MUST_MATCH },
   { "r_pre2", "(Xb)", "r", RAF_ENTITY_ATTACHED | RAF_MUST_MATCH },
+  { "r_post", "(R,Xb)", "r", RAF_ENTITY_ATTACHED | RAF_MUST_MATCH },
   { NULL, NULL, NULL, RAF_NO_FLAGS }
 };
 
@@ -12197,6 +12484,7 @@ translation unit.
   unscanned_attributes = NULL;
   registered_attr_account = NULL;
   registered_attr_buckets = NULL;
+  post_func_attr_ctx = NULL;
 #if USE_X86_FUNCTION_MULTIVERSIONING && DO_IL_LOWERING
   mv_builtins_loaded = FALSE;
 #endif /* USE_X86_FUNCTION_MULTIVERSIONING && DO_IL_LOWERING */

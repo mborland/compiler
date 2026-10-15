@@ -103,7 +103,7 @@ Return TRUE if the given attribute is unrecognized.
 Reclassify the given attribute as "unrecognized".
 */
 #define make_attr_unrecognized(ap)                                           \
-  { account_for_registered_attribute(ap);                                    \
+  { note_registered_attribute_dropped(ap);                                   \
     (ap)->kind = ak_unrecognized; }
 
 /*
@@ -416,6 +416,8 @@ Flag values that describe a registered attribute.
 	   name and equivalent arguments, compared by position of parameters),
 	   or it is an error.  A declaration that has no such attribute is
 	   always fine. */
+/* An attribute with a signature that starts with "R" (see attribute.c) also
+   needs RAF_ENTITY_ATTACHED: it names the result of the function. */
 
 typedef struct an_attr_registration {
   /* The description of one registered attribute. */
@@ -478,6 +480,8 @@ extern void account_for_registered_attributes(an_attribute_ptr  attributes);
 
 extern void account_for_registered_attribute(an_attribute_ptr  ap);
 
+extern void note_registered_attribute_dropped(an_attribute_ptr  ap);
+
 extern a_boolean registered_attribute_was_diagnosed(an_attribute_ptr  ap);
 
 extern void note_attribute_copy(an_attribute_ptr  from,
@@ -486,6 +490,28 @@ extern void note_attribute_copy(an_attribute_ptr  from,
 extern a_boolean attribute_is_entity_attached(an_attribute_ptr  ap);
 
 extern a_boolean is_must_match_registered_attribute(an_attribute_ptr  ap);
+
+/* The context in which the attributes after the parameter list of a
+   function declarator are scanned, for an attribute whose signature starts
+   with "R" (see attribute.c), which names the result of the function. */
+typedef struct a_post_func_attr_context {
+  struct a_decl_parse_state	*dps;
+			/* The state of the declaration being scanned. */
+  struct a_func_info_block	*func_info;
+			/* The information on the parameters (for checking
+			   that the name of the result is not one of them). */
+  a_type_ptr		rout_type;
+			/* The type of the function. */
+  an_error_code		error;
+			/* ec_no_error if the result can be named, otherwise the
+			   error to issue if an attribute names it. */
+} a_post_func_attr_context;
+
+extern void check_named_results_of_instance(an_attribute_ptr  *p_attributes,
+                                            a_routine_ptr     rp);
+
+extern a_post_func_attr_context *set_post_func_attr_context(
+                                              a_post_func_attr_context  *ctx);
 
 extern void reconcile_must_match_attributes(
                                           a_routine_ptr     rp,

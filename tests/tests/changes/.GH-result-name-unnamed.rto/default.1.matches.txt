@@ -1,0 +1,76 @@
+Matches for "type:\s+file-scope type@X+: short\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+1":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: short
+  orig_lvalue_type:        file-scope type@XXXXXXXX: short
+  next:                    NULL
+  kind:                    enk_param_ref
+  param_ref.param_num:     1
+  param_ref.levels_up:     1
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: unsigned short\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+1":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: unsigned short
+  orig_lvalue_type:        file-scope type@XXXXXXXX: unsigned short
+  next:                    NULL
+  kind:                    enk_param_ref
+  param_ref.param_num:     1
+  param_ref.levels_up:     1
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: signed char\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+1":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: signed char
+  orig_lvalue_type:        file-scope type@XXXXXXXX: signed char
+  next:                    NULL
+  kind:                    enk_param_ref
+  param_ref.param_num:     1
+  param_ref.levels_up:     1
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: unsigned char\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+1":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: unsigned char
+  orig_lvalue_type:        file-scope type@XXXXXXXX: unsigned char
+  next:                    NULL
+  kind:                    enk_param_ref
+  param_ref.param_num:     1
+  param_ref.levels_up:     1
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: wchar_t\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+1":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: wchar_t
+  orig_lvalue_type:        file-scope type@XXXXXXXX: wchar_t
+  next:                    NULL
+  kind:                    enk_param_ref
+  param_ref.param_num:     1
+  param_ref.levels_up:     1
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: char16_t\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+1":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: char16_t
+  orig_lvalue_type:        file-scope type@XXXXXXXX: char16_t
+  next:                    NULL
+  kind:                    enk_param_ref
+  param_ref.param_num:     1
+  param_ref.levels_up:     1
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: char32_t\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+1":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: char32_t
+  orig_lvalue_type:        file-scope type@XXXXXXXX: char32_t
+  next:                    NULL
+  kind:                    enk_param_ref
+  param_ref.param_num:     1
+  param_ref.levels_up:     1
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: D \*\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+1\nparam_ref.levels_up:\s+1":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: D *
+  orig_lvalue_type:        file-scope type@XXXXXXXX: D *
+  next:                    file-scope expr-node@XXXXXXXX
+  kind:                    enk_param_ref
+  param_ref.param_num:     1
+  param_ref.levels_up:     1
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*\nkind:\s+registered\nnext:\s+file-scope attribute@X+\nfamily:\s+std\nsyntactic_location:\s+post func\n(on_primary_declaration:\s+TRUE\n)?name:\s+file-scope other-text@X+: "r_post")":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

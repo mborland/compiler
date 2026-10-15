@@ -7310,6 +7310,7 @@ a copy of the attributes with the template arguments substituted to rp.
                                                      decl_info->parameters,
                     rp->template_arg_list, parent_class_or_null(rp),
                     /*is_partial_instantiation=*/FALSE, (a_boolean*)NULL);
+  check_named_results_of_instance(&inst_attr, rp);
   if (inst_attr != NULL) {
     /* An instance (an explicit specialization, say) that has such attributes
        already must have the same ones. */
@@ -7382,6 +7383,7 @@ on_primary_declaration flag is TRUE.
                     rp->template_arg_list, parent_class_or_null(rp),
                     /*is_partial_instantiation=*/FALSE,
                     (a_boolean*)NULL);
+  check_named_results_of_instance(&inst_attr, rp);
   if (primary_only && inst_attr != NULL) {
     /* The attributes of the definition may have been given to rp already
        (when the declaration of a member template of a class that is an

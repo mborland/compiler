@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=16 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 68: error: identifier "r" is undefined
+  int c16(int x) [[edg::r_post(r, true)]] [[edg::r_pre(r > 0)]];
+                                                       ^
+
+1 error detected in the compilation of "Test_name.c".

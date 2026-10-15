@@ -12160,8 +12160,11 @@ arguments in *elements.
     if (result_param_id != NULL) break;
   }  /* for */
   *elements = 0;
-  /* Count the number of pack elements. */
-  for (; param_id != NULL && param_id->is_pack_element;
+  /* Count the number of pack elements.  The elements of the next pack, if it
+     follows this one immediately, are not elements of this pack: they have
+     another number. */
+  for (; param_id != NULL && param_id->is_pack_element &&
+         param_id->param_num == param_num;
        param_id = param_id->next) {
     (*elements)++;
   }  /* for */

@@ -1,5 +1,24 @@
 Version 7.1
 
+10/15/26  [GH #?]
+Adjacent function parameter packs named after a parameter list
+
+When a function parameter pack was named after the parameter list of a
+function template (in a trailing return type, an exception specification or an
+attribute) and the next parameters were the elements of another function
+parameter pack, the front end counted the elements of that pack as elements of
+the first one while it declared an instance of the template.  An expansion over
+two function parameter packs in a row was therefore an error for an instance,
+even where the packs had the same length:
+
+  template <class... Ts, class... Us>
+  auto f(Ts... as, Us... bs) -> decltype(g((as + bs)...));
+  int x = f<int, int>(1, 2, 3, 4);  // Was an error: pack "bs" does not have
+                                    // the same number of elements as "as"
+
+Only the parameters that belong to the pack are counted now.  Packs of
+different lengths are still an error.
+
 10/9/26  [GH #27]
 Clearer diagnostic when auto is deduced from an incomplete type
 

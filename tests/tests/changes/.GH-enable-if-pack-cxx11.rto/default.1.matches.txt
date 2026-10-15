@@ -1,0 +1,72 @@
+Matches for "line 40: error: no\ instance\ of\ function\ template\ "two"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 40: error: no instance of function template "two" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 41: error: no\ instance\ of\ function\ template\ "two"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 41: error: no instance of function template "two" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 43: error: no\ instance\ of\ function\ template\ "two"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 43: error: no instance of function template "two" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 45: error: no\ instance\ of\ function\ template\ "two"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 45: error: no instance of function template "two" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 49: error: no\ instance\ of\ function\ template\ "none"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 49: error: no instance of function template "none" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 55: error: no\ instance\ of\ function\ template\ "three_big"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 55: error: no instance of function template "three_big" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 64: error: no\ instance\ of\ function\ template\ "after_first"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 64: error: no instance of function template "after_first" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 68: error: no\ instance\ of\ function\ template\ "head_and_count"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 68: error: no instance of function template "head_and_count" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 69: error: no\ instance\ of\ function\ template\ "head_and_count"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 69: error: no instance of function template "head_and_count" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 70: error: no\ instance\ of\ function\ template\ "head_and_count"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 70: error: no instance of function template "head_and_count" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 83: error: no\ instance\ of\ overloaded\ function\ "count"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 83: error: no instance of overloaded function "count" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 101: error: no\ instance\ of\ function\ template\ "S::n"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 101: error: no instance of function template "S::n" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 103: error: no\ instance\ of\ function\ template\ "S::cn"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 103: error: no instance of function template "S::cn" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 105: error: no\ instance\ of\ function\ template\ "S::sn"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 105: error: no instance of function template "S::sn" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 113: error: no\ instance\ of\ function\ template\ "W<T>::m\ \[with\ T=int\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 113: error: no instance of function template "W<T>::m [with T=int]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 114: error: no\ instance\ of\ function\ template\ "W<T>::m\ \[with\ T=int\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 114: error: no instance of function template "W<T>::m [with T=int]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 115: error: no\ instance\ of\ function\ template\ "W<T>::m\ \[with\ T=int\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 115: error: no instance of function template "W<T>::m [with T=int]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*line (?!(?:40|41|43|45|49|55|64|68|69|70|83|101|103|105|113|114|115)\b)\d+: error)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

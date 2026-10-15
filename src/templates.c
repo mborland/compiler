@@ -6978,6 +6978,49 @@ described by ctws_state.
 }  /* create_variadic_param_info_for_routine_params */
 
 
+void create_variadic_param_info_for_instance_params(
+                                              a_ctws_state_ptr  ctws_state,
+                                              a_param_type_ptr  template_ptp,
+                                              a_param_type_ptr  instance_ptp)
+/*
+Like create_variadic_param_info_for_routine_params, for a rescan of an
+expression of a function template for one of its instances: template_ptp is the
+parameter list of the template, and instance_ptp that of the instance, in which
+the function parameter packs of the template have already been expanded.  Each
+entry describes the expanded pack: param_type is the first element of the pack
+in the list of the instance (NULL for an empty pack), and orig_param_type the
+pack in the list of the template.  The entries have level zero, the level of
+the references to the parameters of the function itself.
+*/
+{
+  for (; template_ptp != NULL; template_ptp = template_ptp->next) {
+    if (template_ptp->is_parameter_pack) {
+      a_variadic_param_info_ptr  vpip = alloc_variadic_param_info();
+      a_param_type_ptr           ptp;
+      /* The elements of a pack share the number of the pack. */
+      for (ptp = instance_ptp; ptp != NULL; ptp = ptp->next) {
+        if (ptp->is_pack_element &&
+            ptp->param_num == template_ptp->param_num) {
+          vpip->param_type = ptp;
+          break;
+        }  /* if */
+      }  /* for */
+      vpip->orig_param_type = template_ptp;
+      vpip->level = 0;
+      if (ctws_state->variadic_param_info == NULL) {
+        vpip->next = ctws_state->variadic_param_info;
+        ctws_state->variadic_param_info = vpip;
+      } else {
+        check_assertion(ctws_state->variadic_param_info_tail != NULL);
+        vpip->next = ctws_state->variadic_param_info_tail->next;
+        ctws_state->variadic_param_info_tail->next = vpip;
+      }  /* if */
+      ctws_state->variadic_param_info_tail = vpip;
+    }  /* if */
+  }  /* for */
+}  /* create_variadic_param_info_for_instance_params */
+
+
 void copy_exc_spec_from_prototype_template(
                                   an_exception_specification_ptr  esp,
                                   a_boolean                       *copy_error)

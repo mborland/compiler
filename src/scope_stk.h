@@ -2561,11 +2561,12 @@ void wrapup_scope(a_scope_ptr			scope_ptr,
                   a_boolean 	                is_local_reactivation,
 		  a_push_scope_options_set	options);
 
-extern a_type_ptr get_curr_variadic_param_type(an_expr_node_ptr	expr);
+extern a_param_type_ptr get_curr_variadic_param(an_expr_node_ptr	expr);
 
 extern a_boolean renumber_param_ref_for_instance(
 					an_expr_node_ptr	expr,
-					a_ctws_state_ptr	ctws_state);
+					a_ctws_state_ptr	ctws_state,
+					a_param_type_ptr	element);
 
 extern
 a_template_decl_info_ptr get_specified_template_decl_info(

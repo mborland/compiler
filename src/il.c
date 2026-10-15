@@ -20500,30 +20500,25 @@ TRUE.
 }  /* substituted_cast_is_valid */
 
 
-STATIC_THREAD a_template_decl_info_ptr  lambda_rescan_decl_info_fallback;
-			/* The declaration information of the function template
-			   whose attributes are being copied for an instance,
-			   or NULL (see set_lambda_rescan_decl_info). */
+STATIC_THREAD a_boolean  attribute_expr_substitution_active;
+			/* TRUE while the expression of a registered attribute is
+			   being copied for an instance (see
+			   set_attribute_expr_substitution). */
 
 
-a_template_decl_info_ptr set_lambda_rescan_decl_info(
-                                               a_template_decl_info_ptr  di)
+a_boolean set_attribute_expr_substitution(a_boolean  active)
 /*
-The expressions of the attributes of a function template are copied for an
-instance with its template arguments substituted; a lambda in one is scanned
-again, and that needs the declaration information of the template to make
-its template parameters visible, which the list of the parameters of a
-function template does not have (it is not the list of a template template
-parameter or of a class template).  Set the declaration information to be used
-for that (NULL when the attributes are not being copied), and return the
-previous one.
+Set whether the expression of an attribute is being copied for an instance
+of a template, and return the previous setting.  A generic lambda in such an
+expression cannot be copied (see copy_template_param_lambda_expr); in any
+other expression that is substituted it is handled as before.
 */
 {
-  a_template_decl_info_ptr  previous = lambda_rescan_decl_info_fallback;
+  a_boolean  previous = attribute_expr_substitution_active;
 
-  lambda_rescan_decl_info_fallback = di;
+  attribute_expr_substitution_active = active;
   return previous;
-}  /* set_lambda_rescan_decl_info */
+}  /* set_attribute_expr_substitution */
 
 
 static an_expr_node_ptr copy_template_param_lambda_expr(
@@ -20548,6 +20543,23 @@ copy_template_param_expr for the parameter descriptions.
   a_type_ptr          closure_class = lambda->closure_class;
   a_token_cache_ptr   tokens;
 
+  if (attribute_expr_substitution_active &&
+      (lambda->is_generic || lambda->has_template_param_list) &&
+      template_param_list != NULL &&
+      template_param_list->cache.decl_info == NULL) {
+    /* A generic lambda (one with an auto parameter or with template
+       parameters) in the expression of an attribute that is copied for an
+       instance of a function template: the parameters of the call operator of the lambda
+       are numbered among those of the function template, which the
+       substitution of the type of the lambda does not expect (it fails with
+       an invalid access to the template argument list), and the list of the
+       parameters of a function template does not have the declaration
+       information that scanning the lambda again needs.  Such a lambda cannot
+       be copied: that is an error. */
+    subst_fail(*copy_error);
+    goto done;
+  }  /* if */
+
   /* First, do a preliminary substitution on the lambda's routine type so that
      any SFINAE-able substitution failure is reported as a deduction failure
      here rather than as a hard error during the re-scanning of the tokens. */
@@ -20566,7 +20578,6 @@ copy_template_param_expr for the parameter descriptions.
     an_expr_stack_entry         expr_stack_entry;
     an_expr_stack_entry_ptr     saved_expr_stack;
     a_boolean                   pushed_template_decl_scope = FALSE;
-    a_template_decl_info_ptr    rescan_decl_info = NULL;
     a_scope_ptr                 lambda_enclosing_scope = NULL;
     a_scope_depth               scope_depth_before_local_reactivation =
                                                                 NO_SCOPE_DEPTH;
@@ -20581,23 +20592,15 @@ copy_template_param_expr for the parameter descriptions.
     expr_stack_entry.suppress_diagnostics = TRUE;
     expr_stack_entry.possible_rescan_context = TRUE;
     push_lexical_state_stack();
-    if (template_param_list != NULL) {
-      rescan_decl_info = template_param_list->cache.decl_info;
-      if (rescan_decl_info == NULL) {
-        /* The list of the template parameters of a function template does
-           not have the information (see set_lambda_rescan_decl_info). */
-        rescan_decl_info = lambda_rescan_decl_info_fallback;
-      }  /* if */
-    }  /* if */
     if (template_param_list != NULL &&
-        rescan_decl_info != NULL &&
+        template_param_list->cache.decl_info != NULL &&
         template_param_list->param_symbol != NULL) {
       /* Make the template parameters being substituted visible during the
          rescan so that names that refer to them can be resolved.  The scope
          is pushed reusing the original declaration scope number so that the
          template parameter symbols are visible to ordinary name lookup. */
       push_template_declaration_scope_full(
-                            rescan_decl_info,
+                            template_param_list->cache.decl_info,
                             template_param_list->param_symbol->decl_scope,
                             /*is_template_template_param=*/FALSE,
                             /*is_template_param_rescan=*/FALSE);

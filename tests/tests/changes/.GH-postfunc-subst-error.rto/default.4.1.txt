@@ -1,0 +1,7 @@
+fe_only -DTEST_NUMBER=4 --c++20 --instantiate=used --no_il_lowering Test_name.c
+"Test_name.c", line 35: error: bad attribute argument substitution
+  template<class T> int f(T x) Q([](auto a, auto b) -> bool { return a > b; }(x, x));
+                               ^
+          detected during instantiation of "f" based on template argument <int> at line 36
+
+1 error detected in the compilation of "Test_name.c".

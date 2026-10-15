@@ -1,0 +1,7 @@
+fe_only -DTEST_NUMBER=9 --c++20 --instantiate=used --no_il_lowering Test_name.c
+"Test_name.c", line 50: error: bad attribute argument substitution
+  template<class T> int f(T x) Q([](decltype(x) y) { return y > 0; }(x));
+                               ^
+          detected during instantiation of "f" based on template argument <int> at line 51
+
+1 error detected in the compilation of "Test_name.c".

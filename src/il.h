@@ -2007,6 +2007,8 @@ extern a_boolean constant_is_instantiation_dependent(a_constant_ptr con);
 
 extern a_boolean expr_contains_error(an_expr_node_ptr expr);
 
+extern a_boolean set_attribute_expr_substitution(a_boolean  active);
+
 extern a_boolean constant_addresses_local_var(a_constant_ptr  con);
 
 extern a_boolean constant_contains_error(a_constant_ptr con);

@@ -5066,7 +5066,14 @@ the program registers.  It is recorded with the attribute kind
 Its arguments are described by a signature and are typed like the arguments of
 the attributes that the front end defines: an expression argument is looked up
 and checked in the context of the attribute, and is dependent in a template
-declaration and substituted in each instance.
+declaration and substituted in each instance.  An expression that cannot be
+substituted for an instance (it has an error in it after the substitution) is
+the error "bad attribute argument substitution" at the attribute.  A lambda in
+an argument is scanned again for each instance: a lambda that has a parameter
+whose type involves a template parameter of a function template, and a generic
+lambda, cannot be copied that way in the attribute of a function template
+(an error), while the lambda in the attribute of a member of a class template
+can.
 
 The interface is declared in ``attribute.h``, which defines the macro
 ``EDG_ATTRIBUTE_REGISTRATION`` so that a program can test for it:

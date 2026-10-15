@@ -7304,16 +7304,12 @@ a copy of the attributes with the template arguments substituted to rp.
 {
   an_attribute_ptr  inst_attr;
 
-  { a_template_decl_info_ptr  saved_di = set_lambda_rescan_decl_info(
-                          decl_cache_for_function_template(tssp)->decl_info);
-    inst_attr = copy_of_attributes_with_substitution(
+  inst_attr = copy_of_attributes_with_substitution(
                     list, /*primary_only=*/FALSE, template_sym,
                     decl_cache_for_function_template(tssp)->
                                                      decl_info->parameters,
                     rp->template_arg_list, parent_class_or_null(rp),
                     /*is_partial_instantiation=*/FALSE, (a_boolean*)NULL);
-    (void)set_lambda_rescan_decl_info(saved_di);
-  }
   check_named_results_of_instance(&inst_attr, rp);
   if (inst_attr != NULL) {
     /* An instance (an explicit specialization, say) that has such attributes
@@ -7840,9 +7836,7 @@ on_primary_declaration flag is TRUE.
   an_attribute_ptr  inst_attr;
 
   /* First get a substituted copy of the attributes list. */
-  { a_template_decl_info_ptr  saved_di = set_lambda_rescan_decl_info(
-                          decl_cache_for_function_template(tssp)->decl_info);
-    inst_attr = copy_of_attributes_with_substitution(
+  inst_attr = copy_of_attributes_with_substitution(
                     tssp->variant.function.routine->source_corresp.attributes,
                     primary_only,
                     template_sym,
@@ -7851,8 +7845,6 @@ on_primary_declaration flag is TRUE.
                     rp->template_arg_list, parent_class_or_null(rp),
                     /*is_partial_instantiation=*/FALSE,
                     (a_boolean*)NULL);
-    (void)set_lambda_rescan_decl_info(saved_di);
-  }
   check_named_results_of_instance(&inst_attr, rp);
   if (primary_only && inst_attr != NULL) {
     /* The attributes of the definition may have been given to rp already

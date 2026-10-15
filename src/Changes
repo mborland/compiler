@@ -1,6 +1,35 @@
 Version 7.1
 
 10/15/26  [GH #?]
+Substitution errors in the arguments of registered attributes
+
+An expression that is an argument of a registered attribute and cannot be
+substituted for an instance of a template (an error in it after the
+substitution, found for example when a lambda in it is scanned again with its
+diagnostics suppressed) is now the error that the attribute argument cannot be
+substituted ("bad attribute argument substitution"), whatever the cause; an
+attribute with an error expression and no diagnostic was possible.  A lambda in
+the attribute of a function template whose parameter has the type of a
+template parameter ([](T y) ...) is again an error (T is undefined) instead of
+being copied: the way it was made to work could stop the front end for some
+generic lambdas.  A generic lambda in the attribute of a function template
+([](auto a, auto b) ..., []<class V>(V v) ...) is an error, not a crash (the
+parameters of the call operator were looked up among those of the function
+template); this applies to the expression of an attribute only, a generic
+lambda in any other expression that is substituted for an instance (a
+decltype return type, a requires-clause) is handled as before.  An "auto"
+parameter of a lambda that is scanned again with the declaration that contains
+it and is not among the template parameters is an error ("an "auto" parameter
+of a lambda cannot be used in this part of the declaration of a function
+template"), where it was an assertion.  An attribute of a member of a
+class template whose arguments cannot be substituted for an instance (a member
+call on a type that has none, for example) is an error and no longer an
+assertion ("missing default rescan info") when the instance takes the
+attributes of the template.  The error that an attribute cannot name the
+result of a function that returns void is issued once per attribute even when
+the attributes of a declaration are copied for several instances.
+
+10/15/26  [GH #?]
 Explicit specializations of member templates, packs, lambdas and duplicate errors
 
 An explicit specialization of a member template of a class template for one

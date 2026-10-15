@@ -2882,25 +2882,39 @@ or not.  The scope is popped by scan_attr_arg_list.
 }  /* push_result_binder_scope */
 
 
-STATIC_THREAD a_boolean  any_void_result_error;
-STATIC_THREAD a_source_position
-		last_void_result_position;
-			/* An instance and the position of the attribute of
-			   the latest error that check_named_results_of_instance
-			   issued: the attributes of an instance are copied
-			   more than once in some cases (and for more than one
-			   instance), and the error is issued once for an
-			   attribute. */
+typedef struct a_void_result_position *a_void_result_position_ptr;
+typedef struct a_void_result_position {
+  a_void_result_position_ptr  next;
+  a_source_position           position;
+} a_void_result_position;
+
+STATIC_THREAD a_void_result_position_ptr
+		void_result_positions;
+			/* The positions of the attributes for which
+			   check_named_results_of_instance (and the scan of an
+			   attribute after the parameter list) issued the error
+			   that the result of a function that returns void
+			   cannot be named: the attributes of an instance are
+			   copied more than once in some cases (and for more
+			   than one instance, and several attributes of a
+			   declaration are copied one after the other), and the
+			   error is issued once for an attribute. */
 
 
 static a_boolean void_result_error_was_issued(a_source_position  *pos)
 /*
 Return TRUE if the error that an attribute cannot name the result of a function
-that returns void has just been issued for the attribute at *pos.
+that returns void has been issued for the attribute at *pos.
 */
 {
-  return any_void_result_error && last_void_result_position.seq == pos->seq &&
-         last_void_result_position.column == pos->column;
+  a_void_result_position_ptr  vrp;
+
+  for (vrp = void_result_positions; vrp != NULL; vrp = vrp->next) {
+    if (vrp->position.seq == pos->seq && vrp->position.column == pos->column) {
+      break;
+    }  /* if */
+  }  /* for */
+  return vrp != NULL;
 }  /* void_result_error_was_issued */
 
 
@@ -2910,8 +2924,13 @@ Remember that the error about the result of a function that returns void was
 issued for the attribute at *pos.
 */
 {
-  any_void_result_error = TRUE;
-  last_void_result_position = *pos;
+  if (!void_result_error_was_issued(pos)) {
+    a_void_result_position_ptr  vrp;
+    vrp = alloc_fe_of_type(a_void_result_position);
+    vrp->position = *pos;
+    vrp->next = void_result_positions;
+    void_result_positions = vrp;
+  }  /* if */
 }  /* note_void_result_error */
 
 
@@ -5736,7 +5755,7 @@ instantiation.
 }  /* attribute_applies_to_partial_instantiation */
 
 
-static an_expr_node_ptr substitute_attribute_expr_full(
+static an_expr_node_ptr substitute_attribute_expr_inner(
                                               an_expr_node_ptr     expr,
                                               a_template_arg_ptr   t_args,
                                               a_template_param_ptr t_params,
@@ -5778,7 +5797,7 @@ substitution.
     parent_ctws_state.in_parent_substitution = TRUE;
     get_substitution_pairs_for_template_class(parent_class, &parent_t_params,
                                               &parent_t_args);
-    expr = substitute_attribute_expr_full(
+    expr = substitute_attribute_expr_inner(
                    expr, parent_t_args, parent_t_params,
                    parent_class_or_null(parent_class), position,
                    options | CTWS_PARTIAL_ARG_LIST_OKAY |
@@ -5801,6 +5820,33 @@ substitution.
   }  /* if */
   release_local_constant(&constant);
   return expr;
+}  /* substitute_attribute_expr_inner */
+
+
+static an_expr_node_ptr substitute_attribute_expr_full(
+                                              an_expr_node_ptr     expr,
+                                              a_template_arg_ptr   t_args,
+                                              a_template_param_ptr t_params,
+                                              a_type_ptr           parent_class,
+                                              a_source_position    *position,
+                                              a_ctws_options_set   options,
+                                              a_boolean            *p_error,
+                                              a_ctws_state         *ctws_state)
+/*
+Do template argument substitution for the given expression, as
+substitute_attribute_expr_inner does, while noting that the expression is that
+of an attribute (a generic lambda in it cannot be copied, see
+copy_template_param_lambda_expr).
+*/
+{
+  a_boolean         saved = set_attribute_expr_substitution(TRUE);
+  an_expr_node_ptr  result;
+
+  result = substitute_attribute_expr_inner(expr, t_args, t_params,
+                                           parent_class, position, options,
+                                           p_error, ctws_state);
+  (void)set_attribute_expr_substitution(saved);
+  return result;
 }  /* substitute_attribute_expr_full */
 
 
@@ -5983,6 +6029,15 @@ an error.
                                             parent_class,
                                             &((*p_aap)->position),
                                             &err, &ctws_state);
+                  /* An expression with an error in it is a substitution
+                     error whether or not the substitution says so: a lambda
+                     is scanned again with its diagnostics suppressed, and a
+                     failure there can leave an error expression without the
+                     error flag. */
+                  if (!err && ((*p_aap)->variant.expr == NULL ||
+                               expr_contains_error((*p_aap)->variant.expr))) {
+                    err = TRUE;
+                  }  /* if */
                 }
                 break;
               default_is_unexpected();
@@ -12570,7 +12625,7 @@ translation unit.
   registered_attr_account = NULL;
   registered_attr_buckets = NULL;
   post_func_attr_ctx = NULL;
-  any_void_result_error = FALSE;
+  void_result_positions = NULL;
 #if USE_X86_FUNCTION_MULTIVERSIONING && DO_IL_LOWERING
   mv_builtins_loaded = FALSE;
 #endif /* USE_X86_FUNCTION_MULTIVERSIONING && DO_IL_LOWERING */

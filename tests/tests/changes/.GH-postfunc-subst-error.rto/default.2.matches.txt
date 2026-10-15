@@ -1,0 +1,4 @@
+Matches for "(line 26: error: identifier\s+"T"\s+is\s+undefined|line 29: error: identifier\s+"T"\s+is\s+undefined|line 32: error: identifier\s+"T"\s+is\s+undefined|line 35: error: bad\s+attribute\s+argument\s+substitution|line 38: error: bad\s+attribute\s+argument\s+substitution|line 41: error: bad\s+attribute\s+argument\s+substitution|line 44: error: (?:bad\s+attribute\s+argument\s+substitution|an\s+"auto"\s+parameter\s+of\s+a\s+lambda\s+cannot\s+be\s+used)|line 47: error: identifier\s+"T"\s+is\s+undefined|line 50: error: bad\s+attribute\s+argument\s+substitution|line 53: error: expression\s+must\s+have\s+class\s+type|line 56: error: bad\s+attribute\s+argument\s+substitution|line 59: error: bad\s+attribute\s+argument\s+substitution)":
+  <-----------------------------------------------------------------------------
+  line 29: error: identifier "T" is undefined
+  ----------------------------------------------------------------------------->

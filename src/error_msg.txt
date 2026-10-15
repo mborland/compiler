@@ -3693,5 +3693,6 @@ ec_attr_result_name_not_allowed;;"attribute %sq can name the result only after t
 ec_attr_result_name_void_function;;"attribute %sq cannot name the result of a function that returns void"
 ec_attr_result_name_deduced_type;;"attribute %sq cannot name the result of a function whose return type is deduced or is a trailing return type"
 ec_attr_result_name_no_result_type;;"attribute %sq cannot name the result of a constructor, a destructor or a conversion function"
+ec_generic_lambda_not_scanned_again;;"an \"auto\" parameter of a lambda cannot be used in this part of the declaration of a function template"
  ###############################################################################
 

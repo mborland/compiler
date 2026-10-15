@@ -10272,8 +10272,16 @@ return FALSE.
             break;
           }  /* if */
         }  /* for */
-        check_assertion(tpp != NULL);
-        if (tpp->is_pack) {
+        if (tpp == NULL) {
+          /* The "auto" parameter of a generic lambda whose parameter
+             declaration is scanned again together with the declaration that
+             contains it (a lambda in the attribute after the parameter list
+             of a function template): the template parameter of the lambda
+             is not one of those of the template. */
+          pos_error(ec_generic_lambda_not_scanned_again, &pos_curr_token);
+          dps->specifiers_type = error_type();
+          result = TRUE;
+        } else if (tpp->is_pack) {
           record_potential_pack_reference(tpp->param_symbol, &pos_curr_token);
         }  /* if */
       }  /* if */

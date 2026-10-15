@@ -56071,6 +56071,23 @@ function or template.
     expr = make_node_from_operand(&result);
     goto done;
   }  /* if */
+  if (is_at_least_one_error() != 0) {
+    /* An expression whose top level has no rescan information (one scanned
+       where a rescan was not expected, such as the expression of an attribute
+       of a member of a class template) cannot be rescanned: the rescan needs
+       the information to start.  After an error (the attribute of an instance
+       that could not be scanned again, for example) fail instead of stopping
+       on that. */
+    an_expr_rescan_info_entry_ptr  top_eriep = NULL;
+    an_expr_node_ptr               top_expr =
+                  strip_implicit_operations_for_rescan(expr, &top_eriep);
+    if (top_eriep == NULL && top_expr->extra.rescan_info == NULL) {
+      subst_fail(rcblock->error_detected);
+      make_error_operand(&result);
+      expr = make_node_from_operand(&result);
+      goto done;
+    }  /* if */
+  }  /* if */
   push_expr_rescan_context_if_necessary(rcblock, &saved_context);
   if (rcblock->options & CTWS_NONTYPE_TEMPLATE_ARG) {
     /* Rescanning a nontype template argument. */

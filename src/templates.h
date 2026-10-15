@@ -886,6 +886,20 @@ extern a_type_ptr wrapup_function_template_argument_deduction(
 				a_ctws_options_set   ctws_options,
 				uint32_t	     param_count);
 
+extern void inherit_must_match_attributes_of_template(a_routine_ptr  rp);
+
+extern void note_specialization_attributes(a_routine_ptr     rp,
+                                           an_attribute_ptr  id_attrs,
+                                           an_attribute_ptr  prefix_attrs,
+                                           a_boolean         is_explicit_spec);
+
+extern void inherit_must_match_attributes_of_member_template_decl(
+                                          a_symbol_ptr      ft_sym,
+                                          an_attribute_ptr  id_attrs,
+                                          an_attribute_ptr  prefix_attrs);
+
+extern void check_specialization_attributes(void);
+
 extern void attach_registered_attributes_to_existing_instances(
                                           a_symbol_ptr      template_sym,
                                           an_attribute_ptr  attributes);

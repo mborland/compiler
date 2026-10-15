@@ -1076,7 +1076,7 @@ Initialize the attribute correspondence checking map.
 }  /* init_attr_corresp_checking_map */
 
 
-static a_const_char *attribute_display_name(an_attribute_ptr ap)
+a_const_char *attribute_display_name(an_attribute_ptr ap)
 /*
 Returns the name of an attribute, suitable for display in diagnostic messages.
 If necessary, memory is allocated to contain the result (so it can be used
@@ -1416,6 +1416,8 @@ that was neither applied to an entity (or statement or type) nor diagnosed.
 {
   a_registered_attr_account_entry_ptr  ep, *entries;
   size_t                               count = 0, k, j;
+
+  check_specialization_attributes();
 
   for (ep = registered_attr_account; ep != NULL; ep = ep->all_next) {
     if (ep->original == NULL) ++count;

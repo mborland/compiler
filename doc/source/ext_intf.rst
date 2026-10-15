@@ -5160,11 +5160,27 @@ attributes in the same order, with equivalent arguments, in which a parameter
 is its position), or it is an error that names the earlier declaration.  An
 identical list is not attached again, so the function has no duplicates, and
 a declaration that has no such attribute is fine.  The other flagged
-attributes accumulate.  An explicit specialization of a function template is
-a declaration of an instance of the template: it has the template's
-attributes with the template arguments substituted, and the attributes it is
-declared with must be equivalent to those, whichever of the template's
-declarations and the specialization come first.  A function with C language
+attributes accumulate.  An explicit specialization of a function template, or
+of a member of a class template (``template <> int S<int>::m(int)``, also a
+member function template), is a declaration of an instance of the template: it
+has the template's attributes with the template arguments substituted (the
+attributes of a member are those of any of its declarations, including a
+definition outside the class), and the attributes it is declared with must be
+equivalent to those, whichever of the template's declarations and the
+specialization come first.  If the template has none, the specialization
+cannot have any: that is an error at the end of the translation unit (the
+template may get them after the specialization).  The members of an explicit
+specialization or a partial specialization of a class template are members of
+another class and have attributes of their own.  An explicit specialization of
+a member template for one instance of the class (``template <> template
+<class U> int S<int>::g(U)``) is compared with the member template of the
+class template, and gets its attributes, at the end of the translation unit
+(a copy made earlier could not be substituted again when the specialization is
+instantiated), so an instance of it that is created before has none.  (A
+limitation: the member template of an instance of a class template that exists
+when the definition is seen, ``S<long>::g``, does not have the attributes of
+the member template of the class template, which its instances get from the
+definition when it is instantiated.)  A function with C language
 linkage declared in two namespaces is one function; in GNU emulation the front
 end has a routine for each declaration, and they are not compared.
 

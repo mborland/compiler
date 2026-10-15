@@ -491,6 +491,8 @@ extern a_boolean attribute_is_entity_attached(an_attribute_ptr  ap);
 
 extern a_boolean is_must_match_registered_attribute(an_attribute_ptr  ap);
 
+extern a_const_char *attribute_display_name(an_attribute_ptr  ap);
+
 /* The context in which the attributes after the parameter list of a
    function declarator are scanned, for an attribute whose signature starts
    with "R" (see attribute.c), which names the result of the function. */

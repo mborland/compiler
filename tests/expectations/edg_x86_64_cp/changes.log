@@ -6,6 +6,7 @@ EDGcpfe24520.sft.cpp:fp:-DTEST_NUMBER=1:FAIL:[6.3] Microsoft compatibility: __re
 EDGcpfe25938.sft.cpp:fp:-DTEST_NUMBER=1:FAIL:[6.5] C23: Implement typeof and typeof_unqual operators
 GH-postfunc-c.sft.c:fp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:[GH #?] Registered attributes after the parameter list appertain to the function in C
 GH-postfunc-cls.sft.cpp:fp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:[GH #?] Registered attributes after the parameter list of members of class templates reach the instances
+GH-postfunc-inherit.sft.cpp:fp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:[GH #?] Members of the instances of a class template have the contract that is only on a definition
 GH-postfunc-inst.sft.cpp:fp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:[GH #?] Registered attributes of a function template reach the instances that exist
 GH-postfunc.sft.cpp:fp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:[GH #?] Registered attributes after the parameter list appertain to the function
 GH-reg.sft.cpp:fp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:[GH #?] Attributes registered by the embedding program

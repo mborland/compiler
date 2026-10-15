@@ -14,7 +14,10 @@
 //match_regex:type:\s+file-scope type@X+: wchar_t\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref
 //match_regex:type:\s+file-scope type@X+: char16_t\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref
 //match_regex:type:\s+file-scope type@X+: char32_t\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref
-//match_regex:type:\s+file-scope type@X+: float\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref
+//match_regex:type:\s+file-scope type@X+: float\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+2\nparam_ref.levels_up:\s+0
+//match_regex:type:\s+file-scope type@X+: long double\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+2\nparam_ref.levels_up:\s+0
+//match_regex:type:\s+file-scope type@X+: double\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+2\nparam_ref.levels_up:\s+0
+//match_regex:type:\s+file-scope type@X+: char8_t\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref
 //match_regex:\A(?![\s\S]*\nkind:\s+registered\nnext:\s+file-scope attribute@X+\nfamily:\s+std\nsyntactic_location:\s+post func\n(on_primary_declaration:\s+TRUE\n)?name:\s+file-scope other-text@X+: "r_pre")
 // 10/14/26  [GH #?]
 //
@@ -93,9 +96,9 @@ int u10() { P<char32_t, int> p; return p.m(1, 2); }
 
 // An explicit specialization of a class template has its own contract.
 template <class T> struct E { int m(T x); };
-template <> struct E<float> { int m(float x) [[edg::r_pre(x > 0)]]; };
-int E<float>::m(float x) { return 0; }
-int u11() { E<float> e; return e.m(1.0f); }
+template <> struct E<char8_t> { int m(char8_t x) [[edg::r_pre(x > 0)]]; };
+int E<char8_t>::m(char8_t x) { return 0; }
+int u11() { E<char8_t> e; return e.m(1); }
 
 // An accumulating attribute of the members.
 template <class T> struct Ac { int m(T x) [[edg::r_fn]]; };

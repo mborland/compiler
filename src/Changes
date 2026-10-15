@@ -1,5 +1,35 @@
 Version 7.1
 
+10/15/26  [GH #?]
+Explicit specializations and the registered attributes of their template
+
+A registered attribute with the flag RAF_MUST_MATCH (see the entry for
+attributes after a parameter list) of a member of a class template belongs to
+the member of the template, on whichever declaration it is written, including a
+definition outside the class.  It now reaches the member of every instance of
+the class when the member is created, even when the definition of the member is
+never instantiated (an explicit instantiation declaration, an explicit
+specialization), and a member of an instance that exists when the definition
+is seen has it too.  An explicit specialization of a function template or of a
+member of a class template (a member function or a member function template)
+has the attributes of the template if it has none of its own, and the
+attributes that it has must match those of the template, whichever of the
+template and the specialization is declared first (before, only a member whose
+attributes were written in the class was checked).  An explicit
+specialization cannot have such an attribute when the template has none: that
+is an error at the end of the translation unit.  An explicit specialization
+of a member template for one instance of the class (template <> template
+<class U> int S<int>::g(U)) is compared with the member template of the class
+template the same way, at the end of the translation unit.  For example, for
+"pre" with both flags:
+
+  template <class T> struct S { int m(T x); };
+  template <class T> int S<T>::m(T x) [[mine::pre(x > 0)]] { return 0; }
+  template <> int S<int>::m(int x) [[mine::pre(x > 5)]] { return 0; }
+         // Error: attribute "mine::pre" does not match the attributes of an
+         //   earlier declaration
+  template <> int S<long>::m(long x) { return 0; }   // Has "mine::pre(x > 0)".
+
 10/14/26  [GH #?]
 Naming the result of a function in a registered attribute
 

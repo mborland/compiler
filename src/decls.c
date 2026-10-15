@@ -810,6 +810,27 @@ primary_decl is TRUE, the on_primary_declaration flag of the attributes is
 set to TRUE before they are attached.
 */
 {
+  if (dps->sym != NULL && (dps->sym->kind == (a_symbol_kind)sk_routine ||
+                           dps->sym->kind == (a_symbol_kind)sk_member_function)
+      && dps->sym->variant.routine.ptr != NULL) {
+    /* An explicit specialization of a function template or of a member of a
+       class template (or another declaration of an instance) has the
+       attributes of the template, which the attributes of this declaration
+       have to match. */
+    a_routine_ptr  rp = dps->sym->variant.routine.ptr;
+    inherit_must_match_attributes_of_template(rp);
+    note_specialization_attributes(rp, dps->id_attributes,
+                                   dps->prefix_attributes,
+                                   dps->is_explicit_specialization);
+  } else if (dps->sym != NULL &&
+             dps->sym->kind == (a_symbol_kind)sk_function_template &&
+             dps->sym->variant.template_info->prototype_template != NULL) {
+    /* A declaration of a member template of a class that is an instance of a
+       class template, other than the one made for the class (an explicit
+       specialization of the member template, say). */
+    inherit_must_match_attributes_of_member_template_decl(
+                  dps->sym, dps->id_attributes, dps->prefix_attributes);
+  }  /* if */
   if (dps->id_attributes != NULL || dps->prefix_attributes != NULL) {
     an_il_entry_kind  entity_kind;
     char              *entity;

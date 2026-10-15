@@ -1,6 +1,17 @@
 Version 7.1
 
 10/15/26  [GH #?]
+Explicit specializations declared in a class template
+
+An explicit specialization of a member template that is declared in its
+class template (template <> int f<int>(int) { ... } in the class, valid since
+CWG 727 and in Microsoft mode) no longer makes the front end read an
+uninitialized template symbol, which could crash it, whether the class
+template is instantiated or not.  When such a specialization is declared, its
+template is not known yet; the checks of the registered attributes of explicit
+specializations now see no template for it until it is known.
+
+10/15/26  [GH #?]
 Substitution errors in the arguments of registered attributes
 
 An expression that is an argument of a registered attribute and cannot be

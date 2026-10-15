@@ -7350,12 +7350,15 @@ routine of the template from which it is an instance, which has the attributes
 of all the declarations of the template, or NULL if rp is not such an
 instance.  *p_template_sym is set to the symbol of the template and
 *p_proto_tssp to the supplement of the prototype template whose parameters the
-attributes use (as for instantiate_template_function_full).
+attributes use (as for instantiate_template_function_full); both are set to
+NULL when NULL is returned.
 */
 {
   a_routine_ptr  proto_rout = NULL;
   a_symbol_ptr   sym = symbol_for_or_null(rp);
 
+  *p_template_sym = NULL;
+  *p_proto_tssp = NULL;
   if (sym != NULL && rp->is_template_function &&
       !rp->is_prototype_instantiation &&
       (sym->kind == (a_symbol_kind)sk_routine ||

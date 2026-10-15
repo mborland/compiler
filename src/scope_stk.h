@@ -2563,6 +2563,10 @@ void wrapup_scope(a_scope_ptr			scope_ptr,
 
 extern a_type_ptr get_curr_variadic_param_type(an_expr_node_ptr	expr);
 
+extern a_boolean renumber_param_ref_for_instance(
+					an_expr_node_ptr	expr,
+					a_ctws_state_ptr	ctws_state);
+
 extern
 a_template_decl_info_ptr get_specified_template_decl_info(
 					a_boolean	innermost);

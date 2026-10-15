@@ -5584,6 +5584,63 @@ done:
 }  /* arg_count_mismatch */
 
 
+static a_boolean interpret_enable_if_by_param_num(
+                                  an_expr_node_ptr              expr,
+                                  Dyn_array<a_constant*> const  &args,
+                                  a_param_type_ptr              ptp,
+                                  a_source_position             *pos,
+                                  a_boolean                     *p_value)
+/*
+Evaluate the enable_if condition expr like interpret_clang_enable_if_opnd,
+where args[0] is the constant for "this" and args[k] the one for the k-th
+argument of a call of a function whose parameter list is ptp, but for a
+condition whose enk_param_ref nodes have the numbers of the parameters of the
+declaration (a_param_type::param_num) rather than their positions in ptp.
+That is the case for a function that is not a function template and has a
+parameter that follows a function parameter pack of its class, whose elements
+(none, if the pack is empty) all have the number of the pack in the class
+template.
+
+The elements of the pack cannot be told apart by number: a reference to the
+pack uses the constant of its first element.
+*/
+{
+  a_boolean               result;
+  Dyn_array<a_constant*>  keyed(10);
+  a_param_type_ptr        p;
+  size_t                  position = 1;
+  size_t                  size = args.length();
+  uint32_t                last_pack_num = 0;
+
+  /* The numbers can be larger than the number of arguments, e.g., if the
+     elements of an empty pack were omitted from the call. */
+  for (p = ptp; p != NULL; p = p->next) {
+    if (p->param_num >= size) size = p->param_num + 1;
+  }  /* for */
+  for (size_t i = 0; i < size; ++i) {
+    keyed.push_back(local_constant());
+    set_error_constant(keyed.back_elem());
+  }  /* for */
+  *keyed[0] = *args[0];
+  for (p = ptp; p != NULL && position < args.length();
+       p = p->next, ++position) {
+    if (p->param_num == 0) continue;
+    if (p->is_pack_element) {
+      /* Only the first element of a pack gets its number. */
+      if (p->param_num == last_pack_num) continue;
+      last_pack_num = p->param_num;
+    }  /* if */
+    *keyed[p->param_num] = *args[position];
+  }  /* for */
+  result = interpret_clang_enable_if_opnd(expr, keyed, pos, p_value);
+  while (!keyed.is_empty()) {
+    release_local_constant(&keyed.back_elem());
+    keyed.pop_back();
+  }  /* while */
+  return result;
+}  /* interpret_enable_if_by_param_num */
+
+
 static a_boolean eval_enable_if_attributes(
                                      a_routine_ptr             rp,
                                      a_type_ptr                routine_type,
@@ -5609,6 +5666,19 @@ is used in the constraint, its evaluation will fail.
   an_attribute_ptr        ap;
   an_arg_list_elem_ptr    alep, converted_alep;
   Dyn_array<a_constant*>  args(10), no_args;
+  a_param_type_ptr        instance_params =
+                 rout_type_supp(skip_typerefs(routine_type))->param_type_list;
+  a_boolean               params_numbered_by_declaration = FALSE;
+  a_param_type_ptr        ptp0;
+  uint32_t                position0 = 1;
+
+  /* Note whether the numbers of the parameters differ from their positions in
+     the parameter list.  That happens after the elements of a function
+     parameter pack of a class template instance (including none at all, for
+     an empty pack): the parameters have the numbers of the declaration. */
+  for (ptp0 = instance_params; ptp0 != NULL; ptp0 = ptp0->next, ++position0) {
+    if (ptp0->param_num != position0) params_numbered_by_declaration = TRUE;
+  }  /* for */
 
   /* Set up an array of constant values corresponding to the arguments of the
      call, starting with a constant for the selector.  (The constants are
@@ -5641,6 +5711,12 @@ is used in the constraint, its evaluation will fail.
       a_template_ptr  templ = rp->assoc_template;
       check_assertion(templ != NULL);
       init_ctws_state(&ctws_state);
+      /* The references to parameters in the condition have the numbers of
+         the parameters of the template, but the arguments are indexed below
+         by position in the parameter list of the instance, which differs
+         after a function parameter pack: have the rescan renumber them. */
+      ctws_state.instance_param_types = instance_params;
+      ctws_state.instance_param_types_level = ctws_state.routine_type_levels;
       expr = copy_expr_with_substitutions(expr, t_args,
                                           templ_params_of(symbol_for(templ)),
                                           CTWS_NO_OPTIONS, &failed,
@@ -5736,8 +5812,16 @@ next_arg:
     for (; alep != NULL; alep = next_elem(alep)) {
       set_error_constant(args[k++]);
     }  /* if */
-    if (!interpret_clang_enable_if_opnd(expr, args, &aap->position,
-                                        p_result)) {
+    if (t_args == NULL && params_numbered_by_declaration) {
+      /* The condition was not substituted, so it has the numbering of the
+         declaration and not of the (expanded) parameter list of the function
+         that is called. */
+      if (!interpret_enable_if_by_param_num(expr, args, instance_params,
+                                            &aap->position, p_result)) {
+        failed = TRUE;
+      }  /* if */
+    } else if (!interpret_clang_enable_if_opnd(expr, args, &aap->position,
+                                               p_result)) {
       failed = TRUE;
     }  /* if */
     if (failed) {

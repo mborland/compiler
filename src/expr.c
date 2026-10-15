@@ -54529,6 +54529,19 @@ is TRUE if the expression is the immediate operand of an "&" operator.
         /* If no type was returned above, do substitution on the original
            type. */
         new_type = do_type_substitution_for_rescan(expr->type, rcblock, eriep);
+        if (rcblock->ctws_state != NULL &&
+            rcblock->ctws_state->instance_param_types != NULL &&
+            !renumber_param_ref_for_instance(expr_copy,
+                                             rcblock->ctws_state)) {
+          /* The condition of an enable_if is being evaluated for an instance
+             of a function template, and the parameter is not one of the
+             instance's: the evaluation would use some other parameter's
+             argument, so the substitution fails instead. */
+          subst_fail(rcblock->error_detected);
+          make_error_operand(result);
+          copy_operand_position(&eriep->saved_operand, result);
+          break;
+        }  /* if */
       }  /* if */
       if (!is_glvalue_node(expr_copy)) {
         expr_copy->orig_lvalue_type = new_type;

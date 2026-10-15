@@ -21523,6 +21523,7 @@ for the copy/substitution.
       a_ctws_state   local_ctws_state;
       local_ctws_state = *ctws_state;
       local_ctws_state.parent_levels = 0;
+      local_ctws_state.instance_param_types = NULL;
       sym = copy_parent_type_with_substitution(orig_sym, parent_type,
                                                template_arg_list,
                                                template_param_list,

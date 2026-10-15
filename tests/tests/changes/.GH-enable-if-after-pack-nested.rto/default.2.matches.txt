@@ -1,0 +1,36 @@
+Matches for "line 36: error: no\ instance\ of\ function\ template\ "nfa"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 36: error: no instance of function template "nfa" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 40: error: no\ instance\ of\ function\ template\ "nfb"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 40: error: no instance of function template "nfb" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 44: error: no\ instance\ of\ function\ template\ "nfc"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 44: error: no instance of function template "nfc" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 48: error: no\ instance\ of\ function\ template\ "nfd"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 48: error: no instance of function template "nfd" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 53: error: no\ instance\ of\ function\ template\ "nfe"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 53: error: no instance of function template "nfe" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 57: error: no\ instance\ of\ function\ template\ "nff"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 57: error: no instance of function template "nff" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 61: error: no\ instance\ of\ function\ template\ "nfg"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 61: error: no instance of function template "nfg" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 65: error: no\ instance\ of\ function\ template\ "nfh"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 65: error: no instance of function template "nfh" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*line (?!(?:36|40|44|48|53|57|61|65)\b)\d+: error)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

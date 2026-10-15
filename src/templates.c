@@ -601,6 +601,8 @@ Initialize a template argument substitution state block.
 {
   csp->variadic_param_info = NULL;
   csp->variadic_param_info_tail = NULL;
+  csp->instance_param_types = NULL;
+  csp->instance_param_types_level = 0;
   csp->orig_class_templ_params = NULL;
   csp->orig_ctor_templ_params = NULL;
   csp->new_templ_params = NULL;

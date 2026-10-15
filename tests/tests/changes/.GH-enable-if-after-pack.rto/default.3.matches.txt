@@ -1,0 +1,144 @@
+Matches for "line 67: error: no\ instance\ of\ function\ template\ "last_pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 67: error: no instance of function template "last_pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 69: error: no\ instance\ of\ function\ template\ "last_pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 69: error: no instance of function template "last_pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 71: error: no\ instance\ of\ function\ template\ "last_pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 71: error: no instance of function template "last_pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 74: error: no\ instance\ of\ function\ template\ "last_pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 74: error: no instance of function template "last_pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 77: error: no\ instance\ of\ function\ template\ "last_pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 77: error: no instance of function template "last_pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 79: error: no\ instance\ of\ function\ template\ "last_pos"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 79: error: no instance of function template "last_pos" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 85: error: no\ instance\ of\ function\ template\ "mid"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 85: error: no instance of function template "mid" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 86: error: no\ instance\ of\ function\ template\ "mid"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 86: error: no instance of function template "mid" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 88: error: no\ instance\ of\ function\ template\ "mid"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 88: error: no instance of function template "mid" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 89: error: no\ instance\ of\ function\ template\ "mid"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 89: error: no instance of function template "mid" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 91: error: no\ instance\ of\ function\ template\ "mid"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 91: error: no instance of function template "mid" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 92: error: no\ instance\ of\ function\ template\ "mid"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 92: error: no instance of function template "mid" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 98: error: no\ instance\ of\ function\ template\ "below"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 98: error: no instance of function template "below" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 104: error: no\ instance\ of\ function\ template\ "only_x"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 104: error: no instance of function template "only_x" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 110: error: no\ instance\ of\ function\ template\ "between"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 110: error: no instance of function template "between" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 112: error: no\ instance\ of\ function\ template\ "between"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 112: error: no instance of function template "between" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 114: error: no\ instance\ of\ function\ template\ "between"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 114: error: no instance of function template "between" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 116: error: no\ instance\ of\ function\ template\ "between"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 116: error: no instance of function template "between" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 135: error: no\ instance\ of\ function\ template\ "S::m"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 135: error: no instance of function template "S::m" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 137: error: no\ instance\ of\ function\ template\ "S::cm"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 137: error: no instance of function template "S::cm" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 139: error: no\ instance\ of\ function\ template\ "S::sm"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 139: error: no instance of function template "S::sm" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 149: error: no\ instance\ of\ function\ template\ "W<T>::m\ \[with\ T=int\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 149: error: no instance of function template "W<T>::m [with T=int]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 161: error: function\ "C<Cs\.\.\.>::k\ \[with\ Cs=<int,\ int>\]"\ cannot\ be\ called\ with\ the\ given\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 161: error: function "C<Cs...>::k [with Cs=<int, int>]" cannot be called with the given argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 164: error: function\ "C<Cs\.\.\.>::sk\ \[with\ Cs=<int,\ int>\]"\ cannot\ be\ called\ with\ the\ given\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 164: error: function "C<Cs...>::sk [with Cs=<int, int>]" cannot be called with the given argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 167: error: no\ instance\ of\ function\ template\ "C<Cs\.\.\.>::mt\ \[with\ Cs=<int,\ int>\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 167: error: no instance of function template "C<Cs...>::mt [with Cs=<int, int>]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 172: error: function\ "C<Cs\.\.\.>::k\ \[with\ Cs=<>\]"\ cannot\ be\ called\ with\ the\ given\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 172: error: function "C<Cs...>::k [with Cs=<>]" cannot be called with the given argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 174: error: function\ "C<Cs\.\.\.>::sk\ \[with\ Cs=<>\]"\ cannot\ be\ called\ with\ the\ given\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 174: error: function "C<Cs...>::sk [with Cs=<>]" cannot be called with the given argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 176: error: no\ instance\ of\ function\ template\ "C<Cs\.\.\.>::mt\ \[with\ Cs=<>\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 176: error: no instance of function template "C<Cs...>::mt [with Cs=<>]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 193: error: no\ instance\ of\ function\ template\ "P<Cs\.\.\.>::k\ \[with\ Cs=<int,\ int>\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 193: error: no instance of function template "P<Cs...>::k [with Cs=<int, int>]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 194: error: no\ instance\ of\ function\ template\ "P<Cs\.\.\.>::k\ \[with\ Cs=<int,\ int>\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 194: error: no instance of function template "P<Cs...>::k [with Cs=<int, int>]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 196: error: no\ instance\ of\ function\ template\ "P<Cs\.\.\.>::s\ \[with\ Cs=<int,\ int>\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 196: error: no instance of function template "P<Cs...>::s [with Cs=<int, int>]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 208: error: no\ instance\ of\ function\ template\ "Q<Cs\.\.\.>::k\ \[with\ Cs=<int,\ int>\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 208: error: no instance of function template "Q<Cs...>::k [with Cs=<int, int>]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 209: error: no\ instance\ of\ function\ template\ "Q<Cs\.\.\.>::k\ \[with\ Cs=<int,\ int>\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 209: error: no instance of function template "Q<Cs...>::k [with Cs=<int, int>]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 211: error: no\ instance\ of\ function\ template\ "Q<Cs\.\.\.>::k\ \[with\ Cs=<int,\ int>\]"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 211: error: no instance of function template "Q<Cs...>::k [with Cs=<int, int>]" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "line 218: error: no\ instance\ of\ function\ template\ "ref"\ matches\ the\ argument\ list":
+  <-----------------------------------------------------------------------------
+  line 218: error: no instance of function template "ref" matches the argument list
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*line (?!(?:67|69|71|74|77|79|85|86|88|89|91|92|98|104|110|112|114|116|135|137|139|149|161|164|167|172|174|176|193|194|196|208|209|211|218)\b)\d+: error)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

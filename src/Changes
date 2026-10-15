@@ -267,6 +267,48 @@ now match.  For example:
 
   [[cl::x]] int a;    // Warning: attribute namespace "cl" is unrecognized
   [[g::y]] int b;     // Previously, the namespace was accepted.
+Parameters after a function parameter pack in enable_if conditions
+
+The condition of a Clang enable_if attribute that names a function parameter
+that follows a function parameter pack of a function template is now evaluated
+for the call with the argument of that parameter.  The instance of such a
+template has the elements of the pack in its parameter list, but the references
+to parameters in the condition keep the numbering of the template, in which the
+pack is one parameter, so the condition used the argument of an element of the
+pack (or of nothing, if the pack is empty) instead.  Whether a call was
+accepted depended on the length of the pack rather than on the argument.  For
+example:
+
+  template <class... Ts>
+  int f(Ts... xs, int y) __attribute__((enable_if(y > 0, "y > 0")));
+  int a = f<>(3);                 // Was an error (no argument was tested)
+  int b = f<int, int>(-1, -2, 3); // Was an error (-2 > 0 was tested)
+  int c = f<int, int>(1, 2, -3);  // Was accepted (2 > 0 was tested)
+
+The references are now renumbered by position in the parameter list of the
+instance when the condition is substituted for overload resolution; a
+reference that cannot be mapped to a parameter of the instance discards the
+candidate.  The same applies to the function of a class template with a
+function parameter pack (which is not a function template) that has a
+parameter after the pack, whose condition is not substituted: its arguments
+are now found by the numbering of the declaration, including when the pack is
+empty.  Conditions that name the elements of a pack (a fold over a function
+parameter pack, for example) are not changed by this.  Only the references to
+the parameters of the function itself are renumbered: those to the parameters
+of a requires-expression or a lambda in the condition, for example, are not.
+
+A call that omits a parameter with a default argument that follows the pack and
+is named in the condition is now rejected, as it is for a function without a
+pack (the omitted argument has no value that the condition could use):
+"d<int, int>(1, 2)" with "int y = 5" after the pack was accepted before,
+because y was read from the second element of the pack.  Clang accepts the
+call.
+
+The front end no longer stops with a segmentation fault for a condition that
+names a reference parameter that follows a pack (a call such as
+p<int, int>(5, 6, -3) of "template <class... Ts> int p(Ts... xs, const int &y)
+__attribute__((enable_if(y > 0, "")))").  Such calls are rejected whatever the
+argument is, as for a function without a pack.
 
 10/9/26  [GH #27]
 Clearer diagnostic when auto is deduced from an incomplete type

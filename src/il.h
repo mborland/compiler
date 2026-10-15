@@ -3000,6 +3000,31 @@ typedef struct a_ctws_state {
 			   the positions of template arguments being used
 			   during substitution.  This array is resized and
 			   updated by the template substitution routines. */
+  a_param_type_ptr
+		instance_param_types;
+			/* If non-NULL, the (expanded) parameter list of the
+			   function template instance whose enable_if
+			   conditions are being substituted for overload
+			   resolution.  When the references to the parameters
+			   of that function (enk_param_ref) in the rescanned
+			   expression are made, they are renumbered by position
+			   in this list, which is how the arguments of the call
+			   are indexed.  (In an instance, the elements of a
+			   function parameter pack share the number of the
+			   pack and parameters that follow it keep the number
+			   they have in the template.)  This is used only
+			   for the references made at instance_param_types_
+			   level (see renumber_param_ref_for_instance): the
+			   parameters of a requires-expression or of a nested
+			   function type (its return type and exception
+			   specification) in the expression are other
+			   parameter lists.  It is not propagated to any other
+			   substitution: the state is copied for some of
+			   them, which clear it.  NULL otherwise. */
+  int32_t	instance_param_types_level;
+			/* The value of routine_type_levels at which the
+			   references to the parameters of the function itself
+			   are made while instance_param_types is non-NULL. */
   int32_t	routine_type_levels;
 			/* The level of nesting of routine types. */
   int32_t	parent_levels;

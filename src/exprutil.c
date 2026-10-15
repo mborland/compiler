@@ -27526,8 +27526,14 @@ subst_pairs is successful.  ctws_state is a substitution state block pointer
   int32_t           saved_routine_type_levels;
   a_variadic_param_info_ptr
                     saved_variadic_param_info_tail;
+  a_param_type_ptr  saved_instance_param_types =
+                                         ctws_state->instance_param_types;
   an_ovl_res_stack  *ovl_stack = ovl_res_stack();
 
+  /* The references to the parameters of the requires-expression are not
+     references to those of the function whose enable_if condition is being
+     substituted, if that is what ctws_state is for. */
+  ctws_state->instance_param_types = NULL;
   if (ovl_stack) {
     /* If this is called as part of overload resolution, push a new level of
        overload resolution so that diagnostics from failures in individual
@@ -27686,6 +27692,7 @@ subst_pairs is successful.  ctws_state is a substitution state block pointer
     ctws_state->variadic_param_info_tail = saved_variadic_param_info_tail;
   }  /* if */
   ctws_state->routine_type_levels = saved_routine_type_levels;
+  ctws_state->instance_param_types = saved_instance_param_types;
   if (ovl_stack) {
     ovl_res_stack()->pop();
   }  /* if */

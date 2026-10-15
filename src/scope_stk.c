@@ -12772,6 +12772,7 @@ lengths) *err is set to TRUE, FALSE otherwise.
                 local_ctws_state = *ctws_state;
                 local_ctws_state.variadic_param_info = NULL;
                 local_ctws_state.variadic_param_info_tail = NULL;
+                local_ctws_state.instance_param_types = NULL;
                 local_ctws_state.unexpanded_pack = FALSE;
                 /* vpip->param_type points into the function parameter list,
                    but as we only want to substitute a single parameter, make a
@@ -12986,6 +12987,63 @@ is found, NULL is returned.
   }  /* if */
   return result_type;
 }  /* get_curr_variadic_param_type */
+
+
+a_boolean renumber_param_ref_for_instance(an_expr_node_ptr  expr,
+                                          a_ctws_state_ptr  ctws_state)
+/*
+expr is a copy of an enk_param_ref node made while rescanning an expression
+for ctws_state, and ctws_state->instance_param_types is non-NULL, so the
+expression is being evaluated for an instance of a function template and the
+nodes must be numbered the way the evaluation indexes the arguments of the
+call: by position in the (expanded) parameter list of the instance.  The number
+in the node is the one of the parameter in the template.  In an instance, the
+elements of a function parameter pack share the number of the pack, so a
+parameter after a pack has a different position than number.
+
+Replace the number of a reference to a parameter of the instance by the
+position (1, 2, ...) of the parameter that has that number.  References to
+"this" (number zero) are left alone, and so are the references that are not to
+the parameters of the function itself: those with levels_up other than zero,
+and those made while another parameter list is being rescanned (substituting a
+nested routine type, whose return type and exception specification name its own
+parameters, changes routine_type_levels; the parameters of a
+requires-expression are made with instance_param_types cleared, see
+requires_expr_satisfied_full).  A number that is the one of elements of a
+function parameter pack of the instance is the reference to an element of the
+pack of a class template (a member template of an instance of the class, whose
+condition names the class pack): the elements of such a pack all have the
+number of the pack, so which one is meant cannot be told, and the first one is
+used (the limitation of bug 0010: the other elements are read as the first).
+Return FALSE if no parameter of the instance has the number, because a node
+that cannot be mapped must not be left with a number that would name some other
+parameter.  (A reference to an element of a pack of the function being expanded
+is not handled here; see get_curr_variadic_param_type.)
+*/
+{
+  a_param_type_ptr  ptp;
+  uint32_t          num = (uint32_t)expr->variant.param_ref.param_num;
+  uint32_t          position = 1;
+  a_boolean         found = FALSE;
+
+  check_assertion(expr->kind == (an_expr_node_kind)enk_param_ref &&
+                  ctws_state->instance_param_types != NULL);
+  if (num == 0 || expr->variant.param_ref.levels_up != 0 ||
+      ctws_state->routine_type_levels !=
+                                      ctws_state->instance_param_types_level) {
+    found = TRUE;
+  } else {
+    for (ptp = ctws_state->instance_param_types; ptp != NULL;
+         ptp = ptp->next, ++position) {
+      if (ptp->param_num == num) {
+        expr->variant.param_ref.param_num = position;
+        found = TRUE;
+        break;
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return found;
+}  /* renumber_param_ref_for_instance */
 
 
 a_template_arg_ptr get_curr_variadic_arg_for_param(

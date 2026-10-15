@@ -1,0 +1,194 @@
+fe_only -DTEST_NUMBER=2 --clang_v 180000 --c++14 Test_name.c
+"Test_name.c", line 67: error: no instance of function template "last_pos" matches the argument list
+            argument types are: (int)
+  int a1 = last_pos<>(-3);                        // empty pack: rejected
+           ^
+
+"Test_name.c", line 69: error: no instance of function template "last_pos" matches the argument list
+            argument types are: (int)
+  int a3 = last_pos(-3);                          // deduced empty pack: rejected
+           ^
+
+"Test_name.c", line 71: error: no instance of function template "last_pos" matches the argument list
+            argument types are: (int, int)
+  int b1 = last_pos<int>(5, -3);                  // one element, y negative: rejected
+           ^
+
+"Test_name.c", line 74: error: no instance of function template "last_pos" matches the argument list
+            argument types are: (int, int, int)
+  int c1 = last_pos<int, int>(5, 6, -3);          // two elements, y negative: rejected
+           ^
+
+"Test_name.c", line 77: error: no instance of function template "last_pos" matches the argument list
+            argument types are: (int, int, int, int)
+  int d1 = last_pos<int, int, int>(1, 2, 3, -4);    // three elements, y negative: rejected
+           ^
+
+"Test_name.c", line 79: error: no instance of function template "last_pos" matches the argument list
+            argument types are: (char, double, int)
+  int d3 = last_pos<char, double>('a', 2.5, -7);    // elements of other types, y negative: rejected
+           ^
+
+"Test_name.c", line 85: error: no instance of function template "mid" matches the argument list
+            argument types are: (int, int)
+  int e1 = mid<>(-1, 2);                          // x negative: rejected
+           ^
+
+"Test_name.c", line 86: error: no instance of function template "mid" matches the argument list
+            argument types are: (int, int)
+  int e2 = mid<>(1, -2);                          // y negative: rejected
+           ^
+
+"Test_name.c", line 88: error: no instance of function template "mid" matches the argument list
+            argument types are: (int, int, int)
+  int e4 = mid<int>(-1, 100, 2);                  // x negative: rejected
+           ^
+
+"Test_name.c", line 89: error: no instance of function template "mid" matches the argument list
+            argument types are: (int, int, int)
+  int e5 = mid<int>(1, 100, -2);                  // y negative: rejected
+           ^
+
+"Test_name.c", line 91: error: no instance of function template "mid" matches the argument list
+            argument types are: (int, int, int, int, int)
+  int e7 = mid<int, int, int>(1, -7, -8, -9, -2); // y negative: rejected
+           ^
+
+"Test_name.c", line 92: error: no instance of function template "mid" matches the argument list
+            argument types are: (int, int, int, int, int)
+  int e8 = mid<int, int, int>(-1, 7, 8, 9, 2);    // x negative: rejected
+           ^
+
+"Test_name.c", line 98: error: no instance of function template "below" matches the argument list
+            argument types are: (int, int, int, int)
+  int f1 = below<int, int>(5, 9, 9, 2);           // y < x, elements 9: rejected
+           ^
+
+"Test_name.c", line 104: error: no instance of function template "only_x" matches the argument list
+            argument types are: (int, int, int, int)
+  int g1 = only_x<int, int>(-1, 7, 8, 9);         // rejected
+           ^
+
+"Test_name.c", line 110: error: no instance of function template "between" matches the argument list
+            argument types are: (int, int, int)
+  int h1 = between<>(-1, 2, 3);                   // empty first pack: rejected
+           ^
+
+"Test_name.c", line 112: error: no instance of function template "between" matches the argument list
+            argument types are: (int, int)
+  int h3 = between<int>(9, -1);                   // empty second pack: rejected
+           ^
+
+"Test_name.c", line 114: error: no instance of function template "between" matches the argument list
+            argument types are: (int, int, int, int)
+  int h5 = between<int, int>(9, 8, -1, 2);        // m negative: rejected
+           ^
+
+"Test_name.c", line 116: error: no instance of function template "between" matches the argument list
+            argument types are: (int, int, int, int, int)
+  int h7 = between<int, int>(9, 8, -1, 2, 3);     // m negative: rejected
+           ^
+
+"Test_name.c", line 135: error: no instance of function template "S::m" matches the argument list
+            argument types are: (int, int, int)
+            object type is: S
+  int i1 = s.m<int, int>(1, 2, -3);               // non-static: rejected
+             ^
+
+"Test_name.c", line 137: error: no instance of function template "S::cm" matches the argument list
+            argument types are: (int, int, int)
+            object type is: S
+  int i3 = s.cm<int, int>(1, 2, -3);              // const: rejected
+             ^
+
+"Test_name.c", line 139: error: no instance of function template "S::sm" matches the argument list
+            argument types are: (int, int, int)
+  int i5 = S::sm<int, int>(1, 2, -3);             // static: rejected
+           ^
+
+"Test_name.c", line 149: error: no instance of function template "W<T>::m [with T=int]" matches the argument list
+            argument types are: (int, int, int)
+            object type is: W<int>
+  int j1 = w.m<int, int>(1, 2, -3);               // rejected
+             ^
+
+"Test_name.c", line 161: error: function "C<Cs...>::k [with Cs=<int, int>]" cannot be called with the given argument list
+            argument types are: (int, int, int)
+            object type is: C<int, int>
+  int k1 = c.k(1, 2, -3);                         // y negative: rejected
+             ^
+
+"Test_name.c", line 164: error: function "C<Cs...>::sk [with Cs=<int, int>]" cannot be called with the given argument list
+            argument types are: (int, int, int)
+  int k4 = C<int, int>::sk(1, 2, -3);             // static, y negative: rejected
+           ^
+
+"Test_name.c", line 167: error: no instance of function template "C<Cs...>::mt [with Cs=<int, int>]" matches the argument list
+            argument types are: (int, int, int)
+            object type is: C<int, int>
+  int k7 = c.mt(1, 2, -3);                        // member template: rejected
+             ^
+
+"Test_name.c", line 172: error: function "C<Cs...>::k [with Cs=<>]" cannot be called with the given argument list
+            argument types are: (int)
+            object type is: C<>
+  int m1 = ce.k(-3);                              // empty class pack: rejected
+              ^
+
+"Test_name.c", line 174: error: function "C<Cs...>::sk [with Cs=<>]" cannot be called with the given argument list
+            argument types are: (int)
+  int m3 = C<>::sk(-3);                           // empty class pack, static: rejected
+           ^
+
+"Test_name.c", line 176: error: no instance of function template "C<Cs...>::mt [with Cs=<>]" matches the argument list
+            argument types are: (int)
+            object type is: C<>
+  int m5 = ce.mt(-3);                             // empty class pack, member template: rejected
+              ^
+
+"Test_name.c", line 187: warning: fold expressions are nonstandard in this mode
+    int k(Cs... cs, T t) __attribute__((enable_if(((cs > 0) && ...) && t > 0, "P::k"))) { return 1; }
+                                                            ^
+
+"Test_name.c", line 193: error: no instance of function template "P<Cs...>::k [with Cs=<int, int>]" matches the argument list
+            argument types are: (int, int, int)
+            object type is: P<int, int>
+  int q1 = p.k(1, 2, -3);                         // t negative: rejected
+             ^
+
+"Test_name.c", line 194: error: no instance of function template "P<Cs...>::k [with Cs=<int, int>]" matches the argument list
+            argument types are: (int, int, int)
+            object type is: P<int, int>
+  int q2 = p.k(-1, 2, 3);                         // first element negative: rejected
+             ^
+
+"Test_name.c", line 196: error: no instance of function template "P<Cs...>::s [with Cs=<int, int>]" matches the argument list
+            argument types are: (int, int, int)
+            object type is: P<int, int>
+  int q4 = p.s(1, 2, -3);                         // t negative: rejected
+             ^
+
+"Test_name.c", line 208: error: no instance of function template "Q<Cs...>::k [with Cs=<int, int>]" matches the argument list
+            argument types are: (int, int, int, int, int)
+            object type is: Q<int, int>
+  int w1 = q.k<int, int>(1, 2, -5, -6, 7);        // class pack negative: rejected
+             ^
+
+"Test_name.c", line 209: error: no instance of function template "Q<Cs...>::k [with Cs=<int, int>]" matches the argument list
+            argument types are: (int, int, int, int, int)
+            object type is: Q<int, int>
+  int w2 = q.k<int, int>(1, 2, 5, 6, -7);         // t negative: rejected
+             ^
+
+"Test_name.c", line 211: error: no instance of function template "Q<Cs...>::k [with Cs=<int, int>]" matches the argument list
+            argument types are: (int, int, int)
+            object type is: Q<int, int>
+  int w4 = q.k<>(-5, 6, 7);                       // class pack negative: rejected
+             ^
+
+"Test_name.c", line 218: error: no instance of function template "ref" matches the argument list
+            argument types are: (int, int, int)
+  int r0 = ref<int, int>(5, 6, -3);               // y negative: rejected
+           ^
+
+35 errors detected in the compilation of "Test_name.c".

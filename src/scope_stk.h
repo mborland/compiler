@@ -1062,6 +1062,13 @@ typedef struct a_scope_stack_entry {
 			   has been seen.  (Additional elements may follow in
 			   C++, including trailing return types and exception
 			   specifications.) */
+  a_bit_field	is_result_binder_scope:1;
+			/* TRUE for a function prototype scope pushed while the
+			   arguments of an attribute that names the result of a
+			   function are scanned: it is a copy of the one of the
+			   declarator, on top of it, and is not a scope of
+			   the declarator (a registered attribute with the
+			   signature code "R", see attribute.c). */
   a_bit_field	in_field_initializer:1;
 			/* TRUE while scanning a field initializer.  This flag
 			   is set to TRUE in the class (reactivation) scope for

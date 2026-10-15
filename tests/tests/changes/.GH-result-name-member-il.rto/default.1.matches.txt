@@ -1,0 +1,158 @@
+Matches for "type:\s+file-scope type@X+: C \*\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+0\nparam_ref.levels_up:\s+0":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: C *
+  orig_lvalue_type:        file-scope type@XXXXXXXX: C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: const C \*\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+0\nparam_ref.levels_up:\s+0":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: const C *
+  next:                    file-scope expr-node@XXXXXXXX
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: const C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: const C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: const C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: volatile C \*\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+0\nparam_ref.levels_up:\s+0":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: volatile C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: const volatile C \*\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+0\nparam_ref.levels_up:\s+0":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: const volatile C *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+Matches for "type:\s+file-scope type@X+: S<int> \*\n(?:[^\n]*\n){0,3}kind:\s+enk_param_ref\nparam_ref.param_num:\s+0\nparam_ref.levels_up:\s+0":
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: S<int> *
+  orig_lvalue_type:        file-scope type@XXXXXXXX: S<int> *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->
+  <-----------------------------------------------------------------------------
+  type:                    file-scope type@XXXXXXXX: S<int> *
+  orig_lvalue_type:        file-scope type@XXXXXXXX: S<int> *
+  next:                    file-scope expr-node@XXXXXXXX
+  compiler_generated:      TRUE
+  kind:                    enk_param_ref
+  param_ref.param_num:     0
+  param_ref.levels_up:     0
+  ----------------------------------------------------------------------------->

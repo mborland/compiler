@@ -1,6 +1,27 @@
 Version 7.1
 
 10/15/26  [GH #?]
+Result-name scope of an attribute in the definition of a member function outside its class
+
+The attribute of a member function defined outside its class that is scanned
+with the scope for the name of the result of the function (a registered
+attribute with the signature code "R", whether it names the result or not) made
+the front end fail with an internal error ("variable_this_exists_full") when
+it used a member of the class or "this" and the member function had no
+qualifier (an assertion in the lookup of "this", which took the scope for the
+result for the scope of the declarator).  The scope is now skipped when "this"
+is looked up.  Also, the error that an attribute cannot name the result of a
+function that returns void is issued once when the declaration of a function
+template is scanned again for an instance and the attribute is copied to it.
+A lambda that captures "this" in an attribute after the parameter list of a
+member function ([this], [*this]) was an internal error in the front end and
+is now the error that "this" cannot be captured.  For example, with "post"
+registered with "(R,Xb)":
+
+  struct counter { int val; int bump(); };
+  int counter::bump() [[mine::post(val >= 0)]] { return val; }   // OK
+
+10/15/26  [GH #?]
 Explicit specializations and the registered attributes of their template
 
 A registered attribute with the flag RAF_MUST_MATCH (see the entry for

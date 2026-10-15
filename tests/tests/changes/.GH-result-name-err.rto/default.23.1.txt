@@ -1,6 +1,6 @@
 fe_only -DTEST_NUMBER=23 --c++20 --instantiate=used Test_name.c
-"Test_name.c", line 94: error: attribute "edg::r_post" does not match the attributes of an earlier declaration
-            the other declaration is at line 93
+"Test_name.c", line 95: error: attribute "edg::r_post" does not match the attributes of an earlier declaration
+            the other declaration is at line 94
   int c23(int x) [[edg::r_post(x > 0)]];
                    ^
 

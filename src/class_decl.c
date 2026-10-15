@@ -2198,8 +2198,15 @@ capture described by lcp.  Return the field entry.
            variable. */
         a_variable_ptr  this_var;
         is_this = variable_this_exists(&this_var, &field_type);
-        check_assertion(is_this && this_var == NULL);
-        if (!by_reference) {
+        if (!is_this || this_var != NULL) {
+          /* Not a context in which "this" can be captured without a "this"
+             variable: a lambda in an attribute after the parameter list of a
+             member function declaration, for example. */
+          pos_error(ec_cannot_capture_this, pos);
+          is_this = FALSE;
+          set_to_error_locator(locator);
+          field_type = error_type();
+        } else if (!by_reference) {
           /* Capture of "*this". */
           field_type = type_pointed_to(field_type);
         }  /* if */

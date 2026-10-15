@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=3 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 26: error: "this" may only be used inside a nonstatic member function
+  int C3::g() [[edg::r_post(r, this->val > 0)]] { return 0; }
+                               ^
+
+1 error detected in the compilation of "Test_name.c".

@@ -2870,8 +2870,42 @@ or not.  The scope is popped by scan_attr_arg_list.
                    ctx->rout_type, (a_routine_ptr)NULL);
   scope_stack_top().decl_parse_state = ctx->dps;
   scope_stack_top().outside_parameter_list = TRUE;
+  scope_stack_top().is_result_binder_scope = TRUE;
   binder->pushed = TRUE;
 }  /* push_result_binder_scope */
+
+
+STATIC_THREAD a_boolean  any_void_result_error;
+STATIC_THREAD a_source_position
+		last_void_result_position;
+			/* An instance and the position of the attribute of
+			   the latest error that check_named_results_of_instance
+			   issued: the attributes of an instance are copied
+			   more than once in some cases (and for more than one
+			   instance), and the error is issued once for an
+			   attribute. */
+
+
+static a_boolean void_result_error_was_issued(a_source_position  *pos)
+/*
+Return TRUE if the error that an attribute cannot name the result of a function
+that returns void has just been issued for the attribute at *pos.
+*/
+{
+  return any_void_result_error && last_void_result_position.seq == pos->seq &&
+         last_void_result_position.column == pos->column;
+}  /* void_result_error_was_issued */
+
+
+static void note_void_result_error(a_source_position  *pos)
+/*
+Remember that the error about the result of a function that returns void was
+issued for the attribute at *pos.
+*/
+{
+  any_void_result_error = TRUE;
+  last_void_result_position = *pos;
+}  /* note_void_result_error */
 
 
 static a_boolean is_template_parameter_name(a_symbol_locator  *loc)
@@ -2937,7 +2971,13 @@ the result here.
       err = ec_attr_result_name_void_function;
     }  /* if */
     if (err != ec_no_error) {
-      pos_st_error(err, &aap->position, attribute_display_name(ap));
+      if (err != ec_attr_result_name_void_function ||
+          !void_result_error_was_issued(&aap->position)) {
+        pos_st_error(err, &aap->position, attribute_display_name(ap));
+        if (err == ec_attr_result_name_void_function) {
+          note_void_result_error(&aap->position);
+        }  /* if */
+      }  /* if */
       make_attr_unrecognized(ap);
       *p_error = TRUE;
     } else if (ctx->func_info != NULL &&
@@ -3276,8 +3316,11 @@ attribute was scanned): issue it and remove the attribute from the list.
         ap->arguments != NULL &&
         ap->arguments->kind == (an_attribute_arg_kind)aak_token &&
         is_void_type(skip_typerefs(return_type))) {
-      pos_st_error(ec_attr_result_name_void_function,
-                   &ap->arguments->position, attribute_display_name(ap));
+      if (!void_result_error_was_issued(&ap->arguments->position)) {
+        pos_st_error(ec_attr_result_name_void_function,
+                     &ap->arguments->position, attribute_display_name(ap));
+        note_void_result_error(&ap->arguments->position);
+      }  /* if */
       make_attr_unrecognized(ap);
       *pp = ap->next;
     } else {
@@ -12487,6 +12530,7 @@ translation unit.
   registered_attr_account = NULL;
   registered_attr_buckets = NULL;
   post_func_attr_ctx = NULL;
+  any_void_result_error = FALSE;
 #if USE_X86_FUNCTION_MULTIVERSIONING && DO_IL_LOWERING
   mv_builtins_loaded = FALSE;
 #endif /* USE_X86_FUNCTION_MULTIVERSIONING && DO_IL_LOWERING */

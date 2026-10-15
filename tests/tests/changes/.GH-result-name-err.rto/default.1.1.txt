@@ -1,5 +1,5 @@
 fe_only -DTEST_NUMBER=1 --c++20 --instantiate=used Test_name.c
-"Test_name.c", line 18: error: attribute "edg::r_post" cannot name the result of a function that returns void
+"Test_name.c", line 19: error: attribute "edg::r_post" cannot name the result of a function that returns void
   void c1(int x) [[edg::r_post(r, true)]];
                                ^
 

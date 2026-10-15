@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=2 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 22: error: "this" may only be used inside a nonstatic member function
+  int C2::g() [[edg::r_pre(val >= 0)]] { return 0; }
+                           ^
+
+1 error detected in the compilation of "Test_name.c".

@@ -13201,6 +13201,11 @@ implicit "this" is available, e.g., during overload resolution.
          ssep != NULL &&
            (scope_is(ssep, sck_func_prototype) || ssep->in_field_initializer);
          ssep = previous_scope_of(ssep)) {
+      if (ssep->is_result_binder_scope) {
+        /* The scope for the name of the result of the function in an
+           attribute: look at the scope of the declarator under it. */
+        continue;
+      }  /* if */
       if ((scope_is(ssep, sck_class_struct_union) ||
            scope_is(ssep, sck_class_reactivation)) &&
           !type_is_lambda_closure(ssep->assoc_type)) {

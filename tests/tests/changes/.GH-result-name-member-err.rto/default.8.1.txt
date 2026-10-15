@@ -1,0 +1,10 @@
+fe_only -DTEST_NUMBER=8 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 48: error: cannot capture "this"
+  int C8::bump() [[edg::r_pre([this] { return val; }() >= 0)]] { return val; }
+                               ^
+
+"Test_name.c", line 48: error: a nonstatic member reference must be relative to a specific object
+  int C8::bump() [[edg::r_pre([this] { return val; }() >= 0)]] { return val; }
+                                              ^
+
+2 errors detected in the compilation of "Test_name.c".

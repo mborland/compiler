@@ -1,5 +1,5 @@
 fe_only -DTEST_NUMBER=12 --c++20 --instantiate=used Test_name.c
-"Test_name.c", line 53: error: attribute "edg::r_post" can name the result only after the parameter list of a function declaration
+"Test_name.c", line 54: error: attribute "edg::r_post" can name the result only after the parameter list of a function declaration
   [[edg::r_post(r, true)]] int c12;
                 ^
 

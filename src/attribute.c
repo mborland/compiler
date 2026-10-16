@@ -5831,15 +5831,17 @@ static an_expr_node_ptr substitute_attribute_expr_full(
                                               a_source_position    *position,
                                               a_ctws_options_set   options,
                                               a_boolean            *p_error,
-                                              a_ctws_state         *ctws_state)
+                                              a_ctws_state         *ctws_state,
+                                              a_boolean            is_registered)
 /*
 Do template argument substitution for the given expression, as
-substitute_attribute_expr_inner does, while noting that the expression is that
-of an attribute (a generic lambda in it cannot be copied, see
-copy_template_param_lambda_expr).
+substitute_attribute_expr_inner does.  is_registered is TRUE if the expression
+is that of a registered attribute: a generic lambda in it cannot be copied (see
+copy_template_param_lambda_expr).  The expressions of the attributes that the
+front end defines are substituted as before.
 */
 {
-  a_boolean         saved = set_attribute_expr_substitution(TRUE);
+  a_boolean         saved = set_attribute_expr_substitution(is_registered);
   an_expr_node_ptr  result;
 
   result = substitute_attribute_expr_inner(expr, t_args, t_params,
@@ -5857,7 +5859,8 @@ static an_expr_node_ptr substitute_attribute_expr(
                                               a_type_ptr           parent_class,
                                               a_source_position    *position,
                                               a_boolean            *p_error,
-                                              a_ctws_state         *ctws_state)
+                                              a_ctws_state         *ctws_state,
+                                              a_boolean            is_registered)
 /*
 Do template argument substitution for the given expression (which appears as
 an argument in an attribute) and return the substituted expression (see
@@ -5866,7 +5869,7 @@ substitute_attribute_expr_full).
 {
   return substitute_attribute_expr_full(expr, t_args, t_params, parent_class,
                                         position, CTWS_NON_CONSTANT_EXPR,
-                                        p_error, ctws_state);
+                                        p_error, ctws_state, is_registered);
 }  /* substitute_attribute_expr */
 
 
@@ -6028,14 +6031,18 @@ an error.
                                             expr, t_args, t_params,
                                             parent_class,
                                             &((*p_aap)->position),
-                                            &err, &ctws_state);
+                                            &err, &ctws_state,
+                                            (*p_attr)->kind == ak_registered);
                   /* An expression with an error in it is a substitution
                      error whether or not the substitution says so: a lambda
                      is scanned again with its diagnostics suppressed, and a
                      failure there can leave an error expression without the
-                     error flag. */
-                  if (!err && ((*p_aap)->variant.expr == NULL ||
-                               expr_contains_error((*p_aap)->variant.expr))) {
+                     error flag.  (For a registered attribute only: the
+                     expressions of the attributes that the front end defines
+                     are not changed.) */
+                  if (!err && (*p_attr)->kind == ak_registered &&
+                      ((*p_aap)->variant.expr == NULL ||
+                       expr_contains_error((*p_aap)->variant.expr))) {
                     err = TRUE;
                   }  /* if */
                 }

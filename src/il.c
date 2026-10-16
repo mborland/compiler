@@ -20706,17 +20706,16 @@ copy_template_param_expr for the parameter descriptions.
 
   if (attribute_expr_substitution_active &&
       (lambda->is_generic || lambda->has_template_param_list) &&
-      template_param_list != NULL &&
-      template_param_list->cache.decl_info == NULL) {
+      template_param_list != NULL) {
     /* A generic lambda (one with an auto parameter or with template
        parameters) in the expression of an attribute that is copied for an
-       instance of a function template: the parameters of the call operator of the lambda
-       are numbered among those of the function template, which the
+       instance of a template: the parameters of the call operator of the
+       lambda are numbered among those of the template, which the
        substitution of the type of the lambda does not expect (it fails with
-       an invalid access to the template argument list), and the list of the
-       parameters of a function template does not have the declaration
-       information that scanning the lambda again needs.  Such a lambda cannot
-       be copied: that is an error. */
+       an invalid access to the template argument list, or runs off the end
+       of the list of parameters), whatever the first parameter of the list
+       has for declaration information.  Such a lambda cannot be copied: that
+       is an error. */
     subst_fail(*copy_error);
     goto done;
   }  /* if */

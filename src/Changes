@@ -1,6 +1,24 @@
 Version 7.1
 
 10/16/26  [GH #?]
+Lambdas in the registered attributes of function templates
+
+A lambda in the argument of a registered attribute (see ext_intf.rst) of a
+function template, or of a member template of a class that is not a template,
+can name the template parameters (in the types of its parameters and in its
+body): the lambda of each instance has the types of the instance.  A generic
+lambda, or a lambda with template parameters of its own, in the argument of a
+registered attribute of a template that has a template template parameter as
+its first template parameter crashed the front end; it is now the error "bad
+attribute argument substitution", as for other templates:
+
+  template<template<class> class TT> int f(int x)
+    [[ns::pre([](auto a, auto b) { return a > b; }(x, 0))]];
+  template<class U> struct W { };
+  int g() { return f<W>(1); }  // Was a crash.  Now an error at the attribute.
+
+
+10/16/26  [GH #?]
 Lambdas that name template parameters in function template declarations
 
 A lambda in the declaration of a function template that names a template

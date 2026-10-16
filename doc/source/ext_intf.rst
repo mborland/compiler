@@ -5069,11 +5069,18 @@ and checked in the context of the attribute, and is dependent in a template
 declaration and substituted in each instance.  An expression that cannot be
 substituted for an instance (it has an error in it after the substitution) is
 the error "bad attribute argument substitution" at the attribute.  A lambda in
-an argument is scanned again for each instance: a lambda that has a parameter
-whose type involves a template parameter of a function template, and a generic
-lambda, cannot be copied that way in the attribute of a function template
-(an error), while the lambda in the attribute of a member of a class template
-can.
+an argument is scanned again for each instance, with the template parameters
+that it names bound to the template arguments of the instance, so a lambda that
+is not generic can have parameters whose types involve the template parameters
+of a function template, or of a member template of a class that is not a
+template, and can use them in its body.  The following cannot be copied that
+way, and are the error "bad attribute argument substitution" (or the error of
+the name that is not found): a generic lambda and a lambda that has template
+parameters of its own, a function parameter or the result name used in the
+lambda, a template parameter pack named in the lambda, and a lambda in the
+attribute of a member template of a class template.  A lambda in the attribute
+of a member of a class template (that is not itself a template) can name the
+template parameters of the class.
 
 The interface is declared in ``attribute.h``, which defines the macro
 ``EDG_ATTRIBUTE_REGISTRATION`` so that a program can test for it:

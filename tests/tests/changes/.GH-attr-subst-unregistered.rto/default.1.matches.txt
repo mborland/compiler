@@ -1,0 +1,8 @@
+Matches for "line 19: error: parameter pack "vals" was referenced but not expanded":
+  <-----------------------------------------------------------------------------
+  line 19: error: parameter pack "vals" was referenced but not expanded
+  ----------------------------------------------------------------------------->
+Matches for "\A(?![\s\S]*bad attribute argument substitution)":
+  <-----------------------------------------------------------------------------
+  
+  ----------------------------------------------------------------------------->

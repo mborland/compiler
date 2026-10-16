@@ -1,0 +1,6 @@
+fe_only -DTEST_NUMBER=1 --clang --clang_version=210000 --c++20 Test_name.c
+"Test_name.c", line 19: error: parameter pack "vals" was referenced but not expanded
+  void f() __attribute((diagnose_if(vals, "message", "error"))) {}
+                                    ^
+
+1 error detected in the compilation of "Test_name.c".

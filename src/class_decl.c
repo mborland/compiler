@@ -15020,6 +15020,9 @@ IL entry accordingly.  def_pos is the position of the "= default;" or
     rp->defined_in_friend_decl = FALSE;
     rp->is_inline = FALSE;
     rp->storage_class = (a_storage_class)sc_extern;
+  } else if (func_info->is_defaulted) {
+    check_defaulted_function_attributes(rp, dps->id_attributes,
+                                        dps->prefix_attributes, def_pos);
   }  /* if */
 }  /* check_defaulted_or_deleted_function */
 

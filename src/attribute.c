@@ -1762,7 +1762,8 @@ in that program.
                                   NULL };
   a_const_char * const                *p_name;
   const an_attr_registration_flag_set all_registration_flags =
-                                    RAF_ENTITY_ATTACHED | RAF_MUST_MATCH;
+                                    RAF_ENTITY_ATTACHED | RAF_MUST_MATCH |
+                                    RAF_NO_CONSTANT_EVALUATION;
 
   for (nsp = registered_attribute_namespaces; nsp != NULL; nsp = nsp->next) {
     check_registration(is_attribute_identifier_string(nsp->name), nsp, NULL,
@@ -1801,6 +1802,10 @@ in that program.
       check_registration((rp->flags & RAF_MUST_MATCH) == 0 ||
                          (rp->flags & RAF_ENTITY_ATTACHED) != 0, nsp, rp,
                          "a must-match attribute must be entity-attached");
+      check_registration((rp->flags & RAF_NO_CONSTANT_EVALUATION) == 0 ||
+                         (rp->flags & RAF_ENTITY_ATTACHED) != 0, nsp, rp,
+                         "an attribute that forbids constant evaluation must "
+                         "be entity-attached");
       check_registration(!registered_sig_names_result(rp->sig) ||
                          (rp->flags & RAF_ENTITY_ATTACHED) != 0, nsp, rp,
                          "an attribute that names the result must be "
@@ -4070,6 +4075,57 @@ Return TRUE if ap is a registered attribute with the flag RAF_MUST_MATCH.
   return ap->kind == (an_attribute_kind)ak_registered &&
          attribute_must_match(ap);
 }  /* is_must_match_registered_attribute */
+
+
+a_boolean routine_has_no_constant_evaluation_attribute(a_routine_ptr  rp)
+/*
+Return TRUE if a declaration of the routine has a registered attribute with
+the flag RAF_NO_CONSTANT_EVALUATION: a call of it is not evaluated at compile
+time (see attribute.h).  (An attribute that has been made unrecognized no
+longer counts.)
+*/
+{
+  an_attribute_ptr  ap;
+  a_boolean         found = FALSE;
+
+  for (ap = rp->source_corresp.attributes; ap != NULL && !found;
+                                                            ap = ap->next) {
+    found = ap->kind == (an_attribute_kind)ak_registered &&
+            (registered_attribute_flags(ap) & RAF_NO_CONSTANT_EVALUATION) != 0;
+  }  /* for */
+  return found;
+}  /* routine_has_no_constant_evaluation_attribute */
+
+
+void check_defaulted_function_attributes(a_routine_ptr      rp,
+                                         an_attribute_ptr   id_attrs,
+                                         an_attribute_ptr   prefix_attrs,
+                                         a_source_position  *pos)
+/*
+rp is a function that is defaulted ("= default") by a declaration that has the
+attributes id_attrs and prefix_attrs (not attached to the routine yet), and has
+the attributes of its earlier declarations.  An attribute with the flag
+RAF_NO_CONSTANT_EVALUATION on any of them is an error: a defaulted special
+member function can be trivial, and the evaluation of a call of a trivial
+function copies the bits of the objects without calling it.
+*/
+{
+  an_attribute_ptr  ap;
+  a_boolean         found = routine_has_no_constant_evaluation_attribute(rp);
+  int               pass;
+
+  for (pass = 0; pass < 2 && !found; pass++) {
+    for (ap = pass == 0 ? id_attrs : prefix_attrs; ap != NULL && !found;
+                                                            ap = ap->next) {
+      found = ap->kind == (an_attribute_kind)ak_registered &&
+              (registered_attribute_flags(ap) &
+                                         RAF_NO_CONSTANT_EVALUATION) != 0;
+    }  /* for */
+  }  /* for */
+  if (found) {
+    pos_error(ec_attr_no_constant_evaluation_on_defaulted_function, pos);
+  }  /* if */
+}  /* check_defaulted_function_attributes */
 
 
 void reconcile_must_match_attributes(a_routine_ptr     rp,
@@ -12532,6 +12588,7 @@ known_attr_table are tested differently and are not described here.)
 */
 static constexpr an_attr_registration edg_test_attributes[] = {
   { "r_fn", "", "r", RAF_ENTITY_ATTACHED },
+  { "r_noconst", "", "r", RAF_ENTITY_ATTACHED | RAF_NO_CONSTANT_EVALUATION },
   { "r_stmt", "(Xb)", "s", RAF_NO_FLAGS },
   { "r_expr", "(X)", "s:+n!", RAF_NO_FLAGS },
   { "r_null", "(Xb)", "s:+n!", RAF_NO_FLAGS },

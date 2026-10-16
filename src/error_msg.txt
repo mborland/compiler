@@ -3694,5 +3694,7 @@ ec_attr_result_name_void_function;;"attribute %sq cannot name the result of a fu
 ec_attr_result_name_deduced_type;;"attribute %sq cannot name the result of a function whose return type is deduced or is a trailing return type"
 ec_attr_result_name_no_result_type;;"attribute %sq cannot name the result of a constructor, a destructor or a conversion function"
 ec_generic_lambda_not_scanned_again;;"an \"auto\" parameter of a lambda cannot be used in this part of the declaration of a function template"
+ec_constexpr_call_of_function_with_attribute;;"cannot call %nd in a constant expression: an attribute of the function does not allow it"
+ec_attr_no_constant_evaluation_on_defaulted_function;;"an attribute that forbids constant evaluation cannot be applied to a function that is defaulted"
  ###############################################################################
 

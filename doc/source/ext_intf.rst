@@ -5115,8 +5115,8 @@ Each attribute is described by:
   example ``"r"`` for a routine, ``"v"`` for a variable, ``"s"`` for a
   statement, and ``"r|v"`` for either).  An attribute on another kind of
   entity is an error.
-* *flags*: ``RAF_...`` flags: ``RAF_NO_FLAGS``, ``RAF_ENTITY_ATTACHED`` and
-  ``RAF_MUST_MATCH`` (see below).
+* *flags*: ``RAF_...`` flags: ``RAF_NO_FLAGS``, ``RAF_ENTITY_ATTACHED``,
+  ``RAF_MUST_MATCH`` and ``RAF_NO_CONSTANT_EVALUATION`` (see below).
 
 A target for statements can also name a property of the statement: ``s:+n!``
 applies to a null statement only, ``s:+i!`` to an iteration statement
@@ -5195,6 +5195,30 @@ error at the end of the translation unit (when the member template has none,
 the specialization cannot add one).  A function with C language
 linkage declared in two namespaces is one function; in GNU emulation the front
 end has a routine for each declaration, and they are not compared.
+
+An attribute with the flag ``RAF_NO_CONSTANT_EVALUATION`` (in addition to
+``RAF_ENTITY_ATTACHED``) makes the front end refuse to evaluate a call of a
+function that has it, on any of its declarations (and of the instances of a
+template that has it), at compile time.  A ``constexpr`` function that has the
+attribute is an ordinary function otherwise (it can be called at run time, and
+it can appear in an unevaluated operand), but a call of it where a constant is
+needed (an array bound, a template argument, a ``static_assert``, a
+``constexpr`` variable, an enumerator, a ``case`` label, ``if constexpr``, the
+call of a ``consteval`` function that calls it) is not a constant expression,
+and the note of the error says that an attribute of the function does not allow
+it (as for a call of a function that is not ``constexpr``).  It is for a
+program that embeds the front end and describes functions that it does not want
+the compiler to compute with (a specification function that is written in C++
+and kept for the program's own use).  A function that does not have such an
+attribute is evaluated as before.  The attribute cannot be applied to a function
+that is defaulted (``= default``: a special member function that is defaulted
+can be trivial, and the evaluation of a call of a trivial function copies the
+bits of the objects without calling it): that is an error.  A call of a
+virtual function is refused if the function that the call names has the
+attribute, whatever override it would be dispatched to, and if the override that
+it is dispatched to has it.  A library function that the front end treats as a
+built-in function (``strlen``, say) can have the attribute too, by a
+declaration of it that has the attribute.
 
 A signature that starts with ``R`` (``"(R,Xb)"``, for a postcondition) lets the
 attribute name the result of the function.  The name is optional: when the

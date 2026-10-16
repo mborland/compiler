@@ -416,6 +416,25 @@ Flag values that describe a registered attribute.
 	   name and equivalent arguments, compared by position of parameters),
 	   or it is an error.  A declaration that has no such attribute is
 	   always fine. */
+#define RAF_NO_CONSTANT_EVALUATION  0x4
+	/* The attribute is an entity-attached attribute (RAF_ENTITY_ATTACHED
+	   is also required) whose presence on any declaration of a function
+	   (including its redeclarations, and the instances of a template that
+	   has it) means that a call of the function is not evaluated at compile
+	   time, whatever else is true of it: the call is not a constant
+	   expression (a constexpr function that has the attribute can be called
+	   at run time, and a call in a context that needs a constant is an error
+	   for the interpreter, "cannot call ... in a constant expression", like
+	   the call of a function that is not constexpr).  It has no effect on
+	   anything else.  A program that registers an attribute that describes
+	   a function that is not to be used by the compiler to compute a value
+	   uses it to make the front end refuse to compute one.  A function that
+	   is defaulted cannot have it (a special member function that is
+	   defaulted can be trivial, and is then not called by the evaluation: the
+	   attribute is an error on it).  A call of a virtual function is refused if
+	   the function that the call names has the attribute (whatever the
+	   override that it would be dispatched to), and if the override that it
+	   is dispatched to has it. */
 /* An attribute with a signature that starts with "R" (see attribute.c) also
    needs RAF_ENTITY_ATTACHED: it names the result of the function. */
 
@@ -490,6 +509,14 @@ extern void note_attribute_copy(an_attribute_ptr  from,
 extern a_boolean attribute_is_entity_attached(an_attribute_ptr  ap);
 
 extern a_boolean is_must_match_registered_attribute(an_attribute_ptr  ap);
+
+extern a_boolean routine_has_no_constant_evaluation_attribute(
+                                                           a_routine_ptr  rp);
+
+extern void check_defaulted_function_attributes(a_routine_ptr      rp,
+                                             an_attribute_ptr   id_attrs,
+                                             an_attribute_ptr   prefix_attrs,
+                                             a_source_position  *pos);
 
 extern a_const_char *attribute_display_name(an_attribute_ptr  ap);
 

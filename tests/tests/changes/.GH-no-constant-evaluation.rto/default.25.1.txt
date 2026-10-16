@@ -1,0 +1,13 @@
+fe_only -DTEST_NUMBER=25 --c++20 Test_name.c
+"Test_name.c", line 133: error: expression must have a constant value
+  constexpr unsigned long n = strlen("abc");
+                              ^
+"Test_name.c", line 133: note: cannot call function "strlen" (declared at line 132) in a constant expression: an attribute of the function does not allow it
+  constexpr unsigned long n = strlen("abc");
+                                    ^
+
+"Test_name.c", line 133: warning: variable "n" was declared but never referenced
+  constexpr unsigned long n = strlen("abc");
+                          ^
+
+1 error detected in the compilation of "Test_name.c".

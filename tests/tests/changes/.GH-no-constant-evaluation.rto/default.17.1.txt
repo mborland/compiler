@@ -1,0 +1,9 @@
+fe_only -DTEST_NUMBER=17 --c++20 Test_name.c
+"Test_name.c", line 97: error: call to consteval function "ce" did not produce a valid constant expression
+  int f() { return ce(2); }
+                     ^
+"Test_name.c", line 96: note: cannot call function "p" (declared at line 95) in a constant expression: an attribute of the function does not allow it
+  consteval int ce(int y) { return p(y); }
+                                    ^
+
+1 error detected in the compilation of "Test_name.c".

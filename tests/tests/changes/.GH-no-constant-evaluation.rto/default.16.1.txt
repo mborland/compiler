@@ -1,0 +1,9 @@
+fe_only -DTEST_NUMBER=16 --c++20 Test_name.c
+"Test_name.c", line 92: error: expression must have a constant value
+  int a[p(2)];
+        ^
+"Test_name.c", line 92: note: cannot call function "p" (declared at line 91) in a constant expression: an attribute of the function does not allow it
+  int a[p(2)];
+         ^
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,5 +1,21 @@
 Version 7.1
 
+10/18/26  [GH #?]
+A registered attribute can forbid the evaluation of a function at compile time
+
+A program that registers attributes (see ext_intf.rst) can give an attribute the
+flag RAF_NO_CONSTANT_EVALUATION (it needs RAF_ENTITY_ATTACHED too).  A call of a
+function that has such an attribute, on any of its declarations, is not
+evaluated at compile time: where a constant is needed it is not a constant
+expression, with a note that an attribute of the function does not allow it.
+Everything else is unchanged: the function is called at run time and appears in
+unevaluated operands as before.
+
+  [[ns::marked]] constexpr int p(int x) { return x + 1; }
+  int a[p(3)];     // Error: cannot call function "p" in a constant expression:
+                   // an attribute of the function does not allow it
+  int b(int x) { return p(x); }   // Fine
+
 10/17/26  [GH #?]
 Lambdas in the registered attributes of member templates of class templates
 

@@ -22858,6 +22858,16 @@ callee; the iwp_1st_resume visit completes the call in the latter case.
     do_constexpr_fail(result);
     goto done;
   }  /* if */
+  /* A function that has an attribute that forbids constant evaluation is not
+     called (this is checked before the case of a built-in function below: a
+     library function that is implicitly aliased to a built-in function can
+     have the attribute too). */
+  if (routine_has_no_constant_evaluation_attribute(callee)) {
+    info_with_pos_sym(ec_constexpr_call_of_function_with_attribute,
+                      expr_pos(call_node, ips), symbol_for(callee), ips);
+    do_constexpr_fail(result);
+    goto done;
+  }  /* if */
   /* Now interpret the call if possible. */
   /* First check the case of a built-in function that is handled specially by
      the interpreter. */
@@ -23132,6 +23142,13 @@ callee; the iwp_1st_resume visit completes the call in the latter case.
     }  /* if */
     if (!callee->is_constexpr) {
       info_with_pos_sym(ec_constexpr_call_to_nonconstexpr_function,
+                        expr_pos(callee_node, ips), symbol_for(callee), ips);
+      do_constexpr_fail(result);
+      goto done;
+    } else if (routine_has_no_constant_evaluation_attribute(callee)) {
+      /* (The callee of a virtual call, now that it is known: the function
+         that the call named was checked above.) */
+      info_with_pos_sym(ec_constexpr_call_of_function_with_attribute,
                         expr_pos(callee_node, ips), symbol_for(callee), ips);
       do_constexpr_fail(result);
       goto done;
@@ -23434,6 +23451,11 @@ after the constructor body has been interpreted.
     goto done;
   } else if (!callee->is_constexpr) {
     info_with_pos_sym(ec_constexpr_call_to_nonconstexpr_function,
+                      pos, symbol_for(callee), ips);
+    do_constexpr_fail(result);
+    goto done;
+  } else if (routine_has_no_constant_evaluation_attribute(callee)) {
+    info_with_pos_sym(ec_constexpr_call_of_function_with_attribute,
                       pos, symbol_for(callee), ips);
     do_constexpr_fail(result);
     goto done;
@@ -24000,6 +24022,11 @@ the iwp_1st_resume visit destroys the subobjects and undoes that mapping.
     unexpected_condition();
   } else if (!callee->is_constexpr) {
     info_with_pos_sym(ec_constexpr_call_to_nonconstexpr_function,
+                      pos, symbol_for(callee), ips);
+    do_constexpr_fail(result);
+    goto done;
+  } else if (routine_has_no_constant_evaluation_attribute(callee)) {
+    info_with_pos_sym(ec_constexpr_call_of_function_with_attribute,
                       pos, symbol_for(callee), ips);
     do_constexpr_fail(result);
     goto done;

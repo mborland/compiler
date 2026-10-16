@@ -1,0 +1,9 @@
+fe_only -DTEST_NUMBER=26 --c++20 Test_name.c
+"Test_name.c", line 140: error: expression must have a constant value
+  static_assert(g() == 2);
+                ^
+"Test_name.c", line 139: note: cannot call function "B::f" (declared at line 137) in a constant expression: an attribute of the function does not allow it
+  constexpr int g() { D d; const B& b = d; return b.f(); }
+                                                     ^
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,7 +1,11 @@
 fe_only -DTEST_NUMBER=14 --c++20 --instantiate=used --no_il_lowering Test_name.c
-"Test_name.c", line 74: error: bad attribute argument substitution
-  template<class T> struct C { template<class U> int m(U x) Q([](T y) { return y > 0; }(x)); };
+"Test_name.c", line 75: error: a parameter is not allowed
+  template<class T> struct C { template<class U> int m(U x) E(r, [&]{ return r > 0; }()); };
                                                             ^
-          detected during instantiation of "C<T>::m [with T=int]" based on template argument <long> at line 75
 
-1 error detected in the compilation of "Test_name.c".
+"Test_name.c", line 75: error: bad attribute argument substitution
+  template<class T> struct C { template<class U> int m(U x) E(r, [&]{ return r > 0; }()); };
+                                                            ^
+          detected during instantiation of "C<T>::m [with T=int]" based on template argument <long> at line 76
+
+2 errors detected in the compilation of "Test_name.c".

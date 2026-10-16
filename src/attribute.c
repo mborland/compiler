@@ -5793,16 +5793,29 @@ substitution.
     a_template_arg_ptr    parent_t_args = NULL;
     a_template_param_ptr  parent_t_params;
     a_ctws_state          parent_ctws_state;
+    a_boolean             saved_deferral = FALSE, defer_lambdas;
     init_ctws_state(&parent_ctws_state);
     parent_ctws_state.in_parent_substitution = TRUE;
     get_substitution_pairs_for_template_class(parent_class, &parent_t_params,
                                               &parent_t_args);
+    /* When the entity is itself a template (a member template), a lambda in
+       the expression is not copied with the parameters of the enclosing
+       classes: it names the parameters of the member template too, and is
+       copied with all of them, by the substitution of the parameters of the
+       member template below (copy_template_param_lambda_expr). */
+    defer_lambdas = t_args != NULL && !ctws_state->in_parent_substitution;
+    if (defer_lambdas) {
+      saved_deferral = set_attribute_expr_lambda_deferral(TRUE);
+    }  /* if */
     expr = substitute_attribute_expr_inner(
                    expr, parent_t_args, parent_t_params,
                    parent_class_or_null(parent_class), position,
                    options | CTWS_PARTIAL_ARG_LIST_OKAY |
                                                   CTWS_IN_PARENT_SUBSTITUTION,
                    p_error, &parent_ctws_state);
+    if (defer_lambdas) {
+      (void)set_attribute_expr_lambda_deferral(saved_deferral);
+    }  /* if */
   }  /* if */
   if (t_args != NULL && (p_error == NULL || !*p_error)) {
     an_expr_node_ptr  copy;

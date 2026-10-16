@@ -1,0 +1,1 @@
+fe_only -DTEST_NUMBER=25 --c++20 --instantiate=used --no_il_lowering Test_name.c

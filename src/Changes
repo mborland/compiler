@@ -1,5 +1,22 @@
 Version 7.1
 
+10/17/26  [GH #?]
+Lambdas in the registered attributes of member templates of class templates
+
+A lambda in the argument of a registered attribute (see ext_intf.rst) of a
+member template of a class template can name both the template parameters of
+the member template and those of the class, in the types of its parameters and
+in its body.  It was an error ("identifier "U" is undefined", or "bad
+attribute argument substitution"):
+
+  template<class T> struct C {
+    template<class U> int m(U x) [[ns::pre([](T a, U b) { return a > b; }(T{}, x))]];
+  };
+
+The parameters of the class are substituted first, and a lambda is now left
+alone then: it is copied when the parameters of the member template are
+substituted, with the parameters of both bound.
+
 10/16/26  [GH #?]
 Lambdas in the registered attributes of function templates
 

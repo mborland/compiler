@@ -3,8 +3,8 @@
 //remark:[GH #?] A registered attribute whose argument cannot be substituted for an instance is an error
 //require:INCLUDE_EDG_TEST_ATTRIBUTES 1
 //require:DO_IL_LOWERING 1
-//cases:16
-//match_regex:(line 34: error: bad\s+attribute\s+argument\s+substitution|line 37: error: bad\s+attribute\s+argument\s+substitution|line 40: error: bad\s+attribute\s+argument\s+substitution|line 43: error: (?:bad\s+attribute\s+argument\s+substitution|an\s+"auto"\s+parameter\s+of\s+a\s+lambda\s+cannot\s+be\s+used)|line 46: error: bad\s+attribute\s+argument\s+substitution|line 49: error: bad\s+attribute\s+argument\s+substitution|line 52: error: expression\s+must\s+have\s+class\s+type\s+but\s+it\s+has\s+type\s+"long"|line 55: error: bad\s+attribute\s+argument\s+substitution|line 58: error: bad\s+attribute\s+argument\s+substitution|line 61: error: identifier\s+"x"\s+is\s+undefined|line 64: error: a\s+parameter\s+is\s+not\s+allowed|line 67: error: bad\s+attribute\s+argument\s+substitution|line 71: error: identifier\s+"U"\s+is\s+undefined|line 74: error: bad\s+attribute\s+argument\s+substitution|line 77: error: bad\s+attribute\s+argument\s+substitution|line 80: error: bad\s+attribute\s+argument\s+substitution)
+//cases:21
+//match_regex:(line 35: error: bad\s+attribute\s+argument\s+substitution|line 38: error: bad\s+attribute\s+argument\s+substitution|line 41: error: bad\s+attribute\s+argument\s+substitution|line 44: error: (?:bad\s+attribute\s+argument\s+substitution|an\s+"auto"\s+parameter\s+of\s+a\s+lambda\s+cannot\s+be\s+used)|line 47: error: bad\s+attribute\s+argument\s+substitution|line 50: error: bad\s+attribute\s+argument\s+substitution|line 53: error: expression\s+must\s+have\s+class\s+type\s+but\s+it\s+has\s+type\s+"long"|line 56: error: bad\s+attribute\s+argument\s+substitution|line 59: error: bad\s+attribute\s+argument\s+substitution|line 62: error: identifier\s+"x"\s+is\s+undefined|line 65: error: a\s+parameter\s+is\s+not\s+allowed|line 68: error: bad\s+attribute\s+argument\s+substitution|line 72: error: bad\s+attribute\s+argument\s+substitution|line 75: error: a\s+parameter\s+is\s+not\s+allowed|line 78: error: bad\s+attribute\s+argument\s+substitution|line 81: error: bad\s+attribute\s+argument\s+substitution|line 84: error: bad\s+attribute\s+argument\s+substitution|line 88: error: an\s+explicit\s+specialization\s+of\s+a\s+member\s+template\s+of\s+a\s+class\s+template\s+is\s+not\s+supported\s+when\s+the\s+member\s+template\s+has\s+the\s+attribute\s+"edg::r_pre"|line 93: error: function\s+"C<T>::lambda\s+\[\]\(long\s+\*\)\->bool\s+\[with\s+T=int\]"\s+cannot\s+be\s+called\s+with\s+the\s+given\s+argument\s+list|line 97: error: static\s+assertion\s+failed|line 104: error: bad\s+attribute\s+argument\s+substitution)
 // 10/15/26  [GH #?]
 //
 // The expressions of the attributes of a function template, or of a member of
@@ -13,20 +13,21 @@
 // leaves an error expression: that is an error at the attribute (bad attribute
 // argument substitution), whatever the cause, never an attribute with an error
 // expression and no diagnostic.  A lambda that is generic or has template
-// parameters of its own (cases 1 to 4, 8, 9, 12, 15, 16), a function parameter
-// or the result name in the lambda (cases 5, 6, 10, 11) and a member template
-// of a class template (cases 13 and 14) are not supported and are such an
-// error (and not the crashes that some of them were: case 12 is a generic
-// lambda with two auto parameters in a function template whose first template
-// parameter is a template template parameter; it crashed the front end).  A
-// lambda that names a template parameter of a function template or of a member
-// template of a class that is not a template is supported (see
-// GH-postfunc-lambda-t).  Cases 13 and 14 are the ones that a later change
-// supports (the diagnostics of today are pinned here).  An expression that
-// cannot be substituted in the attribute of a member of a class template is
-// also an error and not an assertion in the front end.  Every case has its own
-// diagnostic; the expression above has an alternative for each case, anchored
-// to its line.
+// parameters of its own (cases 1 to 4, 8, 9, 12, 15, 16, 17), a function
+// parameter or the result name in the lambda (cases 5, 6, 10, 11, 13, 14) are
+// not supported and are such an error (and not the crashes that some of them
+// were: case 12 is a generic lambda with two auto parameters in a function
+// template whose first template parameter is a template template parameter; it
+// crashed the front end).  A lambda that names a template parameter of a
+// function template, of a member template of a class that is not a template
+// or of a member template of a class template is supported (see
+// GH-postfunc-lambda-t).  An expression that cannot be substituted in the
+// attribute of a member of a class template is also an error and not an
+// assertion in the front end (case 7), and so is an explicit specialization
+// of a member template of a class template that has the attribute (case 18:
+// the diagnostic of the specialization, not of the lambda).  Every case has
+// its own diagnostic; the expression above has an alternative for each case,
+// anchored to its line.
 
 #define E(...) [[edg::r_post(__VA_ARGS__)]]
 #define Q(...) [[edg::r_pre(__VA_ARGS__)]]
@@ -68,10 +69,10 @@ template<template<class> class TT> int f(int x) Q([](auto a, auto b) { return a 
 template<class U> struct W {};
 int u() { return f<W>(1); }
 #elif TEST_NUMBER == 13
-template<class T> struct C { template<class U> int m(U x) Q([](U y) { return y > 0; }(x)); };
+template<class T> struct C { template<class U> int m(U x) Q([](decltype(x) y) { return y > 0; }(x)); };
 int u() { C<int> c; return c.m(1L); }
 #elif TEST_NUMBER == 14
-template<class T> struct C { template<class U> int m(U x) Q([](T y) { return y > 0; }(x)); };
+template<class T> struct C { template<class U> int m(U x) E(r, [&]{ return r > 0; }()); };
 int u() { C<int> c; return c.m(1L); }
 #elif TEST_NUMBER == 15
 template<class T> int f(T x) Q([]<int N>() { return N > 0; }.template operator()<1>() && x > 0);
@@ -79,4 +80,29 @@ int u() { return f(1); }
 #elif TEST_NUMBER == 16
 template<class T> int f(T x) Q([]<class V>() -> bool { return true; }.template operator()<T>() && x > 0);
 int u() { return f(1); }
+#elif TEST_NUMBER == 17
+template<class T> struct C { template<class U> int m(U x) Q([](auto a) { return a > T{}; }(x)); };
+int u() { C<int> c; return c.m(1L); }
+#elif TEST_NUMBER == 18
+template<class T> struct C { template<class U> int m(U x) Q([](T a, U b) { return a > b; }(T{}, x)); };
+template<> template<> int C<int>::m<long>(long x) { return 0; }
+int u() { C<int> c; return c.m(1L); }
+#elif TEST_NUMBER == 19
+// The type of the lambda's parameter is not the type of the argument (long* for
+// U = char): a real error, as the substitution of U is used.
+template<class T> struct C { template<class U> int m(U x) Q([](long* b) { return b != nullptr; }(&x)); };
+int u() { C<int> c; return c.m('a'); }
+#elif TEST_NUMBER == 20
+// The static_assert in the lambda is wrong for the member's own argument.
+template<class T> struct C { template<class U> int m(U x) Q([]{ static_assert(sizeof(U) == sizeof(short)); return true; }()); };
+template<class U> int g(U u) { C<U> c; return c.m(1L); }
+int u() { return g<short>(1); }
+#elif TEST_NUMBER == 21
+// An explicit instantiation of a member template of a class template, and the
+// use of the member template of another instance of the class afterwards: an
+// error (the substitution fails closed; not supported yet).
+template<class T> struct C { static T st; template<class U> int m(U x) Q([](T* a, U* b) { return a != nullptr && b != nullptr; }(&st, &x)) { return 0; } };
+template int C<int>::m<long>(long);
+template<class U> struct X { int k() { return C<U>{}.m(1.0f); } };
+int u() { X<short> x; return x.k(); }
 #endif

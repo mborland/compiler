@@ -1,7 +1,7 @@
 fe_only -DTEST_NUMBER=12 --c++20 --instantiate=used --no_il_lowering Test_name.c
-"Test_name.c", line 67: error: bad attribute argument substitution
+"Test_name.c", line 68: error: bad attribute argument substitution
   template<template<class> class TT> int f(int x) Q([](auto a, auto b) { return a > b; }(x, 0));
                                                   ^
-          detected during instantiation of "f" based on template argument <W> at line 69
+          detected during instantiation of "f" based on template argument <W> at line 70
 
 1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,7 @@
+fe_only -DTEST_NUMBER=17 --c++20 --instantiate=used --no_il_lowering Test_name.c
+"Test_name.c", line 84: error: bad attribute argument substitution
+  template<class T> struct C { template<class U> int m(U x) Q([](auto a) { return a > T{}; }(x)); };
+                                                            ^
+          detected during instantiation of "C<T>::m [with T=int]" based on template argument <long> at line 85
+
+1 error detected in the compilation of "Test_name.c".

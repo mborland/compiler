@@ -20521,6 +20521,33 @@ other expression that is substituted it is handled as before.
 }  /* set_attribute_expr_substitution */
 
 
+STATIC_THREAD a_boolean  attribute_expr_lambda_deferral;
+			/* TRUE while the parameters of the enclosing classes of
+			   a member template are being substituted into the
+			   expression of a registered attribute: a lambda in
+			   the expression is left as it is, and copied when the
+			   parameters of the member template are substituted
+			   (see set_attribute_expr_lambda_deferral). */
+
+
+a_boolean set_attribute_expr_lambda_deferral(a_boolean  deferred)
+/*
+Set whether a lambda in the expression of an attribute that is copied for an
+instance of a member template is left alone by the substitution of the
+parameters of the enclosing classes (it is copied by the substitution of the
+parameters of the member template, which sees all of them), and return the
+previous setting.  (It is only for the expressions of registered attributes,
+see set_attribute_expr_substitution.)
+*/
+{
+  a_boolean  previous = attribute_expr_lambda_deferral;
+
+  attribute_expr_lambda_deferral = deferred &&
+                                   attribute_expr_substitution_active;
+  return previous;
+}  /* set_attribute_expr_lambda_deferral */
+
+
 static a_boolean lambda_tokens_name_template_param(
                                   a_token_cache_ptr    tokens,
                                   a_template_param_ptr tpp)
@@ -20679,6 +20706,132 @@ as they were, and release the saved state.
 }  /* restore_template_param_symbols */
 
 
+static a_boolean template_param_lists_look_alike(
+                                      a_template_param_ptr  list1,
+                                      a_template_param_ptr  list2)
+/*
+Return TRUE if two template parameter lists have the same parameters in the
+same order (the same names, kinds and pack-ness): they are two declarations of
+the same template parameters, as the list of a member template of a class
+template instance is for the list of the member template of the template.
+*/
+{
+  a_boolean  same = TRUE;
+
+  for (; list1 != NULL && list2 != NULL && same;
+       list1 = list1->next, list2 = list2->next) {
+    if (list1->param_symbol == NULL || list2->param_symbol == NULL ||
+        list1->param_symbol->header != list2->param_symbol->header ||
+        list1->param_symbol->kind != list2->param_symbol->kind ||
+        list1->is_pack != list2->is_pack) {
+      same = FALSE;
+    }  /* if */
+  }  /* for */
+  return same && list1 == NULL && list2 == NULL;
+}  /* template_param_lists_look_alike */
+
+
+static a_template_param_ptr visible_template_param_list(
+                                  a_template_param_ptr template_param_list,
+                                  a_boolean            allow_look_alike)
+/*
+Return the parameter list of the innermost instantiation scope on the scope
+stack that is template_param_list, or (when allow_look_alike is TRUE and there
+is none) the one that has the same parameters as template_param_list: the
+names of the parameters are found by lookup as the symbols of that list.
+Return NULL if there is none.
+*/
+{
+  a_scope_depth  scope_depth;
+
+  if (instantiation_scope_is_active_for_param_list(template_param_list)) {
+    return template_param_list;
+  }  /* if */
+  if (allow_look_alike) {
+    for (scope_depth = depth_scope_stack; scope_depth >= 0; scope_depth--) {
+      a_scope_stack_entry_ptr ssep = &scope_stack[scope_depth];
+      if (scope_is(ssep, sck_template_instantiation) &&
+          ssep->template_decl_info != NULL &&
+          ssep->template_decl_info->parameters != NULL &&
+          template_param_lists_look_alike(
+                                  ssep->template_decl_info->parameters,
+                                  template_param_list)) {
+        return ssep->template_decl_info->parameters;
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return NULL;
+}  /* visible_template_param_list */
+
+
+typedef struct a_lambda_param_binding {
+  /* The saved state of the symbols of a template parameter list that is bound
+     for the rescan of a lambda. */
+  a_saved_template_param_symbol_ptr  saved;
+  size_t                             count;
+} a_lambda_param_binding;
+
+static a_boolean bind_template_params_for_lambda(
+                                  a_token_cache_ptr       tokens,
+                                  a_template_param_ptr    template_param_list,
+                                  a_template_arg_ptr      template_arg_list,
+                                  a_boolean               allow_look_alike,
+                                  a_lambda_param_binding  *binding,
+                                  a_boolean               *failed)
+/*
+If the lambda whose cached tokens are given names a parameter of
+template_param_list, and the symbols of the parameters (or of the list that has
+the same parameters, see visible_template_param_list) are the ones that the
+lookup of a name finds, bind the symbols of the parameters that have a value in
+template_arg_list to the arguments, save their state in *binding (the caller
+restores it) and return TRUE.  If one of the parameters that the lambda names
+has no value, *failed is set to TRUE (the state is restored).  A lambda that
+names a template parameter pack does not have the parameters bound.  See
+copy_template_param_lambda_expr.
+*/
+{
+  a_template_param_ptr tpp, vis_list, vtpp;
+  a_boolean            names_a_parameter = FALSE;
+  a_boolean            names_a_pack = FALSE;
+  a_boolean            value_missing = FALSE;
+
+  for (tpp = template_param_list; tpp != NULL; tpp = tpp->next) {
+    if (lambda_tokens_name_template_param(tokens, tpp)) {
+      names_a_parameter = TRUE;
+      if (tpp->is_pack) names_a_pack = TRUE;
+    }  /* if */
+  }  /* for */
+  if (!names_a_parameter || names_a_pack) return FALSE;
+  vis_list = visible_template_param_list(template_param_list,
+                                         allow_look_alike);
+  if (vis_list == NULL) return FALSE;
+  binding->saved = save_template_param_symbols(vis_list, &binding->count);
+  /* A parameter that has no value must not be visible.  (The instantiation
+     scope that push_instantiation_scope_for_rescan pushes marks every
+     parameter not visible already, which is the only reason why this is not
+     needed there; it makes the result of the binding independent of the state
+     that the symbols happen to have.) */
+  for (vtpp = vis_list; vtpp != NULL; vtpp = vtpp->next) {
+    vtpp->param_symbol->template_param_not_visible = TRUE;
+  }  /* for */
+  update_template_param_symbols(vis_list, template_arg_list,
+                                /*partial_argument_list=*/TRUE);
+  for (vtpp = vis_list; vtpp != NULL; vtpp = vtpp->next) {
+    if (vtpp->param_symbol->template_param_not_visible &&
+        lambda_tokens_name_template_param(tokens, vtpp)) {
+      value_missing = TRUE;
+    }  /* if */
+  }  /* for */
+  if (value_missing) {
+    restore_template_param_symbols(binding->saved, binding->count);
+    binding->saved = NULL;
+    *failed = TRUE;
+    return FALSE;
+  }  /* if */
+  return TRUE;
+}  /* bind_template_params_for_lambda */
+
+
 static an_expr_node_ptr copy_template_param_lambda_expr(
                                   an_expr_node_ptr       expr,
                                   a_template_arg_ptr     template_arg_list,
@@ -20700,10 +20853,17 @@ copy_template_param_expr for the parameter descriptions.
   a_lambda_ptr        lambda = expr->variant.init.source.lambda;
   a_type_ptr          closure_class = lambda->closure_class;
   a_token_cache_ptr   tokens;
-  a_saved_template_param_symbol_ptr
-                      saved_param_symbols = NULL;
-  size_t              num_saved_param_symbols = 0;
+  a_lambda_param_binding  binding;
+  a_boolean               bound = FALSE;
 
+  if (attribute_expr_substitution_active && attribute_expr_lambda_deferral &&
+      ctws_state != NULL && ctws_state->in_parent_substitution) {
+    /* The parameters of an enclosing class of a member template are being
+       substituted: the lambda is copied with the parameters of the member
+       template, which see all of them.  Leave it as it is. */
+    expr_copy = expr;
+    goto done;
+  }  /* if */
   if (attribute_expr_substitution_active &&
       (lambda->is_generic || lambda->has_template_param_list) &&
       template_param_list != NULL) {
@@ -20729,11 +20889,8 @@ copy_template_param_expr for the parameter descriptions.
                                     copy_error, ctws_state);
   if (*copy_error) goto done;
   tokens = cached_lambdas->get(closure_class);
-  if (tokens != NULL && template_param_list != NULL &&
-      !(template_param_list->cache.decl_info != NULL &&
-        template_param_list->param_symbol != NULL) &&
-      !lambda->is_generic && !lambda->has_template_param_list &&
-      instantiation_scope_is_active_for_param_list(template_param_list)) {
+  if (tokens != NULL && !lambda->is_generic &&
+      !lambda->has_template_param_list) {
     /* The parameters of this template have no declaration scope to push
        (cache.decl_info is set only for some parameters), but the
        instantiation scope of the rescan that is being done (template
@@ -20750,44 +20907,26 @@ copy_template_param_expr for the parameter descriptions.
        scope): the copy fails.  A parameter pack is not bound (the symbols of
        a pack cannot be bound as the symbols of other parameters), and neither
        is a generic lambda, or a lambda that has its own template parameter
-       list; they are rescanned as before. */
-    a_template_param_ptr tpp;
-    a_boolean            names_a_parameter = FALSE;
-    a_boolean            names_a_pack = FALSE;
-    for (tpp = template_param_list; tpp != NULL; tpp = tpp->next) {
-      if (lambda_tokens_name_template_param(tokens, tpp)) {
-        names_a_parameter = TRUE;
-        if (tpp->is_pack) names_a_pack = TRUE;
-      }  /* if */
-    }  /* for */
-    if (names_a_parameter && !names_a_pack) {
-      a_boolean value_missing = FALSE;
-      saved_param_symbols = save_template_param_symbols(
-                                                  template_param_list,
-                                                  &num_saved_param_symbols);
-      /* A parameter that has no value must not be visible.  (The instantiation
-         scope that push_instantiation_scope_for_rescan pushes marks every
-         parameter not visible already, which is the only reason why this is
-         not needed there; it makes the result of the binding independent of
-         the state that the symbols happen to have.) */
-      for (tpp = template_param_list; tpp != NULL; tpp = tpp->next) {
-        tpp->param_symbol->template_param_not_visible = TRUE;
-      }  /* for */
-      update_template_param_symbols(template_param_list, template_arg_list,
-                                    /*partial_argument_list=*/TRUE);
-      for (tpp = template_param_list; tpp != NULL; tpp = tpp->next) {
-        if (tpp->param_symbol->template_param_not_visible &&
-            lambda_tokens_name_template_param(tokens, tpp)) {
-          value_missing = TRUE;
-        }  /* if */
-      }  /* for */
-      if (value_missing) {
-        restore_template_param_symbols(saved_param_symbols,
-                                       num_saved_param_symbols);
-        saved_param_symbols = NULL;
-        subst_fail(*copy_error);
-        goto done;
-      }  /* if */
+       list; they are rescanned as before.
+       For the expression of an attribute of a member template of a class
+       template, the parameters of the member template are the ones of the
+       instance, while the names found are those of the member template that
+       the rescan scope was pushed for (a list that has the same parameters,
+       see visible_template_param_list).  The parameters of the enclosing
+       classes are bound by the instantiation scopes of the class instances
+       that the rescan scope reactivates. */
+    a_boolean  failed = FALSE;
+    if (template_param_list != NULL &&
+        !(template_param_list->cache.decl_info != NULL &&
+          template_param_list->param_symbol != NULL)) {
+      bound = bind_template_params_for_lambda(
+                      tokens, template_param_list, template_arg_list,
+                      attribute_expr_substitution_active, &binding, &failed);
+    }  /* if */
+    if (failed) {
+      /* (The binding has been undone.) */
+      subst_fail(*copy_error);
+      goto done;
     }  /* if */
   }  /* if */
   if (tokens == NULL) {
@@ -20902,9 +21041,8 @@ copy_template_param_expr for the parameter descriptions.
     if (pushed_template_decl_scope) {
       pop_scope();
     }  /* if */
-    if (saved_param_symbols != NULL) {
-      restore_template_param_symbols(saved_param_symbols,
-                                     num_saved_param_symbols);
+    if (bound) {
+      restore_template_param_symbols(binding.saved, binding.count);
     }  /* if */
     pop_lexical_state_stack();
     pop_expr_stack();

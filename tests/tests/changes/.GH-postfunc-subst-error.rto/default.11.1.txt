@@ -1,11 +1,11 @@
 fe_only -DTEST_NUMBER=11 --c++20 --instantiate=used --no_il_lowering Test_name.c
-"Test_name.c", line 64: error: a parameter is not allowed
+"Test_name.c", line 65: error: a parameter is not allowed
   template<class T> int f(T x) E(r, [&]{ return r > 0; }());
                                ^
 
-"Test_name.c", line 64: error: bad attribute argument substitution
+"Test_name.c", line 65: error: bad attribute argument substitution
   template<class T> int f(T x) E(r, [&]{ return r > 0; }());
                                ^
-          detected during instantiation of "f" based on template argument <int> at line 65
+          detected during instantiation of "f" based on template argument <int> at line 66
 
 2 errors detected in the compilation of "Test_name.c".

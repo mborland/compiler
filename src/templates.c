@@ -7335,6 +7335,13 @@ template (see attach_registered_attributes_to_existing_instances).
 }  /* routine_includes_definition_attribute */
 
 
+static a_boolean function_template_decl_cache_is_usable(
+                                       a_template_symbol_supplement_ptr  tssp,
+                                       a_boolean  need_decl_info);
+static void report_unusable_template_declaration_info(
+                                                  a_routine_ptr  template_rout);
+
+
 static void attach_registered_list_to_instance(
                                a_routine_ptr                     rp,
                                a_symbol_ptr                      template_sym,
@@ -7349,6 +7356,15 @@ a copy of the attributes with the template arguments substituted to rp.
 {
   an_attribute_ptr  inst_attr;
 
+  if (!function_template_decl_cache_is_usable(tssp, /*need_decl_info=*/TRUE)) {
+    /* The attributes cannot be substituted (this is not reached for the
+       templates that the front end makes). */
+    if (tssp->variant.function.routine != NULL) {
+      report_unusable_template_declaration_info(
+                                          tssp->variant.function.routine);
+    }  /* if */
+    return;
+  }  /* if */
   inst_attr = copy_of_attributes_with_substitution(
                     list, /*primary_only=*/FALSE, template_sym,
                     decl_cache_for_function_template(tssp)->
@@ -7381,6 +7397,87 @@ the other declarations (see RAF_MUST_MATCH in attribute.h).
   }  /* for */
   return ap != NULL;
 }  /* routine_has_must_match_attribute */
+
+
+static a_template_symbol_supplement_ptr function_template_supplement_or_null(
+                                                       a_symbol_ptr  sym)
+/*
+Return the supplement of a function template symbol, or of the symbol of a
+member function that is an instance of a member of a class template (the
+symbol of the template of an instance can be either), or NULL if the symbol
+has none (the supplement is read through different members of the symbol, which
+a symbol of another kind does not have).
+*/
+{
+  a_template_symbol_supplement_ptr  tssp = NULL;
+
+  if (sym != NULL) {
+    if (sym->kind == (a_symbol_kind)sk_function_template) {
+      tssp = sym->variant.template_info;
+    } else if (sym->kind == (a_symbol_kind)sk_member_function &&
+               sym->variant.routine.instance_ptr != NULL) {
+      tssp = sym->variant.routine.instance_ptr->template_info;
+    }  /* if */
+  }  /* if */
+  return tssp;
+}  /* function_template_supplement_or_null */
+
+
+static a_boolean function_template_decl_cache_is_usable(
+                                       a_template_symbol_supplement_ptr  tssp,
+                                       a_boolean  need_decl_info)
+/*
+Return TRUE if decl_cache_for_function_template can be used for the supplement
+tssp of a function template (it reads the supplement of the prototype template,
+through the symbol's template_info, and the primary cache, and none of them is
+NULL).  If need_decl_info is TRUE, the cache that it returns must also have the
+declaration information that the substitution into the attributes of an
+instance uses.  (The declaration information of a member of a class template
+is filled in after its instances are made, so it is not needed to find the
+routine of the template; see prototype_routine_of_template_instance.)
+*/
+{
+  a_template_cache_ptr  tcp;
+
+  if (tssp->prototype_template != NULL && !tssp->is_specific_definition) {
+    a_symbol_ptr  proto_sym = tssp->prototype_template;
+    if (!is_template_symbol(proto_sym) ||
+        proto_sym->variant.template_info == NULL) {
+      return FALSE;
+    }  /* if */
+    tcp = proto_sym->variant.template_info->variant.function.decl_cache;
+  } else {
+    tcp = tssp->variant.function.decl_cache;
+  }  /* if */
+  if (tcp != NULL && need_decl_info && tcp->decl_info == NULL) {
+    /* decl_cache_for_function_template falls back to the primary cache. */
+    tcp = cache_for_template(tssp);
+  }  /* if */
+  return tcp != NULL && (!need_decl_info || tcp->decl_info != NULL);
+}  /* function_template_decl_cache_is_usable */
+
+
+static void report_unusable_template_declaration_info(
+                                                  a_routine_ptr  template_rout)
+/*
+The declaration information of a function template that has attributes that
+must match is not usable (see function_template_decl_cache_is_usable), so the
+attributes of its instances cannot be substituted: an error at the first of the
+attributes, instead of an instance (or an explicit specialization) that is not
+compared with the template.  (This is not reached for the templates that the
+front end makes.)
+*/
+{
+  an_attribute_ptr  ap;
+
+  for (ap = template_rout->source_corresp.attributes; ap != NULL;
+                                                            ap = ap->next) {
+    if (is_must_match_registered_attribute(ap)) {
+      pos_error(ec_bad_attribute_template_substitution, &ap->position);
+      break;
+    }  /* if */
+  }  /* for */
+}  /* report_unusable_template_declaration_info */
 
 
 static a_routine_ptr prototype_routine_of_template_instance(
@@ -7417,15 +7514,17 @@ NULL when NULL is returned.
       } else {
         proto_sym = template_sym;
       }  /* if */
-      if (proto_sym != NULL && proto_sym->variant.template_info != NULL) {
-        a_template_symbol_supplement_ptr  proto_tssp =
-                                    template_supplement_for_symbol(proto_sym);
-        if (proto_tssp->variant.function.routine != NULL &&
-            (proto_tssp->variant.function.decl_cache != NULL ||
-             proto_tssp->prototype_template != NULL)) {
+      a_template_symbol_supplement_ptr  proto_tssp =
+                              function_template_supplement_or_null(proto_sym);
+      if (proto_tssp != NULL && proto_tssp->variant.function.routine != NULL) {
+        if (function_template_decl_cache_is_usable(proto_tssp, /*need_decl_info=*/FALSE)) {
           proto_rout = proto_tssp->variant.function.routine;
           *p_template_sym = template_sym;
           *p_proto_tssp = proto_tssp;
+        } else if (routine_has_must_match_attribute(
+                                   proto_tssp->variant.function.routine)) {
+          report_unusable_template_declaration_info(
+                                   proto_tssp->variant.function.routine);
         }  /* if */
       }  /* if */
     }  /* if */
@@ -7663,9 +7762,11 @@ of a member template of a class template is not supported then.
   a_routine_ptr                     rp = tssp->variant.function.routine;
   a_specialization_attr_entry_ptr   ep;
 
-  if (proto_sym == NULL || proto_sym->variant.template_info == NULL ||
+  if (proto_sym == NULL ||
+      function_template_supplement_or_null(proto_sym) == NULL ||
       rp == NULL ||
-      proto_sym->variant.template_info->variant.function.routine == NULL) {
+      function_template_supplement_or_null(proto_sym)->variant.function.
+                                                              routine == NULL) {
     return;
   }  /* if */
   for (ep = specialization_attr_entries; ep != NULL; ep = ep->next) {
@@ -7840,6 +7941,16 @@ created later gets them when it is created.)
   }  /* for */
   if (list != NULL) {
     tssp = template_supplement_for_symbol(template_sym);
+    if (tssp == NULL || !function_template_decl_cache_is_usable(tssp, /*need_decl_info=*/FALSE)) {
+      /* The attributes of the instances cannot be substituted. */
+      if (tssp != NULL && tssp->variant.function.routine != NULL) {
+        report_unusable_template_declaration_info(
+                                          tssp->variant.function.routine);
+      }  /* if */
+      list = NULL;
+    }  /* if */
+  }  /* if */
+  if (list != NULL) {
     for (tip = tssp->variant.function.instantiations; tip != NULL;
          tip = tip->next) {
       a_routine_ptr  rp = tip->instance_sym->variant.routine.ptr;

@@ -1,0 +1,7 @@
+fe_only -DTEST_NUMBER=11 --c++20 --instantiate=used Test_name.c
+"Test_name.c", line 97: error: attribute "edg::r_pre" does not match the attributes of an earlier declaration
+            the other declaration is at line 96
+  struct X { template <class T> friend int f(T x) Q(x > 0) { return 0; } };
+                                                  ^
+
+1 error detected in the compilation of "Test_name.c".

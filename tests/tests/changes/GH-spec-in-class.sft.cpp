@@ -9,7 +9,9 @@
 // specialization is declared, its template is not known yet: the checks of
 // the registered attributes of explicit specializations must not use the
 // symbol of a template then (they used an uninitialized one, and the front end
-// could crash).
+// could crash).  (The uninitialized symbol was read on the stack: before this
+// was fixed the test fails only in a build that detects it, the ASan builds;
+// the other builds happen to read a zero there and pass.)
 
 template <class T> struct Outer {
   template <class U> static int f(U) { return 0; }

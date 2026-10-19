@@ -343,6 +343,9 @@ def main() -> None:
                              'OVERWRITE_FREED_MEM_BLOCKS off)')
   parser.add_argument('--only', default = '',
                       help = 'comma separated rows to run')
+  parser.add_argument('--level', type = int, default = 0, choices = range(4),
+                      help = 'optimization level: --cir_opt_level of the '
+                             'front end rows and -O of edg-cir (default 0)')
   args = parser.parse_args()
 
   if args.generate_cxx_functions:
@@ -397,13 +400,18 @@ def main() -> None:
       stats_lines.extend(f"{row}: {line}" for line in proc.stdout.splitlines()
                          if line.startswith('ecil:'))
 
+    level_option = f" --cir_opt_level={args.level}" if args.level else ''
     for row in rows:
       env = dict(base_env)
+      if level_option:
+        # (eccp does not take the option itself: it goes in the defaults.)
+        env['EDG_CPFE_DEFAULT_OPTIONS'] = level_option.strip()
       (work / 'fe.time').write_text('')
       if row in ('inproc', 'keep'):
         env['CPFE'] = str(timed_fe)
         if row == 'keep':
-          env['EDG_CPFE_DEFAULT_OPTIONS'] = '--ecil_keep_regions'
+          env['EDG_CPFE_DEFAULT_OPTIONS'] = '--ecil_keep_regions' + \
+            level_option
         proc = subprocess.run(eccp_fe_only(env), cwd = work, env = env,
                               stdout = subprocess.PIPE,
                               stderr = subprocess.STDOUT, text = True)
@@ -416,7 +424,8 @@ def main() -> None:
                         proc.returncode))
       elif row == '2p-fe':
         env['CPFE'] = str(timed_fe)
-        env['EDG_CPFE_DEFAULT_OPTIONS'] = f"--ecil_output={work}/x.ecil"
+        env['EDG_CPFE_DEFAULT_OPTIONS'] = (f"--ecil_output={work}/x.ecil" +
+                                           level_option)
         proc = subprocess.run(eccp_fe_only(env), cwd = work, env = env,
                               stdout = subprocess.PIPE,
                               stderr = subprocess.STDOUT, text = True)
@@ -429,7 +438,8 @@ def main() -> None:
                         proc.returncode))
       elif row == '2p-edg-cir':
         seconds, megabytes, rc, output = run_timed(
-          [edg_cir or 'edg-cir', '--emit=asm', '-o', str(work / 'x.s'),
+          [edg_cir or 'edg-cir', f"-O{args.level}", '--emit=asm', '-o',
+           str(work / 'x.s'),
            str(work / 'x.ecil')], env, work, row
         )
         results.append((row, seconds, megabytes, rc))
@@ -462,6 +472,8 @@ def main() -> None:
   lines = source.read_text().count('\n')
   print(f"input: {source} ({lines} lines, "
         f"{source.stat().st_size // 1024} KB)")
+  if args.level:
+    print(f"optimization level -O{args.level}")
   print(f"{'mode':<12} {'wall s':>8} {'peak RSS MB':>12} {'rc':>4}")
   for row, seconds, megabytes, rc in results:
     wall = f"{seconds:.2f}" if seconds is not None else 'n/a'

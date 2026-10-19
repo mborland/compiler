@@ -1,0 +1,6 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --gcc --cir_opt_level=4 Test_name.c
+Command-line error: CIR back end: --cir_opt_level must be 0, 1, 2 or 3
+
+1 catastrophic error detected in this compilation.
+Compilation terminated.
+ecil-dump: format error at byte 0: truncated stream (partial preamble or frame)

@@ -1,0 +1,23 @@
+; Stack floor: BUILTIN takes its arguments from its own construct (the
+; argument of the bswap is a value of the enclosing function body).
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: BUILTIN needs 1 argument values but the value stack holds 0
+
+frame DECLS
+  STR 10 "f"
+  TY_FUNC 21 11 0 []
+  DECL_FUNC 40 21 0 1 10
+frame REGION
+  FUNC_BEGIN 40 0
+  CONST_INT 8 287454020
+  FULLEXPR_BEGIN
+  BUILTIN 5 1 8
+  FULLEXPR_END
+  DROP
+  FUNC_END 1
+frame END
+  END auto 0

@@ -28,6 +28,8 @@ after the worker has joined.
 #include <vector>
 
 #include <pthread.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include "clang/CIR/CIRToCIRPasses.h"
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
@@ -58,6 +60,20 @@ namespace {
 struct a_fatal_state {
   std::string message;
 };  /* a_fatal_state */
+
+#if EDG_CIR_TEST_HOOKS
+__attribute__((noinline)) int overflow_the_stack(int depth, int limit)
+/*
+Recurse until the guard page of the stack is hit (limit is never reached; it
+keeps the compiler from seeing an infinite recursion).
+*/
+{
+  volatile char pad[4096];
+
+  pad[0] = static_cast<char>(depth);
+  return depth < limit ? overflow_the_stack(depth + 1, limit) + pad[0] : 0;
+}  /* overflow_the_stack */
+#endif
 
 void fatal_error_handler(void *user_data, const char *reason, bool)
 /*
@@ -315,16 +331,8 @@ body): verify, textual CIR, CIR-to-CIR passes, then lower_and_emit.
 #if EDG_CIR_TEST_HOOKS
   /* Test hooks: prove that a fatal LLVM error or a crash in the worker
      becomes EDG_CIR_ERROR_INTERNAL (see test/driver). */
-  if (const char *hook = std::getenv("EDG_CIR_TEST_CRASH")) {
-    if (std::strcmp(hook, "fatal") == 0)
-      llvm::report_fatal_error("EDG_CIR_TEST_CRASH=fatal");
-    else if (std::strcmp(hook, "usage") == 0)
-      llvm::reportFatalUsageError("EDG_CIR_TEST_CRASH=usage");
-    else if (std::strcmp(hook, "segv") == 0)
-      std::raise(SIGSEGV);
-    else if (std::strcmp(hook, "abort") == 0)
-      std::abort();
-  }
+  if (const char *hook = std::getenv("EDG_CIR_TEST_CRASH"))
+    run_test_crash_hook(hook);
 #endif
 
   if (session.stats_on)
@@ -383,6 +391,30 @@ body): verify, textual CIR, CIR-to-CIR passes, then lower_and_emit.
 
 }  /* anonymous namespace */
 
+#if EDG_CIR_TEST_HOOKS
+void run_test_crash_hook(const char *hook)
+/*
+The test hooks of EDG_CIR_TEST_CRASH (the pipeline) and
+EDG_CIR_TEST_CONSUME_CRASH (consuming), see test/driver/capi_tests.cpp:
+fatal and usage errors, a signal, an abort, an exit() on the worker (what
+the front end's error path does) and a stack overflow.
+*/
+{
+  if (std::strcmp(hook, "fatal") == 0)
+    llvm::report_fatal_error("EDG_CIR_TEST hook: fatal");
+  else if (std::strcmp(hook, "usage") == 0)
+    llvm::reportFatalUsageError("EDG_CIR_TEST hook: usage");
+  else if (std::strcmp(hook, "segv") == 0)
+    std::raise(SIGSEGV);
+  else if (std::strcmp(hook, "abort") == 0)
+    std::abort();
+  else if (std::strcmp(hook, "exit") == 0)
+    std::exit(66);
+  else if (std::strcmp(hook, "overflow") == 0)
+    (void)overflow_the_stack(0, 0x7fffffff);
+}  /* run_test_crash_hook */
+#endif
+
 namespace {
 
 std::mutex &guard_mutex()
@@ -398,6 +430,72 @@ handler are process-global).
 unsigned crash_recovery_holders = 0;  /* Protected by guard_mutex(). */
 
 thread_local bool on_guard_worker = false;   /* This thread is the worker. */
+
+class an_alt_stack {
+/*
+The signal stack of a guarded thread.  A stack overflow raises SIGSEGV with
+no stack left to run the handler on, so crash recovery needs one (see
+make_crash_handlers_use_alt_stack).  The region is mapped with a PROT_NONE
+page below it, so that a handler that itself overflows faults instead of
+running into other memory (it is not in the heap, and LeakSanitizer does not
+track it).  A thread that already has a usable signal stack (the sanitizers
+install their own) keeps it: replacing it would lose, or leak, theirs.
+
+A longjmp out of a handler that runs on this stack (the crash recovery
+context leaves that way) leaves the kernel's "on stack" state alone on Linux,
+where it follows the stack pointer; on Darwin the SS_ONSTACK flag stays set,
+and a later SS_DISABLE then fails with EPERM.  This code is Linux-only so
+far; remove() ignores the failure, and the cost is the mapping of a thread
+that crashed.
+*/
+public:
+  void install()
+  {
+    static const size_t size = 256u * 1024u;
+    stack_t old = {};
+
+    if (sigaltstack(nullptr, &old) == 0 &&
+        (old.ss_flags & SS_DISABLE) == 0 && old.ss_sp != nullptr &&
+        old.ss_size >= size)
+      return;
+    size_t page = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    void *map = mmap(nullptr, size + page, PROT_NONE,
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+    if (map != MAP_FAILED) {
+      char *usable = static_cast<char *>(map) + page;
+      stack_t alt = {};
+
+      alt.ss_sp = usable;
+      alt.ss_size = size;
+      alt.ss_flags = 0;
+      if (mprotect(usable, size, PROT_READ | PROT_WRITE) == 0 &&
+          sigaltstack(&alt, nullptr) == 0) {
+        base_ = map;
+        length_ = size + page;
+      } else {
+        munmap(map, size + page);
+      }
+    }
+  }  /* install */
+
+  void remove()
+  {
+    if (base_ != nullptr) {
+      stack_t alt = {};
+
+      alt.ss_flags = SS_DISABLE;
+      sigaltstack(&alt, nullptr);
+      munmap(base_, length_);
+      base_ = nullptr;
+    }
+  }  /* remove */
+
+private:
+  void   *base_ = nullptr;   /* The mapping we made (null: none, or kept
+                                the thread's own). */
+  size_t  length_ = 0;
+};  /* an_alt_stack */
 
 class a_guard_worker {
 /*
@@ -425,25 +523,53 @@ public:
   {
     bool completed = false;
 
-    if (state_ != nullptr && stack_mb_ != stack_mb)
+    bool fallback = false;
+
+#if EDG_CIR_TEST_HOOKS
+    /* Test hook: run every section on a thread of its own, as when no
+       worker slot is left. */
+    fallback = std::getenv("EDG_CIR_TEST_NO_WORKER") != nullptr;
+#endif
+    if (!fallback && state_ != nullptr && stack_mb_ != stack_mb)
       stop();
-    if (state_ == nullptr)
+    if (!fallback && state_ == nullptr)
       start(stack_mb);
-    if (state_ == nullptr) {
+    if (fallback || state_ == nullptr) {
+      /* No persistent worker (every slot is used after forks, or
+         pthread_create failed): the section runs on a thread of its own,
+         with what the worker thread has: the "guarded" flag that keeps the
+         guard mutex out of the way of an exit() or a close on it, and a
+         signal stack.  If the body crashes, the unwinding by longjmp skips
+         the removal of that stack (the mapping is lost with the thread). */
       llvm::CrashRecoveryContext context;
+      std::function<void()> wrapped = [&body] {
+        an_alt_stack alt;
 
-      completed = context.RunSafelyOnThread(body, stack_mb * 1024u * 1024u);
+        on_guard_worker = true;
+        alt.install();
+        body();
+        alt.remove();
+        on_guard_worker = false;
+      };
+
+      completed = context.RunSafelyOnThread(wrapped,
+                                            stack_mb * 1024u * 1024u);
     } else {
-      std::unique_lock<std::mutex> lock(state_->mutex);
+      /* The state is used through a local pointer, not through state_: an
+         exit() on the worker destroys this handle (stop() clears state_ and
+         wakes this thread) while this thread still waits, and the wait's
+         predicate must not read the cleared member. */
+      a_state *state = state_;
+      std::unique_lock<std::mutex> lock(state->mutex);
 
-      state_->task = &body;
-      ++state_->requested;
-      state_->cv.notify_all();
-      state_->cv.wait(lock, [this] {
-        return state_->finished == state_->requested;
+      state->task = &body;
+      ++state->requested;
+      state->cv.notify_all();
+      state->cv.wait(lock, [state] {
+        return state->finished == state->requested;
       });
-      state_->task = nullptr;
-      completed = state_->completed;
+      state->task = nullptr;
+      completed = state->completed;
     }
     return completed;
   }
@@ -457,6 +583,7 @@ private:
     unsigned long                 finished = 0;    /* Sections completed. */
     bool                          stopping = false;
     bool                          completed = false;
+    an_alt_stack                  alt;       /* The worker's signal stack. */
   };  /* a_state */
 
   void start(unsigned stack_mb)
@@ -514,6 +641,7 @@ private:
     std::unique_lock<std::mutex> lock(state->mutex);
 
     on_guard_worker = true;
+    state->alt.install();
     for (;;) {
       state->cv.wait(lock, [state] {
         return state->stopping || state->finished != state->requested;
@@ -532,6 +660,7 @@ private:
       state->finished = state->requested;
       state->cv.notify_all();
     }
+    state->alt.remove();
     return nullptr;
   }
 
@@ -554,28 +683,100 @@ void a_guard_worker::after_fork()
 
 }  /* anonymous namespace */
 
+namespace {
+
+void make_crash_handlers_use_alt_stack()
+/*
+LLVM installs its crash-recovery handlers without SA_ONSTACK, so a stack
+overflow (SIGSEGV with no stack left to run the handler on) kills the
+process instead of reaching the guarded section.  Add the flag to the
+handlers that crash recovery has just installed; a thread with a
+sigaltstack (the guard worker) then runs them there, and threads without
+one are not affected.  Disable() restores the previous handlers whatever
+flags these have.
+
+The read-modify-write of each handler is not atomic with respect to the host
+program's own threads: one that installs a handler for the same signal
+between the read and the write is overwritten.  guard_mutex serializes only
+this library's sections, and POSIX has no way to change the flags of an
+installed handler in place.
+*/
+{
+  static const int signals[] = {SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGSEGV,
+                                SIGTRAP};
+
+  for (int number : signals) {
+    struct sigaction action;
+
+    if (sigaction(number, nullptr, &action) == 0 &&
+        (action.sa_flags & (SA_ONSTACK | SA_SIGINFO)) == 0 &&
+        action.sa_handler != SIG_DFL && action.sa_handler != SIG_IGN) {
+      action.sa_flags |= SA_ONSTACK;
+      sigaction(number, &action, nullptr);
+    }
+  }
+}  /* make_crash_handlers_use_alt_stack */
+
+void enable_crash_recovery()
+/* CrashRecoveryContext::Enable, with the handlers on the alternate stack. */
+{
+  llvm::CrashRecoveryContext::Enable();
+  make_crash_handlers_use_alt_stack();
+}  /* enable_crash_recovery */
+
+void take_crash_recovery_hold()
+{
+  if (crash_recovery_holders++ == 0)
+    enable_crash_recovery();
+}  /* take_crash_recovery_hold */
+
+void drop_crash_recovery_hold()
+{
+  if (crash_recovery_holders != 0 && --crash_recovery_holders == 0)
+    llvm::CrashRecoveryContext::Disable();
+}  /* drop_crash_recovery_hold */
+
+}  /* anonymous namespace */
+
+bool on_guard_worker_thread()
+{
+  return on_guard_worker;
+}  /* on_guard_worker_thread */
+
 void hold_crash_recovery()
 /*
 Keep LLVM crash recovery enabled until the matching release_crash_recovery.
 A session holds it from its first consumed frame to finish, so the signal
-handlers are installed once per session and not once per frame.
+handlers are installed once per session and not once per frame.  On the
+guard worker the mutex is not taken: the thread that waits for the section
+holds it, and the worker is the only thread that can touch the count.
 */
 {
-  std::lock_guard<std::mutex> lock(guard_mutex());
+  if (on_guard_worker) {
+    take_crash_recovery_hold();
+  } else {
+    std::lock_guard<std::mutex> lock(guard_mutex());
 
-  if (crash_recovery_holders++ == 0)
-    llvm::CrashRecoveryContext::Enable();
+    take_crash_recovery_hold();
+  }
 }  /* hold_crash_recovery */
 
 void release_crash_recovery()
 /*
-Drop one hold; the last one restores the previous signal handlers.
+Drop one hold; the last one restores the previous signal handlers.  Called
+on the guard worker (an exit() inside a guarded section runs the static
+destructors and atexit handlers on it, and one of them may close the
+session), it must not take guard_mutex: the thread that waits for the
+section holds it, and waits for the worker.
 */
 {
-  std::lock_guard<std::mutex> lock(guard_mutex());
+  if (on_guard_worker) {
+    drop_crash_recovery_hold();
+  } else {
+    std::lock_guard<std::mutex> lock(guard_mutex());
 
-  if (crash_recovery_holders != 0 && --crash_recovery_holders == 0)
-    llvm::CrashRecoveryContext::Disable();
+    drop_crash_recovery_hold();
+  }
 }  /* release_crash_recovery */
 
 namespace {
@@ -598,7 +799,7 @@ crashed or hit a fatal error.
   bool temporary = crash_recovery_holders == 0;
 
   if (temporary)
-    llvm::CrashRecoveryContext::Enable();
+    enable_crash_recovery();
   llvm::install_fatal_error_handler(fatal_error_handler, &fatal);
   {
     llvm::CrashRecoveryContext context;

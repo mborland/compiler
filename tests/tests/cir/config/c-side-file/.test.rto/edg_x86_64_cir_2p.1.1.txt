@@ -1,0 +1,3 @@
+eccp -DTEST_NUMBER=1 -w Test_name.c side.c
+Test_name.c:
+side.c:

@@ -2317,6 +2317,15 @@ void compute_default_arg_name_collision_discriminators(a_param_type_ptr  ptp);
 
 #endif /* NEED_NAME_MANGLING */
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+/* The first named data member of an anonymous union, or NULL. */
+extern a_const_char *cir_anonymous_union_member_name(a_type_ptr class_type);
+
+/* The variable of an anonymous union was declared: a static local gets its
+   discriminator among the entities named like its first member. */
+extern void cir_note_anonymous_union_variable(a_symbol_ptr sym);
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
 extern void set_parent_entity_for_closure_types(
                    an_il_entity_list_entry_ptr  elp,
                    a_symbol_ptr                 parent_sym,

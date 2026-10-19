@@ -20445,6 +20445,11 @@ nonstandard anonymous unions is_nonstd is TRUE.
                                         cssp->num_unparsed_field_initializers;
     cssp->num_unparsed_field_initializers = 0;
   }  /* if */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  if (assoc_object_sym->kind == (a_symbol_kind)sk_variable) {
+    cir_note_anonymous_union_variable(assoc_object_sym);
+  }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 done:
   db_exit();
 }  /* check_anonymous_union_symbols */

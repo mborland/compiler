@@ -392,12 +392,14 @@ Error statuses, sticky errors and call-order rules.
 #if EDG_CIR_TEST_HOOKS
 void test_crash_recovery(const std::vector<uint8_t> &stream)
 /*
-A fatal LLVM error, a usage-style fatal error, a crash and an abort in the
-worker all become EDG_CIR_ERROR_INTERNAL; the session stays usable
-afterwards.
+A fatal LLVM error, a usage-style fatal error, a crash, an abort and a stack
+overflow in the worker all become EDG_CIR_ERROR_INTERNAL; the session stays
+usable afterwards.  (The overflow needs the worker's alternate signal stack:
+the crash handler has no stack to run on otherwise, and the process dies.)
 */
 {
-  static const char *const hooks[] = {"fatal", "usage", "segv", "abort"};
+  static const char *const hooks[] = {"fatal", "usage", "segv", "abort",
+                                      "overflow"};
 
   for (const char *hook : hooks) {
     a_capture c;
@@ -411,8 +413,12 @@ afterwards.
           "session after crash hook %s", hook);
   }
 
-  /* The same while consuming (on the caller's thread, not the worker). */
-  static const char *const consume_hooks[] = {"fatal", "segv", "abort"};
+  /* The same while consuming.  consume_guarded runs the reader and the
+     emitter on the guard worker too (the caller's thread only waits for it),
+     which is why the "overflow" hook is recovered here as well: the worker's
+     signal stack is what the crash handler runs on. */
+  static const char *const consume_hooks[] = {"fatal", "usage", "segv",
+                                              "abort", "overflow"};
   for (const char *hook : consume_hooks) {
     a_capture c;
     setenv("EDG_CIR_TEST_CONSUME_CRASH", hook, 1);
@@ -436,7 +442,23 @@ afterwards.
    deadline; the parent kills it when it is late. */
 
 enum a_exit_mode { exit_after_full, exit_after_bytes, exit_after_abort,
-                   exit_after_fatal, wait_for_signal };
+                   exit_after_fatal, exit_in_worker, exit_in_worker_close,
+                   exit_in_pipeline, overflow_pipeline, overflow_consume,
+                   wait_for_signal };
+
+#if EDG_CIR_TEST_HOOKS
+an_edg_cir_session *exit_session = nullptr;   /* For the atexit handler. */
+
+void close_session_at_exit()
+/*
+What a front end's atexit handler or static destructor does: close the
+session.  When the exit() came from the guard worker this runs on the worker
+while the thread that waits for the section holds the guard mutex.
+*/
+{
+  edg_cir_session_close(exit_session);
+}  /* close_session_at_exit */
+#endif
 
 int child_body(a_exit_mode mode, const std::vector<uint8_t> &stream,
                const std::vector<uint8_t> &abort_stream)
@@ -475,6 +497,52 @@ Open a session, feed it as the mode says and leave the process through exit()
 #if EDG_CIR_TEST_HOOKS
     setenv("EDG_CIR_TEST_CONSUME_CRASH", "fatal", 1);
     edg_cir_session_consume(session, stream.data(), stream.size());
+#endif
+    break;
+  case exit_in_worker:
+  case exit_in_worker_close:
+#if EDG_CIR_TEST_HOOKS
+    /* The whole stream first, so that the session holds a module; then a
+       consume call whose guarded section calls exit() on the worker. */
+    edg_cir_session_consume(session, stream.data(), stream.size());
+    if (mode == exit_in_worker_close) {
+      exit_session = session;
+      std::atexit(close_session_at_exit);
+    }
+    setenv("EDG_CIR_TEST_CONSUME_CRASH", "exit", 1);
+    edg_cir_session_consume(session, stream.data(), 1);
+#endif
+    break;
+  case exit_in_pipeline:
+#if EDG_CIR_TEST_HOOKS
+    exit_session = session;
+    std::atexit(close_session_at_exit);
+    edg_cir_session_consume(session, stream.data(), stream.size());
+    setenv("EDG_CIR_TEST_CRASH", "exit", 1);
+    edg_cir_session_finish(session);
+#endif
+    break;
+  case overflow_pipeline:
+  case overflow_consume:
+#if EDG_CIR_TEST_HOOKS
+    /* A stack overflow in a section is reported as a crash of the stage;
+       the process must survive it (the exit status says whether it did). */
+    {
+      an_edg_cir_status result;
+
+      if (mode == overflow_consume) {
+        setenv("EDG_CIR_TEST_CONSUME_CRASH", "overflow", 1);
+        result = edg_cir_session_consume(session, stream.data(),
+                                         stream.size());
+      } else {
+        setenv("EDG_CIR_TEST_CRASH", "overflow", 1);
+        result = edg_cir_session_consume(session, stream.data(),
+                                         stream.size());
+        if (result == EDG_CIR_OK)
+          result = edg_cir_session_finish(session);
+      }
+      std::_Exit(result == EDG_CIR_ERROR_INTERNAL ? 0 : 1);
+    }
 #endif
     break;
   case wait_for_signal:
@@ -532,6 +600,9 @@ void test_exit_paths(const std::vector<uint8_t> &stream,
                      const char *abort_hex)
 {
   std::vector<uint8_t> abort_stream = parse_hex_file(abort_hex);
+#if EDG_CIR_TEST_HOOKS
+  int status;
+#endif
 
   CHECK(run_child(exit_after_full, stream, abort_stream, 0, 10) == 7,
         "exit() after a consumed stream, no finish");
@@ -542,6 +613,37 @@ void test_exit_paths(const std::vector<uint8_t> &stream,
 #if EDG_CIR_TEST_HOOKS
   CHECK(run_child(exit_after_fatal, stream, abort_stream, 0, 10) == 7,
         "exit() after a fatal error in a guarded section");
+  /* exit() on the guard worker, inside a guarded section: the hook exits
+     with status 66, and the process must leave with it (not 7, the child's
+     own exit, and not the -1 of a deadlock on the guard mutex). */
+  status = run_child(exit_in_worker, stream, abort_stream, 0, 10);
+  CHECK(status == 66, "exit() on the guard worker while consuming (status "
+        "%d)", status);
+  status = run_child(exit_in_worker_close, stream, abort_stream, 0, 10);
+  CHECK(status == 66, "exit() on the guard worker while consuming, atexit "
+        "closes the session (status %d)", status);
+  status = run_child(exit_in_pipeline, stream, abort_stream, 0, 10);
+  CHECK(status == 66, "exit() on the guard worker in the pipeline, atexit "
+        "closes the session (status %d)", status);
+  /* The same on the thread of its own that a section gets when no worker
+     slot is left.  A stack overflow there needs the signal stack of that
+     thread; it runs in a child process that has done nothing else (earlier
+     crashes in this process leave the signal state different), and the exit
+     status 0 says the process survived and the status was INTERNAL. */
+  setenv("EDG_CIR_TEST_NO_WORKER", "1", 1);
+  status = run_child(overflow_consume, stream, abort_stream, 0, 30);
+  CHECK(status == 0, "stack overflow on a section's own thread while "
+        "consuming (status %d)", status);
+  status = run_child(overflow_pipeline, stream, abort_stream, 0, 30);
+  CHECK(status == 0, "stack overflow on a section's own thread in the "
+        "pipeline (status %d)", status);
+  status = run_child(exit_in_worker_close, stream, abort_stream, 0, 10);
+  CHECK(status == 66, "exit() on a section's own thread, atexit closes the "
+        "session (status %d)", status);
+  status = run_child(exit_in_pipeline, stream, abort_stream, 0, 10);
+  CHECK(status == 66, "exit() on a section's own thread in the pipeline "
+        "(status %d)", status);
+  unsetenv("EDG_CIR_TEST_NO_WORKER");
 #endif
   CHECK(run_child(wait_for_signal, stream, abort_stream, SIGTERM, 10) ==
             128 + SIGTERM,

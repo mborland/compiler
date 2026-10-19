@@ -49,6 +49,17 @@ if [ -z "$EDG_CIR_RT_LIBDIR" ] ; then
 fi
 EDG_C_TO_OBJ_LIBRARIES="$EDG_C_TO_OBJ_LIBRARIES -L$EDG_CIR_RT_LIBDIR -ledg_cir_rt -lstdc++ -lgcc_s -lm -lpthread"
 
+# Behavior of eccp that only this base turns on (the other bases do not set
+# these variables, so their eccp runs are unchanged):
+#  - a -O option (-O, -O<N>, -Og, -Os, -Oz, -Ofast, --optimize=N) is also
+#    passed to the front end as --cir_opt_level (0 to 3; -Os and -Oz are 2 and
+#    -Ofast is 3 without fast-math flags: approximations), after the options of
+#    EDG_CPFE_DEFAULT_OPTIONS, so that an option of the test wins over them;
+#  - a .c side file of a C++ test is compiled as C (--c): this front end takes
+#    every file as C++ unless told otherwise.
+EDG_CIR_MAP_OPT_LEVEL=1
+EDG_CIR_C_SIDE_FILES=1
+
 # The generated file is assembly, not C.  (A suffix not ending in ".c" also
 # makes eccp pass --old_line_commands to the front end.)
 EDG_GEN_C_SUFFIX=".int.s"

@@ -16,6 +16,15 @@
 #   CPFE_CIR_BIN   the cpfe-cir to run (CPFE_CIR if unset)
 #   EDG_CIR_TOOL   the edg-cir tool
 #
+# The optimization level: the last --cir_opt_level=N among the arguments (they
+# include those that eccp takes from EDG_CPFE_DEFAULT_OPTIONS) is also given
+# to edg-cir as -ON, as the in-process front end does with its own value.  The
+# front end checks the value (0 to 3).  Without the option the level is 0.
+#
+# Only the --cir_opt_level=N form is recognized (the form eccp and
+# EDG_CPFE_DEFAULT_OPTIONS give); the front end itself accepts nothing else
+# for this option either.
+#
 # Invocations that do not name a generated file (--version, --dump_config,
 # --preprocess_only, ...) go straight to cpfe-cir.
 
@@ -27,12 +36,21 @@ fi
 
 # Find --gen_c_file_name=<file>; keep the other arguments in order.
 out=
+opt_level=0
 count=$#
 while [ "$count" -gt 0 ]; do
   arg=$1
   shift
   case "$arg" in
     --gen_c_file_name=*) out=${arg#--gen_c_file_name=} ;;
+    --cir_opt_level=*)
+      value=${arg#--cir_opt_level=}
+      case "$value" in
+        '' | *[!0-9]*) ;;
+        *) opt_level=$(expr "$value" + 0) ;;
+      esac
+      set -- "$@" "$arg"
+      ;;
     *) set -- "$@" "$arg" ;;
   esac
   count=$((count - 1))
@@ -51,7 +69,7 @@ if [ "$status" -ne 0 ]; then
   exit "$status"
 fi
 
-"$EDG_CIR_TOOL" --emit=asm -o "$out" "$stream"
+"$EDG_CIR_TOOL" --emit=asm "-O$opt_level" -o "$out" "$stream"
 status=$?
 if [ "$status" -ne 0 ]; then
   # Report a failed back end like the front end does for a library error.

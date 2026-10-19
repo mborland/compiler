@@ -1,0 +1,553 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Attribute the PASS->FAIL cases of the -O2 corpus runs to a cause.
+
+The opt-corpus step of edg-cir-gate-evidence lists the cases that pass at -O0
+and fail at -O2 without a line in tests/.edgy/filters/cir-opt-triage.txt
+(`opt-corpus/unattributed.txt`: `path | variant | status at -O2`).  For each
+case of such a list this tool builds and runs the test program in these ways,
+inside the cir-env image (the cases are single-file tests; a test with source
+files is reported as `manual`):
+
+  gcc    the reference gcc/g++ at -O0 and at -O2, with the options of the
+         source's dg-options (the ones the harness ignores) other than -O
+  clang  clang (the CIR-enabled one of the image, without -fclangir) at -O0
+         and -O2
+  clangir clang -fclangir at -O0 and -O2: the upstream CIR pipeline
+  ours   cpfe-cir like the test configuration, edg-cir -O2 on the stream
+
+and gives the case the first category that fits (the categories of
+OPT_CATEGORIES in edg-cir-gate-evidence; a test passes if it exits with 0).
+Ours is built first: if ours does not build at -O2 (a crash of the front end
+or the library, or a failed link) the case is `our-ir`, except that a link
+failure that plain clang -O2 has too is `upstream`; it is never `ub`,
+`dg-option` or `ref-fails`.  Otherwise:
+
+  manual      ours passes here, or the evidence cannot decide (clang or
+              clang -fclangir do not pass the test at -O0, a test with source
+              files): look at it
+  dg-option   gcc passes at -O2 with the source's dg-options but not
+              without -fwrapv/-fno-strict-aliasing, or gcc fails at -O2 and
+              passes with one of PROBE_FLAGS (-fwrapv, -fno-strict-aliasing,
+              -fnon-call-exceptions, -frounding-math): flags that the harness
+              ignores, and that the corpus's sources no longer carry
+  ub          gcc passes at -O0 and fails at -O2 (undefined or unspecified
+              behavior in the test)
+  ref-fails   gcc fails at -O2 and at -O0 (the note says if the reference
+              configuration fails the case too)
+  upstream    gcc passes, ours fails, and clang -O2 fails too (LLVM), or
+              clang -fclangir passes at -O0 and fails at -O2
+  our-ir      gcc, clang and clang -fclangir pass (at -O0 and -O2), ours fails
+
+The evidence of every case starts with the outcome of ours at -O2.  The tool
+prints a line for tests/.edgy/filters/cir-opt-triage.txt per case, with the
+evidence (the outcome of every build) as the reason.  The result is a
+proposal: read the `our-ir` ones before they go into the file.
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-opt-triage \\
+      .tmp/.../opt-corpus/unattributed.txt [--json c-corpus.json ...]
+  ... --case 'imported/gnu/c/pr1.sft.c | -DTEST_NUMBER=1'
+  ... --self-test
+'''
+
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import edgtest.runtest as runtest
+
+LEVEL = 2
+# The options that edgy gives every test case (as in edg-cir-compare-modes):
+# C tests get --gcc, C++ tests -tused; the case's own options follow.
+STANDARD_C = ['--gnu_version=999999', '-e', '200', '--no_wrap',
+              '--no_wrap_diagnostics', '--gcc']
+STANDARD_CXX = ['--gnu_version=999999', '-tused', '-e', '200', '--no_wrap',
+                '--no_wrap_diagnostics']
+# What a crash of the front end or the library looks like in the output.
+CRASH_TEXT = re.compile(r'internal error|assertion|Segmentation|Aborted|'
+                        r'core dumped|signal|crash|pass manager failed', re.I)
+# Flags probed when gcc fails a test at -O2 (the corpus has lost the dg-options
+# comments of its sources).
+PROBE_FLAGS = (['-fwrapv'], ['-fno-strict-aliasing'],
+               ['-fwrapv', '-fno-strict-aliasing'], ['-fnon-call-exceptions'],
+               ['-frounding-math'])
+# The dg-options that change what optimized code means for a test.
+SEMANTIC_FLAGS = ('-fwrapv', '-fno-strict-aliasing', '-fwrapv-pointer',
+                  '-fno-strict-overflow')
+
+
+def load_tool(name: str):
+  path = str(Path(__file__).resolve().with_name(name))
+  loader = importlib.machinery.SourceFileLoader(name.replace('-', '_'), path)
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+def dg_options(text: str) -> List[str]:
+  '''The flags of the dg-options and dg-additional-options directives of a
+  GCC testsuite source (a flag that selects the optimization level is
+  dropped).'''
+  flags: List[str] = []
+  for match in re.finditer(
+      r'dg-(?:additional-)?options\s+"([^"]*)"', text):
+    for flag in match.group(1).split():
+      if re.match(r'-O(\d|s|g|fast|z)?$', flag):
+        continue
+      if flag.startswith(('-f', '-W', '-m', '-std=', '-D', '-U')):
+        flags.append(flag)
+  return flags
+
+
+def read_cases(path: Path) -> List[Tuple[str, str, str]]:
+  '''The (path, variant, note) lines of a list file (`path | variant | note`,
+  comments allowed).'''
+  cases = []
+  for line in path.read_text().splitlines():
+    line = line.strip()
+    if not line or line.startswith('#'):
+      continue
+    parts = [p.strip() for p in line.split('|')]
+    cases.append((parts[0], parts[1] if len(parts) > 1 else '',
+                  parts[2] if len(parts) > 2 else ''))
+  return cases
+
+
+def run(command: List[str], cwd: Path, env: Dict[str, str],
+        timeout: int) -> Tuple[int, str]:
+  try:
+    proc = subprocess.run(command, cwd = cwd, env = env, text = True,
+                          stdout = subprocess.PIPE, stderr = subprocess.STDOUT,
+                          timeout = timeout)
+    return proc.returncode, proc.stdout
+  except subprocess.TimeoutExpired:
+    return 124, 'timeout'
+
+
+class Toolchain:
+  def __init__(self, root: Path, fe_build: str, timeout: int) -> None:
+    self.diff = load_tool('edg-cir-run-diff')
+    self.base = self.diff.Toolchain(root, fe_build, 'g++')
+    self.root = root
+    self.timeout = timeout
+    self.env = dict(self.base.env)
+    # The harness uses the EDG headers, not the system ones, unless a test
+    # asks for them.
+    self.env.pop('EDG_USE_SYSTEM_HEADERS', None)
+    prefix = self.env.get('EDG_LLVM_CIR_PREFIX', '')
+    self.clang = str(Path(prefix) / 'bin' / 'clang') if prefix else 'clang'
+
+  def build_run(self, compiler: List[str], source: Path, work: Path,
+                name: str) -> Tuple[str, Tuple[int, str]]:
+    '''("ok", (status, output)) of a program built with a reference
+    compiler, or ("build", (status, output)) if it did not build.'''
+    exe = work / name
+    code, output = run([*compiler, str(source), '-o', str(exe), '-lm'], work,
+                       self.env, self.timeout)
+    if code != 0:
+      return 'build', (code, output[-300:])
+    return 'ok', run([str(exe)], work, self.env, self.timeout)
+
+  def build_ours(self, source: Path, work: Path, options: List[str],
+                 is_c: bool) -> Tuple[str, str, Path]:
+    return self.base.build_ours(source, work, options, LEVEL, c_mode = is_c)
+
+
+def outcome(result: Tuple[str, Tuple[int, str]]) -> str:
+  state, (code, text) = result
+  if state == 'build':
+    lines = [l for l in text.splitlines() if 'error' in l] or [text]
+    return f"build-fail ({lines[0].strip()[:90]!r})"
+  return f"rc={code}"
+
+
+def passes(result: Tuple[str, Tuple[int, str]]) -> bool:
+  '''Did a program build and exit with status 0?'''
+  return result[0] == 'ok' and result[1][0] == 0
+
+
+def same(a: Tuple[str, Tuple[int, str]], b: Tuple[str, Tuple[int, str]]
+         ) -> bool:
+  return a[0] == 'ok' and b[0] == 'ok' and a[1] == b[1]
+
+
+def chosen_options(description, variant: str, is_c: bool
+                   ) -> Optional[List[str]]:
+  '''The eccp options of the case whose variant (as in the status JSON:
+  -DTEST_NUMBER=n and the case's own options) is `variant`: the standard
+  options of edgy, then the options of the description and of the case.'''
+  for number, (mode, base_options, case_options) in enumerate(
+      description.traverse_cases(), 1):
+    variant_here = ' '.join([f"-DTEST_NUMBER={number}", *case_options])
+    if variant_here == variant or not variant:
+      return [f"-DTEST_NUMBER={number}",
+              *(STANDARD_C if is_c else STANDARD_CXX), *base_options,
+              *case_options]
+  return None
+
+
+def triage_case(toolchain: Toolchain, tests_dir: Path, path: str,
+                variant: str, entry: Optional[dict]
+                ) -> Tuple[str, str]:
+  '''(category or "manual", evidence) for one case.'''
+  test = tests_dir / path
+  # A test directory has the file test.mft.<suffix>; a single file is itself.
+  if test.is_dir():
+    found = sorted(test.glob('test.mft.*'))
+    test = found[0] if found else test
+  if not test.is_file():
+    return 'manual', 'the test source was not found'
+  description = runtest.load_description(
+    test, top_dir = tests_dir / Path(path).parts[0])
+  if description.source_files:
+    return 'manual', 'a test with source files'
+  is_c = test.suffix == '.c'
+  chosen = chosen_options(description, variant, is_c)
+  if chosen is None:
+    return 'manual', f"no case with the options {variant!r}"
+  text = test.read_text(errors = 'replace')
+  flags = dg_options(text)
+  semantic = [f for f in flags if f in SEMANTIC_FLAGS]
+  ref = 'gcc' if is_c else 'g++'
+  std = [] if is_c else ['-std=c++17']
+  for token in chosen:
+    match = re.match(r'--c\+\+(\w+)$', token)
+    if match:
+      std = [f"-std=c++{match.group(1)}"]
+    elif token.startswith('-D'):
+      flags.append(token)
+  with tempfile.TemporaryDirectory(prefix = 'edg-cir-triage.') as tmp:
+    work = Path(tmp)
+    local = work / test.name
+    shutil.copy2(test, local)
+    for extra in test.parent.glob('*.h'):
+      shutil.copy2(extra, work / extra.name)
+
+    def reference(compiler: str, level: int, drop_semantic: bool,
+                  extra_flags: Optional[List[str]] = None):
+      use = [f for f in flags if not (drop_semantic and f in SEMANTIC_FLAGS)]
+      if compiler not in (ref,):
+        # clang refuses the GCC-only -f options that a dg-options may have.
+        use = [f for f in use if f in SEMANTIC_FLAGS or
+               f.startswith(('-D', '-U'))]
+      command = [compiler, '-w', f"-O{level}", *std, *use,
+                 *(extra_flags or [])]
+      return toolchain.build_run(command, local, work,
+                                 f"{Path(compiler).name}{level}.exe")
+
+    # Ours first: a crash or a failed build of ours is never the test's fault.
+    ours_work = work / 'ours'
+    ours_work.mkdir()
+    for extra in test.parent.glob('*.h'):
+      shutil.copy2(extra, ours_work / extra.name)
+    state, text, exe = toolchain.build_ours(test, ours_work, chosen, is_c)
+    ours = None
+    if state == 'ok':
+      ours = ('ok', run([str(exe)], ours_work, toolchain.env,
+                        toolchain.timeout))
+    gcc0 = reference(ref, 0, False)
+    gcc2 = reference(ref, LEVEL, False)
+    clang_cc = toolchain.clang + ('' if is_c else '++')
+    if not Path(clang_cc).exists():
+      clang_cc = toolchain.clang
+    lang = [] if is_c else ['-x', 'c++']
+    clang0 = reference(clang_cc, 0, False, lang)
+    clang2 = reference(clang_cc, LEVEL, False, lang)
+    facts = Facts(state, text, ours, ref, gcc0, gcc2, clang0, clang2,
+                  semantic, entry is not None and bool(entry.get('ref_fail')))
+    if ours is not None and not passes(ours):
+      if semantic and passes(gcc2):
+        facts.bare = reference(ref, LEVEL, True)
+      if not passes(gcc2):
+        facts.probes = [probe for probe in PROBE_FLAGS
+                        if passes(reference(ref, LEVEL, False, probe))]
+      if passes(gcc2) and passes(clang0) and passes(clang2):
+        facts.clangir0 = reference(clang_cc, 0, False, [*lang, '-fclangir'])
+        facts.clangir2 = reference(clang_cc, LEVEL, False,
+                                   [*lang, '-fclangir'])
+    return decide(facts)
+
+
+class Facts:
+  '''What the builds of one case showed (see decide).'''
+
+  def __init__(self, state, text, ours, ref, gcc0, gcc2, clang0, clang2,
+               semantic, reference_fails) -> None:
+    self.state = state              # "ok" or why ours did not build
+    self.text = text                # the output of that failure
+    self.ours = ours                # the run of ours, or None
+    self.ref = ref                  # "gcc" or "g++"
+    self.gcc0, self.gcc2 = gcc0, gcc2
+    self.clang0, self.clang2 = clang0, clang2
+    self.semantic = semantic        # the semantic flags of the source
+    self.reference_fails = reference_fails
+    self.bare = None                # gcc -O2 without the semantic flags
+    self.probes: List[List[str]] = []   # PROBE_FLAGS with which gcc passes
+    self.clangir0 = None
+    self.clangir2 = None
+
+
+def decide(facts: Facts) -> Tuple[str, str]:
+  '''(category, evidence): see the header of this file for the rules.'''
+  ref = facts.ref
+  ours_note = (outcome(facts.ours) if facts.ours is not None else
+               f"{facts.state} ({' '.join(facts.text.split())[-110:]})")
+  evidence = (f"ours -O2 {ours_note}; {ref} -O0 {outcome(facts.gcc0)}, -O2 "
+              f"{outcome(facts.gcc2)}; clang -O0 {outcome(facts.clang0)}, "
+              f"-O2 {outcome(facts.clang2)}")
+  if facts.ours is None:
+    # Only a link failure that clang -O2 has too is not ours.
+    if facts.text.startswith('link:') and passes(facts.clang0) and \
+        not passes(facts.clang2):
+      return 'upstream', evidence + '; clang -O2 fails to build it too'
+    crash = ' (a crash or an internal error)' \
+      if CRASH_TEXT.search(facts.text) else ''
+    return 'our-ir', evidence + f"; ours -O2 did not build{crash}"
+  if passes(facts.ours):
+    return 'manual', evidence + '; ours -O2 passes here (flaky or a ' \
+      'harness difference, e.g. the output compared)'
+  # A test of the corpus is a run test: it passes with exit status 0.  The
+  # dg-options of the sources are lost in the preprocessed corpus, so when
+  # gcc fails the flags that the harness ignores are probed.
+  if facts.semantic and passes(facts.gcc2) and facts.bare is not None and \
+      not passes(facts.bare):
+    return 'dg-option', (evidence + f"; without {' '.join(facts.semantic)} "
+                         f"{ref} -O2 fails")
+  if not passes(facts.gcc2):
+    if facts.probes:
+      probe = facts.probes[0]
+      return 'dg-option', (evidence + f"; {ref} -O2 {' '.join(probe)} passes "
+                           f"(the flag is not in the source: the corpus lost "
+                           f"its dg-options)")
+    if passes(facts.gcc0):
+      return 'ub', evidence + f": {ref} itself fails at -O2"
+    note = ('; the reference configuration fails the case too'
+            if facts.reference_fails else '')
+    return 'ref-fails', evidence + note
+  # gcc passes at -O2 and ours fails at run time: is it LLVM or the IR?
+  if passes(facts.clang0) and not passes(facts.clang2):
+    return 'upstream', evidence + '; clang -O2 fails too (LLVM)'
+  if not passes(facts.clang0):
+    return 'manual', evidence + '; clang does not pass the test at -O0, so ' \
+      'it cannot attribute the failure'
+  if facts.clangir0 is None or facts.clangir2 is None:
+    return 'manual', evidence + '; clang -fclangir was not run'
+  evidence += (f"; clang -fclangir -O0 {outcome(facts.clangir0)}, -O2 "
+               f"{outcome(facts.clangir2)}")
+  if not passes(facts.clangir0):
+    return 'manual', evidence + '; clang -fclangir does not pass at -O0, ' \
+      'so it cannot attribute the failure'
+  if not passes(facts.clangir2):
+    return 'upstream', evidence + '; clang -fclangir -O2 fails too'
+  return 'our-ir', evidence
+
+
+# The builds of the matrix: (label, front end level, library level, extra
+# flags of edg-cir).  The harness at -O2 is "fe2 lib2".
+MATRIX = (('fe0 lib0', 0, 0, []), ('fe2 lib0', 2, 0, []),
+          ('fe0 lib2', 0, 2, []), ('fe2 lib1', 2, 1, []),
+          ('fe2 lib2', 2, 2, []),
+          ('fe2 lib2 no-cir-passes', 2, 2, ['--disable-cir-passes']),
+          ('fe2 lib3', 2, 3, []))
+
+
+def matrix_case(toolchain: Toolchain, tests_dir: Path, path: str,
+                variant: str) -> List[str]:
+  '''Lines: the outcome of our build of a case at the levels of MATRIX,
+  against the reference gcc at -O0 (to separate the effect of the front
+  end's predefined macros, the library's level and its CIR passes).'''
+  test = tests_dir / path
+  if test.is_dir():
+    found = sorted(test.glob('test.mft.*'))
+    test = found[0] if found else test
+  description = runtest.load_description(
+    test, top_dir = tests_dir / Path(path).parts[0])
+  is_c = test.suffix == '.c'
+  chosen = chosen_options(description, variant, is_c)
+  if chosen is None or description.source_files:
+    return ['(not a single-file case)']
+  lines = []
+  with tempfile.TemporaryDirectory(prefix = 'edg-cir-triage.') as tmp:
+    work = Path(tmp)
+    ref = 'gcc' if is_c else 'g++'
+    std = [] if is_c else ['-std=c++17']
+    for token in chosen:
+      match = re.match(r'--c\+\+(\w+)$', token)
+      if match:
+        std = [f"-std=c++{match.group(1)}"]
+    local = work / test.name
+    shutil.copy2(test, local)
+    base = toolchain.build_run([ref, '-w', '-O0', *std], local, work, 'ref.exe')
+    lines.append(f"{ref} -O0: {outcome(base)}")
+    for label, fe, lib, flags in MATRIX:
+      sub = work / label.replace(' ', '_')
+      sub.mkdir()
+      for extra in test.parent.glob('*.h'):
+        shutil.copy2(extra, sub / extra.name)
+      state, text, exe = toolchain.base.build_ours(
+        test, sub, chosen, lib, c_mode = is_c, fe_level = fe,
+        edg_cir_flags = flags)
+      if state != 'ok':
+        lines.append(f"{label}: {state} {text[-100:]!r}")
+        continue
+      result = ('ok', run([str(exe)], sub, toolchain.env, toolchain.timeout))
+      verdict = 'same' if same(base, result) else 'DIFFERS'
+      lines.append(f"{label}: {outcome(result)} {verdict}")
+  return lines
+
+
+class SelfTest(unittest.TestCase):
+  def test_dg_options(self) -> None:
+    text = ('/* { dg-do run } */\n/* { dg-options "-O3 -fwrapv -w" } */\n'
+            '/* { dg-additional-options "-fno-strict-aliasing -std=gnu99" }'
+            ' */\n')
+    self.assertEqual(dg_options(text),
+                     ['-fwrapv', '-fno-strict-aliasing', '-std=gnu99'])
+    self.assertEqual(dg_options('int main(){}\n'), [])
+
+  def test_read_cases(self) -> None:
+    with tempfile.NamedTemporaryFile('w', suffix = '.txt') as handle:
+      handle.write('# c\na/b.c | -DX | FAIL\n\nc/d.cpp\n')
+      handle.flush()
+      self.assertEqual(read_cases(Path(handle.name)),
+                       [('a/b.c', '-DX', 'FAIL'), ('c/d.cpp', '', '')])
+
+  def test_decide(self) -> None:
+    ok = ('ok', (0, ''))
+    bad = ('ok', (-6, ''))
+    build_fail = ('build', (1, 'x'))
+
+    def facts(**kw) -> Facts:
+      f = Facts(kw.get('state', 'ok'), kw.get('text', ''),
+                kw.get('ours', bad), 'gcc', kw.get('gcc0', ok),
+                kw.get('gcc2', ok), kw.get('clang0', ok), kw.get('clang2', ok),
+                kw.get('semantic', []), kw.get('ref_fail', False))
+      f.bare, f.probes = kw.get('bare'), kw.get('probes', [])
+      f.clangir0, f.clangir2 = kw.get('clangir0'), kw.get('clangir2')
+      return f
+
+    # A crash or failed build of ours is our IR, whatever the reference does.
+    for gcc2 in (ok, bad):
+      category, text = decide(facts(state = 'fail', ours = None,
+                                    text = 'edg-cir: internal error',
+                                    gcc2 = gcc2, probes = [['-fwrapv']]))
+      self.assertEqual(category, 'our-ir')
+      self.assertIn('a crash or an internal error', text)
+      self.assertTrue(text.startswith('ours -O2 fail'))
+    # A link failure that clang -O2 has too is upstream, one that it does not
+    # have is ours.
+    self.assertEqual(decide(facts(state = 'fail', ours = None,
+                                  text = 'link: undefined', clang2 =
+                                  build_fail))[0], 'upstream')
+    self.assertEqual(decide(facts(state = 'fail', ours = None,
+                                  text = 'link: undefined'))[0], 'our-ir')
+    # Ours passes: look at it.
+    self.assertEqual(decide(facts(ours = ok))[0], 'manual')
+    # gcc itself fails at -O2: the flags, or ub, or the reference.
+    self.assertEqual(decide(facts(gcc2 = bad, probes = [['-frounding-math']])
+                            )[0], 'dg-option')
+    self.assertEqual(decide(facts(gcc2 = bad))[0], 'ub')
+    self.assertEqual(decide(facts(gcc0 = bad, gcc2 = bad))[0], 'ref-fails')
+    self.assertEqual(decide(facts(semantic = ['-fwrapv'], bare = bad)
+                            )[0], 'dg-option')
+    # gcc passes: LLVM (clang -O2 fails too), or the upstream CIR (only if it
+    # passes at -O0), or ours.
+    self.assertEqual(decide(facts(clang2 = bad))[0], 'upstream')
+    self.assertEqual(decide(facts(clang0 = bad, clang2 = bad))[0], 'manual')
+    self.assertEqual(decide(facts(clangir0 = ok, clangir2 = bad))[0],
+                     'upstream')
+    self.assertEqual(decide(facts(clangir0 = build_fail,
+                                  clangir2 = build_fail))[0], 'manual')
+    self.assertEqual(decide(facts(clangir0 = bad, clangir2 = bad))[0],
+                     'manual')
+    self.assertEqual(decide(facts(clangir0 = ok, clangir2 = ok))[0], 'our-ir')
+    self.assertEqual(decide(facts())[0], 'manual')
+
+  def test_same(self) -> None:
+    self.assertTrue(same(('ok', (0, 'x')), ('ok', (0, 'x'))))
+    self.assertFalse(same(('ok', (0, 'x')), ('ok', (1, 'x'))))
+    self.assertFalse(same(('build', (1, 'x')), ('build', (1, 'x'))))
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2])
+  parser.add_argument('lists', nargs = '*',
+                      help = 'files of `path | variant | note` lines')
+  parser.add_argument('--case', action = 'append', default = [],
+                      help = '"path | variant" of one case')
+  parser.add_argument('--json', action = 'append', default = [],
+                      help = 'status JSON of edg-cir-summary (for the '
+                             'reference expectation of a case)')
+  parser.add_argument('--root', default = '.')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir')
+  parser.add_argument('--timeout', type = int, default = 60)
+  parser.add_argument('--matrix', action = 'store_true',
+                      help = 'instead of the triage, print the outcome of '
+                             'each case built at several front end and '
+                             'library levels (see MATRIX)')
+  parser.add_argument('--self-test', action = 'store_true')
+  args = parser.parse_args()
+  if args.self_test:
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SelfTest)
+    sys.exit(0 if unittest.TextTestRunner(verbosity = 1).run(
+      suite).wasSuccessful() else 1)
+  cases: List[Tuple[str, str, str]] = []
+  for item in args.lists:
+    cases += read_cases(Path(item))
+  for item in args.case:
+    parts = [p.strip() for p in item.split('|')]
+    cases.append((parts[0], parts[1] if len(parts) > 1 else '', ''))
+  if not cases:
+    parser.error('no case: give a list file or --case')
+  entries: Dict[Tuple[str, str], dict] = {}
+  for name in args.json:
+    for rows in json.loads(Path(name).read_text()).values():
+      for row in rows:
+        entries[(row['path'], row.get('variant', ''))] = row
+  root = Path(args.root).resolve()
+  toolchain = Toolchain(root, args.fe_build, args.timeout)
+  if not toolchain.base.ready():
+    print('edg-cir-opt-triage: build cpfe-cir and the library first (no '
+          f"CPFE_CIR and EDG_CIR_TOOL in {args.fe_build}/environment.sh)",
+          file = sys.stderr)
+    sys.exit(2)
+  counts: Dict[str, int] = {}
+  if args.matrix:
+    for path, variant, _ in cases:
+      print(f"== {path} | {variant}")
+      for line in matrix_case(toolchain, root / 'tests' / 'tests', path,
+                              variant):
+        print(f"  {line}", flush = True)
+    return
+  for path, variant, _ in cases:
+    category, evidence = triage_case(toolchain, root / 'tests' / 'tests',
+                                     path, variant,
+                                     entries.get((path, variant)))
+    counts[category] = counts.get(category, 0) + 1
+    print(f"{path} | {variant} | {category} | {evidence}", flush = True)
+  print('# ' + ', '.join(f"{k} {v}" for k, v in sorted(counts.items())),
+        file = sys.stderr)
+
+
+if __name__ == '__main__':
+  main()

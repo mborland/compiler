@@ -377,11 +377,20 @@ with the tables):
 
 1. **Next milestone**: M5 (performance, lazy decode, the -O plumbing) or M6
    (remaining gaps: vectors, multiversioning, inline asm, …)?
+
+M5 since that's a blocker identified
+
 2. **`src/cmd_line.c`**: may the next session add the CIR-gated
    `--cir_opt_level` option there (the edit was refused by the permission
    system this session)?
+
+Yes, see number 8.1
+
 3. **Box trees**: may the next session prune `~/edg-cir-config/m31-int`
    (the M3.1/M4 working tree) after taking the M4 baselines?
+
+Yes
+
 4. **A small M4.1 first?** Fix the small items below as a short gate
    before the next milestone, as M3.1 did for M3:
    - the `value_is_pushed` fix (`init/ref16`) and the library stack-floor
@@ -390,6 +399,8 @@ with the tables):
      `sigaltstack`, the `ZERO_BYTES` rule, and the two gate-step checks
      (§5);
    - `--c` for C side files, and `__debug_level` (§4).
+
+Yes
 
 ## 9. Gate evidence
 

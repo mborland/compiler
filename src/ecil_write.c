@@ -1139,32 +1139,93 @@ operands its opcode declares.
 }  /* ecil_rec_end */
 
 
+void ecil_supp_begin(an_ecil_supp *supp)
+/*
+Start a supp blob (spec 6).
+*/
+{
+  ecil_buf_init(&supp->payload);
+  supp->num_pairs = 0;
+  supp->last_key = 0;
+}  /* ecil_supp_begin */
+
+
+static void ecil_supp_key(an_ecil_supp *supp, an_ecil_supp_key key)
+/*
+Write the key of the next pair.  The keys of a blob increase, so that none
+repeats.
+*/
+{
+  check_assertion((unsigned int)key > supp->last_key);
+  supp->last_key = (unsigned int)key;
+  supp->num_pairs++;
+  ecil_put_uint(&supp->payload, (uint64_t)key);
+}  /* ecil_supp_key */
+
+
+void ecil_supp_true(an_ecil_supp *supp, an_ecil_supp_key key)
+/*
+Add a flag-like pair: the key with the value true.
+*/
+{
+  ecil_supp_key(supp, key);
+  ecil_put_bool(&supp->payload, TRUE);
+}  /* ecil_supp_true */
+
+
+void ecil_supp_uint(an_ecil_supp *supp, an_ecil_supp_key key, uint64_t value)
+/*
+Add a pair with an unsigned integer value.
+*/
+{
+  ecil_supp_key(supp, key);
+  ecil_put_uint(&supp->payload, value);
+}  /* ecil_supp_uint */
+
+
 static size_t ecil_sanitize_utf8(char *to, const char *from, size_t max);
 
-void ecil_rec_supp_reason(an_ecil_frame *frame, const char *text)
+void ecil_supp_text(an_ecil_supp *supp, an_ecil_supp_key key, const char *text)
 /*
-Append the supp blob of the unsupported_reason key (13) to the record just
-written (spec 6): the key, then the text as a bin of at most 255 bytes.  The
-blob is supp8 if its payload fits in one byte of length, else supp16.
+Add a pair whose value is the text, as a bin of at most 255 bytes (UTF-8, cut
+at a character boundary).
 */
 {
   char    clean[256];
   size_t  length = ecil_sanitize_utf8(clean, text, 255);
-  size_t  payload = 1 + (length < 32 ? 1 : 2) + length;
+
+  ecil_supp_key(supp, key);
+  ecil_put_bin(&supp->payload, clean, length);
+}  /* ecil_supp_text */
+
+
+void ecil_rec_supp_end(an_ecil_frame *frame, an_ecil_supp *supp)
+/*
+Append the blob to the record just written: the tag with the length of the
+payload (supp8 if it fits in one byte, else supp16), then the pairs.
+*/
+{
+  size_t  payload = supp->payload.size;
 
   check_assertion(frame->pending_operands == 0 ||
                   frame->pending_operands == -1);
-  frame->flags |= ECIL_FRAME_FLAG_HAS_SUPP;
-  if (payload <= 0xFF) {
-    ecil_buf_put_byte(frame->current, ECIL_TAG_SUPP8);
-    ecil_buf_put_le(frame->current, payload, 1);
-  } else {
-    ecil_buf_put_byte(frame->current, ECIL_TAG_SUPP16);
-    ecil_buf_put_le(frame->current, payload, 2);
+  if (supp->payload.failed) {
+    frame->current->failed = TRUE;
+  } else if (supp->num_pairs != 0) {
+    frame->flags |= ECIL_FRAME_FLAG_HAS_SUPP;
+    if (payload <= 0xFF) {
+      ecil_buf_put_byte(frame->current, ECIL_TAG_SUPP8);
+      ecil_buf_put_le(frame->current, payload, 1);
+    } else {
+      ecil_buf_put_byte(frame->current, ECIL_TAG_SUPP16);
+      ecil_buf_put_le(frame->current, payload, 2);
+    }  /* if */
+    ecil_buf_put_bytes(frame->current, supp->payload.data, payload);
   }  /* if */
-  ecil_put_uint(frame->current, (uint64_t)esk_unsupported_reason);
-  ecil_put_bin(frame->current, clean, length);
-}  /* ecil_rec_supp_reason */
+  ecil_buf_free(&supp->payload);
+  supp->num_pairs = 0;
+  supp->last_key = 0;
+}  /* ecil_rec_supp_end */
 
 
 void ecil_rec0(an_ecil_frame *frame, unsigned int opcode)

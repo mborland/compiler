@@ -396,7 +396,10 @@ Pop the innermost frame, checking the value stack height.
 {
   bool ok = true;
 
-  if (values_.size() != frames_.back().value_base)
+  if (values_.size() < frames_.back().value_base)
+    ok = format_error("the value stack ran below the base of a construct "
+                      "at its end");
+  else if (values_.size() != frames_.back().value_base)
     ok = format_error("values left on the stack at the end of a construct");
   frames_.pop_back();
   return ok;
@@ -1357,6 +1360,12 @@ after them, as CIRGen does: a cir.cleanup.scope has no results.
 
     if (f == nullptr) {
       ok = false;
+    } else if (values_.size() < f->value_base) {
+      /* Unreachable while every pop honors the value base (the value
+         stack floor); kept so that a pop added without the check is named
+         for what it is. */
+      ok = internal("FULLEXPR_END: the value stack ran below the base of "
+                    "its full expression (a stack under-run)");
     } else if (values_.size() > f->value_base + 1) {
       ok = format_error("a full expression carries out at most one value");
     } else {

@@ -1,4 +1,5 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics --gcc -O Test_name.c
 /usr/sbin/ld: Test_name.o: in function `main':
 Test_name.c:(.text+0xXX): undefined reference to `tag'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `tag'
 collect2: error: ld returned 1 exit status

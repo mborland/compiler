@@ -1,0 +1,39 @@
+# Attribution of the status changes of the CIR configurations at -O2 against
+# -O0, for the opt-corpus step of edg-cir-gate-evidence: every case that passes
+# at -O0 and does not at -O2 needs a line here, one per case:
+#
+#   <test path> | <variant> | <category> | <reason>
+#
+# <test path> is as in the status JSON of edg-cir-summary (suite directory
+# first, as in cir-documented-gaps.txt), <variant> the option list of the case
+# exactly as there.  The categories:
+#
+#   ub          undefined or unspecified behavior in the test: the reference
+#               compiler (g++, clang) changes its behavior between -O0 and -O2
+#   dg-option   the test needs a dg-option that the harness ignores
+#               (-fwrapv, -fno-strict-aliasing)
+#   ref-fails   the reference does not pass the test at -O2
+#   our-ir      our IR (the writer or the library) is wrong; the gate lists
+#               these for the user
+#   upstream    the upstream CIR passes or LLVM: clang -fclangir -O2 fails too
+#
+# A line for a case that did not get worse is stale and fails the step.
+
+# The first baseline (gate M4.1, tree m41-int, -O2 against -O0).
+imported/gnu/c/fold-abs-2.sft.c | -DTEST_NUMBER=1 | dg-option | gcc -O0 rc=-6, -O2 rc=-6; clang -O0 rc=0, -O2 rc=-6; gcc -O2 -fwrapv passes (the flag is not in the source: the corpus lost its dg-options)
+imported/gnu/c/fwrapv-1.sft.c | -DTEST_NUMBER=1 | dg-option | gcc -O0 rc=-6, -O2 rc=-6; clang -O0 rc=0, -O2 rc=-6; gcc -O2 -fwrapv passes (the flag is not in the source: the corpus lost its dg-options)
+imported/gnu/c/pr101254.sft.c | -DTEST_NUMBER=1 | dg-option | gcc -O0 rc=0, -O2 rc=0; clang -O0 rc=0, -O2 rc=0; without -fwrapv gcc -O2 fails
+imported/gnu/c/pr114090.sft.c | -DTEST_NUMBER=1 | dg-option | gcc -O0 rc=0, -O2 rc=0; clang -O0 rc=0, -O2 rc=0; without -fwrapv gcc -O2 fails
+imported/gnu/c/pr118224.sft.c | -DTEST_NUMBER=1 -w | upstream | clang -O2 and clang -fclangir -O2 also abort (aligned_alloc spelled as the library function): LLVM folds malloc(huge) != null to true, gcc does not
+imported/gnu/c/pr55236.sft.c | -DTEST_NUMBER=1 | dg-option | gcc -O0 rc=0, -O2 rc=0; clang -O0 rc=0, -O2 rc=0; without -fwrapv gcc -O2 fails
+imported/gnu/c/pr95115.sft.c | -DTEST_NUMBER=1 | upstream | gcc -O0 rc=0, -O2 rc=0; clang -O0 rc=0, -O2 rc=-6; ours -O2 rc=-6; clang -fclangir -O2 rc=-6; clang -O2 fails too (LLVM)
+imported/gnu/c/torture/builtin-ctype-1.sft.c | -DTEST_NUMBER=1 | our-ir | UNDIAGNOSED (for S2): probably our ctype declarations or call attributes. The test compiles its link_failure checks only under __OPTIMIZE__ and needs isalnum(i) != isalnum(i) and the like folded (the functions treated as pure): clang -O2 links it, ours leaves the link_failure_* calls; with --cir_opt_level=0 and the library at -O2 (no checks compiled) it passes
+imported/gnu/c/torture/builtin-ctype-2.sft.c | -DTEST_NUMBER=1 | upstream | the test compiles its link_failure checks only under __OPTIMIZE__ and needs GCC's folding of the builtins; clang -O2 fails to link it too. Evidence: gcc -O0 rc=0, -O2 rc=0; clang -O0 rc=0, -O2 build-fail ('clang: error: linker command failed with exit code 1 (use -v to see invocation)'); ours -O2 fail: "uiltin-ctype-2.sft.c:(.text+0x16): undefined reference to `link_failure_var'\ncollect2: error: ld 
+imported/gnu/c/torture/builtin-wctype-1.sft.c | -DTEST_NUMBER=1 | upstream | the test compiles its link_failure checks only under __OPTIMIZE__ and needs GCC's folding of the builtins; clang -O2 fails to link it too. Evidence: gcc -O0 rc=0, -O2 rc=0; clang -O0 rc=0, -O2 build-fail ('clang: error: linker command failed with exit code 1 (use -v to see invocation)'); ours -O2 fail: "wctype-1.sft.c:(.text+0x166): undefined reference to `link_failure_towupper'\ncollect2: error: ld
+imported/gnu/c/torture/fp-uint64-convert-double-1.sft.c | -DTEST_NUMBER=1 | dg-option | needs -frounding-math (the test calls fesetround; g++ -O2 passes with the flag): the harness ignores it. Evidence: gcc -O0 rc=0, -O2 rc=-6; clang -O0 rc=0, -O2 rc=-6: gcc itself fails at -O2
+imported/gnu/c/torture/fp-uint64-convert-double-2.sft.c | -DTEST_NUMBER=1 | dg-option | needs -frounding-math (the test calls fesetround; g++ -O2 passes with the flag): the harness ignores it. Evidence: gcc -O0 rc=0, -O2 rc=-6; clang -O0 rc=0, -O2 rc=-6: gcc itself fails at -O2
+imported/gnu/c/tree-ssa/builtin-sprintf.sft.c | -DTEST_NUMBER=1 | upstream | the test compiles its link_failure checks only under __OPTIMIZE__ and needs GCC's folding of the builtins; clang -O2 fails to link it too. Evidence: gcc -O0 rc=0, -O2 rc=0; clang -O0 rc=0, -O2 build-fail ('clang: error: linker command failed with exit code 1 (use -v to see invocation)'); ours -O2 fail: "n-sprintf.sft.c:(.text+0x876d): undefined reference to `failure_on_line_813'\ncollect2: error: ld
+imported/gnu/c/tree-ssa/negneg-4.sft.c | -DTEST_NUMBER=1 | dg-option | gcc -O0 rc=0, -O2 rc=0; clang -O0 rc=0, -O2 rc=0; without -fwrapv gcc -O2 fails
+imported/gnu/cpp/eh/sighandle.sft.cpp | -DTEST_NUMBER=1 --exceptions | dg-option | needs -fnon-call-exceptions (g++ -O0 and -O2 abort without it, pass with it): the signal handler throws; works unoptimized in ours only by accident
+imported/gnu/cpp/torture/except-1.sft.cpp | -DTEST_NUMBER=1 --exceptions | ref-fails | g++ -O0 rc=-6, -O2 rc=1; clang -O0 build-fail ('/mds/gnu/build/gcc-15-20250112/include/c++/15.0.0/x86_64-pc-linux-gnu/bits/c++config.h:881'), -O2 build-fail ('/mds/gnu/build/gcc-15-20250112/include/c++/15.0.0/x86_64-pc-linux-gnu/bits/c++config.h:881')
+imported/gnu/cpp/torture/pr85334.sft.cpp | -DTEST_NUMBER=1 --exceptions | dg-option | needs -fnon-call-exceptions (g++ -O0 and -O2 abort without it, pass with it): the signal handler throws; works unoptimized in ours only by accident

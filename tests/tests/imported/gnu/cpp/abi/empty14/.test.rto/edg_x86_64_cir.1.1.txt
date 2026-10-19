@@ -1,6 +1,3 @@
 eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diagnostics -w Test_name.c empty14a.c
 Test_name.c:
 empty14a.c:
-/usr/sbin/ld: Test_name.o: in function `main':
-Test_name.c:(.text+0xXX): undefined reference to `fun'
-collect2: error: ld returned 1 exit status

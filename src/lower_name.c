@@ -16124,13 +16124,31 @@ The text is in the mangling buffer and is valid until the next mangling.
 }  /* cir_structor_name */
 
 
+a_const_char *cir_local_static_source_name(a_variable_ptr variable)
+/*
+Return the name that a function-local static variable has in its Itanium
+name: its own, or for the variable of an anonymous union that of the first
+member of the union.  NULL if it has none (a variable the front end makes:
+__func__, a compound literal).
+*/
+{
+  a_const_char  *name = unmangled_or_fabricated_name_of(
+                                                    &variable->source_corresp);
+
+  if (name == NULL && variable->is_anonymous_parent_object) {
+    name = cir_anonymous_union_member_name(variable->type);
+  }  /* if */
+  return name;
+}  /* cir_local_static_source_name */
+
+
 char *cir_local_static_name(a_variable_ptr variable)
 /*
 Return the Itanium name of a function-local static variable (the name of
 the entity local to its function: _ZZ1fvE1a, with the discriminator for a
 second variable of the same name in the function).  The variable is not
 changed.  The text is in the mangling buffer and is valid until the next
-mangling.
+mangling.  The variable must have a name (cir_local_static_source_name).
 */
 {
   a_mangling_control_block  mctl;
@@ -16139,7 +16157,7 @@ mangling.
   start_mangling(&mctl, variable->is_prototype_instantiation);
   add_mangled_name_prefix(&mctl);
   add_prefix_for_local_entity(scp->enclosing_routine, &mctl);
-  mangled_name_with_length(unmangled_or_fabricated_name_of(scp), &mctl);
+  mangled_name_with_length(cir_local_static_source_name(variable), &mctl);
   add_discriminator_if_necessary(scp, &mctl);
   return end_mangling(/*final=*/TRUE, &mctl);
 }  /* cir_local_static_name */
@@ -16511,8 +16529,13 @@ recursion on the nesting of the entities.
       if (r->source_corresp.name_linkage ==
                                           (a_name_linkage_kind)nlk_internal ||
           (r->storage_class == (a_storage_class)sc_static &&
-           !cir_routine_in_nested_unnamed_class(r)) ||
+           !cir_routine_in_nested_unnamed_class(r) &&
+           !(r->source_corresp.is_local_to_function &&
+             r->source_corresp.is_class_member)) ||
           is_member_of_unnamed_namespace(&r->source_corresp)) {
+        /* (A member of a local class is static for the front end, which
+           means that it has no linkage: it is local to the translation unit
+           if the function that encloses it is, pushed below.) */
         result = TRUE;
       } else {
         if (r->source_corresp.is_class_member) {

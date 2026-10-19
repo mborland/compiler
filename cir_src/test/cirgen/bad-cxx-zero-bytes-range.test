@@ -1,11 +1,10 @@
-; ZERO_BYTES zeroes a range inside the object its glvalue designates, or a
-; whole number of elements from the first one (new T[n]()); 6 bytes through an
-; int is neither.
+; ZERO_BYTES zeroes a range inside the object its glvalue designates; 6 bytes
+; through an int is outside it (and no allocation result is involved).
 ; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
 ; RUN: %ecil-asm %t.txt -o %t.ecil
 ; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
 
-; CHECK: error [1001]: ZERO_BYTES of 6 bytes through a glvalue of a 4-byte type: neither inside it nor a whole number of elements
+; CHECK: error [1001]: ZERO_BYTES of 6 bytes through a glvalue of a 4-byte type: more than the object it designates
 
 frame DECLS
   STR 102 "f"

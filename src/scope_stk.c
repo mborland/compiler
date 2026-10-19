@@ -538,6 +538,34 @@ the given scope stack entry.
 }  /* free_local_name_collision_table */
 
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+
+a_const_char *cir_anonymous_union_member_name(a_type_ptr class_type)
+/*
+Return the name of the first named data member of an anonymous union, looking
+into a nested anonymous union when the first member has no name, or NULL if
+there is none.
+*/
+{
+  a_const_char  *name = NULL;
+  a_field_ptr   field;
+
+  class_type = skip_typerefs(class_type);
+  if (is_immediate_class_type(class_type)) {
+    for (field = class_type->variant.class_struct_union.field_list;
+         field != NULL && name == NULL; field = field->next) {
+      name = field->source_corresp.name;
+      if (name == NULL && field->is_anonymous_parent_object) {
+        name = cir_anonymous_union_member_name(field->type);
+      }  /* if */
+    }  /* for */
+  }  /* if */
+  return name;
+}  /* cir_anonymous_union_member_name */
+
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
+
 static a_const_char* name_for_linkage_purposes(a_symbol_ptr  sym)
 /*
 Return the "name for linkage purposes" of the given entity.  If the entity is
@@ -559,6 +587,20 @@ unnamed, return the symbol header identifier (usually something like
     }  /* if */
   } else {
     result = sym->header->identifier;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+    if (sym->kind == (a_symbol_kind)sk_variable &&
+        sym->variant.variable.ptr != NULL &&
+        sym->variant.variable.ptr->is_anonymous_parent_object) {
+      /* The variable of an anonymous union is named after its first member
+         (Itanium 5.1.2), so it takes part in the sequence of the entities
+         that have that name. */
+      a_const_char  *member_name =
+                          cir_anonymous_union_member_name(
+                                       sym->variant.variable.ptr->type);
+
+      if (member_name != NULL) result = member_name;
+    }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   }  /* if */
   check_assertion(result != NULL);
   return result;
@@ -786,6 +828,35 @@ unnamed type ends up being an "anonymous union".
     }  /* if */
   }  /* if */
 }  /* compute_name_collision_discriminator */
+
+
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+
+void cir_note_anonymous_union_variable(a_symbol_ptr sym)
+/*
+The variable of the anonymous union that sym stands for has just been
+declared, and its members promoted.  If it is a static local of a function
+(in C++), give it its discriminator in the sequence of the entities that have
+the name of its first member, as the named variables get theirs, and attach
+the symbol to the variable so that the mangler finds it: the discriminators
+of this variable and of a variable of that name must differ (Itanium names
+them after the member).
+*/
+{
+  a_variable_ptr  var = sym->variant.variable.ptr;
+
+  if (!C_mode() && var != NULL && var->is_anonymous_parent_object &&
+      var->source_corresp.is_local_to_function &&
+      var->storage_class == (a_storage_class)sc_static &&
+      var->source_corresp.assoc_info == NULL &&
+      innermost_function_scope != NULL &&
+      cir_anonymous_union_member_name(var->type) != NULL) {
+    compute_name_collision_discriminator(sym, decl_scope_level);
+    var->source_corresp.assoc_info = (char *)sym;
+  }  /* if */
+}  /* cir_note_anonymous_union_variable */
+
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 
 void cancel_name_collision_discriminator(a_symbol_ptr   sym,

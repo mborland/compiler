@@ -406,10 +406,11 @@ constructor or destructor the reason is kept for both variants.
 }  /* ecil_remember_drop_reason */
 
 
-static void emit_drop_reason(an_ecil_frame *frame, uint32_t gid)
+static void add_drop_reason(an_ecil_supp *supp, uint32_t gid)
 /*
-Follow the DECL_FUNC or DECL_VAR just written, which is unsupported, with the
-reason that was remembered for its G-id (never another G-id's), if any.
+Add to the supp blob of the DECL_FUNC or DECL_VAR that is being written, which
+is unsupported, the reason that was remembered for its G-id (never another
+G-id's), if any.
 */
 {
   size_t  i;
@@ -417,9 +418,9 @@ reason that was remembered for its G-id (never another G-id's), if any.
   for (i = 0; i < num_drop_reasons && drop_reasons[i].gid != gid; i++) {
   }  /* for */
   if (i < num_drop_reasons) {
-    ecil_rec_supp_reason(frame, drop_reasons[i].text);
+    ecil_supp_text(supp, esk_unsupported_reason, drop_reasons[i].text);
   }  /* if */
-}  /* emit_drop_reason */
+}  /* add_drop_reason */
 
 
 void ecil_emit_decl_var(an_ecil_frame *frame,
@@ -449,7 +450,13 @@ and remember its facts as the last ones emitted for the G-id.
   } else {
     ecil_arg_nil(frame);
   }  /* if */
-  if ((flags & ECIL_DECL_VAR_UNSUPPORTED) != 0) emit_drop_reason(frame, gid);
+  if ((flags & ECIL_DECL_VAR_UNSUPPORTED) != 0) {
+    an_ecil_supp  supp;
+
+    ecil_supp_begin(&supp);
+    add_drop_reason(&supp, gid);
+    ecil_rec_supp_end(frame, &supp);
+  }  /* if */
   ecil_rec_end(frame);
   ecil_frame_leave_decl(frame, saved);
   info = ecil_gid_info(gid);
@@ -2597,6 +2604,7 @@ typedef struct a_func_state {
   unsigned int  flags;
   uint32_t      name;
   a_boolean     late;             /* The name is not final: nil for now. */
+  a_boolean     noinline;         /* GNU noinline: supp key 14, sticky. */
 } a_func_state;
 
 /* TRUE while the late names are being resolved (the file scope is complete,
@@ -2779,9 +2787,9 @@ static void check_routine_attributes(a_routine_ptr rout)
 /*
 Note as unsupported the GNU routine attributes whose meaning the code
 generator cannot reproduce by ignoring them (constructor, destructor, alias,
-ifunc, weakref).  Attributes that only affect optimization (noinline, noipa,
-noclone, used, unused, cold, hot, always_inline, pure, const, ...) are
-ignorable and need no code here.
+ifunc, weakref).  Attributes that only affect optimization (noipa, noclone,
+used, unused, cold, hot, always_inline, pure, const, ...) are ignorable and
+need no code here; noinline is sent as a supp key of DECL_FUNC (ECIL 1.3).
 */
 {
 #if GNU_EXTENSIONS_ALLOWED
@@ -2860,6 +2868,7 @@ entities may be gone, and a C++ name does not change after it is sent).
      (spec 11.9). */
   a_routine_ptr lrout = rout;
   a_boolean     nested_unnamed = FALSE;
+  a_boolean     local_vague = FALSE;
 
   if (!C_mode() && rout->special_kind ==
                           (a_special_function_kind)sfk_lambda_entry_point &&
@@ -2879,6 +2888,15 @@ entities may be gone, and a C++ name does not change after it is sent).
     state->linkage = ecil_linkage_for((a_storage_class)sc_unspecified,
                                       (unsigned int)nlk_external,
                                       lrout->is_weak);
+  } else if (!C_mode() && routine_is_function_local(lrout) &&
+             ecil_routine_has_vague_linkage(lrout)) {
+    /* A routine that lives in a discardable function (a local class's
+       member, a lambda's call operator) has no linkage of its own in the
+       front end; it has that of the function (below). */
+    local_vague = TRUE;
+    state->linkage = ecil_linkage_for((a_storage_class)sc_unspecified,
+                                      (unsigned int)nlk_external,
+                                      lrout->is_weak);
   }  /* if */
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   state->flags = 0;
@@ -2893,14 +2911,14 @@ entities may be gone, and a C++ name does not change after it is sent).
   if (!C_mode() && defining && !unsupported &&
       state->linkage == (unsigned int)elk_external &&
       (lrout->storage_class == (a_storage_class)sc_unspecified ||
-       nested_unnamed)) {
+       nested_unnamed || local_vague)) {
     /* Vague linkage (spec 11.2): internal wins, and a declaration is
        external. */
-    if (routine_is_explicit_instantiation_definition(lrout)) {
+    if (!local_vague && routine_is_explicit_instantiation_definition(lrout)) {
       state->linkage = (unsigned int)elk_weak_odr;
       state->flags |= ECIL_DECL_FUNC_COMDAT;
-    } else if (nested_unnamed ? (lrout->is_inline != 0) :
-               routine_might_exist_in_multiple_copies(lrout)) {
+    } else if (local_vague || (nested_unnamed ? (lrout->is_inline != 0) :
+               routine_might_exist_in_multiple_copies(lrout))) {
       /* (A member of a class that is declared in a class is defined in its
          class, so it is inline.) */
       state->linkage = (unsigned int)elk_linkonce_odr;
@@ -2918,6 +2936,11 @@ entities may be gone, and a C++ name does not change after it is sent).
     state->flags |= ECIL_DECL_FUNC_INLINE_ONLY;
   }  /* if */
   if (unsupported) state->flags |= ECIL_DECL_FUNC_UNSUPPORTED;
+#if GNU_EXTENSIONS_ALLOWED || MICROSOFT_EXTENSIONS_ALLOWED
+  state->noinline = rout->never_inline;
+#else /* !(GNU_EXTENSIONS_ALLOWED || MICROSOFT_EXTENSIONS_ALLOWED) */
+  state->noinline = FALSE;
+#endif /* GNU_EXTENSIONS_ALLOWED || MICROSOFT_EXTENSIONS_ALLOWED */
   if (ecil_has_exceptions()) {
     /* NOTHROW only from the front end's own answer, and never taken back by
        a re-issue (a wrong NOTHROW skips cleanups: spec 12.6). */
@@ -2959,12 +2982,15 @@ one emitted (spec 8.2: a re-issue updates the entity).
   const a_func_state *state = &sticky;
 
   if (info->decl_emitted) {
-    /* A re-issue never takes NOTHROW back (spec 12.6). */
+    /* A re-issue never takes NOTHROW back (spec 12.6), nor noinline (the GNU
+       attributes of the declarations of a function add up, spec 6). */
     sticky.flags |= info->decl_flags & ECIL_DECL_FUNC_NOTHROW;
+    sticky.noinline = sticky.noinline || info->decl_noinline;
   }  /* if */
   if (!info->decl_emitted || info->decl_type != state->type ||
       info->decl_linkage != state->linkage ||
-      info->decl_flags != state->flags || info->decl_name != state->name) {
+      info->decl_flags != state->flags || info->decl_name != state->name ||
+      info->decl_noinline != state->noinline) {
     an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
 
     ecil_rec_begin(frame, eop_decl_func);
@@ -2977,9 +3003,16 @@ one emitted (spec 8.2: a re-issue updates the entity).
     } else {
       ecil_arg_nil(frame);
     }  /* if */
-    if ((state->flags & ECIL_DECL_FUNC_UNSUPPORTED) != 0) {
-      emit_drop_reason(frame, gid);
-    }  /* if */
+    {
+      an_ecil_supp  supp;
+
+      ecil_supp_begin(&supp);
+      if ((state->flags & ECIL_DECL_FUNC_UNSUPPORTED) != 0) {
+        add_drop_reason(&supp, gid);
+      }  /* if */
+      if (state->noinline) ecil_supp_true(&supp, esk_noinline);
+      ecil_rec_supp_end(frame, &supp);
+    }
     ecil_rec_end(frame);
     ecil_frame_leave_decl(frame, saved);
     if (info->decl_emitted && state->name != 0 &&
@@ -2998,6 +3031,7 @@ one emitted (spec 8.2: a re-issue updates the entity).
     info->decl_linkage = state->linkage;
     info->decl_flags = state->flags;
     info->decl_name = state->name;
+    info->decl_noinline = state->noinline;
     info->decl_emitted = TRUE;
   }  /* if */
 }  /* emit_func_decl_if_changed */
@@ -3049,6 +3083,7 @@ initializers calls it (spec 12.5).
       state.name = ecil_intern_cstring(frame,
                                        "__cxa_throw_bad_array_new_length");
       state.late = FALSE;
+      state.noinline = FALSE;
       ecil_mark_symbol_name(state.name);
       emit_func_decl_if_changed(frame, gid, &state);
       symbol_binding_register(state.name, gid);
@@ -5347,13 +5382,102 @@ a class template instance.
 }  /* ecil_variable_may_have_multiple_copies */
 
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+
+static a_routine_ptr local_routine_owner(a_routine_ptr rout,
+                                         a_type_ptr    *local_class)
+/*
+For a routine that lives in a function (a member of a class that is local to
+it, nested classes included: a local class's function, a lambda's call
+operator, a special member, a static invoker), return the innermost function
+that encloses it and set *local_class to the class that is declared directly
+in that function.  Return NULL for any other routine.
+*/
+{
+  a_routine_ptr  owner = NULL;
+  a_type_ptr     cls;
+
+  if (rout->source_corresp.is_class_member) {
+    cls = parent_class_of(rout);
+    while (!cls->source_corresp.is_local_to_function &&
+           cls->source_corresp.is_class_member) {
+      cls = parent_class_of(cls);
+    }  /* while */
+    if (cls->source_corresp.is_local_to_function) {
+      owner = enclosing_routine_for_local_type_or_null(cls);
+      *local_class = cls;
+    }  /* if */
+  }  /* if */
+  return owner;
+}  /* local_routine_owner */
+
+
+a_boolean ecil_routine_has_vague_linkage(a_routine_ptr rout)
+/*
+Return TRUE for a C++ routine that every translation unit that needs it
+defines, which the linker keeps one of (linkonce_odr or weak_odr with COMDAT,
+spec 11.2): an inline function, a template instance, a member defined in its
+class, a member of an unnamed class declared in a class, and what lives in
+such a function (the member functions of its local classes, a lambda's call
+operator, the static invoker), at any depth.  A routine that is local to the
+translation unit, or that lives in a function that is not discardable, does
+not have it.  The rule is the one of Itanium and clang: the entities local to
+a function share its linkage when the function is discardable, and are
+internal when it is not.
+*/
+{
+  a_boolean      result = FALSE;
+  a_boolean      local_to_tu = FALSE;
+  a_type_ptr     local_class = NULL;
+  a_routine_ptr  owner;
+
+  if (!C_mode()) {
+    /* The routine's own template arguments and parameter types count too (a
+       generic lambda's call operator of a type in an unnamed namespace). */
+    local_to_tu = cir_entity_is_tu_local(iek_routine, rout);
+    for (owner = local_routine_owner(rout, &local_class); owner != NULL;
+         owner = local_routine_owner(rout, &local_class)) {
+      /* The local class decides too: it may be made of local entities, and
+         a lambda that is not subject to translation unit correspondence has
+         no name that other translation units can repeat. */
+      local_to_tu = local_to_tu || cir_entity_is_tu_local(iek_type,
+                                                          local_class);
+      if (type_is_lambda_closure(local_class)) {
+        a_class_symbol_supplement_ptr  cssp =
+                                      symbol_supplement_for_class(local_class);
+
+        local_to_tu = local_to_tu || cssp == NULL ||
+                      !cssp->lambda_subject_to_trans_unit_corresp;
+      }  /* if */
+      rout = owner;
+    }  /* for */
+    if (!local_to_tu) {
+      a_boolean  nested_unnamed = cir_routine_in_nested_unnamed_class(rout);
+
+      result = (nested_unnamed ||
+                (ecil_linkage_for(rout->storage_class,
+                                  rout->source_corresp.name_linkage,
+                                  FALSE) != (unsigned int)elk_internal &&
+                 rout->storage_class == (a_storage_class)sc_unspecified)) &&
+               !cir_entity_is_tu_local(iek_routine, rout) &&
+               (nested_unnamed ? rout->is_inline != 0 :
+                                 routine_might_exist_in_multiple_copies(rout));
+    }  /* if */
+  }  /* if */
+  return result;
+}  /* ecil_routine_has_vague_linkage */
+
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
+
 a_boolean ecil_local_static_may_have_multiple_copies(a_variable_ptr var)
 /*
-Return TRUE for a static local variable of a function that may be defined in
-several translation units (an inline function, a template instance, a
-function defined in its class): the variable has vague linkage too
-(linkonce_odr, COMDAT; spec 11.2) and every copy must initialize it the same
-way.
+Return TRUE for a static local variable of a function that has vague linkage
+(an inline function, a template instance, a function defined in its class,
+or a function that lives in one: ecil_routine_has_vague_linkage): the
+variable has vague linkage too (linkonce_odr, COMDAT; spec 11.2), and so has
+its guard, and every copy must initialize it the same way.  The variable of
+an anonymous union is one (it has the name of the first member).
 */
 {
   a_boolean  result = FALSE;
@@ -5361,17 +5485,8 @@ way.
   a_routine_ptr  fn = var->source_corresp.enclosing_routine;
 
   if (!C_mode() && var->source_corresp.is_local_to_function && fn != NULL &&
-      var->source_corresp.name != NULL) {
-    a_boolean  nested_unnamed = cir_routine_in_nested_unnamed_class(fn);
-
-    result = (nested_unnamed ||
-              (ecil_linkage_for(fn->storage_class,
-                                fn->source_corresp.name_linkage,
-                                FALSE) != (unsigned int)elk_internal &&
-               fn->storage_class == (a_storage_class)sc_unspecified)) &&
-             !cir_entity_is_tu_local(iek_routine, fn) &&
-             (nested_unnamed ? fn->is_inline != 0 :
-                               routine_might_exist_in_multiple_copies(fn));
+      cir_local_static_source_name(var) != NULL) {
+    result = ecil_routine_has_vague_linkage(fn);
   }  /* if */
 #else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
   (void)var;
@@ -5410,7 +5525,7 @@ the statics of such a function) when it is defined here.
 
     *flags |= ECIL_DECL_VAR_STATIC_LOCAL;
     *linkage = (unsigned int)elk_internal;
-    if (fn == NULL || var->source_corresp.name == NULL) {
+    if (fn == NULL || cir_local_static_source_name(var) == NULL) {
       /* Compiler-generated (__func__ and the like): an internal symbol
          that no other translation unit can name. */
       (void)snprintf(unique, sizeof(unique), "%.400s.%.400s",

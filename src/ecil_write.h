@@ -241,11 +241,37 @@ extern void ecil_arg_int128(an_ecil_frame *frame,
 
 extern void ecil_rec_end(an_ecil_frame *frame);
 
+/*
+A supp blob under construction (spec 6): the key and value pairs of one
+record.  A record has at most one blob, so what a record can carry (the
+unsupported_reason and the noinline of a DECL_FUNC) goes into the same
+builder: begin, add the pairs in increasing key order (each key at most once;
+CHECKING builds assert it), then end it with the record just completed.
+*/
+typedef struct an_ecil_supp {
+  an_ecil_buffer  payload;
+  unsigned int    num_pairs;
+  unsigned int    last_key;
+} an_ecil_supp;
+
+extern void ecil_supp_begin(an_ecil_supp *supp);
+
+/* A flag-like key (value true). */
+extern void ecil_supp_true(an_ecil_supp *supp, an_ecil_supp_key key);
+
+extern void ecil_supp_uint(an_ecil_supp *supp,
+                           an_ecil_supp_key key,
+                           uint64_t         value);
+
+/* A text key (a bin): cut to at most 255 bytes at a UTF-8 boundary. */
+extern void ecil_supp_text(an_ecil_supp *supp,
+                           an_ecil_supp_key key,
+                           const char       *text);
+
 /* Follow the record just completed (all its operands written, before
-   ecil_rec_end) with a supp blob holding the unsupported_reason key (spec 6,
-   ECIL 1.1) and set HAS_SUPP on the frame.  The text is cut to at most 255
-   bytes at a UTF-8 boundary. */
-extern void ecil_rec_supp_reason(an_ecil_frame *frame, const char *text);
+   ecil_rec_end) with the blob, if it has a pair, and set HAS_SUPP on the
+   frame.  The builder is empty afterwards. */
+extern void ecil_rec_supp_end(an_ecil_frame *frame, an_ecil_supp *supp);
 
 extern void ecil_rec0(an_ecil_frame *frame, unsigned int opcode);
 
@@ -381,6 +407,7 @@ typedef struct an_ecil_gid_info {
   uint32_t      decl_name;
   unsigned int  decl_flags;
   unsigned int  decl_linkage;
+  a_boolean     decl_noinline;    /* DECL_FUNC: the noinline key was sent. */
   a_boolean     decl_emitted;
   /* A constructor or destructor has two G-ids (spec 11.4): the complete
      variant C1/D1 and the base variant C2/D2; each names the other. */
@@ -679,6 +706,12 @@ extern void ecil_cxx_variable_facts(an_ecil_frame *frame,
 extern a_boolean ecil_variable_may_have_multiple_copies(a_variable_ptr var);
 extern a_boolean ecil_local_static_may_have_multiple_copies(
                                                        a_variable_ptr var);
+
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+/* TRUE for a routine that has vague linkage (linkonce_odr or weak_odr in a
+   COMDAT, spec 11.2), the functions that live in one included. */
+extern a_boolean ecil_routine_has_vague_linkage(a_routine_ptr rout);
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 extern uint32_t ecil_variable_symbol_gid(an_ecil_frame *frame,
                                          a_variable_ptr var);

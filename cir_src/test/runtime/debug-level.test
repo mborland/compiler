@@ -1,0 +1,12 @@
+; edg_cir_rt defines `int __debug_level`, which EDG's runtime defines (0 by
+; default) and some front end tests set (rma/lifetime18).  It is in a member
+; of its own in the archive: a program that never mentions it does not link
+; it, and a program that defines its own does not clash with it.
+; RUN: g++ -std=c++17 -w %S/Inputs/debug_level_set.cpp -L%rtlibdir -ledg_cir_rt -o %t.set
+; RUN: %t.set
+; RUN: g++ -std=c++17 -w %S/Inputs/debug_level_own.cpp -L%rtlibdir -ledg_cir_rt -o %t.own
+; RUN: %t.own
+; RUN: g++ -std=c++17 -w %S/Inputs/debug_level_unused.cpp -L%rtlibdir -ledg_cir_rt -o %t.unused
+; RUN: %t.unused
+; RUN: sh -c 'nm %t.unused | grep -c __debug_level; test $? -eq 1'
+; RUN: sh -c 'nm %t.set | grep " [BD] __debug_level$"'

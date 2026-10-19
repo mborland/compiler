@@ -124,6 +124,8 @@ extern char *cir_structor_name(a_routine_ptr        routine,
 
 extern char *cir_local_static_name(a_variable_ptr variable);
 
+extern a_const_char *cir_local_static_source_name(a_variable_ptr variable);
+
 extern a_boolean cir_entity_is_tu_local(an_il_entry_kind kind, void *entity);
 
 /* A member function of an unnamed class declared inside another class: the

@@ -11,7 +11,9 @@ container from the repository root, with PYTHONPATH=dev_tools/pylibs:
 
 --keep also keeps the streams, as <out>/<name>.<case>.ecil.  --grep TEXT
 also writes <out>/matches.txt, the cases whose output contains TEXT with the
-number of occurrences, and the total (whitespace is normalized).  --count-ir runs the front end
+number of occurrences, and the total (whitespace is normalized).  --body-hash
+hashes the stream without its 16-byte preamble, so that two writers that
+differ only in the version they declare compare equal.  --count-ir runs the front end
 under cachegrind and adds the instruction count to each row (the sum over a
 corpus measures the writer; use the release build); --sample N takes every Nth
 test.  The options are those that
@@ -75,6 +77,9 @@ def find_tests(tests_dir: Path, positive: List[str],
   return found
 
 
+# --body-hash: the hash leaves out the preamble (magic, version, features).
+BODY_HASH = False
+
 # --reasons: how often each reason of an unsupported construct was noted.
 REASONS: 'collections.Counter[str]' = collections.Counter()
 REASONS_LOCK = threading.Lock()
@@ -123,7 +128,9 @@ def sweep_one(test: Path, tests_dir: Path, env: Dict[str, str],
         for line in cg.read_text().splitlines():
           if line.startswith('summary:'):
             ir = int(line.split()[1])
-      rows.append((name, rc, hashlib.sha256(data).hexdigest(), len(data),
+      rows.append((name, rc,
+                   hashlib.sha256(data[16:] if BODY_HASH else data).hexdigest(),
+                   len(data),
                    matched, ir))
       if keep and data:
         (out / f"{name}.ecil").write_bytes(data)
@@ -143,10 +150,13 @@ def main() -> None:
   parser.add_argument('--keep', action = 'store_true')
   parser.add_argument('--grep', default = '')
   parser.add_argument('--count-ir', action = 'store_true')
+  parser.add_argument('--body-hash', action = 'store_true')
   parser.add_argument('--sample', type = int, default = 1)
   parser.add_argument('-j', dest = 'jobs', type = int,
                       default = os.cpu_count() or 1)
   args = parser.parse_args()
+  global BODY_HASH
+  BODY_HASH = args.body_hash
 
   root = Path(args.root).resolve()
   tests_dir = root / 'tests' / 'tests'

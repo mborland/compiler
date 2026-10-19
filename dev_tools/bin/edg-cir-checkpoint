@@ -15,7 +15,7 @@ key is available:
   edg-cir-checkpoint                # sync, clean build, the default steps
   edg-cir-checkpoint --quick        # build, smoke, cpp-smoke only
   edg-cir-checkpoint --steps build,ctest --detach
-  edg-cir-checkpoint --tree m31-int --prune 3 --quick
+  edg-cir-checkpoint --tree m41-int --prune 3 --quick
 
 It does, in this order:
 
@@ -23,10 +23,11 @@ It does, in this order:
      --prune N, deletes all but the newest N of the tests/runs/* and
      .tmp/checkpoint-* directories of the tree (--prune-only does just that;
      --prune-evidence adds .tmp/gate-{evidence,asm,cpp-asm,identity,perf}/*).
-     Never pruned: the tree m3-final, a tree with a file KEEP, an entry with a
-     file KEEP, an entry younger than 6 hours or one that a process uses.
+     Never pruned: the trees m3-final and m4-final, a tree with a file KEEP,
+     an entry with a file KEEP, an entry younger than 6 hours or one that a
+     process uses.
   1. rsync --checksum --no-times of the working tree to ~/edg-cir-config/<tree>
-     on the box (default tree m31-int; build/, tests/runs/, .tmp/ and .git/
+     on the box (default tree m41-int; build/, tests/runs/, .tmp/ and .git/
      are not touched).  --no-times gives changed files the time of the
      transfer: with `rsync -a` a changed source can keep a time older than
      the objects of an earlier build, and ninja then rebuilds nothing.
@@ -42,8 +43,8 @@ The default steps are:
   cpp-writer-stress crash-sweep ctest
 
 that is the C smoke and corpus (statuses against the recorded expectations),
-the C assembly against the M3.1 baseline (--asm-baseline, default
-~/edg-cir-config/m31-base-asm: every difference is listed with its class and
+the C assembly against the M4 baseline (--asm-baseline, default
+~/edg-cir-config/m4-base-asm: every difference is listed with its class and
 cause; the frame description directives (.cfi_*) are ignored from S1 on,
 when every function gets unwind tables: --no-asm-normalize-cfi shows them;
 personality, lsda and escape directives stay visible), the ASan
@@ -55,7 +56,7 @@ have are gated, against the allowlist tests/.edgy/filters/
 cir-excused-crashes.txt), and the four cir_src presets from clean build
 directories.  About 25 minutes.  Day, stress, rss, perf, modes, cpp-corpus,
 cpp-modes and cpp-asm-diff (the C++ assembly against --cpp-asm-baseline,
-default ~/edg-cir-config/m31-base-cpp-asm, made with the corpus filter
+default ~/edg-cir-config/m4-base-cpp-asm, made with the corpus filter
 that includes eh/ and rtti/) are left for the gates; name them
 with --steps (they exist in the gate tool).
 
@@ -85,7 +86,7 @@ from typing import List
 
 BOX = 'mborland@192.168.1.167'
 SOCKET = Path.home() / '.ssh' / 'cm-edgbox'
-DEFAULT_TREE = 'm31-int'
+DEFAULT_TREE = 'm41-int'
 LOW_DISK_GB = 40
 DEFAULT_STEPS = ('build,identity,smoke,corpus,asm-diff,writer-stress,'
                  'cpp-smoke,cpp-writer-stress,crash-sweep,ctest')
@@ -155,7 +156,7 @@ EVIDENCE_DIRS = ('.tmp/gate-evidence', '.tmp/gate-asm', '.tmp/gate-cpp-asm',
                  '.tmp/gate-identity', '.tmp/gate-perf')
 # Trees that are never pruned (the gate evidence is kept in them); any tree
 # or entry that holds a file named KEEP is not pruned either.
-PROTECTED_TREES = ('m3-final',)
+PROTECTED_TREES = ('m3-final', 'm4-final')
 RECENT_MINUTES = 360
 
 
@@ -238,9 +239,9 @@ def main() -> None:
   parser.add_argument('--no-sync', action = 'store_true',
                       help = 'do not rsync (the tree is up to date)')
   parser.add_argument('--asm-baseline', default = '~/edg-cir-config/'
-                      'm31-base-asm')
+                      'm4-base-asm')
   parser.add_argument('--cpp-asm-baseline', default = '~/edg-cir-config/'
-                      'm31-base-cpp-asm')
+                      'm4-base-cpp-asm')
   parser.add_argument('--asm-normalize-cfi', action = 'store_true',
                       default = True,
                       help = 'asm-diff steps ignore .cfi_* directives '
@@ -251,7 +252,7 @@ def main() -> None:
   parser.add_argument('--identity-baseline',
                       default = '~/edg-cir-config/identity-m0c')
   parser.add_argument('--perf-baseline',
-                      default = '~/edg-cir-config/m31-base-perf.json')
+                      default = '~/edg-cir-config/m4-base-perf.json')
   parser.add_argument('--smoke-all-pass', action = 'store_true',
                       help = 'cpp-smoke fails unless every test passes')
   parser.add_argument('--jobs', type = int, default = 12)

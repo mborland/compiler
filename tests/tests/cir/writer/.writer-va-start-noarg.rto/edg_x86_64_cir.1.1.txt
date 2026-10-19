@@ -7,7 +7,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c23 --gnu_version=999999 Test_name.c
   void f(...) { __builtin_c23_va_start(); }
                                           ^
 
-ecil 1.2 features=0x00000002
+ecil 1.3 features=0x00000002
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""

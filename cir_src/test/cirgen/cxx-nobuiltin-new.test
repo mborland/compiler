@@ -1,0 +1,69 @@
+; The replaceable global operator new is `nobuiltin`: LLVM recognizes
+; _Znwm by name, and the program's own definition of it (this one sets a flag
+; and returns a static buffer) must not be treated as a removable allocation.
+; Without the attribute -O2 deletes the call whose result is unused and the
+; program exits with 1; the other functions here (an operator delete, a
+; function that merely has a similar name) show the exact set.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=llvm %t.ecil | %FileCheck %s
+; RUN: %edg-cir -O2 --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+
+; CHECK: define {{.*}} @_Znwm({{.*}}) #[[NB:[0-9]+]]
+; CHECK: define {{.*}} @_ZdlPv({{.*}}) #[[NB]]
+; CHECK: define {{.*}} @_Znwy({{.*}}) #[[OTHER:[0-9]+]]
+; CHECK: attributes #[[NB]] = {{{.*}}nobuiltin
+; CHECK-NOT: attributes #[[OTHER]] = {{{.*}}nobuiltin
+
+frame DECLS
+  STR 100 "_Znwm"
+  STR 101 "called"
+  STR 102 "buf"
+  STR 103 "main"
+  STR 104 "_ZdlPv"
+  STR 105 "_Znwy"
+  TY_ARRAY 41 4 16 0
+  TY_FUNC 70 12 0 [2]
+  TY_FUNC 71 11 0 [12]
+  TY_FUNC 80 1 0 []
+  DECL_VAR 300 41 0 1 16 102
+  DECL_VAR 301 1 0 1 4 101
+  DECL_FUNC 100 70 0 1 100
+  DECL_FUNC 120 80 0 9 103
+  DECL_FUNC 121 71 0 1 104
+  DECL_FUNC 122 70 0 1 105
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 2 2 nil 0
+  GREF 301
+  CONST_INT 1 1
+  STORE 0 0
+  GREF 300
+  ADDR
+  CAST 11 12
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 121 0
+  PARAM 1 12 12 nil 0
+  FUNC_END 1
+  FUNC_BEGIN 122 0
+  PARAM 1 2 2 nil 0
+  GREF 300
+  ADDR
+  CAST 11 12
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 120 0
+  CONST_INT 2 8
+  CALL 100 70 1 0
+  DROP
+  CONST_INT 1 1
+  GREF 301
+  LOAD 0
+  SUB 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

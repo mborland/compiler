@@ -1,0 +1,55 @@
+; ZERO_BYTES through a glvalue made by DEREF (the first element of an
+; allocation) covers a whole number of elements: `new int[3]()` zeroes 12
+; bytes from the first element.  Both shapes of the writer are covered: the
+; pointer straight from the allocation call, and (with a free-on-throw
+; cleanup) the pointer reloaded from a local first.
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+
+; CHECK-LABEL: cir.func dso_local @f()
+; CHECK: cir.call @alloc
+; CHECK: [[BYTES:%[0-9]+]] = cir.const #cir.int<12> : !u64i
+; CHECK-NEXT: cir.libc.memset [[BYTES]] bytes at
+; CHECK-LABEL: cir.func dso_local @g()
+; CHECK: cir.call @alloc
+; CHECK: [[BYTES2:%[0-9]+]] = cir.const #cir.int<12> : !u64i
+; CHECK-NEXT: cir.libc.memset [[BYTES2]] bytes at
+
+frame DECLS
+  STR 102 "f"
+  STR 103 "alloc"
+  STR 104 "g"
+  TY_FUNC 204 11 0 []
+  TY_FUNC 205 12 0 [2]
+  DECL_FUNC 300 204 0 1 102
+  DECL_FUNC 301 205 0 1 103
+  DECL_FUNC 302 204 0 1 104
+frame REGION
+  FUNC_BEGIN 300 0
+  CONST_INT 2 12
+  CALL 301 205 1 0
+  CAST 11 14
+  DUP
+  DEREF
+  ZERO_BYTES 12
+  DROP
+  FUNC_END 1
+  FUNC_BEGIN 302 0
+  LOCAL 1 14 nil 0 0
+  LREF 1
+  CONST_INT 2 12
+  CALL 301 205 1 0
+  CAST 11 14
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  CAST 11 14
+  DUP
+  DEREF
+  ZERO_BYTES 12
+  DROP
+  FUNC_END 1
+frame END
+  END auto 0

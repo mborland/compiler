@@ -23,7 +23,7 @@ ECIL_VERSION_MAJOR or ECIL_VERSION_MINOR (section 9 of the spec).
 #include <stdint.h>
 
 #define ECIL_VERSION_MAJOR 1
-#define ECIL_VERSION_MINOR 2
+#define ECIL_VERSION_MINOR 3
 
 /*
 The stream preamble: 8 magic bytes, then u16 major, u16 minor and
@@ -715,8 +715,10 @@ typedef enum an_ecil_supp_key {
   esk_visibility    = 10,
   esk_used          = 11,
   esk_explicit_align = 12,
-  esk_unsupported_reason = 13  /* 1.1: bin, UTF-8, at most 255 bytes; on a
+  esk_unsupported_reason = 13, /* 1.1: bin, UTF-8, at most 255 bytes; on a
                                   DECL_FUNC or DECL_VAR with UNSUPPORTED. */
+  esk_noinline      = 14  /* 1.3: true; on a DECL_FUNC.  The function must
+                             not be inlined (GNU noinline).  Sticky. */
 } an_ecil_supp_key;
 
 #endif /* ECIL_FORMAT_H */

@@ -474,6 +474,9 @@ def exec_docker_cmd(image_name: str, workspace_dir: Path,
   _expose_env_value(docker_args, 'EDG_TEST_RUNS_KEPT')
   _expose_env_value(docker_args, 'EDG_BENCH_RUNS_KEPT')
   _expose_env_value(docker_args, 'EDG_DOCKER_HOST_PATHS')
+  # Extra front end options for a whole run (the CIR gate's opt-corpus step
+  # sets --cir_opt_level=2); nothing is passed when it is not set.
+  _expose_env_value(docker_args, 'EDG_CPFE_DEFAULT_OPTIONS')
   _expose_env_value(docker_args, 'EDG_ACKNOWLEDG_UI_HOST')
   _expose_env_value(docker_args, 'EDG_ACKNOWLEDG_API_HOST')
   _expose_env_value(docker_args, 'EDG_ACKNOWLEDG_UI_PORT')

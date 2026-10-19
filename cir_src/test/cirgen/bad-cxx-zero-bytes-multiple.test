@@ -1,0 +1,22 @@
+; ZERO_BYTES of a whole multiple of the glvalue's size is accepted only for
+; the first element of a new[] allocation.  Through a local it would write
+; past the object (this used to be accepted for every glvalue).
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+
+; CHECK: error [1001]: ZERO_BYTES of 8 bytes through a glvalue of a 4-byte type: more than the object it designates
+
+frame DECLS
+  STR 102 "f"
+  TY_FUNC 204 11 0 []
+  DECL_FUNC 300 204 0 1 102
+frame REGION
+  FUNC_BEGIN 300 0
+  LOCAL 1 1 nil 4 0
+  LREF 1
+  ZERO_BYTES 8
+  FUNC_END 1
+frame END
+  END auto 0

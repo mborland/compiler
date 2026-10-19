@@ -1,0 +1,7 @@
+eccp -DTEST_NUMBER=2 --export -UM -DM Test_name.c t2.c
+Test_name.c:
+t2.c:
+Command-line error: option "export" can be used only when compiling C++
+
+1 catastrophic error detected in this compilation.
+Compilation terminated.

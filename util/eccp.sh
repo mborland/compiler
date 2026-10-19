@@ -1326,6 +1326,32 @@ END_OF_INPUT
 }  # check_abbreviation
 
 
+cir_map_opt_level()
+{
+# With the CIR back end's EDG_CIR_MAP_OPT_LEVEL set (by the edg_eccp_config of
+# its base), pass the optimization level of a -O option to the front end as
+# --cir_opt_level, as the C compiler step also gets the option.  $1 is the
+# text after "-O" (empty for a bare -O or --optimize): a digit string (above 3
+# it is 3, as for gcc), g (1), s or z (2, an approximation: without
+# __OPTIMIZE_SIZE__, so glibc's extern-inline bodies are used as at -O2) or
+# fast (3, without the fast-math flags).  Later options win in the front end, so the option that
+# the test itself gives overrides one in EDG_CPFE_DEFAULT_OPTIONS.
+  if [ "$EDG_CIR_MAP_OPT_LEVEL" = 1 ] ; then
+    case "$1" in
+      "" | g) cir_level=1 ;;
+      s | z) cir_level=2 ;;
+      fast) cir_level=3 ;;
+      *[!0-9]*) cir_level= ;;
+      *) cir_level=`expr "$1" + 0`
+         if [ $cir_level -gt 3 ] ; then cir_level=3 ; fi ;;
+    esac
+    if [ -n "$cir_level" ] ; then
+      feoptions=$feoptions" --cir_opt_level=$cir_level"
+    fi
+  fi
+}  # cir_map_opt_level
+
+
 process_option()
 {
   add_to_instantiation_command=1
@@ -1351,15 +1377,18 @@ process_option()
     -O | --optimize)
 #     Generate optimized code
       c_to_obj_options=$c_to_obj_options" -O";
+      cir_map_opt_level ""
       ;;
     -O*)
 #     Generate optimized code (e.g., -O2)
       c_to_obj_options=$c_to_obj_options" $arg";
+      cir_map_opt_level "${arg#-O}"
       ;;
     --optimize=*)
 #     Generate optimized code (e.g., --optimize=2)
       arg_value=`expr $arg : '.*=\(.*\)'`    # Get the string after the =
       c_to_obj_options=$c_to_obj_options" -O$arg_value";
+      cir_map_opt_level "$arg_value"
       ;;
     -S | --cpfe_only)
 #     Run front end only.
@@ -2776,6 +2805,19 @@ if [ -z "$cfiles" -a $source_file_name_optional -eq 1 ] ; then
   check_front_end_exit_code
 fi
 #
+# With the CIR back end's EDG_CIR_C_SIDE_FILES set (by the edg_eccp_config of
+# its base), a .c file other than the test driver's main file Test_name.c is
+# compiled as C when the options select no language mode: the front end of
+# that base compiles every file as C++ unless told otherwise (a C test has
+# --gcc or another mode option), and the C side file of a C++ test needs its
+# names unmangled.  Limits: the options that name a language or dialect
+# (--c, --c++NN, --g++, --gcc, --clang*, --microsoft*, --strict*, -A, -a) and
+# --multi_trans_unit (one front end run for all the files) suppress it, the
+# C++-only options that a C compile rejects are removed only for the
+# instantiation mode (-t<mode>, --instantiate, -T and
+# --[no_]auto_instantiation), and the main file is recognized by the name Test_name.c that the test driver
+# gives it.
+#
 # Run through the list of .c files and compile.
 #
 for cfile in $cfiles
@@ -2783,6 +2825,24 @@ do
   instantiation_command_suffix=
   basefile=$(basename_of_file "$cfile")
   suffix=`expr "$cfile" : '.*\.\(.*\)'` # Get the file suffix
+  cir_c_option=
+  if [ "$EDG_CIR_C_SIDE_FILES" = 1 -a "$suffix" = "c" -a \
+       `basename "$cfile"` != "Test_name.c" ] ; then
+    case " $EDG_CPFE_DEFAULT_OPTIONS $feoptions " in
+      *" --c "* | *" --c+"* | *" --c"[0-9]* | *" --g++"* | *" --gcc"* | \
+      *" --clang"* | *" --microsoft"* | *" --strict"* | *" -A "* | \
+      *" -a "* | *" --multi_trans_unit"*) ;;
+      *) cir_c_option="--c" ;;
+    esac
+  fi
+  fe_file_options=$feoptions
+  if [ -n "$cir_c_option" ] ; then
+    # The options that only C++ accepts are dropped for the C file.
+    fe_file_options=`printf '%s' " $feoptions " | sed \
+      -e 's/ -t[a-z]* / /g' -e 's/ -t[a-z]* / /g' \
+      -e 's/ --instantiate=[^ ]* / /g' -e 's/ --no_auto_instantiation / /g' \
+      -e 's/ --auto_instantiation / /g' -e 's/ -T / /g'`
+  fi
   if [ $more_than_one_c_file -ne 0 ]
   then
     echo "$cfile:" 1>&2
@@ -2875,7 +2935,7 @@ do
       fi
     fi
   fi
-  command="$CPFE $EDG_CPFE_DEFAULT_OPTIONS $feoptions $gen_c_option $ii_file_option $ti_file_option $instantiation_dir_option"
+  command="$CPFE $EDG_CPFE_DEFAULT_OPTIONS $fe_file_options${cir_c_option:+ $cir_c_option} $gen_c_option $ii_file_option $ti_file_option $instantiation_dir_option"
   if [ $compile_as_secondary -ne 0 ] ; then
     # Append the dummy primary file name.
     command=$command" "$dummy_primary_file_name

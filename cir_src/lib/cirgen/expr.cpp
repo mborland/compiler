@@ -34,15 +34,33 @@ Records and arrays are aggregates (loaded and stored as whole values).
 
 /* The value stack. */
 
-bool a_emitter::pop_value(a_value &out)
+size_t a_emitter::values_in_frame() const
 /*
-Pop the top entry.
+The number of values on the stack that the innermost construct pushed: the
+height above its value base.  A pop, DUP or DROP may take only these; a
+stray one would otherwise eat a value of an enclosing construct and show up
+only at the end of a frame, far from its cause.
 */
 {
-  bool ok = !values_.empty();
+  size_t base = frames_.empty() ? 0 : frames_.back().value_base;
+
+  return values_.size() > base ? values_.size() - base : 0;
+}  /* a_emitter::values_in_frame */
+
+bool a_emitter::pop_value(a_value &out)
+/*
+Pop the top entry, which must belong to the innermost construct (above its
+value base).
+*/
+{
+  bool ok = values_in_frame() != 0;
 
   if (!ok) {
-    format_error("the value stack is empty");
+    format_error(values_.empty()
+                     ? "the value stack is empty"
+                     : "a pop below the value base of the innermost "
+                       "construct (the value stack holds only values of "
+                       "an enclosing one)");
   } else {
     out = values_.back();
     values_.pop_back();
@@ -677,11 +695,11 @@ and an indirect call with all arguments as variadic extras.
                         "or result");
   }
   if (ok && nargs + (indirect ? 1u : 0u) + (with_vtt ? 1u : 0u) >
-                values_.size())
+                values_in_frame())
     /* Bound the allocation by what the value stack can supply. */
     ok = format_error("CALL needs " + std::to_string(nargs) +
                       " argument values but the value stack holds " +
-                      std::to_string(values_.size()));
+                      std::to_string(values_in_frame()));
   if (ok && with_vtt && nargs == 0)
     ok = format_error("CALL VTT without an object argument");
   if (ok) {
@@ -1259,14 +1277,24 @@ ZERO_BYTES: zero the first bytes bytes of the object a glvalue designates
     uint64_t size = type_size(mlir::cast<cir::PointerType>(
                                   target.value.getType()).getPointee());
 
-    /* The range lies inside the glvalue's object, or covers a whole number
-       of elements from the first one (`new T[n]()`, the glvalue designates
-       the first element). */
-    if (size != 0 && bytes > size && bytes % size != 0)
+    /* The range lies inside the glvalue's object.  A glvalue made by DEREF
+       may designate an array element (`new T[n]()` zeroes n elements from
+       the first one, through a pointer that may have been reloaded from a
+       local or carried through casts), so it may be zeroed beyond itself by
+       a whole number of elements; a glvalue rooted in a named object is
+       bounded by its type. */
+    if (size != 0 && bytes > size && !target.from_deref)
       ok = format_error("ZERO_BYTES of " + std::to_string(bytes) +
                         " bytes through a glvalue of a " +
-                        std::to_string(size) + "-byte type: neither inside "
-                        "it nor a whole number of elements");
+                        std::to_string(size) + "-byte type: more than the "
+                        "object it designates (only a glvalue made by "
+                        "DEREF, such as the first element of a new[] "
+                        "allocation, may be zeroed beyond itself)");
+    else if (size != 0 && bytes > size && bytes % size != 0)
+      ok = format_error("ZERO_BYTES of " + std::to_string(bytes) +
+                        " bytes through a DEREF glvalue of a " +
+                        std::to_string(size) + "-byte type: not a whole "
+                        "number of elements");
     else
       compat::memset_zero(builder_, loc(), target.value,
                           builder_.getUIntNTy(64), bytes, target.align);
@@ -2060,6 +2088,7 @@ Handle one expression record.
                                   type.getPointee()) ||
                                       !type_is_complete(type.getPointee())
                                   ? 1 : type_align(type.getPointee())));
+    values_.back().from_deref = true;
     break;
   }
   case eop_addr: {
@@ -2103,8 +2132,11 @@ Handle one expression record.
     break;
   }
   case eop_dup:
-    if (values_.empty()) {
-      ok = format_error("DUP on an empty stack");
+    if (values_in_frame() == 0) {
+      ok = format_error(values_.empty()
+                            ? "DUP on an empty stack"
+                            : "DUP below the value base of the innermost "
+                              "construct");
       break;
     }
     if (values_.back().kind == a_value_kind::prvalue &&
@@ -2115,8 +2147,11 @@ Handle one expression record.
     values_.push_back(values_.back());
     break;
   case eop_drop:
-    if (values_.empty()) {
-      ok = format_error("DROP on an empty stack");
+    if (values_in_frame() == 0) {
+      ok = format_error(values_.empty()
+                            ? "DROP on an empty stack"
+                            : "DROP below the value base of the innermost "
+                              "construct");
       break;
     }
     if (values_.back().kind == a_value_kind::prvalue) {
@@ -2380,11 +2415,11 @@ Handle one expression record.
     llvm::SmallVector<mlir::Value> args;
     uint_operand(r.ops[0], id);
     uint_operand(r.ops[1], nargs);
-    if (nargs > values_.size())
+    if (nargs > values_in_frame())
       /* Bound the allocation by what the value stack can supply. */
       ok = format_error("BUILTIN needs " + std::to_string(nargs) +
                         " argument values but the value stack holds " +
-                        std::to_string(values_.size()));
+                        std::to_string(values_in_frame()));
     if (ok)
       args.resize(static_cast<size_t>(nargs));
     for (size_t k = static_cast<size_t>(nargs); ok && k > 0; --k)

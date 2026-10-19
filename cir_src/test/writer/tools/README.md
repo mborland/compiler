@@ -60,3 +60,13 @@ builds (`cmake --build build/gcc-cir --target cpfe-cir`) and calls
   new G-id (the debug writer does so for the first 160 anyway), so a stale
   `an_ecil_gid_info` pointer is a use-after-free under ASan
   (tests `writer-gid-growth*`).
+- `cg_writer.py [--top N] [--delete] CG_FILE...` — the writer's share of a
+  callgrind profile of the release front end (`cpfe-cir`, RelWithDebInfo):
+  total Ir, Ir on the writer's own lines, the writer's inclusive Ir (calls
+  entering the writer from outside, libc and front-end callees included), the
+  writer functions by self and inclusive Ir, the front-end and libc functions
+  the writer calls (with the writer caller), and call counts of selected
+  functions.  `valgrind --tool=callgrind --callgrind-out-file=F cpfe-cir
+  --ecil_output=/dev/null X.c` makes the input; with `stream_sweep.py --fe` a
+  wrapper script that execs valgrind does it over a corpus.  See
+  `../../../doc/research/m5_writer.md`.

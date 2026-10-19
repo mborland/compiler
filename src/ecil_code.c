@@ -578,6 +578,19 @@ cast, a statement).
       node = node->variant.operation.operands->next;
       unused = TRUE;
       walking = TRUE;
+    } else if (node->kind == (an_expr_node_kind)enk_operation &&
+               node->variant.operation.kind == eok_class_rvalue_adjust &&
+               node->variant.operation.operands != NULL &&
+               (is_glvalue_node(node) ||
+                !is_glvalue_node(skip_parens(
+                                     node->variant.operation.operands)))) {
+      /* The adjustment changes only the cv-qualification of a class
+         prvalue.  Translation passes through it without the unused flag,
+         and so does this.  The adjustment of a glvalue to a prvalue is a
+         load, which pushes. */
+      node = node->variant.operation.operands;
+      unused = FALSE;
+      walking = TRUE;
     }  /* if */
   }  /* while */
   if (is_void_node_type(node)) {
@@ -10576,34 +10589,24 @@ other function.  The state of the walk is reset at its end.
 }  /* emit_function_walk */
 
 
-static void emit_function(an_ecil_frame *frame, a_scope_ptr scope)
+static void emit_function_rest(an_ecil_frame *frame,
+                               a_scope_ptr   scope,
+                               uint32_t      gid)
 /*
-Translate one function scope: re-issue its DECL_FUNC if the definition's
-facts differ, then FUNC_BEGIN, PARAMs, the body and FUNC_END.  If the body
-uses a construct v0 cannot express, discard the body records (spec 8.11:
-the declaration section is kept), re-issue the declaration as unsupported
-and warn.
+The rest of emit_function, for a routine whose G-id (0 if it has none) is
+introduced: re-issue its DECL_FUNC if the definition's facts differ, then
+FUNC_BEGIN, PARAMs, the body and FUNC_END.  If the body uses a construct v0
+cannot express, discard the body records (spec 8.11: the declaration section
+is kept), re-issue the declaration as unsupported and warn.
 */
 {
   a_routine_ptr rout = scope->variant.routine.ptr;
-  uint32_t      gid;
   an_ecil_mark  mark;
   size_t        use_mark;
   a_boolean     dropped = FALSE;
   a_boolean     vbases = FALSE;
   uint32_t      walk_gid;
 
-  /* A reason noted while introducing the declaration (an unsupported
-     parameter type) is reported with the dropped body below. */
-  ecil_unsupported_reason = NULL;
-  /* Records declared incomplete in an earlier frame and completed since get
-     their bodies before anything here can need them complete. */
-  ecil_complete_pending_records(frame);
-#if BACK_END_TYPE == BACK_END_TYPE_CIR
-  ecil_jump_check_enabled = !C_mode() && cfront_2_1_mode;
-#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
-  ecil_symbol_clash = FALSE;
-  gid = ecil_function_id(frame, rout);
   if (gid != 0 && ecil_unsupported_reason == NULL) {
     ecil_gid_info(gid)->entity = rout;
     if (ecil_gid_info(gid)->partner != 0) {
@@ -10709,6 +10712,59 @@ and warn.
   num_pending_cleanups = 0;
   ecil_end_lid_epoch(next_lid);
   ecil_set_function_state(rout, dropped ? efs_dropped : efs_streamed);
+}  /* emit_function_rest */
+
+static void emit_function(an_ecil_frame *frame, a_scope_ptr scope)
+/*
+Translate one function scope (emit_function_rest), unless another routine with
+the same symbol has its body in the stream already: overloads that share an
+asm label (glibc's gnu_inline memchr and its const overload) have one G-id,
+which has one body (spec 8.2).  If the routine is inline-only, as those are,
+it is left with the first one's body (the static locals and lambdas of the
+skipped body are never introduced, which is harmless: the consumer keeps no
+inline-only body).  Otherwise it is a real definition of a symbol that has a
+body: a second definition with the same asm label, or a definition after an
+inline-only body.  That is an error (gcc fails in the assembler).  The
+routine is not dropped through emit_function_rest, whose drop would re-issue
+the shared G-id as unsupported and take the first body away.
+*/
+{
+  a_routine_ptr rout = scope->variant.routine.ptr;
+  uint32_t      gid;
+
+  /* A reason noted while introducing the declaration (an unsupported
+     parameter type) is reported with the dropped body (emit_function_rest). */
+  ecil_unsupported_reason = NULL;
+  /* Records declared incomplete in an earlier frame and completed since get
+     their bodies before anything here can need them complete. */
+  ecil_complete_pending_records(frame);
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  ecil_jump_check_enabled = !C_mode() && cfront_2_1_mode;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+  ecil_symbol_clash = FALSE;
+  gid = ecil_function_id(frame, rout);
+  if (gid != 0 && ecil_unsupported_reason == NULL &&
+      (ecil_gid_info(gid)->flags & ECIL_GF_DEFINED) != 0 &&
+      ecil_gid_info(gid)->entity != NULL &&
+      ecil_gid_info(gid)->entity != (void *)rout) {
+    ecil_jump_check_enabled = FALSE;
+    if (rout->definition_for_inlining_only || rout->suppress_inline_body) {
+      ecil_set_function_state(rout, efs_streamed);
+    } else {
+      char  message[ECIL_DIAGNOSTIC_MAX];
+
+      (void)snprintf(message, sizeof(message),
+                     "the definition of \"%.200s\" is a definition of a "
+                     "symbol that already has a body in this translation "
+                     "unit (an asm label or gnu_inline)",
+                     rout->source_corresp.name != NULL ?
+                               rout->source_corresp.name : "?");
+      cir_be_error(message);
+      ecil_set_function_state(rout, efs_dropped);
+    }  /* if */
+  } else {
+    emit_function_rest(frame, scope, gid);
+  }  /* if */
 }  /* emit_function */
 
 

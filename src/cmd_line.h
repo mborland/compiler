@@ -119,6 +119,7 @@ enum an_option_kind {
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
   optk_ecil_output,
   optk_ecil_keep_regions,
+  optk_cir_opt_level,
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   optk_create_pch,
   optk_use_pch,
@@ -1392,6 +1393,13 @@ EXTERN_THREAD a_boolean
 			/* TRUE if IL memory regions should not be freed after
 			   they are streamed (--ecil_keep_regions; also set by
 			   --il_display, which needs the IL after streaming). */
+EXTERN_THREAD int
+		cir_opt_level;
+			/* The optimization level (0 to 3) that the CIR library
+			   is asked to compile at (--cir_opt_level=N).  The
+			   default is 0.  The front end also predefines
+			   __OPTIMIZE__ (level 1 and up) or __NO_INLINE__
+			   (level 0) as gcc does. */
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 EXTERN_THREAD a_boolean

@@ -1,5 +1,28 @@
 Version 7.1
 
+10/19/26
+CIR back end: optimization level and follow-ups to the M4 gate
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the new
+option --cir_opt_level=N (N is 0 to 3, the default is 0) sets the optimization
+level at which the CIR library compiles.  In GNU and clang modes the front end
+then predefines __OPTIMIZE__ when N is at least 1 and __NO_INLINE__ when it is
+0, as gcc does; the predefined macro file's __NO_INLINE__ is ignored at a
+level of 1 or more.  The in-process CIR session is opened at that level (it was
+always 0 before).  A conditional expression whose arm is a class temporary that
+is built in place under a cv-adjustment, such as the initializer of
+"const A &r = c ? *p : f();", no longer leaves a stray value drop in the
+stream, which the library rejected.  The static locals of a function that
+has vague linkage (an inline function, a template instance, a member defined
+in its class) and the functions that live in one (the members of its local
+classes, the call operators of its lambdas, to any depth) are linkonce_odr in
+a COMDAT, as Itanium, g++ and clang have them, where they were internal; that
+includes the variable of a static anonymous union, which is named after its
+first member (_ZZ1fvE1i).  The GNU noinline attribute, in both spellings
+(__attribute__((noinline)) and [[gnu::noinline]]), is sent to the library, with
+ECIL version 1.3, so that the function is not inlined at the optimization
+levels above 0.  The other configurations are not affected.
+
 10/12/26
 CIR back end: corrections found by running the C++ corpus
 

@@ -54,12 +54,27 @@ Steps (names for --only/--skip):
              listed: passes iff every difference is on the allowlist of
              KNOWN_SYMBOL_DIFFERENCES (with reasons) and nothing was skipped
   mixed-tu   edg-cir-mixed-tu over every case, both directions, with g++ and
-             with clang as the other translation unit: passes iff every
-             result is PASS
+             with clang as the other translation unit: passes iff there is
+             exactly one row per case x direction x host (cases x 2 x 2) and
+             each is PASS, or XFAIL for a direction that the case lists in
+             its xfail file; an XPASS (a stale xfail line) fails
   eh-probes  edg-cir-run-diff over the writer's exception probes (probes/m4
              e*, s4_*, s5_*): programs built by g++ and by the CIR back end
              run alike; the probes of --eh-probes-skip may be diagnosed as
-             unsupported
+             unsupported; at least one probe must exist and one must pass
+  opt-corpus (--with-m4 or --only) both corpora at -O2 (--cir_opt_level=2
+             through EDG_CPFE_DEFAULT_OPTIONS, set for its runs only) in
+             edg_x86_64_cir, and both smoke lists at -O2 in
+             edg_x86_64_cir_2p.  Passes iff the corpora have the cases of the
+             -O0 run (the corpus steps of this evidence directory, else
+             --opt-baseline-status), every PASS->FAIL case and every new crash,
+             kill or timeout has a line in
+             tests/.edgy/filters/cir-opt-triage.txt (category: ub,
+             dg-option, ref-fails, our-ir, upstream; the our-ir ones are
+             listed in our-ir.txt), and the assembly of every smoke test
+             differs between -O0 and -O2 (edg-cir-compare-modes
+             --opt-level, which also checks that both modes agree at each
+             level)
   m4-stress  cir_src/scripts/box_m4_stress.sh under `ulimit -s 256` over the
              cases of M4_STRESS_CASES (the sizes of research/m4_stress.md):
              passes iff every run succeeds within its time and memory limit
@@ -96,7 +111,10 @@ Steps (names for --only/--skip):
              ECIL_GID_STRESS=1 over the C smoke list and tests/tests/cir/
              writer: same exit status and byte-identical streams as without
              the variable, no sanitizer report or assertion, ecil-dump clean
-  rss        peak memory and time: ASan with the quarantine off, and non-ASan
+  rss        peak memory and time of the front end and the library on a
+             generated C file, a generated C++ file and a template-heavy
+             C++ file, with ASan (quarantine off) and without: every row has
+             a ceiling (RSS_CEILINGS_MB) that it may not exceed
   day        the default full day suite (edg_x86_64, edg_x86_64_cp) has the same
              test statuses as the M0 baseline run
   ctest      the cir_src tests in every cir_src preset, each built from
@@ -130,9 +148,13 @@ Steps (names for --only/--skip):
              have no CIR expectations) are not gated
   perf       edg-cir-perf (instruction counts, CPU time and RSS of a big
              generated file and of the whole corpus) and, with --perf-baseline
-             (the JSON of an earlier run), the before/after table;
-             --perf-max-regression PERCENT makes an increase of an
-             instruction count beyond it a failure
+             (the JSON of an earlier run, default the M4 gate's; a step
+             without one fails unless --perf-measure-only), the before/after
+             table;
+             --perf-max-regression PERCENT (default
+             DEFAULT_PERF_MAX_REGRESSION) makes an increase of an
+             instruction count beyond it a failure; a baseline row that the
+             new run lacks (or has as 0) fails too
 
 For the step asm-diff, the baseline of a commit is made with this tree's
 scripts on a tree of that commit (a `git archive` of it will do):
@@ -163,6 +185,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tarfile
 import time
 
 from datetime import datetime
@@ -175,10 +198,11 @@ STEPS = ('build', 'identity', 'isolation', 'smoke', 'cir-suite', 'corpus',
          'cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
          'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
          'cpp-asm-diff', 'crash-sweep', 'abi-diff', 'symbols', 'mixed-tu',
-         'eh-probes', 'm4-stress')
+         'eh-probes', 'm4-stress', 'opt-corpus')
 # The steps of gate M4 (the ABI and EH harnesses); they run only with
 # --with-m4 or --only.
-M4_STEPS = ('abi-diff', 'symbols', 'mixed-tu', 'eh-probes', 'm4-stress')
+M4_STEPS = ('abi-diff', 'symbols', 'mixed-tu', 'eh-probes', 'm4-stress',
+            'opt-corpus')
 # The steps of the C++ milestones; they run only with --with-cpp or --only.
 CPP_STEPS = ('cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
              'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
@@ -208,6 +232,12 @@ class Context:
     )
     self.args = args
     self.env = dict(os.environ)
+    # edgdocker forwards EDG_CPFE_DEFAULT_OPTIONS into the containers, so a
+    # value in the operator's shell would reach every step: only step
+    # opt-corpus sets it (for its own runs).
+    if self.env.pop('EDG_CPFE_DEFAULT_OPTIONS', None) is not None:
+      print('WARNING: EDG_CPFE_DEFAULT_OPTIONS is set in the environment; '
+            'it is ignored (removed) for this gate run', file = sys.stderr)
     self.env['PATH'] = f"{self.tree / 'dev_tools/bin'}:{self.env['PATH']}"
     self.env['PYTHONPATH'] = str(self.tree / 'dev_tools/pylibs')
     # The commands of a step that were stopped at their time limit.
@@ -222,6 +252,7 @@ STEP_TIMEOUTS = {
   'isolation': 900, 'writer-stress': 1800, 'cpp-writer-stress': 1800,
   'cpp-stress': 1800, 'cpp-stress-asan': 3600, 'abi-diff': 1800,
   'symbols': 1800, 'mixed-tu': 1800, 'eh-probes': 1800, 'm4-stress': 3600,
+  'opt-corpus': 10800,
   'poison': 3600, 'release-smoke': 3600, 'crash-sweep': 5400
 }
 
@@ -388,7 +419,8 @@ def summarize_run(ctx: Context, step: str, run: Path, config: str,
 # (edgtest.exec): a program that hangs is a normal FAIL (status 124) and not a
 # test that edgy cancelled (an "X" line), as torture/ssp-1 does in every config.
 def edgy_run(ctx: Context, step: str, config: str, filters: str,
-             types: str, timeout: int = 180, posture: str = 'cir'
+             types: str, timeout: int = 180, posture: str = 'cir',
+             extra_env: Optional[Dict[str, str]] = None
              ) -> Optional[Path]:
   before = runs_before(ctx)
   command = [
@@ -399,7 +431,7 @@ def edgy_run(ctx: Context, step: str, config: str, filters: str,
     command += ['--types', types]
   command.append(filters)
   run_logged(ctx, step, ['sg', 'docker', '-c', ' '.join(
-    shlex.quote(c) for c in command)])
+    shlex.quote(c) for c in command)], extra_env = extra_env)
   return newest_run(ctx, before)
 
 
@@ -877,29 +909,138 @@ def step_writer_stress(ctx: Context) -> Tuple[bool, str]:
                      (match.group(0) if match else 'no result line'))
 
 
+# The workloads of the rss step: (name, edg-cir-rss generator and input
+# options).  Each is measured with the ASan front end (quarantine off) and the
+# release front end, in the rows of RSS_ROWS (the rows of edg-cir-rss that run
+# the CIR back end; the plain cpfe row is for reference only).
+RSS_WORKLOADS = ('c', 'cxx', 'tmpl')
+RSS_BUILDS = (('asan', 'build/gcc-cir'), ('release', 'build/gcc-release-cir'))
+RSS_ROWS = ('inproc', 'keep', '2p-fe', '2p-edg-cir')
+# The peak RSS (MB) that a row may not exceed, per (workload, build, row):
+# 1.25 times the value measured on the box at gate M4.1 (2026-10-19, tree
+# m41-int, one run each; rounded up to 10 MB), for the
+# default sizes (--rss-functions 6000 C functions and C++ functions,
+# --rss-template-units 300).  A change that makes memory grow by more than a
+# quarter must raise a ceiling deliberately (and say why).
+RSS_CEILINGS_MB: Dict[Tuple[str, str, str], int] = {
+  ('c', 'asan', 'inproc'): 850,
+  ('c', 'asan', 'keep'): 1020,
+  ('c', 'asan', '2p-fe'): 150,
+  ('c', 'asan', '2p-edg-cir'): 520,
+  ('cxx', 'asan', 'inproc'): 350,
+  ('cxx', 'asan', 'keep'): 400,
+  ('cxx', 'asan', '2p-fe'): 140,
+  ('cxx', 'asan', '2p-edg-cir'): 200,
+  ('tmpl', 'asan', 'inproc'): 950,
+  ('tmpl', 'asan', 'keep'): 1320,
+  ('tmpl', 'asan', '2p-fe'): 630,
+  ('tmpl', 'asan', '2p-edg-cir'): 460,
+  ('c', 'release', 'inproc'): 560,
+  ('c', 'release', 'keep'): 650,
+  ('c', 'release', '2p-fe'): 80,
+  ('c', 'release', '2p-edg-cir'): 520,
+  ('cxx', 'release', 'inproc'): 240,
+  ('cxx', 'release', 'keep'): 250,
+  ('cxx', 'release', '2p-fe'): 80,
+  ('cxx', 'release', '2p-edg-cir'): 200,
+  ('tmpl', 'release', 'inproc'): 860,
+  ('tmpl', 'release', 'keep'): 890,
+  ('tmpl', 'release', '2p-fe'): 440,
+  ('tmpl', 'release', '2p-edg-cir'): 460
+}
+
+
+def parse_rss(text: str) -> Dict[Tuple[str, str, str], Tuple[int, float]]:
+  '''(workload, build, row) -> (exit status, peak MB) of the output of the
+  rss step: `== RSS <workload> <build>` marks a block of edg-cir-rss rows.'''
+  rows: Dict[Tuple[str, str, str], Tuple[int, float]] = {}
+  block: Optional[Tuple[str, str]] = None
+  for line in text.splitlines():
+    match = re.match(r'^== RSS (\S+) (\S+)$', line)
+    if match:
+      block = (match.group(1), match.group(2))
+      continue
+    match = re.match(r'^(inproc|keep|2p-fe|2p-edg-cir)\s+(\S+)\s+(\S+)\s+'
+                     r'(-?\d+)$', line)
+    if match and block:
+      try:
+        megabytes = float(match.group(3))
+      except ValueError:
+        megabytes = float('inf')
+      rows[(block[0], block[1], match.group(1))] = (int(match.group(4)),
+                                                    megabytes)
+  return rows
+
+
+def judge_rss(text: str, ceilings: Dict[Tuple[str, str, str], int]
+              ) -> Tuple[bool, str]:
+  '''The rule of the rss step: a row for every key of `ceilings`, each with
+  exit status 0 and a peak RSS within its ceiling.'''
+  rows = parse_rss(text)
+  problems: List[str] = []
+  worst = 0.0
+  for key in sorted(ceilings):
+    name = '/'.join(key)
+    if key not in rows:
+      problems.append(f"{name}: no measurement")
+      continue
+    status, megabytes = rows[key]
+    if status != 0:
+      problems.append(f"{name}: exit status {status}")
+    elif megabytes > ceilings[key]:
+      problems.append(f"{name}: {megabytes:.0f} MB over the ceiling of "
+                      f"{ceilings[key]} MB")
+    else:
+      worst = max(worst, megabytes / ceilings[key])
+  detail = (f"{len(rows)} measurements, {len(ceilings)} ceilings; the "
+            f"highest row is at {100 * worst:.0f}% of its ceiling")
+  if not ceilings:
+    problems.append('no ceiling is defined')
+  if problems:
+    detail = 'PROBLEMS: ' + '; '.join(problems[:6]) + ' | ' + detail
+  return not problems, detail
+
+
+RSS_DEFAULT_FUNCTIONS = 6000
+RSS_DEFAULT_TEMPLATE_UNITS = 300
+
+
 def step_rss(ctx: Context) -> Tuple[bool, str]:
+  '''Peak memory of the CIR front end and library on a generated C file, a
+  generated C++ file and a template-heavy C++ file, ASan (quarantine off) and
+  release; every row has a ceiling.'''
+  if (ctx.args.rss_functions, ctx.args.rss_template_units) != (
+      RSS_DEFAULT_FUNCTIONS, RSS_DEFAULT_TEMPLATE_UNITS):
+    return False, (f"the ceilings are for {RSS_DEFAULT_FUNCTIONS} functions "
+                   f"and {RSS_DEFAULT_TEMPLATE_UNITS} template units; "
+                   f"--rss-functions and --rss-template-units must keep "
+                   f"those values")
   # One container: /tmp is not shared between edg-exec runs.
-  big = '/tmp/gate-big.c'
   rss = 'python3 dev_tools/bin/edg-cir-rss'
-  command = (
-    f"{rss} --generate-functions {ctx.args.rss_functions} -o {big} && "
-    f"echo '== ASan front end, ASAN_OPTIONS=quarantine_size_mb=0' && "
-    f"ASAN_OPTIONS=quarantine_size_mb=0 {rss} --fe-build build/gcc-cir "
-    f"{big} && "
-    f"echo '== non-ASan front end (build/gcc-release-cir)' && "
-    f"{rss} --fe-build build/gcc-release-cir {big}"
-  )
-  code = in_cir_env(ctx, 'rss', command)
+  inputs = {
+    'c': ('/tmp/gate-big.c',
+          f"--generate-functions {ctx.args.rss_functions}", ''),
+    'cxx': ('/tmp/gate-bigxx.cpp',
+            f"--generate-cxx-functions {ctx.args.rss_functions}", '--cxx '),
+    'tmpl': ('/tmp/gate-tmpl.cpp',
+             f"--generate-cxx-templates {ctx.args.rss_template_units}",
+             '--cxx ')
+  }
+  steps = [f"{rss} {gen} -o {path}" for path, gen, _ in inputs.values()]
+  rows = ','.join(RSS_ROWS)
+  for build_name, build in RSS_BUILDS:
+    for workload in RSS_WORKLOADS:
+      path, _, flag = inputs[workload]
+      env = ('ASAN_OPTIONS=quarantine_size_mb=0 '
+             if build_name == 'asan' else '')
+      steps.append(f"echo '== RSS {workload} {build_name}'")
+      steps.append(f"{env}{rss} --fe-build {build} --only {rows} "
+                   f"{flag}{path}")
+  code = in_cir_env(ctx, 'rss', ' && '.join(steps))
   text = (ctx.out / 'rss' / 'log.txt').read_text()
-  rows = re.findall(
-    r'^(inproc|keep|2p-fe|2p-edg-cir|cpfe)\s+\S+\s+\S+\s+(\d+)$', text,
-    re.M
-  )
-  bad = [name for name, rc in rows if rc != '0']
-  ok = code == 0 and len(rows) >= 10 and not bad
-  return ok, (f"{len(rows)} measurements; numbers in log.txt"
-              if ok else f"failed (see log.txt): rows with a failing "
-              f"exit status: {bad or 'none'}, {len(rows)} measurements")
+  ok, detail = judge_rss(text, RSS_CEILINGS_MB)
+  return ok and code == 0, (detail if code == 0 else
+                            f"failed (see log.txt) | {detail}")
 
 
 def _status_lines(run: Path, suites: Optional[List[str]] = None
@@ -1542,6 +1683,18 @@ def collections_counter(items) -> Dict[str, int]:
   return counts
 
 
+# The default limit of the perf step (percent): the instruction count of any
+# row (a generated C or C++ file through the front end and the library, the
+# library on a generated C++ stream, the corpus totals) may grow by this much
+# against the baseline.  The counts are cachegrind Ir, so they do not depend on
+# the load of the box: two M4 gate runs of unchanged library code differed by
+# at most 0.23% on the library rows (and by 0.02% on the corpus total); the
+# front end rows moved by up to 5.7% only when the front end itself changed
+# (the pinned test macros).  A deliberate cost (the M4 exception handling was
+# +13.6%) is accepted by raising the limit for that gate.
+DEFAULT_PERF_MAX_REGRESSION = 2.0
+
+
 def step_perf(ctx: Context) -> Tuple[bool, str]:
   work = ctx.tree / '.tmp' / 'gate-perf' / ctx.out.name
   work.mkdir(parents = True, exist_ok = True)
@@ -1563,6 +1716,8 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
                f"edg_prelink -j{BUILD_JOBS}")
     only.append('cxx')
   command += f" --only {','.join(only)}"
+  if ctx.args.perf_levels != '0':
+    command += f" --levels {ctx.args.perf_levels}"
   if ctx.args.perf_sample > 1:
     command += f" --sample {ctx.args.perf_sample}"
   if in_cir_env(ctx, 'perf', command) != 0 or not new_json.exists():
@@ -1571,7 +1726,8 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
   table_command = [sys.executable,
                    str(ctx.tree / 'dev_tools/bin/edg-cir-perf'),
                    '--table-only', '--json', str(new_json)]
-  baseline = ctx.args.perf_baseline
+  baseline = str(Path(ctx.args.perf_baseline).expanduser()) \
+    if ctx.args.perf_baseline else ''
   if baseline:
     table_command += ['--baseline', str(Path(baseline).resolve())]
   proc = subprocess.run(table_command, env = ctx.env, text = True,
@@ -1581,29 +1737,61 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
   if proc.returncode != 0:
     return False, 'could not print the table'
   if not baseline:
-    return True, 'measured (no --perf-baseline: no before/after table)'
+    if ctx.args.perf_measure_only:
+      return True, 'measured (--perf-measure-only: no baseline, no limit)'
+    return False, ('no --perf-baseline: nothing to compare with (give one, '
+                   'or --perf-measure-only to only measure)')
+  if not Path(baseline).exists():
+    return False, f"the perf baseline {baseline} does not exist"
   limit = ctx.args.perf_max_regression
   after = json.loads(new_json.read_text())
   before = json.loads(Path(baseline).read_text())
-  worst = 0.0
-  for name, entry in after.get('big', {}).items():
-    old = before.get('big', {}).get(name, {}).get('ir')
-    if old:
-      worst = max(worst, 100.0 * (entry['ir'] - old) / old)
-  for name, entry in after.get('big_cxx', {}).items():
-    old = before.get('big_cxx', {}).get(name, {}).get('ir')
-    if old and entry['ir']:
-      worst = max(worst, 100.0 * (entry['ir'] - old) / old)
-  for name, entry in after.get('streams', {}).items():
-    old = before.get('streams', {}).get(name, {}).get('ir')
-    if old:
-      worst = max(worst, 100.0 * (entry['ir'] - old) / old)
+  worst, compared, problems = perf_worst_change(before, after)
+  detail = (f"largest instruction count change {worst:+.2f}% over {compared} "
+            f"rows (limit {limit}%; table.md)")
+  if compared == 0:
+    problems.append('no row of the perf run could be compared with the '
+                    'baseline')
+  if problems:
+    return False, 'PROBLEMS: ' + '; '.join(problems[:6]) + ' | ' + detail
+  return limit is None or worst <= limit, detail
+
+
+def perf_worst_change(before: dict, after: dict
+                      ) -> Tuple[float, int, List[str]]:
+  '''The largest increase (percent, negative if every row shrank) of an
+  instruction count between two perf.json files, the number of rows that both
+  have, and the problems: a row of the baseline (with a count) that the new
+  run lacks or has with a count of zero (which would hide a regression).'''
+  worst = None
+  compared = 0
+  problems: List[str] = []
+
+  def note(old: float, new: float) -> None:
+    nonlocal worst, compared
+    change = 100.0 * (new - old) / old
+    worst = change if worst is None else max(worst, change)
+    compared += 1
+
+  for section in ('big', 'big_cxx', 'streams', 'big_O2', 'big_cxx_O2'):
+    for name, entry in before.get(section, {}).items():
+      old = entry.get('ir')
+      if not old:
+        continue
+      new = after.get(section, {}).get(name, {}).get('ir')
+      if new:
+        note(old, new)
+      else:
+        problems.append(f"{section}/{name} is missing or 0 in the new run")
   for key in ('fe_ir', 'cir_ir'):
     old = before.get('corpus', {}).get(key)
-    if old and 'corpus' in after:
-      worst = max(worst, 100.0 * (after['corpus'][key] - old) / old)
-  detail = f"largest instruction count change {worst:+.2f}% (table.md)"
-  return limit is None or worst <= limit, detail
+    if old:
+      new = after.get('corpus', {}).get(key)
+      if new:
+        note(old, new)
+      else:
+        problems.append(f"corpus/{key} is missing or 0 in the new run")
+  return (0.0 if worst is None else worst), compared, problems
 
 
 # ----------------------------------------------------------------------------
@@ -1794,19 +1982,68 @@ def judge_symbols(text: str) -> Tuple[bool, str]:
   return not problems, detail
 
 
-def judge_mixed_tu(text: str) -> Tuple[bool, str]:
-  '''The rule of one run of the mixed-tu step: every row PASS.'''
-  rows = [l.split() for l in text.splitlines()
-          if re.match(r'^\S+\s+(ref\+ours|ours\+ref|all-ours|all-ref)\s+\S+',
-                      l)]
+MIXED_TU_DIRECTIONS = ('ref+ours', 'ours+ref')
+MIXED_TU_HOSTS = ('g++', 'clang')
+
+
+def load_mixed_tu_cases(cases_dir: Path) -> Dict[str, set]:
+  '''The cases of edg-cir-mixed-tu in cases_dir: name -> the set of
+  directions that the case lists in its xfail file.'''
+  tool = _load_tool('edg-cir-mixed-tu')
+  return {case.name: set(case.xfail) for case in tool.find_cases(cases_dir)}
+
+
+def judge_mixed_tu(text: str, cases: Dict[str, set]) -> Tuple[bool, str]:
+  '''The rule of one run of the mixed-tu step (one reference compiler):
+  exactly one row for every case and direction (the rows of `cases` x
+  MIXED_TU_DIRECTIONS), each PASS, or XFAIL for a direction in the xfail set
+  of its case.  An XPASS is a stale xfail line and fails.'''
+  seen: Dict[Tuple[str, str], str] = {}
+  problems: List[str] = []
+  for line in text.splitlines():
+    # A case whose baseline (all-ref) does not build or run has one such row
+    # in place of its direction rows: name it.
+    baseline = re.match(r'^(\S+?)\s*all-ref\s+(REF-FAIL)\s*(.*)$', line)
+    if baseline:
+      problems.append(f"{baseline.group(1)}: REF-FAIL (the baseline itself "
+                      f"fails: {baseline.group(3)[:80]})")
+      continue
+    match = re.match(r'^(\S+?)\s*(ref\+ours|ours\+ref|all-ours)\s+(\S+)', line)
+    if not match:
+      continue
+    key = (match.group(1), match.group(2))
+    if key in seen:
+      problems.append(f"{key[0]} {key[1]}: two rows")
+    seen[key] = match.group(3)
+  expected = {(name, d) for name in cases for d in MIXED_TU_DIRECTIONS}
+  named = {p.split(':')[0] for p in problems if 'REF-FAIL' in p}
+  for key in sorted(expected - set(seen)):
+    if key[0] not in named:
+      problems.append(f"{key[0]} {key[1]}: no row")
+  for key in sorted(set(seen) - expected):
+    problems.append(f"{key[0]} {key[1]}: a row that no case expects")
   results: Dict[str, int] = {}
-  for row in rows:
-    results[row[2]] = results.get(row[2], 0) + 1
-  bad = {k: v for k, v in results.items() if k != 'PASS'}
-  detail = ', '.join(f"{k} {v}" for k, v in sorted(results.items()))
-  if not rows:
-    return False, 'no result rows'
-  return not bad, detail
+  for key in sorted(expected & set(seen)):
+    result = seen[key]
+    results[result] = results.get(result, 0) + 1
+    if result == 'PASS':
+      continue
+    if result == 'XFAIL' and key[1] in cases[key[0]]:
+      continue
+    if result == 'XPASS':
+      problems.append(f"{key[0]} {key[1]}: XPASS, remove the direction from "
+                      f"its xfail file")
+    elif result == 'XFAIL':
+      problems.append(f"{key[0]} {key[1]}: XFAIL but not in the xfail file")
+    else:
+      problems.append(f"{key[0]} {key[1]}: {result}")
+  detail = (f"{len(seen)} of {len(expected)} rows (" +
+            ', '.join(f"{k} {v}" for k, v in sorted(results.items())) + ')')
+  if not cases:
+    problems.append('no case found')
+  if problems:
+    detail = 'PROBLEMS: ' + '; '.join(problems[:6]) + ' | ' + detail
+  return not problems, detail
 
 
 def parse_stress(text: str) -> List[Tuple[str, int, int, int, int]]:
@@ -1900,7 +2137,10 @@ def step_symbols(ctx: Context) -> Tuple[bool, str]:
 
 
 def step_mixed_tu(ctx: Context) -> Tuple[bool, str]:
+  '''Both hosts: rows = cases x directions x 2 hosts, each PASS or an
+  XFAIL that the case lists; an XPASS fails.'''
   (ctx.out / 'mixed-tu').mkdir(parents = True, exist_ok = True)
+  cases = load_mixed_tu_cases(ctx.tree / 'dev_tools' / 'cir-mixed-tu-cases')
   parts = []
   ok = True
   for name, ref in (('g++', 'g++'), ('clang',
@@ -1910,7 +2150,7 @@ def step_mixed_tu(ctx: Context) -> Tuple[bool, str]:
                f"python3 dev_tools/bin/edg-cir-mixed-tu --ref {ref} "
                f"> {out} 2>&1")
     passed, detail = judge_mixed_tu(
-      _read_step_output(ctx, 'mixed-tu', f"{name}.txt"))
+      _read_step_output(ctx, 'mixed-tu', f"{name}.txt"), cases)
     ok = ok and passed
     parts.append(f"{name}: {detail}")
   return ok, '; '.join(parts)
@@ -1927,6 +2167,8 @@ def judge_eh_probes(text: str, skip: set, expected: int
     if match:
       results[match.group(1)] = match.group(2)
   problems: List[str] = []
+  if expected < 1:
+    problems.append('no probe file was found (at least one is required)')
   if len(results) != expected:
     problems.append(f"{len(results)} probe(s) ran, {expected} expected")
   for name, result in sorted(results.items()):
@@ -1938,6 +2180,8 @@ def judge_eh_probes(text: str, skip: set, expected: int
     else:
       problems.append(f"{name}: {result}")
   passed = sum(1 for r in results.values() if r == 'PASS')
+  if passed < 1:
+    problems.append('no probe passed')
   detail = (f"{len(results)} probe(s): {passed} PASS, "
             f"{len(results) - passed} UNSUPPORTED (allowed, on the skip list)")
   if problems:
@@ -1977,6 +2221,306 @@ def step_m4_stress(ctx: Context) -> Tuple[bool, str]:
   return judge_stress(_read_step_output(ctx, 'm4-stress', 'stress.txt'))
 
 
+# ----------------------------------------------------------------------------
+# The step opt-corpus: both corpora at -O2 (--cir_opt_level=2).
+
+OPT_LEVEL = 2
+# The categories of a status change at -O2 against -O0 (the triage file
+# tests/.edgy/filters/cir-opt-triage.txt, one line per test case:
+#   <test path> | <variant> | <category> | <reason>
+# with the path and variant as in the status JSON of edg-cir-summary).
+OPT_CATEGORIES = {
+  'ub': 'undefined or unspecified behavior in the test (the reference '
+        'compiler changes its behavior between -O0 and -O2 too)',
+  'dg-option': 'needs a dg-option that the harness ignores (-fwrapv, '
+               '-fno-strict-aliasing)',
+  'ref-fails': 'the reference does not pass the test at -O2',
+  'our-ir': 'our IR (the writer or the library) is wrong',
+  'upstream': 'the upstream CIR passes or LLVM (clang -fclangir -O2 fails '
+              'too)'
+}
+OPT_TRIAGE_FILE = 'tests/.edgy/filters/cir-opt-triage.txt'
+OPT_CRASH_BUCKETS = ('FE_CRASH', 'LIB_CRASH', 'TIMEOUT', 'KILLED')
+# The -O2 canary: a test that passes at every level and prints whether
+# __OPTIMIZE__ is defined, so that its output differs from the -O0 recording
+# exactly when -O2 reached the run (status PASS--OUTPUT MISMATCH).
+OPT_CANARY = 'cir/config/opt-level-canary.sft.c'
+OPT_CANARY_CPP = 'cir/config/opt-level-canary-cpp.sft.cpp'
+
+
+def read_opt_triage(path: Path) -> Dict[Tuple[str, str], Tuple[str, str]]:
+  '''The attributions of the triage file: (path, variant) -> (category,
+  reason).  A line with an unknown category raises ValueError.'''
+  table: Dict[Tuple[str, str], Tuple[str, str]] = {}
+  if not path.exists():
+    return table
+  for number, line in enumerate(path.read_text().splitlines(), 1):
+    line = line.strip()
+    if not line or line.startswith('#'):
+      continue
+    parts = [p.strip() for p in line.split('|', 3)]
+    if len(parts) != 4 or parts[2] not in OPT_CATEGORIES:
+      raise ValueError(f"{path}:{number}: expected 'path | variant | "
+                       f"category | reason' with a category of "
+                       f"{sorted(OPT_CATEGORIES)}")
+    table[(parts[0], parts[1])] = (parts[2], parts[3])
+  return table
+
+
+def status_map(results: List[dict]) -> Dict[Tuple[str, str], str]:
+  '''(test path, variant) -> bucket of the results of edg-cir-summary.'''
+  return {(r['path'], r.get('variant', '')): r['bucket'] for r in results}
+
+
+def judge_opt_changes(before: Dict[Tuple[str, str], str],
+                      after: Dict[Tuple[str, str], str],
+                      triage: Dict[Tuple[str, str], Tuple[str, str]],
+                      label: str) -> Tuple[bool, str, Dict[str, list]]:
+  '''The rule for one corpus: `after` (-O2) has exactly the cases of `before`
+  (-O0), none is missing; every PASS->not PASS case is in the triage file.  A
+  triage line for a case that did not change is stale and fails.  Returns
+  (ok, detail, lists) with the lists "unattributed", "stale", "our-ir",
+  "improved" and the other categories of the attributed cases.'''
+  lists: Dict[str, list] = {'unattributed': [], 'stale': [], 'improved': [],
+                            'other': []}
+  problems: List[str] = []
+  if not before:
+    problems.append('no -O0 statuses to compare with')
+  if set(after) != set(before):
+    problems.append(
+      f"{len(after)} case(s) at -O2 against {len(before)} at -O0 "
+      f"({len(set(before) - set(after))} missing, "
+      f"{len(set(after) - set(before))} new)")
+  # PASS -> not PASS, and any new crash, kill or timeout at -O2 whatever the
+  # -O0 status was (a FAIL that becomes a crash is a new problem).
+  worse = [k for k in sorted(set(before) & set(after))
+           if (before[k] == 'PASS' and after[k] != 'PASS') or
+           (after[k] in OPT_CRASH_BUCKETS and before[k] not in
+            OPT_CRASH_BUCKETS)]
+  for key in sorted(set(before) & set(after)):
+    if before[key] != 'PASS' and after[key] == 'PASS':
+      lists['improved'].append(key)
+    elif before[key] != after[key] and key not in worse:
+      lists['other'].append(key)
+  counts: Dict[str, int] = {}
+  for key in worse:
+    if key in triage:
+      category = triage[key][0]
+      counts[category] = counts.get(category, 0) + 1
+      lists.setdefault(category, []).append(key)
+    else:
+      lists['unattributed'].append(key)
+  for key in sorted(triage):
+    if key not in worse:
+      lists['stale'].append(key)
+  if lists['unattributed']:
+    problems.append(f"{len(lists['unattributed'])} worse case(s) (PASS->FAIL "
+                    f"or a new crash) without a triage line, e.g. "
+                    f"{lists['unattributed'][0]}")
+  if lists['stale']:
+    problems.append(f"{len(lists['stale'])} triage line(s) for a case that "
+                    f"did not get worse, e.g. {lists['stale'][0]}")
+  by_category = ', '.join(f"{k} {v}" for k, v in sorted(counts.items()))
+  detail = (f"{label}: {len(after)} cases, {len(worse)} worse "
+            f"({by_category or 'none'}), {len(lists['improved'])} FAIL->PASS")
+  if problems:
+    detail = 'PROBLEMS: ' + '; '.join(problems) + ' | ' + detail
+  return not problems, detail, lists
+
+
+def judge_opt_asm(o0: Path, o2: Path, label: str) -> Tuple[bool, str]:
+  '''The non-vacuity rule for one smoke list: both --save-asm directories
+  (edg-cir-compare-modes --opt-level 0 / 2, whose modes comparison also
+  passed, so the two-process assembly equals the saved in-process one) have
+  the same cases, at least one has assembly, and the assembly of every case
+  at -O2 differs from the one at -O0.'''
+  try:
+    m0 = json.loads((o0 / 'manifest.json').read_text())
+    m2 = json.loads((o2 / 'manifest.json').read_text())
+  except (OSError, ValueError) as error:
+    return False, f"{label}: no manifest ({error})"
+  problems: List[str] = []
+  if set(m0) != set(m2):
+    problems.append(f"the cases differ ({len(set(m0) ^ set(m2))})")
+  with_asm = [n for n in sorted(set(m0) & set(m2))
+              if m0[n]['asm'] and m2[n]['asm']]
+  lost = [n for n in sorted(set(m0) & set(m2))
+          if m0[n]['asm'] != m2[n]['asm']]
+  if lost:
+    problems.append(f"{len(lost)} case(s) with assembly at one level only, "
+                    f"e.g. {lost[0]}")
+  same = [n for n in with_asm
+          if (o0 / n).read_bytes() == (o2 / n).read_bytes()]
+  if not with_asm:
+    problems.append('no case has assembly')
+  if same:
+    problems.append(f"{len(same)} case(s) with the same assembly at -O0 and "
+                    f"-O2, e.g. {same[0]}")
+  detail = f"{label}: {len(with_asm) - len(same)}/{len(with_asm)} differ"
+  if problems:
+    detail = 'PROBLEMS: ' + '; '.join(problems) + ' | ' + detail
+  return not problems, detail
+
+
+def _o0_statuses(ctx: Context, name: str, fallback: str
+                 ) -> Dict[Tuple[str, str], str]:
+  '''The -O0 statuses of a corpus: the JSON of the step of this evidence
+  directory (`corpus`, `cpp-corpus`), else the baseline directory
+  (--opt-baseline-status).'''
+  step = {'c': 'corpus', 'cpp': 'cpp-corpus'}[name]
+  here = ctx.out / step / 'edg_x86_64_cir.json'
+  path = here if here.exists() else (
+    Path(ctx.args.opt_baseline_status).expanduser() / fallback)
+  if not path.exists():
+    return {}
+  data = json.loads(path.read_text())
+  return status_map(data.get('edg_x86_64_cir', []))
+
+
+def canary_output(run: Path, config: str, canary_path: str
+                  ) -> Optional[str]:
+  '''The output that edgy kept of the canary test in a run (the .rt.tar.gz
+  of a case whose output differs from its recording), or None if it has
+  none.'''
+  archive = run / config / re.sub(r'\.[A-Za-z]+$', '', canary_path)
+  archive = archive.with_name(archive.name + '.rt.tar.gz')
+  if not archive.exists():
+    return None
+  texts = []
+  with tarfile.open(archive) as tar:
+    for member in tar.getmembers():
+      if member.name.endswith('output.txt'):
+        handle = tar.extractfile(member)
+        if handle:
+          texts.append(handle.read().decode('utf-8', 'replace'))
+  return '\n'.join(texts)
+
+
+def step_opt_corpus(ctx: Context) -> Tuple[bool, str]:
+  '''Both corpora at -O2 in edg_x86_64_cir, the smoke lists at -O2 in
+  edg_x86_64_cir_2p, and the non-vacuity check on the smoke assembly.
+
+  The level reaches eccp through EDG_CPFE_DEFAULT_OPTIONS (set for the
+  edg-docker-test runs of this step only).  Statuses are compared with the
+  -O0 statuses of the corpus steps of this evidence directory (or
+  --opt-baseline-status), and every PASS->FAIL and every new crash must be
+  attributed in the triage file (see OPT_CATEGORIES); the `our-ir` ones are
+  listed in our-ir.txt.  Every run also has a canary test (OPT_CANARY, and
+  OPT_CANARY_CPP for the C++ runs), which proves that -O2 reached it.'''
+  step = 'opt-corpus'
+  (ctx.out / step).mkdir(parents = True, exist_ok = True)
+  parts: List[str] = []
+  ok = True
+  runs: Dict[str, List[dict]] = {}
+  # The level reaches eccp through EDG_CPFE_DEFAULT_OPTIONS, which edgdocker
+  # forwards into the container of the run when it is set (for this process
+  # only: nothing is left behind if the step is killed).
+  level_env = {'EDG_CPFE_DEFAULT_OPTIONS': f"--cir_opt_level={OPT_LEVEL}"}
+  for key, config, filters, types, summary_args in (
+      ('c', 'edg_x86_64_cir', ctx.args.corpus_filter, ctx.args.types, []),
+      ('cpp', 'edg_x86_64_cir', ctx.args.cpp_corpus_filter, 'rp,lp',
+       ['--language', 'cxx', '--types', 'rp,lp']),
+      ('c-smoke', 'edg_x86_64_cir_2p', ctx.args.smoke_filter,
+       ctx.args.types, []),
+      ('cpp-smoke', 'edg_x86_64_cir_2p', ctx.args.cpp_smoke_filter,
+       'rp,lp', ['--language', 'cxx', '--types', 'rp,lp'])):
+    # The canary rides along in every run: its output differs from its -O0
+    # recording exactly when the level reached the run.
+    canary_path = OPT_CANARY_CPP if 'cxx' in ' '.join(summary_args) \
+      else OPT_CANARY
+    run = edgy_run(ctx, step, config, f"{filters},{canary_path}", types,
+                   extra_env = level_env)
+    if run is None:
+      return False, f"no run for {key}"
+    results, _ = summarize_run(ctx, step, run, config, f"{key}.json",
+                               summary_args, text_tag = f"-{key}")
+    canary = [r for r in results if r['path'] == canary_path]
+    results = [r for r in results if r['path'] != canary_path]
+    seen = canary_output(run, config, canary_path)
+    if len(canary) != 1 or canary[0]['status'] != 'PASS--OUTPUT MISMATCH' or \
+        (seen is not None and 'canary: optimizing' not in seen):
+      ok = False
+      parts.append(f"PROBLEMS: {key}: the -O2 canary "
+                   f"({canary_path}) did not show -O2 in the run: "
+                   f"{[r['status'] for r in canary] or 'it did not run'}")
+    runs[key] = results
+  killed = killed_tests(ctx, step, [])
+  if killed:
+    ok = False
+    parts.append(f"PROBLEMS: {len(killed)} test(s) killed or cancelled at "
+                 f"-O2: {', '.join(killed[:3])}")
+  # Statuses against -O0.  A triage line belongs to the corpus that has its
+  # case; one that no corpus has is stale.
+  triage = read_opt_triage(ctx.tree / OPT_TRIAGE_FILE)
+  baselines = {'c': 'c_edg_x86_64_cir.json',
+               'cpp': 'cpp_edg_x86_64_cir.json'}
+  before = {key: _o0_statuses(ctx, key, baselines[key])
+            for key in ('c', 'cpp')}
+  all_lists: Dict[str, Dict[str, list]] = {}
+  for key in ('c', 'cpp'):
+    mine = {k: v for k, v in triage.items() if k in before[key]}
+    passed, detail, lists = judge_opt_changes(
+      before[key], status_map(runs[key]), mine, key.upper())
+    ok = ok and passed
+    parts.append(detail)
+    all_lists[key] = lists
+  unknown = [k for k in triage if k not in before['c'] and
+             k not in before['cpp']]
+  if unknown:
+    ok = False
+    parts.append(f"PROBLEMS: {len(unknown)} triage line(s) for a case that "
+                 f"no corpus has, e.g. {unknown[0]}")
+  # The smoke lists: every test passes?  (recorded, not required here)
+  for key in ('c-smoke', 'cpp-smoke'):
+    buckets: Dict[str, int] = {}
+    for result in runs[key]:
+      buckets[result['bucket']] = buckets.get(result['bucket'], 0) + 1
+    if not runs[key]:
+      ok = False
+    parts.append(f"{key} (2p) {buckets.get('PASS', 0)}/{len(runs[key])}")
+  with open(ctx.out / step / 'changes.txt', 'w') as listing:
+    for key, lists in all_lists.items():
+      for name, items in sorted(lists.items()):
+        for item in items:
+          note = triage.get(item, ('', ''))
+          listing.write(f"{key} {name} {item[0]} [{item[1]}] {note[1]}\n")
+  with open(ctx.out / step / 'unattributed.txt', 'w') as listing:
+    for key, lists in all_lists.items():
+      after = status_map(runs[key])
+      for item in lists['unattributed']:
+        listing.write(f"{item[0]} | {item[1]} | {after[item]}\n")
+  ours = [i for lists in all_lists.values() for i in lists.get('our-ir', [])]
+  (ctx.out / step / 'our-ir.txt').write_text(
+    ''.join(f"{p} [{v}] {triage[(p, v)][1]}\n" for p, v in ours))
+  if ours:
+    parts.append(f"{len(ours)} worse case(s) attributed to our IR "
+                 f"(our-ir.txt)")
+  # Non-vacuity: the assembly of the smoke lists at -O2 differs from -O0 (and
+  # the two modes agree at both levels).
+  asm_root = ctx.tree / '.tmp' / 'gate-opt' / ctx.out.name
+  for key, filters, flags in (
+      ('c-smoke', ctx.args.smoke_filter, ''),
+      ('cpp-smoke', ctx.args.cpp_smoke_filter, ' --cxx --types rp,lp')):
+    for level in (0, OPT_LEVEL):
+      target = asm_root / f"{key}-O{level}"
+      if target.exists():
+        shutil.rmtree(target)
+      code = in_cir_env(
+        ctx, step, f"python3 dev_tools/bin/edg-cir-compare-modes "
+        f"{shlex.quote(filters)} -j {BUILD_JOBS} --opt-level {level} "
+        f"--save-asm {rel(ctx, target)}{flags}")
+      if code != 0:
+        ok = False
+        parts.append(f"{key} modes at -O{level}: edg-cir-compare-modes "
+                     f"failed (see log.txt)")
+    passed, detail = judge_opt_asm(asm_root / f"{key}-O0",
+                                   asm_root / f"{key}-O{OPT_LEVEL}", key)
+    ok = ok and passed
+    parts.append(detail)
+  return ok, '; '.join(parts)
+
+
+
 STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'build': step_build, 'identity': step_identity,
   'isolation': step_isolation, 'smoke': step_smoke, 'corpus': step_corpus,
@@ -1991,6 +2535,7 @@ STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'crash-sweep': step_crash_sweep, 'abi-diff': step_abi_diff,
   'symbols': step_symbols, 'mixed-tu': step_mixed_tu,
   'eh-probes': step_eh_probes, 'm4-stress': step_m4_stress,
+  'opt-corpus': step_opt_corpus,
   'perf': step_perf
 }
 
@@ -2038,11 +2583,23 @@ def main() -> None:
   parser.add_argument('--asm-allow-order', action = 'store_true',
                       help = 'asm-diff passes if files differ only in the '
                              'order of their lines')
-  parser.add_argument('--perf-baseline', default = '',
-                      help = 'perf.json of the baseline commit (step perf)')
-  parser.add_argument('--perf-max-regression', type = float, default = None,
+  parser.add_argument('--perf-baseline',
+                      default = '~/edg-cir-config/m4-base-perf.json',
+                      help = 'perf.json of the baseline commit (step perf; '
+                             'default: the M4 gate\'s)')
+  parser.add_argument('--perf-levels', default = '0',
+                      help = 'optimization levels of the big files of the '
+                             'perf step (0,2 adds the -O2 rows big_O2 and '
+                             'big_cxx_O2; the default is the M4 set)')
+  parser.add_argument('--perf-measure-only', action = 'store_true',
+                      help = 'step perf may run without a baseline (pass '
+                             '--perf-baseline "" and this); it then only '
+                             'measures')
+  parser.add_argument('--perf-max-regression', type = float,
+                      default = DEFAULT_PERF_MAX_REGRESSION,
                       help = 'step perf fails if an instruction count grows '
-                             'by more than this many percent')
+                             'by more than this many percent (default '
+                             f"{DEFAULT_PERF_MAX_REGRESSION})")
   parser.add_argument('--perf-only', default = 'cxx',
                       help = 'extra measurements of the perf step: cxx (a '
                              'generated 6000-function C++ file, with the C '
@@ -2111,12 +2668,26 @@ def main() -> None:
                              'M3 gate)')
   parser.add_argument('--smoke-filter',
                       default = '@tests/.edgy/filters/cir-c-smoke.txt')
+  parser.add_argument('--opt-baseline-status',
+                      default = '~/edg-cir-config/m4-base-status',
+                      help = 'directory with the -O0 statuses of both '
+                             'corpora (c_edg_x86_64_cir.json, '
+                             'cpp_edg_x86_64_cir.json) for the opt-corpus '
+                             'step when this evidence directory has no '
+                             'corpus and cpp-corpus step')
   parser.add_argument('--corpus-filter',
                       default = '@tests/.edgy/filters/cir-c-corpus.txt')
   parser.add_argument('--types', default = 'rp,lp')
   parser.add_argument('--jobs', type = int, default = 12,
                       help = 'parallel build and test jobs')
-  parser.add_argument('--rss-functions', type = int, default = 6000)
+  parser.add_argument('--rss-functions', type = int,
+                      default = RSS_DEFAULT_FUNCTIONS,
+                      help = 'functions of the generated files of the rss '
+                             'step (the ceilings are for the default)')
+  parser.add_argument('--rss-template-units', type = int,
+                      default = RSS_DEFAULT_TEMPLATE_UNITS,
+                      help = 'units of the template-heavy C++ file of the '
+                             'rss step')
   parser.add_argument('--identity-presets', default = ','.join(PRESETS),
                       help = 'CMake presets of the identity step')
   parser.add_argument('--ctest-presets', default = '',

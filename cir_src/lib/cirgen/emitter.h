@@ -166,6 +166,8 @@ struct a_entity {
   bool                       has_init = false;
   bool                       referenced = false;
   bool                       had_linkonce = false;  /* Was linkonce_odr. */
+  bool                       no_inline = false;    /* supp noinline (1.3):
+                                                      sticky. */
   bool                       in_structor = false;  /* In a STRUCTOR pair. */
   bool                       is_alias = false;     /* C1 as aliasee of C2. */
   bool                       has_vtt = false;      /* The base variant of a
@@ -306,6 +308,15 @@ struct a_value {
                                         field or base, which may share its
                                         bytes with another member: nothing
                                         is ever written through it. */
+  bool             from_deref = false; /* glv: made by DEREF (or a DUP of
+                                        one): the pointer may point at an
+                                        array element, so the object it is
+                                        in can be larger than its type
+                                        (new T[n]).  ZERO_BYTES alone may
+                                        then cover more than the type; a
+                                        glvalue rooted in a named object
+                                        (LREF, GREF, FIELD, ...) never
+                                        does. */
 };  /* a_value */
 
 /* Frames. */
@@ -716,7 +727,9 @@ private:
   std::string_view claim_symbol(std::string_view want, uint64_t gid);
   std::string_view keep_string(std::string_view text);
   std::string_view unsupported_reason(const ecil::a_record &r);
+  bool has_supp_flag(const ecil::a_record &r, uint64_t key) const;
   void assign_final_names();
+  void apply_nobuiltin();
   void apply_substitution();
   void apply_function_attributes(a_entity &e, cir::FuncOp fn);
 
@@ -766,6 +779,7 @@ private:
   bool builtin_operation(uint64_t id, llvm::SmallVectorImpl<mlir::Value> &args,
                          a_type *result_type);
   bool agg_record(const ecil::a_record &r);
+  size_t values_in_frame() const;
   bool pop_value(a_value &out);
   bool pop_prvalue(mlir::Value &out);
   bool pop_glvalue(a_value &out);

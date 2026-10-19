@@ -495,6 +495,9 @@ Initialize the option information table.
   add_option_description(optk_ecil_keep_regions, "ecil_keep_regions",
                          '\0', /*value=*/TRUE, /*arg_required=*/FALSE,
                          pchek_none);
+  add_option_description(optk_cir_opt_level, "cir_opt_level",
+                         '\0', /*value=*/TRUE, /*arg_required=*/TRUE,
+                         pchek_command_line);
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if BACK_END_GENERATES_SOURCE
   /* --msvc_target_version is supported for compatibility but deprecated
@@ -11132,6 +11135,14 @@ Process the arguments on the command line that invoked the compiler.
         check_assertion(opt_value == TRUE);
         ecil_keep_regions = TRUE;
         break;
+      case optk_cir_opt_level:
+        /* The optimization level of the CIR library (0 to 3). */
+        scan_opt_arg_number(&cir_opt_level, opt_arg);
+        if (cir_opt_level > 3) {
+          str_command_line_error(ec_cir_error,
+                                 "--cir_opt_level must be 0, 1, 2 or 3");
+        }  /* if */
+        break;
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if BACK_END_GENERATES_SOURCE
       case optk_msvc_target_version:
@@ -13493,6 +13504,7 @@ variables declared in cmd_line.h.
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
   ecil_output_file_name = NULL;
   ecil_keep_regions = FALSE;
+  cir_opt_level = 0;
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   precompiled_header_processing_required = FALSE;
   create_precompiled_header = FALSE;

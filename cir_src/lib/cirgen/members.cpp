@@ -735,7 +735,7 @@ and the adjusted `this`, and the call is indirect.
   call_type = type_at(tcall);
   if (call_type == nullptr) {
     ok = false;
-  } else if (nargs + 1 > values_.size()) {
+  } else if (nargs + 1 > values_in_frame()) {
     ok = format_error("PM_CALL needs more values than the value stack "
                       "holds");
   } else {

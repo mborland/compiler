@@ -27,6 +27,11 @@ of every case to <dir>/manifest.json; with --in-process-only the two-process
 run is skipped, so the command only produces that directory (the commit-vs-
 commit baseline of edg-cir-gate-evidence's asm-diff step).
 
+With --opt-level N both runs also get --cir_opt_level=N (through
+EDG_CPFE_DEFAULT_OPTIONS, so that an -O option of a test still wins): the
+in-process run optimizes in the library, the two-process run passes -ON to
+edg-cir, and the two must agree at that level too.
+
 A different exit status (other than the front end's error limit: 4 in-process,
 2 in two-process mode) or different assembly is a failure (`DIFF`, exit status
 1).  Differences only in the diagnostics (text, order, count) or in the
@@ -230,6 +235,10 @@ def main() -> None:
   parser.add_argument('--cxx', action = 'store_true',
                       help = 'compile the tests as C++ (the options edgy '
                              'gives the C++ tests, not --gcc)')
+  parser.add_argument('--opt-level', type = int, default = 0,
+                      choices = range(4),
+                      help = 'compile at this --cir_opt_level (default 0: '
+                             'the options are the ones of the tests only)')
   parser.add_argument('--in-process-only', action = 'store_true',
                       help = 'skip the two-process run (needs --save-asm)')
   args = parser.parse_args()
@@ -242,6 +251,10 @@ def main() -> None:
   base['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
   base['ECCP_LIBDIR'] = cir_env.get('EDG_CIR_RT_LIBDIR', '')
   base['ECCP'] = str(root / 'util/eccp.sh')
+  if args.opt_level:
+    base['EDG_CPFE_DEFAULT_OPTIONS'] = (
+      f"{base.get('EDG_CPFE_DEFAULT_OPTIONS', '')} "
+      f"--cir_opt_level={args.opt_level}").strip()
   env_in = dict(base)
   env_in['CPFE'] = cir_env['CPFE_CIR']
   env_2p = dict(base)

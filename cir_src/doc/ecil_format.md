@@ -1,6 +1,6 @@
 # ECIL — EDG CIR IL stream format
 
-Status: **v1.2** (gate M4a, session 3: section 12: virtual functions, virtual bases, RTTI, exceptions and pointers to members). 1.2 is frozen at the M4 gate; additions and corrections found while implementing it (for example `NEW_ARRAY_SIZE_THROW`) are part of 1.2 until then. **v1.1** (gate M3.1, session 3: section 11.12). **v1.0** was frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
+Status: **v1.3, open** (session 4, from gate M4.1: supp key `noinline` (14) and several keys per supp blob (section 6); more 1.3 additions come at M5a, and 1.3 freezes at the M5 gate). **v1.2** (gate M4a, session 3: section 12: virtual functions, virtual bases, RTTI, exceptions and pointers to members). 1.2 is frozen at the M4 gate; additions and corrections found while implementing it (for example `NEW_ARRAY_SIZE_THROW`) are part of 1.2 until then. **v1.1** (gate M3.1, session 3: section 11.12). **v1.0** was frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
 orchestrator.
 
 - **Normative source.** The definitions live in
@@ -150,8 +150,14 @@ one** value, so an unknown key can always be skipped:
 - flag-like keys use `true`.
 
 The keys are `an_ecil_supp_key` in `ecil_format.h`. Writers before 1.1
-emit none. From 1.1 the writer emits `unsupported_reason` (13); the other
-keys are consumed from M5 onward. Readers skip keys they do not use.
+emit none. From 1.1 the writer emits `unsupported_reason` (13), and from
+1.3 `noinline` (14); the other keys are consumed from M5 onward. Readers
+skip keys they do not use.
+
+**Several keys in one blob** (1.3). A record has at most one supp blob,
+and a blob may hold several pairs. A key appears at most once per blob.
+For example, a dropped `noinline` function carries both
+`unsupported_reason` and `noinline`.
 
 | Key | Value |
 | --- | --- |
@@ -168,6 +174,7 @@ keys are consumed from M5 onward. Readers skip keys they do not use.
 | 11 `used` | true |
 | 12 `explicit_align` | uint |
 | 13 `unsupported_reason` (1.1) | bin: UTF-8 text, at most 255 bytes |
+| 14 `noinline` (1.3) | true |
 
 **`unsupported_reason`** (1.1) may follow a `DECL_FUNC` or `DECL_VAR` that
 has `UNSUPPORTED` set, and only such a record; it appears at most once per
@@ -179,6 +186,21 @@ declaration in a system header). A frame that carries a supp blob sets
 `HAS_SUPP`. A 1.1 writer sets the `SUPP` feature bit on every stream,
 because the preamble is written before any frame: the bit means "frames
 may carry supp blobs", not that one does.
+
+**`noinline`** (1.3) may follow a `DECL_FUNC`, and only a `DECL_FUNC`.
+Its value is `true`.
+- **Meaning.** The function must not be inlined. It is the GNU
+  `noinline` attribute, written `__attribute__((noinline))` or
+  `[[gnu::noinline]]`. The consumer sets the function's inline kind to
+  "never" (LLVM `noinline`).
+- **Sticky.** Once any issue of a G-id carries the key, the function is
+  `noinline` for the rest of the stream. A re-issue without the key does
+  not clear it, because GNU attributes accumulate over declarations.
+- **The writer** sends the key on the first issue after the FE records
+  the attribute, and on every later issue.
+- **Older readers.** A 1.2 reader accepts a 1.3 stream that uses no newer
+  opcode or flag (section 9) and skips key 14. It compiles the function
+  without the attribute, which is the 1.2 behavior.
 
 ## 7. Identifiers
 
@@ -730,10 +752,30 @@ Background is in `research/m3_ecil_v1_design.md` (§8 has the spike verdicts),
     TUs.
 - **Function-local statics** carry the local-entity name, for example
   `_ZZ1fvE1a` and `_ZZ1fvE1a_0`.
-  - Linkage: a local static of a function that may exist in several TUs
-    (inline, template instance, defined in its class) is `linkonce_odr`
-    with `COMDAT`, and `GUARDED` when dynamically initialized. Otherwise it
-    is internal.
+  - **Static anonymous unions** (1.3 writer, gate M4.1). A static anonymous
+    union has no source name. Like g++ and clang, it takes the name of its
+    first named member: `_ZZ1fiE1i` for `static union { int i; … };` in
+    `f(int)`. It is discriminated in the same sequence as the named locals
+    of that name, in declaration order: a union then a `static int i`
+    give `_ZZ1fvE1i` and `_ZZ1fvE1i_0`, as in g++ and clang.
+  - **Linkage.** A local static of a function with vague linkage is
+    `linkonce_odr` with `COMDAT`, and `GUARDED` when it is dynamically
+    initialized. That covers inline functions, template instances,
+    functions defined in their class, and the routines nested in such a
+    function (next rule). Every other local static is internal, as in
+    clang: the locals of a `static inline` function and of a function in
+    an anonymous namespace, for example. Before gate M4.1 the writer made
+    every unnamed static local internal, and the static locals of nested
+    routines too. That was an ABI defect (pr39188): a g++ TU that inlines
+    `f` used a different object.
+- **Routines nested in a function** (1.3 writer, gate M4.1). These are the
+  member functions of a local class, the call operator and static invoker
+  of a lambda, and the special members of either. They have the vague
+  linkage of their innermost enclosing namespace-scope function, at any
+  depth of nesting: `linkonce_odr` with `COMDAT` when that function has
+  vague linkage and the local class is not TU-local, internal otherwise.
+  That is clang's rule. EDG gives such routines `storage_class` `static`,
+  meaning "no linkage", which the writer used to read as internal.
 - **Guard and lifetime-extension names** are derived from the variable's
   name. The consumer derives guard names and the writer derives `_ZGR`
   names.
@@ -961,9 +1003,29 @@ diagnosed "unsupported".
     element.
 
   The writer guarantees that the range lies inside one complete object.
-  The consumer does not check the count against the glvalue's type, because
-  for `new[]` the range covers more than the element the glvalue
-  designates.
+  **Validation (gate M4.1; a tightening that applies to streams of every
+  minor):**
+  - **A glvalue made directly by `DEREF`.** This includes the same glvalue
+    passed on by `DUP`, by a `STORE` that yields its target, or out of a
+    `FULLEXPR`. It designates the object a pointer addresses, which may be
+    an element of an array: a subscript `a[i]` is `PTR_STRIDE` then
+    `DEREF`, and a `new[]` allocation is addressed by its first element.
+    The writer may reach it through a reload of a local, as in the
+    free-on-throw form of 12.10 (10). So `bytes` may exceed the size of
+    the glvalue's type, but must be a whole multiple of it.
+  - **Every other glvalue.** That covers a local, a global, a `FIELD`
+    (also of a `DEREF` glvalue), an `AGG_SEL` element and the return slot.
+    `bytes` must not exceed the size of its type: the range lies inside
+    the object it designates.
+  - **Still errors.** A bit-field, an object that holds a pointer to a data
+    member (12.7), and an omitted empty subobject with `bytes` > 1 (below)
+    remain errors.
+  - **Not checked.** The consumer does not check the count against the
+    number of elements that the pointer's array holds.
+  - **Future.** A writer could zero through a `T[n]` glvalue instead, as it
+    already does for types with pointers to data members. Then
+    `bytes ≤ size` could hold for every glvalue (an ECIL 1.3 candidate).
+    Streams of 1.2 writers keep the rule above.
 - **Omitted empty subobjects.** The writer writes nothing to an empty
   subobject that the consumer omits (an empty base, or an empty
   `[[no_unique_address]]` member, at an offset it shares with another

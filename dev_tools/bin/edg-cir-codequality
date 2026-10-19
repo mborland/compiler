@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Compare the code that the CIR back end produces with other compilers'.
+
+Builds each kernel of dev_tools/cir-codequality (sort, hash map, matrix
+multiply, strings, virtual dispatch, hot integer and floating point loops,
+recursion, vector algorithms, a sieve) at -O2 four ways and measures the
+program:
+
+  ours      cpfe-cir and `edg-cir -O2` (the front end gets --cir_opt_level=2)
+  clang     clang
+  clangir   clang -fclangir
+  gcc       g++
+
+The programs must print the same output (a kernel whose output differs is
+listed as DIFFERS and its numbers are not trusted).  For each build the table
+has the user-mode instructions executed (valgrind cachegrind `Ir`, as
+edg-cir-perf: the primary metric) in millions and the size of the .text
+section, each with the ratio to clang.  A kernel that a compiler cannot build
+is listed with the reason, and the report ends with the kernels that CIR
+cannot compile (those are the ones the real-world set of edg-cir-perf has to
+leave out too).  The numbers are for information; the exit status is 0 unless
+the setup is wrong (2) or no kernel could be built with ours (1).
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-cir and build/cir:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-codequality
+  ... --kernels sort,fib --json out.json
+  ... --self-test
+'''
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import importlib.machinery
+import importlib.util
+
+KERNELS = Path(__file__).resolve().parent.parent / 'cir-codequality'
+VALGRIND = ['valgrind', '--tool=cachegrind', '--cache-sim=no', '-q']
+COMPILERS = ('ours', 'clang', 'clangir', 'gcc')
+
+
+def load_tool(name: str):
+  path = str(Path(__file__).resolve().with_name(name))
+  loader = importlib.machinery.SourceFileLoader(name.replace('-', '_'), path)
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+def cachegrind_total(path: Path) -> int:
+  total = 0
+  for line in path.read_text().splitlines():
+    if line.startswith('summary:'):
+      total = int(line.split()[1])
+  return total
+
+
+def text_size(binary: Path) -> int:
+  '''The size of the .text section of an executable, in bytes.'''
+  proc = subprocess.run(['size', '-A', str(binary)], stdout = subprocess.PIPE,
+                        stderr = subprocess.STDOUT, text = True)
+  match = re.search(r'^\.text\s+(\d+)', proc.stdout, re.M)
+  return int(match.group(1)) if match else 0
+
+
+def run_kernel(binary: Path, work: Path, timeout: int
+               ) -> Tuple[int, str, int]:
+  '''(exit status, output, instructions) of one run under cachegrind.'''
+  out = work / f"{binary.name}.cg"
+  try:
+    proc = subprocess.run(
+      [*VALGRIND, f"--cachegrind-out-file={out}", str(binary)], cwd = work,
+      stdout = subprocess.PIPE, stderr = subprocess.PIPE, text = True,
+      timeout = timeout)
+  except subprocess.TimeoutExpired:
+    return 124, 'timeout', 0
+  return proc.returncode, proc.stdout, (
+    cachegrind_total(out) if out.exists() else 0)
+
+
+class Builder:
+  def __init__(self, root: Path, fe_build: str, timeout: int) -> None:
+    self.diff = load_tool('edg-cir-run-diff')
+    self.base = self.diff.Toolchain(root, fe_build, 'g++')
+    self.timeout = timeout
+    self.env = dict(self.base.env)
+    prefix = self.env.get('EDG_LLVM_CIR_PREFIX', '')
+    self.clang = str(Path(prefix) / 'bin' / 'clang') if prefix else 'clang'
+
+  def build(self, compiler: str, source: Path, work: Path
+            ) -> Tuple[Optional[Path], str]:
+    '''(executable, "") or (None, why not).'''
+    out = work / f"{source.stem}.{compiler}"
+    if compiler == 'ours':
+      state, text, exe = self.base.build_ours(
+        source, work / 'ours', ['--c++17', '--gnu_version=140000', '-w'], 2)
+      if state != 'ok':
+        return None, f"{state}: " + ' '.join(text.split())[-160:]
+      exe.rename(out)
+      return out, ''
+    if compiler == 'gcc':
+      command = ['g++', '-O2', '-std=c++17', '-w', str(source), '-o', str(out)]
+    else:
+      flags = ['-fclangir'] if compiler == 'clangir' else []
+      command = [self.clang + '++', '-O2', '-std=c++17', '-w', *flags,
+                 str(source), '-o', str(out)]
+    code, output = self.diff.run(command, work, self.env, self.timeout)
+    if code != 0 or not out.exists():
+      lines = [l for l in output.splitlines() if 'error' in l] or [output]
+      return None, ' '.join(lines[0].split())[:160]
+    return out, ''
+
+
+def measure(builder: Builder, kernel: Path, timeout: int
+            ) -> Dict[str, Dict[str, object]]:
+  '''Per compiler: {"ir", "text", "output", "rc"} or {"error"}.'''
+  result: Dict[str, Dict[str, object]] = {}
+  with tempfile.TemporaryDirectory(prefix = 'edg-cir-quality.') as tmp:
+    work = Path(tmp)
+    (work / 'ours').mkdir()
+    for compiler in COMPILERS:
+      exe, why = builder.build(compiler, kernel, work)
+      if exe is None:
+        result[compiler] = {'error': why}
+        continue
+      rc, output, instructions = run_kernel(exe, work, timeout)
+      result[compiler] = {'ir': instructions, 'text': text_size(exe),
+                          'output': output, 'rc': rc}
+  return result
+
+
+def ratio(value: object, reference: object) -> str:
+  if not value or not reference:
+    return '   -'
+  return f"{float(value) / float(reference):4.2f}"  # type: ignore
+
+
+def report(results: Dict[str, Dict[str, Dict[str, object]]]) -> List[str]:
+  lines = [f"{'kernel':<10}" + ''.join(
+    f"{c + ' Mir':>13}{'x':>6}" for c in COMPILERS) +
+           ''.join(f"{c + ' text':>13}{'x':>6}" for c in COMPILERS)]
+  for kernel, rows in sorted(results.items()):
+    clang = rows.get('clang', {})
+    reference_output = clang.get('output')
+    cells = []
+    for field in ('ir', 'text'):
+      for compiler in COMPILERS:
+        row = rows.get(compiler, {})
+        if 'error' in row:
+          cells.append(f"{'n/a':>13}{'':>6}")
+          continue
+        value = row.get(field, 0)
+        shown = f"{float(value) / (1e6 if field == 'ir' else 1):.2f}" \
+          if field == 'ir' else f"{value}"
+        cells.append(f"{shown:>13}{ratio(value, clang.get(field)):>6}")
+    differs = [c for c in COMPILERS
+               if 'error' not in rows.get(c, {}) and clang.get('output') and
+               rows[c].get('output') != reference_output]
+    note = f"  DIFFERS: {', '.join(differs)}" if differs else ''
+    lines.append(f"{kernel:<10}" + ''.join(cells) + note)
+  return lines
+
+
+class SelfTest(unittest.TestCase):
+  def test_ratio(self) -> None:
+    self.assertEqual(ratio(150, 100), '1.50')
+    self.assertEqual(ratio(0, 100), '   -')
+    self.assertEqual(ratio(5, None), '   -')
+
+  def test_report_marks_unbuilt_and_differing(self) -> None:
+    results = {
+      'k': {'ours': {'error': 'unsupported: x'},
+            'clang': {'ir': 2000000, 'text': 100, 'output': 'a\n', 'rc': 0},
+            'clangir': {'ir': 3000000, 'text': 150, 'output': 'b\n', 'rc': 0},
+            'gcc': {'ir': 1000000, 'text': 90, 'output': 'a\n', 'rc': 0}}}
+    text = '\n'.join(report(results))
+    self.assertIn('n/a', text)
+    self.assertIn('1.50', text)
+    self.assertIn('DIFFERS: clangir', text)
+
+  def test_kernels_exist(self) -> None:
+    names = sorted(p.stem for p in KERNELS.glob('*.cpp'))
+    self.assertGreaterEqual(len(names), 10, names)
+
+  def test_cachegrind_total(self) -> None:
+    with tempfile.NamedTemporaryFile('w', suffix = '.cg') as handle:
+      handle.write('desc: x\nsummary: 12345\n')
+      handle.flush()
+      self.assertEqual(cachegrind_total(Path(handle.name)), 12345)
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2])
+  parser.add_argument('--kernels', default = '',
+                      help = 'comma separated kernel names (default: all)')
+  parser.add_argument('--kernel-dir', default = str(KERNELS))
+  parser.add_argument('--json', default = '')
+  parser.add_argument('--root', default = '.')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir')
+  parser.add_argument('--timeout', type = int, default = 300)
+  parser.add_argument('--self-test', action = 'store_true')
+  args = parser.parse_args()
+  if args.self_test:
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SelfTest)
+    sys.exit(0 if unittest.TextTestRunner(verbosity = 1).run(
+      suite).wasSuccessful() else 1)
+  root = Path(args.root).resolve()
+  builder = Builder(root, args.fe_build, args.timeout)
+  if not builder.base.ready():
+    print(f"edg-cir-codequality: no CPFE_CIR and EDG_CIR_TOOL in "
+          f"{args.fe_build}/environment.sh", file = sys.stderr)
+    sys.exit(2)
+  wanted = [k for k in args.kernels.split(',') if k]
+  kernels = sorted(Path(args.kernel_dir).glob('*.cpp'))
+  if wanted:
+    kernels = [k for k in kernels if k.stem in wanted]
+  if not kernels:
+    print('edg-cir-codequality: no kernel found', file = sys.stderr)
+    sys.exit(2)
+  results: Dict[str, Dict[str, Dict[str, object]]] = {}
+  for kernel in kernels:
+    results[kernel.stem] = measure(builder, kernel, args.timeout)
+    print(f"measured {kernel.stem}", file = sys.stderr, flush = True)
+  print('\n'.join(report(results)))
+  not_built = sorted(k for k, rows in results.items()
+                     if 'error' in rows.get('ours', {}))
+  for name in not_built:
+    print(f"CIR cannot build {name}: {results[name]['ours']['error']}")
+  print(f"{len(kernels)} kernel(s); CIR built "
+        f"{len(kernels) - len(not_built)}")
+  if args.json:
+    Path(args.json).write_text(json.dumps(results, indent = 1,
+                                          sort_keys = True) + '\n')
+  sys.exit(1 if len(not_built) == len(kernels) else 0)
+
+
+if __name__ == '__main__':
+  main()

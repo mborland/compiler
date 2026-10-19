@@ -1,0 +1,561 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Compare the LLVM IR attributes of the CIR back end with clang -fclangir.
+
+For every translation unit and every optimization level, this tool makes the
+LLVM IR of
+
+  ours     cpfe-cir and `edg-cir -O<N> --emit=llvm` (the options of the test
+           configurations: the front end gets --cir_opt_level=N too)
+  clangir  `clang -fclangir -S -emit-llvm -Xclang -disable-llvm-passes -O<N>`
+
+and compares, per symbol that both have:
+
+  fn         function attributes (the attribute group; target strings such as
+             "target-cpu" are ignored, see IGNORED_STRING_ATTRS)
+  ret        return attributes (noundef, nonnull, noalias, align, ...)
+  param<i>   parameter attributes
+  call       the attributes of the call sites of each callee (the union per
+             callee: function, return and argument attributes)
+  md         the kinds of metadata on instructions (tbaa, prof, llvm.loop,
+             ...; !dbg is ignored)
+
+Symbols that only one side has are counted, not compared.  A difference is
+`explained` if the known-differences file (--known) has a line for it:
+
+  <category> | <level or *> | <detail> | <reason>
+
+where the detail is exactly what the report prints after the category
+(`only-ours:noundef`, `only-clangir:nonnull`, ...).  Exit status: 0 if every
+difference is explained and at least one symbol was compared (a run that
+compared nothing fails), 1 otherwise, 2 for a setup problem.  The report ends
+with the number of translation units that clang -fclangir could not compile.
+
+At -O1 and above the comparison is only meaningful if our IR is taken before
+the LLVM passes, as clang's is.  `edg-cir` does not have that switch yet (it
+needs a library flag, EDG_CIR_FLAG_NO_LLVM_PASSES, which this tool passes as
+--no-llvm-passes when `edg-cir --help` lists it); until then the levels above
+0 compare our optimized IR with clang's unoptimized IR, and the report says
+so.
+
+Run it inside the cir-env image from the repository root:
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-attr-diff \\
+      --filter @tests/.edgy/filters/cir-c-smoke.txt --levels 0,2
+  ... --filter @tests/.edgy/filters/cir-cpp-smoke.txt --cxx
+  ... path/to/file.cpp ...          # plain sources (C++ unless *.c)
+  ... --self-test
+'''
+
+import argparse
+import importlib.machinery
+import importlib.util
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple
+
+# String attributes of the function groups that depend on the target and the
+# compiler's defaults, not on the program.
+IGNORED_STRING_ATTRS = {
+  'target-cpu', 'target-features', 'tune-cpu', 'min-legal-vector-width',
+  'stack-protector-buffer-size', 'no-trapping-math', 'frame-pointer',
+  'no-builtins'
+}
+# Attributes that the clang -O0 pipeline adds and that mean "no optimization
+# was done", not a property of the code.
+IGNORED_FUNCTION_ATTRS = {'noinline', 'optnone'}
+
+PARAM_ATTR = re.compile(
+  r'\b(noundef|nonnull|noalias|nocapture|readonly|writeonly|readnone|'
+  r'returned|zeroext|signext|inreg|nofree|nest|'
+  r'captures\([^)]*\)|initializes\([^)]*\)|range\([^)]*\)|'
+  r'byval\([^)]*\)|sret\([^)]*\)|byref\([^)]*\)|elementtype\([^)]*\)|'
+  r'align \d+|dereferenceable\(\d+\)|dereferenceable_or_null\(\d+\))')
+GROUP_TOKEN = re.compile(r'"[^"]*"(?:="[^"]*")?|[A-Za-z_][\w-]*(?:\([^)]*\))?')
+
+
+class Function:
+  def __init__(self) -> None:
+    self.defined = False
+    self.attributes: Set[str] = set()
+    self.ret: Set[str] = set()
+    self.params: List[Set[str]] = []
+    # callee -> the union of the attributes at its call sites
+    self.calls: Dict[str, Set[str]] = {}
+    self.metadata: Set[str] = set()
+
+
+def parse_groups(text: str) -> Dict[str, Set[str]]:
+  '''The attribute groups: "#0" -> {"uwtable", "nounwind", ...}.'''
+  groups: Dict[str, Set[str]] = {}
+  for match in re.finditer(r'(?m)^attributes (#\d+) = \{(.*)\}\s*$', text):
+    tokens = set()
+    for token in GROUP_TOKEN.findall(match.group(2)):
+      key = token.split('=')[0].strip('"')
+      if token.startswith('"') and key in IGNORED_STRING_ATTRS:
+        continue
+      if token in IGNORED_FUNCTION_ATTRS:
+        continue
+      tokens.add(token)
+    groups[match.group(1)] = tokens
+  return groups
+
+
+def split_top_level(text: str) -> List[str]:
+  '''Split at the commas that are not inside (), {}, [] or <>.'''
+  parts: List[str] = []
+  depth = 0
+  current = ''
+  for char in text:
+    if char in '({[<':
+      depth += 1
+    elif char in ')}]>':
+      depth -= 1
+    if char == ',' and depth == 0:
+      parts.append(current.strip())
+      current = ''
+    else:
+      current += char
+  if current.strip():
+    parts.append(current.strip())
+  return parts
+
+
+def matching_paren(text: str, start: int) -> int:
+  '''The index of the ")" that closes the "(" at `start`.'''
+  depth = 0
+  for index in range(start, len(text)):
+    if text[index] == '(':
+      depth += 1
+    elif text[index] == ')':
+      depth -= 1
+      if depth == 0:
+        return index
+  return -1
+
+
+def parse_header(line: str, groups: Dict[str, Set[str]]
+                 ) -> Optional[Tuple[str, Function]]:
+  '''(name, Function) of a `define` or `declare` line.'''
+  match = re.match(r'^(define|declare)\b(.*?)@("[^"]+"|[^\s(]+)\(', line)
+  if not match:
+    return None
+  function = Function()
+  function.defined = match.group(1) == 'define'
+  name = match.group(3).strip('"')
+  function.ret = set(PARAM_ATTR.findall(match.group(2)))
+  open_paren = match.end() - 1
+  close = matching_paren(line, open_paren)
+  if close < 0:
+    return None
+  for parameter in split_top_level(line[open_paren + 1:close]):
+    function.params.append(set(PARAM_ATTR.findall(parameter)))
+  rest = line[close + 1:]
+  for group in re.findall(r'#\d+', rest):
+    function.attributes |= groups.get(group, set())
+  return name, function
+
+
+def parse_ir(text: str) -> Dict[str, Function]:
+  '''The functions of a module of LLVM IR text, by name.'''
+  groups = parse_groups(text)
+  functions: Dict[str, Function] = {}
+  current: Optional[Function] = None
+  for line in text.splitlines():
+    header = parse_header(line, groups)
+    if header:
+      name, function = header
+      # A definition replaces an earlier declaration of the same name.
+      if name not in functions or function.defined:
+        functions[name] = function
+      current = function if function.defined else None
+      continue
+    if current is None:
+      continue
+    if line.startswith('}'):
+      current = None
+      continue
+    call = re.search(r'\b(?:call|invoke)\b(.*?)@("[^"]+"|[^\s(]+)\(', line)
+    if call:
+      open_paren = call.end() - 1
+      close = matching_paren(line, open_paren)
+      if close > 0:
+        attributes = set(f"ret:{a}" for a in PARAM_ATTR.findall(call.group(1)))
+        for index, argument in enumerate(
+            split_top_level(line[open_paren + 1:close])):
+          attributes |= set(f"arg{index}:{a}"
+                            for a in PARAM_ATTR.findall(argument))
+        for group in re.findall(r'#\d+', line[close + 1:]):
+          attributes |= set(f"fn:{a}" for a in groups.get(group, set()))
+        current.calls.setdefault(call.group(2).strip('"'),
+                                 set()).update(attributes)
+    for kind in re.findall(r', !([A-Za-z_][\w.]*) !', line):
+      if kind != 'dbg':
+        current.metadata.add(kind)
+  return functions
+
+
+def compare(ours: Dict[str, Function], theirs: Dict[str, Function]
+            ) -> Tuple[int, int, int, List[Tuple[str, str, str]]]:
+  '''(compared, only ours, only theirs, differences): a difference is
+  (symbol, category, detail).'''
+  differences: List[Tuple[str, str, str]] = []
+  common = sorted(set(ours) & set(theirs))
+
+  def sets(symbol: str, category: str, mine: Set[str], other: Set[str]):
+    for item in sorted(mine - other):
+      differences.append((symbol, category, f"only-ours:{item}"))
+    for item in sorted(other - mine):
+      differences.append((symbol, category, f"only-clangir:{item}"))
+
+  for symbol in common:
+    a, b = ours[symbol], theirs[symbol]
+    sets(symbol, 'fn', a.attributes, b.attributes)
+    sets(symbol, 'ret', a.ret, b.ret)
+    for index in range(max(len(a.params), len(b.params))):
+      mine = a.params[index] if index < len(a.params) else set()
+      other = b.params[index] if index < len(b.params) else set()
+      sets(symbol, f"param{index}", mine, other)
+    for callee in sorted(set(a.calls) | set(b.calls)):
+      sets(symbol, 'call', {f"{callee}:{x}" for x in a.calls.get(callee, ())},
+           {f"{callee}:{x}" for x in b.calls.get(callee, ())})
+    sets(symbol, 'md', a.metadata, b.metadata)
+  return (len(common), len(set(ours) - set(theirs)),
+          len(set(theirs) - set(ours)), differences)
+
+
+def read_known(path: str) -> List[Tuple[str, str, str, str]]:
+  known = []
+  if path:
+    for line in Path(path).read_text().splitlines():
+      line = line.strip()
+      if line and not line.startswith('#'):
+        parts = [p.strip() for p in line.split('|', 3)]
+        if len(parts) == 4:
+          known.append((parts[0], parts[1], parts[2], parts[3]))
+  return known
+
+
+def explained(known: List[Tuple[str, str, str, str]], level: int,
+              category: str, detail: str) -> bool:
+  for known_category, known_level, known_detail, _ in known:
+    if known_category == category and known_level in ('*', str(level)) and \
+        known_detail == detail:
+      return True
+  return False
+
+
+def load_tool(name: str):
+  path = str(Path(__file__).resolve().with_name(name))
+  loader = importlib.machinery.SourceFileLoader(name.replace('-', '_'), path)
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+STANDARD_C = ['--gnu_version=999999', '-e', '200', '--no_wrap',
+              '--no_wrap_diagnostics', '--gcc']
+STANDARD_CXX = ['--gnu_version=999999', '-tused', '-e', '200', '--no_wrap',
+                '--no_wrap_diagnostics']
+
+
+def clang_flags(options: List[str]) -> List[str]:
+  '''The clang options for the EDG options of a case.'''
+  flags: List[str] = []
+  for token in options:
+    match = re.match(r'--c\+\+(\w+)$', token)
+    if match:
+      flags.append(f"-std=c++{match.group(1)}")
+    elif token.startswith(('-D', '-U', '-I')):
+      flags.append(token)
+  return flags
+
+
+def find_cases(root: Path, spec: str, cxx: bool
+               ) -> List[Tuple[str, Path, List[str]]]:
+  '''(name, source, eccp options) of the cases of an edgy filter list.'''
+  import edgtest.runtest as runtest
+  tests_dir = root / 'tests' / 'tests'
+  positive: List[str] = []
+  for line in (Path(spec[1:]).read_text().splitlines() if spec.startswith('@')
+               else spec.split(',')):
+    line = line.strip()
+    if line and not line.startswith(('#', '!')):
+      positive.append(line)
+  cases = []
+  for prefix in positive:
+    base = tests_dir / prefix
+    found = [base] if base.is_file() else sorted(base.rglob('*.sft.*'))
+    for test in found:
+      if test.is_dir() or test.name.startswith('.'):
+        continue
+      description = runtest.load_description(
+        test, top_dir = tests_dir / test.relative_to(tests_dir).parts[0])
+      if description.source_files:
+        continue
+      for number, (mode, base_options, case_options) in enumerate(
+          description.traverse_cases(), 1):
+        is_c = test.suffix == '.c'
+        options = [f"-DTEST_NUMBER={number}",
+                   *(STANDARD_C if is_c else STANDARD_CXX), *base_options,
+                   *case_options]
+        cases.append((f"{test.relative_to(tests_dir)}#{number}", test,
+                      options))
+        break
+  return cases
+
+
+class Runner:
+  def __init__(self, root: Path, fe_build: str, timeout: int) -> None:
+    self.diff = load_tool('edg-cir-run-diff')
+    self.base = self.diff.Toolchain(root, fe_build, 'g++')
+    self.timeout = timeout
+    self.env = dict(self.base.env)
+    self.env.pop('EDG_USE_SYSTEM_HEADERS', None)
+    prefix = self.env.get('EDG_LLVM_CIR_PREFIX', '')
+    self.clang = str(Path(prefix) / 'bin' / 'clang') if prefix else 'clang'
+    help_text = subprocess.run(
+      [self.base.edg_cir, '--help'], stdout = subprocess.PIPE,
+      stderr = subprocess.STDOUT, text = True).stdout
+    self.no_llvm_passes = '--no-llvm-passes' in help_text
+
+  def ours(self, source: Path, work: Path, options: List[str], level: int,
+           is_c: bool) -> Tuple[str, str, Optional[Path]]:
+    '''("ok", "", ll) or (state, text, None).'''
+    state, text, stream = self.base.make_stream(
+      source, work, options, level, c_mode = is_c)
+    if state != 'ok':
+      return state, text, None
+    out = work / 'ours.ll'
+    flags = ['--no-llvm-passes'] if level and self.no_llvm_passes else []
+    code, output = self.diff.run(
+      [self.base.edg_cir, f"-O{level}", *flags, '--emit=llvm', '-o',
+       str(out), str(stream)], work, self.env, self.timeout)
+    if code != 0 or not out.exists():
+      return 'fail', 'edg-cir: ' + output[-300:], None
+    return 'ok', '', out
+
+  def clangir(self, source: Path, work: Path, options: List[str], level: int,
+              is_c: bool) -> Tuple[str, str, Optional[Path]]:
+    out = work / 'clangir.ll'
+    compiler = self.clang if is_c else self.clang + '++'
+    if not Path(compiler).exists():
+      compiler = self.clang
+    command = [compiler, '-fclangir', '-S', '-emit-llvm', '-Xclang',
+               '-disable-llvm-passes', f"-O{level}", '-w',
+               *([] if is_c else ['-x', 'c++']), *clang_flags(options),
+               str(source), '-o', str(out)]
+    code, output = self.diff.run(command, work, self.env, self.timeout)
+    if code != 0 or not out.exists():
+      return 'fail', output[-300:], None
+    return 'ok', '', out
+
+
+def run_one(runner: Runner, name: str, source: Path, options: List[str],
+            levels: List[int]
+            ) -> Tuple[bool, Dict[int, Tuple[int, int, int,
+                                             List[Tuple[str, str, str]]]],
+                       str]:
+  '''(clangir compiled it, per level the result of compare, note).'''
+  results: Dict[int, Tuple[int, int, int, List[Tuple[str, str, str]]]] = {}
+  is_c = source.suffix == '.c'
+  note = ''
+  with tempfile.TemporaryDirectory(prefix = 'edg-cir-attr.') as tmp:
+    for level in levels:
+      work = Path(tmp) / f"o{level}"
+      work.mkdir()
+      for extra in source.parent.glob('*.h'):
+        shutil.copy2(extra, work / extra.name)
+      state, text, theirs = runner.clangir(source, work, options, level, is_c)
+      if theirs is None:
+        return False, results, 'clang -fclangir: ' + ' '.join(text.split())[
+          -120:]
+      state, text, mine = runner.ours(source, work, options, level, is_c)
+      if mine is None:
+        note = f"ours {state}: " + ' '.join(text.split())[-120:]
+        continue
+      results[level] = compare(parse_ir(mine.read_text()),
+                               parse_ir(theirs.read_text()))
+  return True, results, note
+
+
+SAMPLE_OURS = """
+@g = global i32 0
+define dso_local i32 @f(ptr noundef nonnull align 4 %0, i32 %1) #0 {
+  %3 = call i32 @h(ptr %0) #1, !tbaa !1
+  ret i32 %3, !dbg !5
+}
+declare i32 @h(ptr)
+attributes #0 = { mustprogress uwtable "target-cpu"="x86-64" noinline optnone }
+attributes #1 = { nounwind }
+"""
+
+SAMPLE_CLANGIR = """
+define dso_local noundef i32 @f(ptr noundef nonnull align 4 dereferenceable(4) %0, i32 noundef %1) #0 {
+  %3 = call i32 @h(ptr noundef nonnull %0) #1
+  ret i32 %3
+}
+declare i32 @h(ptr noundef)
+attributes #0 = { mustprogress uwtable "target-cpu"="skylake" "frame-pointer"="all" }
+attributes #1 = { nounwind }
+"""
+
+
+class SelfTest(unittest.TestCase):
+  def test_parse_groups_ignores_target_strings(self) -> None:
+    groups = parse_groups(SAMPLE_OURS)
+    self.assertEqual(groups['#0'], {'mustprogress', 'uwtable'})
+
+  def test_parse_header(self) -> None:
+    functions = parse_ir(SAMPLE_CLANGIR)
+    f = functions['f']
+    self.assertTrue(f.defined)
+    self.assertEqual(f.ret, {'noundef'})
+    self.assertEqual(f.params, [{'noundef', 'nonnull', 'align 4',
+                                 'dereferenceable(4)'}, {'noundef'}])
+    self.assertEqual(f.attributes, {'mustprogress', 'uwtable'})
+    self.assertEqual(f.calls['h'], {'arg0:noundef', 'arg0:nonnull',
+                                    'fn:nounwind'})
+    self.assertFalse(functions['h'].defined)
+
+  def test_split_top_level(self) -> None:
+    self.assertEqual(split_top_level('ptr %a, { i64, i64 } %b, i32 align 4 %c'),
+                     ['ptr %a', '{ i64, i64 } %b', 'i32 align 4 %c'])
+
+  def test_compare_lists_the_differences(self) -> None:
+    compared, only_ours, only_theirs, diffs = compare(
+      parse_ir(SAMPLE_OURS), parse_ir(SAMPLE_CLANGIR))
+    self.assertEqual((compared, only_ours, only_theirs), (2, 0, 0))
+    details = {(s, c, d) for s, c, d in diffs}
+    self.assertIn(('f', 'ret', 'only-clangir:noundef'), details)
+    self.assertIn(('f', 'param0', 'only-clangir:dereferenceable(4)'), details)
+    self.assertIn(('f', 'param1', 'only-clangir:noundef'), details)
+    self.assertIn(('f', 'md', 'only-ours:tbaa'), details)
+    self.assertIn(('f', 'call', 'only-clangir:h:arg0:nonnull'), details)
+    self.assertIn(('h', 'param0', 'only-clangir:noundef'), details)
+    # Nothing is reported for the ignored target strings or optnone.
+    self.assertFalse([d for d in details if 'target' in d[2] or
+                      'optnone' in d[2] or 'noinline' in d[2]])
+
+  def test_compare_of_disjoint_modules_compares_nothing(self) -> None:
+    compared, only_ours, only_theirs, diffs = compare(
+      parse_ir('define void @a() {\n}\n'), parse_ir('define void @b() {\n}\n'))
+    self.assertEqual((compared, only_ours, only_theirs, diffs), (0, 1, 1, []))
+
+  def test_known_differences(self) -> None:
+    with tempfile.NamedTemporaryFile('w', suffix = '.txt') as handle:
+      handle.write('# why\nret | 2 | only-clangir:noundef | later\n'
+                   'md | * | only-ours:tbaa | none\n')
+      handle.flush()
+      known = read_known(handle.name)
+    self.assertTrue(explained(known, 2, 'ret', 'only-clangir:noundef'))
+    self.assertFalse(explained(known, 0, 'ret', 'only-clangir:noundef'))
+    self.assertTrue(explained(known, 0, 'md', 'only-ours:tbaa'))
+    self.assertFalse(explained(known, 0, 'md', 'only-ours:prof'))
+
+  def test_clang_flags(self) -> None:
+    self.assertEqual(clang_flags(['--c++17', '-DX=1', '-w', '-tused']),
+                     ['-std=c++17', '-DX=1'])
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2])
+  parser.add_argument('sources', nargs = '*')
+  parser.add_argument('--filter', default = '',
+                      help = '"@file" or comma separated prefixes of tests, '
+                             'as for edgy (single-file cases only)')
+  parser.add_argument('--levels', default = '0,2')
+  parser.add_argument('--known', default = '',
+                      help = 'file of explained differences')
+  parser.add_argument('--root', default = '.')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir')
+  parser.add_argument('--timeout', type = int, default = 120)
+  parser.add_argument('--show', type = int, default = 30,
+                      help = 'unexplained differences to list')
+  parser.add_argument('--self-test', action = 'store_true')
+  args = parser.parse_args()
+  if args.self_test:
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SelfTest)
+    sys.exit(0 if unittest.TextTestRunner(verbosity = 1).run(
+      suite).wasSuccessful() else 1)
+  root = Path(args.root).resolve()
+  levels = [int(x) for x in args.levels.split(',')]
+  cases: List[Tuple[str, Path, List[str]]] = []
+  if args.filter:
+    cases += find_cases(root, args.filter, False)
+  for item in args.sources:
+    path = Path(item).resolve()
+    is_c = path.suffix == '.c'
+    cases.append((path.name, path,
+                  ['--gnu_version=140000', *(['--gcc'] if is_c else
+                                             ['--c++17'])]))
+  if not cases:
+    parser.error('no sources: give files or --filter')
+  runner = Runner(root, args.fe_build, args.timeout)
+  if not runner.base.ready():
+    print(f"edg-cir-attr-diff: no CPFE_CIR and EDG_CIR_TOOL in "
+          f"{args.fe_build}/environment.sh", file = sys.stderr)
+    sys.exit(2)
+  known = read_known(args.known)
+  total = {level: [0, 0, 0] for level in levels}
+  unexplained: List[Tuple[int, str, str, str, str]] = []
+  counts: Dict[Tuple[int, str], int] = {}
+  no_clangir: List[str] = []
+  ours_failed = 0
+  for name, source, options in cases:
+    ok, results, note = run_one(runner, name, source, options, levels)
+    if not ok:
+      no_clangir.append(f"{name}: {note}")
+      continue
+    if note:
+      ours_failed += 1
+    for level, (compared, only_ours, only_theirs, diffs) in results.items():
+      total[level][0] += compared
+      total[level][1] += only_ours
+      total[level][2] += only_theirs
+      for symbol, category, detail in diffs:
+        if not explained(known, level, category, detail):
+          unexplained.append((level, name, symbol, category, detail))
+        counts[(level, f"{category} {detail}")] = counts.get(
+          (level, f"{category} {detail}"), 0) + 1
+  print(f"{len(cases)} translation unit(s); clang -fclangir could not "
+        f"compile {len(no_clangir)}; ours failed on {ours_failed}")
+  if levels != [0] and not runner.no_llvm_passes:
+    print('NOTE: edg-cir has no --no-llvm-passes: levels above 0 compare our '
+          'optimized IR with clang -fclangir\'s unoptimized IR')
+  for level in levels:
+    compared, only_ours, only_theirs = total[level]
+    print(f"-O{level}: {compared} symbol(s) compared, {only_ours} only ours, "
+          f"{only_theirs} only clangir")
+  for (level, kind), count in sorted(counts.items(),
+                                     key = lambda item: -item[1])[:25]:
+    print(f"  -O{level} {count:6d}  {kind}")
+  for line in no_clangir[:5]:
+    print(f"  clangir cannot compile: {line}")
+  print(f"{len(unexplained)} unexplained difference(s)")
+  for level, name, symbol, category, detail in unexplained[:args.show]:
+    print(f"  -O{level} {name} {symbol}: {category} {detail}")
+  nothing = [level for level in levels if total[level][0] == 0]
+  if nothing:
+    print(f"FAIL: nothing was compared at -O{', -O'.join(map(str, nothing))}")
+  sys.exit(1 if unexplained or nothing else 0)
+
+
+if __name__ == '__main__':
+  main()

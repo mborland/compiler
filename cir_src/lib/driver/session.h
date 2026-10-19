@@ -212,6 +212,16 @@ void release_crash_recovery();
 bool run_guarded(const std::function<void()> &body, unsigned stack_mb,
                  std::string &message);
 
+/* True on the guard worker thread (inside a guarded section, which the
+   thread that waits for it holds guard_mutex for). */
+bool on_guard_worker_thread();
+
+#if EDG_CIR_TEST_HOOKS
+/* Test hooks (EDG_CIR_TEST_CRASH, EDG_CIR_TEST_CONSUME_CRASH): crash, exit
+   or overflow the stack in the calling thread. */
+void run_test_crash_hook(const char *hook);
+#endif
+
 /* cir_module.cpp */
 std::unique_ptr<a_cir_module>
 create_cir_module(an_edg_cir_session &session, an_edg_cir_status &status);

@@ -15,6 +15,7 @@ metadata, inline-only bodies, unsupported entities).
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -68,6 +69,26 @@ the value.
   }
   return reason;
 }  /* a_emitter::unsupported_reason */
+
+bool a_emitter::has_supp_flag(const ecil::a_record &r, uint64_t key) const
+/*
+Whether the record's supp blob carries a flag-like key (value true).  The
+validator has checked the keys it knows.
+*/
+{
+  bool result = false;
+
+  if (r.supp != nullptr) {
+    std::vector<std::pair<uint64_t, ecil::an_operand>> pairs;
+
+    ecil::supp_pairs(r, pairs);
+    for (const auto &pair : pairs) {
+      if (pair.first == key && pair.second.u == 1)
+        result = true;
+    }
+  }
+  return result;
+}  /* a_emitter::has_supp_flag */
 
 std::string_view a_emitter::keep_string(std::string_view text)
 /*
@@ -153,7 +174,9 @@ Set the function's attributes from the latest DECL_FUNC.
     fn->setAttr(noreturn_name_, unit_attr_);
   else
     fn->removeAttr(noreturn_name_);
-  if (e.flags & ECIL_DECL_FUNC_INLINE)
+  if (e.no_inline)
+    fn.setInlineKind(cir::InlineKind::NoInline);
+  else if (e.flags & ECIL_DECL_FUNC_INLINE)
     fn.setInlineKind(cir::InlineKind::InlineHint);
   mlir::SymbolTable::setSymbolVisibility(
       fn, compat::symbol_visibility(kind, !e.has_body));
@@ -400,6 +423,7 @@ renames the entity (spec 7); the new name is applied at finish.
     if (linkage == elk_linkonce_odr)
       e.had_linkonce = true;
     e.flags = static_cast<uint32_t>(flags);
+    e.no_inline = has_supp_flag(r, esk_noinline);
     if (std::string_view why = unsupported_reason(r); !why.empty())
       e.reason = why;
     e.named = r.ops[4].kind != ecil::an_operand_kind::nil;
@@ -432,6 +456,8 @@ renames the entity (spec 7); the new name is applied at finish.
       if (linkage == elk_linkonce_odr)
         e.had_linkonce = true;
       e.flags = static_cast<uint32_t>(flags);
+      if (has_supp_flag(r, esk_noinline))
+        e.no_inline = true;     /* Sticky: GNU attributes accumulate. */
       if (std::string_view why = unsupported_reason(r); !why.empty())
         e.reason = why;
       if (r.ops[4].kind != ecil::an_operand_kind::nil &&
@@ -1653,6 +1679,58 @@ the name is mangled, else _ZGV<length><name>.
   }
 }  /* a_emitter::apply_dynamic_init */
 
+void a_emitter::apply_nobuiltin()
+/*
+The replaceable global allocation and deallocation functions are `nobuiltin`
+(declarations and definitions alike, by final symbol).  LLVM recognizes them
+by name (TargetLibraryInfo.td): without the attribute a call to the
+translation unit's own operator new is a removable allocation that the
+optimizer folds, pairs with a delete, or sizes by a cookie of its own, and
+a program that replaces the functions miscompiles at -O1 and above.  This is
+the half of clang's rule that holds for every call; the other half, a
+`builtin` call-site attribute on the calls of a new-expression (which allows
+allocation elision), needs a stream fact.  A direct call takes the attribute
+of its callee in LLVM (CallBase::isNoBuiltin looks at the called function), so
+the declaration is enough.  The names are exactly the operator new/delete
+entries of LLVM's TargetLibraryInfo (the 32-bit `j` spellings, the
+`__hot_cold_t` ones and the __size_returning_new family included).
+*/
+{
+  static const char *const names[] = {
+    "_ZdaPv", "_ZdaPvRKSt9nothrow_t", "_ZdaPvSt11align_val_t",
+    "_ZdaPvSt11align_val_tRKSt9nothrow_t", "_ZdaPvj",
+    "_ZdaPvjSt11align_val_t", "_ZdaPvm", "_ZdaPvmSt11align_val_t",
+    "_ZdlPv", "_ZdlPvRKSt9nothrow_t", "_ZdlPvSt11align_val_t",
+    "_ZdlPvSt11align_val_tRKSt9nothrow_t", "_ZdlPvj",
+    "_ZdlPvjSt11align_val_t", "_ZdlPvm", "_ZdlPvmSt11align_val_t",
+    "_Znaj", "_ZnajRKSt9nothrow_t", "_ZnajSt11align_val_t",
+    "_ZnajSt11align_val_tRKSt9nothrow_t", "_Znam", "_Znam12__hot_cold_t",
+    "_ZnamRKSt9nothrow_t", "_ZnamRKSt9nothrow_t12__hot_cold_t",
+    "_ZnamSt11align_val_t", "_ZnamSt11align_val_t12__hot_cold_t",
+    "_ZnamSt11align_val_tRKSt9nothrow_t",
+    "_ZnamSt11align_val_tRKSt9nothrow_t12__hot_cold_t",
+    "_Znwj", "_ZnwjRKSt9nothrow_t", "_ZnwjSt11align_val_t",
+    "_ZnwjSt11align_val_tRKSt9nothrow_t", "_Znwm", "_Znwm12__hot_cold_t",
+    "_ZnwmRKSt9nothrow_t", "_ZnwmRKSt9nothrow_t12__hot_cold_t",
+    "_ZnwmSt11align_val_t", "_ZnwmSt11align_val_t12__hot_cold_t",
+    "_ZnwmSt11align_val_tRKSt9nothrow_t",
+    "_ZnwmSt11align_val_tRKSt9nothrow_t12__hot_cold_t",
+    "__size_returning_new", "__size_returning_new_hot_cold",
+    "__size_returning_new_aligned", "__size_returning_new_aligned_hot_cold"
+  };
+  std::unordered_set<std::string_view> set(std::begin(names),
+                                           std::end(names));
+  mlir::StringAttr name = mlir::StringAttr::get(
+      ctx_, cir::CIRDialect::getNoBuiltinAttrName());
+
+  for (a_entity *entity : entity_order_) {
+    if (entity->is_function && entity->op != nullptr &&
+        set.count(std::string_view(
+            mlir::cast<mlir::SymbolOpInterface>(entity->op).getName())) != 0)
+      entity->op->setAttr(name, unit_attr_);
+  }
+}  /* a_emitter::apply_nobuiltin */
+
 bool a_emitter::is_discardable(const a_entity &e) const
 /*
 Whether every translation unit that needs the entity defines it itself:
@@ -1782,6 +1860,7 @@ entity policy (spec 8.11).
   apply_substitution();
   finish_structors();
   apply_dynamic_init();
+  apply_nobuiltin();
   /* Definitions must be named. */
   for (a_entity *entity : entity_order_) {
     a_entity &e = *entity;

@@ -1,0 +1,116 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --gcc Test_name.c
+ecil 1.3 features=0x00000002
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 201112 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  TY_VOID 4
+  TY_INT 5 8 true 1 1
+  TY_PTR 6 5
+  TY_FUNC 7 4 0 [6]
+  STR 5 "bar"
+  DECL_FUNC 8 7 0 0 5 supp{14: true}
+  DECL_FUNC 8 7 0 1 5 supp{14: true}
+  STR 6 "p"
+  FUNC_BEGIN 8 0
+  PARAM 1 6 6 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CONST_INT 1 255
+  PTR_STRIDE 0
+  DEREF
+  CONST_INT 5 1
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_FUNC 9 1 0 [6]
+  STR 7 "foo"
+  DECL_FUNC 10 9 0 0 7 supp{14: true}
+  DECL_FUNC 10 9 0 1 7 supp{14: true}
+  FUNC_BEGIN 10 0
+  PARAM 1 6 6 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CONST_NULL 6
+  CMP 5
+  CAST 4 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_PTR 11 1
+  TY_FUNC 12 1 0 [11]
+  STR 8 "loop_next"
+  DECL_FUNC 13 12 0 0 8 supp{14: true}
+  DECL_FUNC 13 12 0 1 8 supp{14: true}
+  STR 9 "loop_next.state"
+  DECL_VAR 14 1 1 17 0 9
+  C_INT 1 0
+  VAR_INIT 14
+  FUNC_BEGIN 13 0
+  PARAM 1 11 11 6 0
+  BLOCK_BEGIN
+  BLOCK_BEGIN
+  GREF 14
+  LOAD 0
+  CONST_INT 1 1
+  CMP 4
+  IF_BEGIN false
+  BLOCK_BEGIN
+  CONST_INT 1 1
+  RETURN_STMT true
+  BLOCK_END
+  IF_END
+  BLOCK_END
+  GREF 14
+  CONST_INT 1 1
+  STORE 0 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 15 1 0 []
+  STR 10 "main"
+  DECL_FUNC 16 15 0 8 10
+  DECL_FUNC 16 15 0 9 10
+  TY_ARRAY 17 5 256 0
+  STR 11 "buffer"
+  STR 12 "t"
+  FUNC_BEGIN 16 0
+  BLOCK_BEGIN
+  LOCAL 1 17 11 0 0
+  LOCAL 2 1 12 0 0
+  LREF 1
+  ADDR
+  CAST 12 6
+  CALL 8 7 1 4
+  LREF 1
+  ADDR
+  CAST 12 6
+  CALL 10 9 1 0
+  LREF 2
+  ADDR
+  CALL 13 12 1 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame END
+  END 6 0

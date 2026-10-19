@@ -1,0 +1,18 @@
+; ECIL 1.3: supp key noinline (14) on DECL_FUNC, alone, sticky across a re-issue, and in blobs with other keys.
+ecil 1.3 features=0x00000002
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  HDR_TARGET 1 nil nil 64 64 6
+  HDR_LANG 1 201703 0
+frame DECLS supp
+  TY_INT 1 32 true 4 4
+  TY_FUNC 2 1 0 []
+  STR 3 "f"
+  STR 4 "g"
+  STR 5 "h"
+  DECL_FUNC 10 2 0 1 3 supp{14: true}
+  DECL_FUNC 10 2 0 1 3
+  DECL_FUNC 11 2 0 32 4 supp{13: bin8:"why", 14: true}
+  DECL_FUNC 12 2 0 1 5 supp{1: true, 14: true, 99: 7}
+frame END
+  END 2 0

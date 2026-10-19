@@ -170,10 +170,15 @@ class Toolchain:
                        self.env)
     return code == 0, output, exe
 
-  def build_ours(self, source: Path, work: Path, options: List[str],
-                 level: int) -> Tuple[str, str, Path]:
-    '''("ok", "", exe), ("unsupported", text, ...) or ("fail", text, ...).'''
-    exe = work / 'ours.exe'
+  def make_stream(self, source: Path, work: Path, options: List[str],
+                  level: int, c_mode: bool = False,
+                  fe_level: Optional[int] = None
+                  ) -> Tuple[str, str, Path]:
+    '''Run the front end like the test configurations and keep the ECIL
+    stream: ("ok", "", stream), ("unsupported", text, stream) or ("fail",
+    text, stream).  With c_mode the instantiation option -tused (C++ only) is
+    left out; the options must then select C (--gcc).  fe_level (default:
+    level) is the --cir_opt_level of the front end.'''
     stream = work / 'ours.ecil'
     wrapper = work / 'cpfe-wrapper.sh'
     wrapper.write_text(f"#!/bin/sh\nexec {self.cpfe} "
@@ -183,18 +188,45 @@ class Toolchain:
     env['CPFE'] = str(wrapper)
     local = work / source.name
     shutil.copy2(source, local)
-    _, output = run([str(self.root / 'util/eccp.sh'), '-c', '-tused',
-                     *options, local.name], work, env)
+    # At -O1 and above the front end is told the level too, as the test
+    # configurations do (it predefines __OPTIMIZE__ instead of
+    # __NO_INLINE__, which changes what the system headers declare).
+    front_level = level if fe_level is None else fe_level
+    if front_level:
+      # (eccp does not take the option itself: it goes in the defaults.)
+      env['EDG_CPFE_DEFAULT_OPTIONS'] = (
+        f"{env.get('EDG_CPFE_DEFAULT_OPTIONS', '')} "
+        f"--cir_opt_level={front_level}").strip()
+    _, output = run([str(self.root / 'util/eccp.sh'), '-c',
+                     *([] if c_mode else ['-tused']), *options, local.name],
+                    work, env)
     if is_unsupported(output):
-      return 'unsupported', output, exe
+      return 'unsupported', output, stream
     # eccp's own last steps fail ("can't open ....int.s": the front end wrote
     # the stream and no assembly); a front end error is a diagnostic line.
     if _FE_ERROR.search(output) or not stream.exists() or \
         not stream.stat().st_size:
-      return 'fail', 'cpfe-cir: ' + output[-800:], exe
+      return 'fail', 'cpfe-cir: ' + output[-800:], stream
+    return 'ok', '', stream
+
+  def build_ours(self, source: Path, work: Path, options: List[str],
+                 level: int, c_mode: bool = False,
+                 fe_level: Optional[int] = None,
+                 edg_cir_flags: Optional[List[str]] = None
+                 ) -> Tuple[str, str, Path]:
+    '''("ok", "", exe), ("unsupported", text, ...) or ("fail", text, ...).
+    The front end is run by make_stream; level is the -O of edg-cir and
+    edg_cir_flags more flags of edg-cir.'''
+    exe = work / 'ours.exe'
+    env = dict(self.env)
+    state, text, stream = self.make_stream(source, work, options, level,
+                                           c_mode, fe_level)
+    if state != 'ok':
+      return state, text, exe
     obj = work / 'ours.o'
-    code, output = run([self.edg_cir, f"-O{level}", '--emit=obj', '-o',
-                        str(obj), str(stream)], work, env)
+    code, output = run([self.edg_cir, f"-O{level}", *(edg_cir_flags or []),
+                        '--emit=obj', '-o', str(obj), str(stream)], work,
+                       env)
     if is_unsupported(output):
       return 'unsupported', output, exe
     if code != 0 or not obj.exists():

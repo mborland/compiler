@@ -944,13 +944,16 @@ At the end of a frame no TY_RECORD_BODY may still await REC_FIELD records.
 
 bool a_ref_checker::check_supp(const a_record &r, std::string &problem)
 /*
-The keys of a supp blob this reader understands.  unsupported_reason (1.1) is
-UTF-8 text of at most 255 bytes, at most once, on a DECL_FUNC or DECL_VAR that
-has UNSUPPORTED set.  Unknown keys are skipped.
+The keys of a supp blob this reader understands.  A key appears at most once
+per blob (any key: a blob may hold several, since 1.3).  unsupported_reason
+(1.1) is UTF-8 text of at most 255 bytes on a DECL_FUNC or DECL_VAR that has
+UNSUPPORTED set.  noinline (1.3) is `true` on a DECL_FUNC; it is honored in
+streams of every minor (a reader that knows the key checks it whatever the
+preamble says).  Unknown keys are skipped.
 */
 {
   bool ok = true;
-  bool seen = false;
+  std::unordered_set<uint64_t> seen;
   std::vector<std::pair<uint64_t, an_operand>> pairs;
   uint64_t flags = 0;
   bool unsupported_decl = false;
@@ -964,29 +967,38 @@ has UNSUPPORTED set.  Unknown keys are skipped.
   }
   for (size_t k = 0; ok && k < pairs.size(); ++k) {
     const an_operand &value = pairs[k].second;
+    uint64_t key = pairs[k].first;
 
-    if (pairs[k].first != esk_unsupported_reason)
-      continue;
-    if (!unsupported_decl) {
-      problem = "supp key unsupported_reason (13) is only valid on a "
-                "DECL_FUNC or DECL_VAR with UNSUPPORTED";
+    if (!seen.insert(key).second) {
+      problem = "supp key " + number(key) + " appears twice in one blob";
       ok = false;
-    } else if (seen) {
-      problem = "supp key unsupported_reason (13) appears twice";
-      ok = false;
-    } else if (value.kind != an_operand_kind::bin) {
-      problem = "supp key unsupported_reason (13) is not a bin";
-      ok = false;
-    } else if (value.length > unsupported_reason_max) {
-      problem = "supp key unsupported_reason (13) is " +
-                number(value.length) + " bytes (at most " +
-                number(unsupported_reason_max) + ")";
-      ok = false;
-    } else if (!is_valid_utf8(value.data, value.length)) {
-      problem = "supp key unsupported_reason (13) is not valid UTF-8";
-      ok = false;
+    } else if (key == esk_noinline) {
+      if (r.opcode != eop_decl_func) {
+        problem = "supp key noinline (14) is only valid on a DECL_FUNC";
+        ok = false;
+      } else if (!((value.kind == an_operand_kind::boolean ||
+                    value.kind == an_operand_kind::uint) && value.u == 1)) {
+        problem = "supp key noinline (14) is not true";
+        ok = false;
+      }
+    } else if (key == esk_unsupported_reason) {
+      if (!unsupported_decl) {
+        problem = "supp key unsupported_reason (13) is only valid on a "
+                  "DECL_FUNC or DECL_VAR with UNSUPPORTED";
+        ok = false;
+      } else if (value.kind != an_operand_kind::bin) {
+        problem = "supp key unsupported_reason (13) is not a bin";
+        ok = false;
+      } else if (value.length > unsupported_reason_max) {
+        problem = "supp key unsupported_reason (13) is " +
+                  number(value.length) + " bytes (at most " +
+                  number(unsupported_reason_max) + ")";
+        ok = false;
+      } else if (!is_valid_utf8(value.data, value.length)) {
+        problem = "supp key unsupported_reason (13) is not valid UTF-8";
+        ok = false;
+      }
     }
-    seen = true;
   }
   return ok;
 }  /* a_ref_checker::check_supp */

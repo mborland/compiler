@@ -1354,3 +1354,47 @@ ECIL 1.2, spec 12.4 (`FUNC_EH_SPEC`), 12.5 (`TRY_BEGIN`, `CATCH_BEGIN`,
   pointers).
 * **Not in 1.2** (diagnosed by the writer, section 9.12 and the map, `il_to_ecil_map_m4.md`):
   see the final status there.
+* **1.3** (open from gate M4.1, session 4; frozen at the M5 gate):
+  * **Supp key 14 `noinline`** on every `DECL_FUNC` issue of a routine with
+    `never_inline` set. `__attribute__((noinline))`, `[[gnu::noinline]]`
+    and `__declspec(noinline)` all set that FE bit. The writer state is
+    sticky (`decl_noinline`), and the key is part of the re-issue
+    comparison in `emit_func_decl_if_changed`, so a later declaration that
+    adds the attribute re-issues the `DECL_FUNC`.
+  * **Multi-key supp blobs.** The builder in `ecil_write.c` is
+    `ecil_supp_begin`, `ecil_supp_true`, `ecil_supp_uint`, `ecil_supp_text`
+    and `ecil_rec_supp_end`. Keys go in increasing order (asserted in
+    CHECKING builds), each at most once. It replaces
+    `ecil_rec_supp_reason`, so a dropped `noinline` function carries
+    `supp{13: reason, 14: true}`.
+  * **Vague linkage of nested routines and their static locals.** These
+    changes are writer behavior, not new records (spec 11.2).
+    * `ecil_routine_has_vague_linkage` (`ecil_type.c`) walks a routine that
+      lives in a function up to its innermost enclosing namespace-scope
+      function. That covers local-class members, lambda call operators,
+      static invokers and special members, at any depth.
+    * `compute_func_state` gives such routines `linkonce_odr` with `COMDAT`
+      when that function has vague linkage and the local class is not
+      TU-local. Their static locals and guards follow the same predicate.
+    * A static anonymous union is named after its first named member
+      (`cir_local_static_source_name`, `cir_first_member_name` in
+      `lower_name.c`).
+    * `tu_walk` no longer treats a local-class member's `sc_static` as
+      TU-local.
+    * Proof: a 22-shape probe matches clang's IR in linkage and name.
+      73 C++ corpus streams changed (only `DECL_FUNC` linkage and flags,
+      plus the pr39188 variables), with 0 status changes. Goldens:
+      `writer-cxx-static-local-vague-linkage`, `writer-noinline`,
+      `writer-noinline-reissue`, `writer-noinline-c`.
+  * **One body per symbol** (`emit_function`). Overloads that share an asm
+    label have one G-id. glibc's `gnu_inline` `memchr` pair under
+    `__OPTIMIZE__` is the case that showed it.
+    * If the G-id already has a body from another routine, an inline-only
+      routine (`definition_for_inlining_only` or `suppress_inline_body`) is
+      not streamed. It is marked `efs_streamed`, and the static locals and
+      lambdas of its body are never introduced.
+    * A real definition there is a `cir_be_error`, marked `efs_dropped`
+      without the unsupported re-issue, so the first body stays.
+    * Goldens: `writer-cxx-gnu-inline-shared-symbol`,
+      `writer-cxx-asm-label-two-definitions-negative` and
+      `writer-cxx-asm-label-inline-then-definition-negative`.

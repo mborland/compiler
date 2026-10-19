@@ -317,20 +317,29 @@ destroyed.
     (void)module.release();
   }
   if (emitter || module) {
-    /* Destroying nested regions recurses once per nesting level, so it runs
-       on the big-stack worker like everything else that walks the IR.  If
-       even that fails the state is leaked. */
-    std::string reason;
-    bool completed = edg_cir::run_guarded(
-        [this] {
-          emitter.reset();
-          module.reset();
-        },
-        static_cast<unsigned>(EDG_CIR_WORKER_STACK_MB), reason);
+    if (edg_cir::on_guard_worker_thread()) {
+      /* Closed from the guard worker (an exit() inside a guarded section
+         runs the atexit handlers and static destructors there): this is
+         already a big-stack thread under crash recovery, and a guarded
+         section would only wait for itself. */
+      emitter.reset();
+      module.reset();
+    } else {
+      /* Destroying nested regions recurses once per nesting level, so it
+         runs on the big-stack worker like everything else that walks the
+         IR.  If even that fails the state is leaked. */
+      std::string reason;
+      bool completed = edg_cir::run_guarded(
+          [this] {
+            emitter.reset();
+            module.reset();
+          },
+          static_cast<unsigned>(EDG_CIR_WORKER_STACK_MB), reason);
 
-    if (!completed) {
-      (void)emitter.release();
-      (void)module.release();
+      if (!completed) {
+        (void)emitter.release();
+        (void)module.release();
+      }
     }
   }
   if (crash_held)
@@ -427,16 +436,10 @@ or a crash must not exit() or kill the front end.
   bool completed = edg_cir::run_guarded(
       [this, bytes, length, &accepted] {
 #if EDG_CIR_TEST_HOOKS
-        /* Test hook: a crash or fatal error while consuming (op
-           construction runs on the front end's thread). */
-        if (const char *hook = std::getenv("EDG_CIR_TEST_CONSUME_CRASH")) {
-          if (std::strcmp(hook, "fatal") == 0)
-            llvm::report_fatal_error("EDG_CIR_TEST_CONSUME_CRASH=fatal");
-          else if (std::strcmp(hook, "segv") == 0)
-            std::raise(SIGSEGV);
-          else if (std::strcmp(hook, "abort") == 0)
-            std::abort();
-        }
+        /* Test hook: a crash, exit or stack overflow while consuming: this
+           runs on the guard worker, like the pipeline. */
+        if (const char *hook = std::getenv("EDG_CIR_TEST_CONSUME_CRASH"))
+          edg_cir::run_test_crash_hook(hook);
 #endif
         accepted = reader->consume(bytes, length);
       }, static_cast<unsigned>(EDG_CIR_WORKER_STACK_MB), reason);

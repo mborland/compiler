@@ -1,0 +1,28 @@
+; Through a glvalue made by DEREF (the first element of an allocation),
+; ZERO_BYTES covers a whole number of elements; 6 bytes of 4-byte elements is
+; not one.
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: error [1001]: ZERO_BYTES of 6 bytes through a DEREF glvalue of a 4-byte type: not a whole number of elements
+
+frame DECLS
+  STR 102 "f"
+  STR 103 "alloc"
+  TY_FUNC 204 11 0 []
+  TY_FUNC 205 12 0 [2]
+  DECL_FUNC 300 204 0 1 102
+  DECL_FUNC 301 205 0 1 103
+frame REGION
+  FUNC_BEGIN 300 0
+  CONST_INT 2 12
+  CALL 301 205 1 0
+  CAST 11 14
+  DUP
+  DEREF
+  ZERO_BYTES 6
+  DROP
+  FUNC_END 1
+frame END
+  END auto 0

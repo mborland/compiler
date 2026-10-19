@@ -117,8 +117,9 @@ copies the message to the queue and returns.
 void cir_be_fill_session_options(an_edg_cir_options *options)
 /*
 Set the options of the in-process session: assembly output to the generated
-file name (the --gen_c_file_name value, or <source>.int.s), unoptimized, with
-the queueing diagnostic callback.
+file name (the --gen_c_file_name value, or <source>.int.s), at the
+optimization level of --cir_opt_level (default 0, unoptimized), with the
+queueing diagnostic callback.
 */
 {
   a_const_char  *output_name = gen_c_file_name;
@@ -130,7 +131,7 @@ the queueing diagnostic callback.
   options->output_path = output_name;
   options->diagnostic_callback = queue_diagnostic;
   options->diagnostic_user_data = NULL;
-  options->opt_level = 0;
+  options->opt_level = cir_opt_level;
 }  /* cir_be_fill_session_options */
 
 #endif /* EDG_CIR_LIBRARY_LINKED */

@@ -417,8 +417,15 @@ class M4StepsTest(unittest.TestCase):
     skip = {'u1.cpp'}
     ok, detail = gate.judge_eh_probes(rows, skip, 6)
     self.assertTrue(ok, detail)
-    # Fewer probes than expected (a glob that matched nothing) fails.
+    # Fewer probes than expected (a glob that matched nothing) fails, and a
+    # step that expects no probe at all is not a pass.
     self.assertFalse(gate.judge_eh_probes('0 probe(s): ...\n', skip, 6)[0])
+    ok, detail = gate.judge_eh_probes('', set(), 0)
+    self.assertFalse(ok)
+    self.assertIn('no probe file was found', detail)
+    # Every probe unsupported is not a pass either.
+    self.assertFalse(gate.judge_eh_probes(
+      'u1.cpp                     UNSUPPORTED* x\n', {'u1.cpp'}, 1)[0])
     self.assertFalse(gate.judge_eh_probes(rows, skip, 7)[0])
     # A probe on the skip list that passes now must be removed from it.
     ok, detail = gate.judge_eh_probes(rows, skip | {'e1.cpp'}, 6)
@@ -452,12 +459,202 @@ class M4StepsTest(unittest.TestCase):
     self.assertFalse(gate.judge_symbols(skipped)[0])
 
   def test_mixed_tu_rule(self) -> None:
+    cases = {'a': set(), 'b': {'ref+ours'}}
     good = ('case direction result detail\n'
-            'a ref+ours PASS \na ours+ref PASS \n2 case(s)\n')
-    self.assertTrue(gate.judge_mixed_tu(good)[0])
-    self.assertFalse(gate.judge_mixed_tu(
-      good + 'b ref+ours XFAIL why\n')[0])
-    self.assertFalse(gate.judge_mixed_tu('nothing\n')[0])
+            'a                               ref+ours    PASS \n'
+            'a                               ours+ref    PASS \n'
+            'b                               ref+ours    XFAIL why\n'
+            'b                               ours+ref    PASS \n'
+            '2 case(s), 0 not passing\n')
+    ok, detail = gate.judge_mixed_tu(good, cases)
+    self.assertTrue(ok, detail)
+    self.assertIn('4 of 4 rows', detail)
+    # A missing row (a case or a direction that did not run) fails, also when
+    # the name of the case is as wide as its column (no space before the
+    # direction).
+    ok, detail = gate.judge_mixed_tu(good.replace(
+      'b                               ours+ref    PASS \n', ''), cases)
+    self.assertFalse(ok)
+    self.assertIn('b ours+ref: no row', detail)
+    wide = {'a-case-with-a-name-of-33-characters': set()}
+    rows = ''.join(f"a-case-with-a-name-of-33-characters{d}    PASS \n"
+                   for d in ('ref+ours', 'ours+ref'))
+    self.assertTrue(gate.judge_mixed_tu(rows, wide)[0])
+    # An XFAIL that the case does not list, an XPASS (a stale xfail line), any
+    # other result, a duplicate row and a row of an unknown case fail.
+    row = '{}                               {}    {}'
+    for bad in (good.replace(row.format('a', 'ours+ref', 'PASS'),
+                             row.format('a', 'ours+ref', 'XFAIL')),
+                good.replace(row.format('b', 'ref+ours', 'XFAIL'),
+                             row.format('b', 'ref+ours', 'XPASS')),
+                good.replace(row.format('b', 'ours+ref', 'PASS'),
+                             row.format('b', 'ours+ref', 'LINK')),
+                good + row.format('a', 'ours+ref', 'PASS') + '\n',
+                good + row.format('c', 'ours+ref', 'PASS') + '\n'):
+      self.assertFalse(gate.judge_mixed_tu(bad, cases)[0], bad)
+    self.assertFalse(gate.judge_mixed_tu('nothing\n', cases)[0])
+    self.assertFalse(gate.judge_mixed_tu(good, {})[0])
+
+  def test_mixed_tu_cases_load(self) -> None:
+    cases = gate.load_mixed_tu_cases(
+      Path(__file__).resolve().parent.parent / 'cir-mixed-tu-cases')
+    self.assertGreaterEqual(len(cases), 19)
+    self.assertIn('s1-deleting-dtor', cases)
+
+  def test_mixed_tu_names_a_failing_baseline(self) -> None:
+    text = ('b                               all-ref     REF-FAIL    link: x\n'
+            'a                               ref+ours    PASS \n'
+            'a                               ours+ref    PASS \n')
+    ok, detail = gate.judge_mixed_tu(text, {'a': set(), 'b': set()})
+    self.assertFalse(ok)
+    self.assertIn('b: REF-FAIL (the baseline itself fails: link: x)', detail)
+    self.assertNotIn('no row', detail)
+
+  def test_context_drops_the_default_options(self) -> None:
+    import argparse
+    import contextlib
+    import io
+    saved = os.environ.get('EDG_CPFE_DEFAULT_OPTIONS')
+    os.environ['EDG_CPFE_DEFAULT_OPTIONS'] = '--cir_opt_level=2'
+    try:
+      with tempfile.TemporaryDirectory() as tmp:
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+          context = gate.Context(argparse.Namespace(tree = tmp, out = tmp))
+        self.assertNotIn('EDG_CPFE_DEFAULT_OPTIONS', context.env)
+        self.assertIn('WARNING', err.getvalue())
+    finally:
+      if saved is None:
+        del os.environ['EDG_CPFE_DEFAULT_OPTIONS']
+      else:
+        os.environ['EDG_CPFE_DEFAULT_OPTIONS'] = saved
+
+  def test_perf_worst_change(self) -> None:
+    def perf(big: int, cxx: int, fe: int) -> dict:
+      return {'big': {'inproc': {'ir': big}}, 'big_cxx': {'inproc': {'ir': cxx},
+              'cgen-total': {'ir': 0}}, 'corpus': {'fe_ir': fe, 'cir_ir': 100}}
+    before = perf(1000, 2000, 500)
+    worst, compared, problems = gate.perf_worst_change(before,
+                                                       perf(1010, 1900, 500))
+    self.assertEqual((compared, problems), (4, []))
+    self.assertAlmostEqual(worst, 1.0)
+    # Rows that shrank only: no increase (the unchanged row is 0).
+    worst, _, _ = gate.perf_worst_change(before, perf(900, 1900, 400))
+    self.assertEqual(worst, 0.0)
+    # Nothing in common compares nothing; a baseline row that is missing or
+    # 0 in the new run is a problem, not a skipped row.
+    self.assertEqual(gate.perf_worst_change({}, before), (0.0, 0, []))
+    _, compared, problems = gate.perf_worst_change(before, {})
+    self.assertEqual(compared, 0)
+    self.assertEqual(len(problems), 4, problems)
+    _, _, problems = gate.perf_worst_change(before, perf(1000, 0, 500))
+    self.assertEqual(problems, ['big_cxx/inproc is missing or 0 in the new '
+                                'run'])
+    self.assertEqual(gate.DEFAULT_PERF_MAX_REGRESSION, 2.0)
+
+  def test_opt_corpus_rules(self) -> None:
+    before = {('a', ''): 'PASS', ('b', ''): 'PASS', ('c', ''): 'FAIL',
+              ('d', ''): 'PASS'}
+    after = {('a', ''): 'PASS', ('b', ''): 'RUN_FAIL', ('c', ''): 'PASS',
+             ('d', ''): 'LIB_CRASH'}
+    triage = {('b', ''): ('ub', 'overflow'), ('d', ''): ('our-ir', 'x')}
+    ok, detail, lists = gate.judge_opt_changes(before, after, triage, 'C')
+    self.assertTrue(ok, detail)
+    self.assertIn('2 worse (our-ir 1, ub 1)', detail)
+    self.assertEqual(lists['our-ir'], [('d', '')])
+    self.assertEqual(lists['improved'], [('c', '')])
+    # A FAIL that becomes a crash (or a kill, a timeout) is a new problem
+    # that needs a line too; a crash that was already one is not.
+    ok, detail, lists = gate.judge_opt_changes(
+      {('a', ''): 'FAIL', ('b', ''): 'LIB_CRASH'},
+      {('a', ''): 'LIB_CRASH', ('b', ''): 'LIB_CRASH'}, {}, 'C')
+    self.assertFalse(ok)
+    self.assertEqual(lists['unattributed'], [('a', '')])
+    # A change without a line, a stale line, and a different set of cases.
+    ok, detail, lists = gate.judge_opt_changes(
+      before, after, {('b', ''): ('ub', 'x')}, 'C')
+    self.assertFalse(ok)
+    self.assertEqual(lists['unattributed'], [('d', '')])
+    ok, detail, lists = gate.judge_opt_changes(
+      before, after, {**triage, ('a', ''): ('ub', 'x')}, 'C')
+    self.assertFalse(ok)
+    self.assertEqual(lists['stale'], [('a', '')])
+    short = dict(after)
+    del short[('a', '')]
+    self.assertFalse(gate.judge_opt_changes(before, short, triage, 'C')[0])
+    self.assertFalse(gate.judge_opt_changes({}, {}, {}, 'C')[0])
+    # The triage file: categories are checked.
+    with tempfile.TemporaryDirectory() as tmp:
+      path = Path(tmp) / 'triage.txt'
+      path.write_text('# c\nimported/x.c | -O | our-ir | why\n')
+      self.assertEqual(gate.read_opt_triage(path),
+                       {('imported/x.c', '-O'): ('our-ir', 'why')})
+      path.write_text('x | | bogus | why\n')
+      with self.assertRaises(ValueError):
+        gate.read_opt_triage(path)
+      self.assertEqual(gate.read_opt_triage(Path(tmp) / 'none.txt'), {})
+
+  def test_canary_output(self) -> None:
+    import tarfile
+    with tempfile.TemporaryDirectory() as tmp:
+      run = Path(tmp)
+      path = 'cir/config/opt-level-canary.sft.c'
+      config_dir = run / 'edg_x86_64_cir' / 'cir' / 'config'
+      config_dir.mkdir(parents = True)
+      self.assertIsNone(gate.canary_output(run, 'edg_x86_64_cir', path))
+      output = config_dir / 'output.txt'
+      output.write_text('canary: optimizing\n')
+      with tarfile.open(config_dir / 'opt-level-canary.sft.rt.tar.gz',
+                        'w:gz') as tar:
+        tar.add(output, arcname = 'cases/1/2/output.txt')
+      self.assertIn('canary: optimizing',
+                    gate.canary_output(run, 'edg_x86_64_cir', path))
+
+  def test_opt_corpus_asm_rule(self) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+      o0, o2 = Path(tmp) / 'o0', Path(tmp) / 'o2'
+      for directory, text in ((o0, 'a\n'), (o2, 'b\n')):
+        directory.mkdir()
+        (directory / 'x.0.s').write_text(text)
+        (directory / 'y.0.s').write_text(text)
+        (directory / 'manifest.json').write_text(json.dumps({
+          'x.0.s': {'asm': True, 'rc': 0}, 'y.0.s': {'asm': True, 'rc': 0},
+          'z.0.s': {'asm': False, 'rc': 1}}))
+      ok, detail = gate.judge_opt_asm(o0, o2, 'smoke')
+      self.assertTrue(ok, detail)
+      self.assertIn('2/2 differ', detail)
+      (o2 / 'y.0.s').write_text('a\n')
+      ok, detail = gate.judge_opt_asm(o0, o2, 'smoke')
+      self.assertFalse(ok)
+      self.assertIn('1 case(s) with the same assembly', detail)
+      # Nothing with assembly is no pass either.
+      for directory in (o0, o2):
+        (directory / 'manifest.json').write_text(json.dumps(
+          {'z.0.s': {'asm': False, 'rc': 1}}))
+      self.assertFalse(gate.judge_opt_asm(o0, o2, 'smoke')[0])
+      self.assertFalse(gate.judge_opt_asm(o0, Path(tmp) / 'no', 'smoke')[0])
+
+  def test_rss_rule(self) -> None:
+    ceilings = {('c', 'asan', 'inproc'): 100, ('c', 'asan', '2p-fe'): 50,
+                ('cxx', 'release', 'inproc'): 80}
+    text = ('== RSS c asan\nmode wall s peak\n'
+            'inproc          1.00           90    0\n'
+            '2p-fe           1.00           40    0\n'
+            '== RSS cxx release\n'
+            'inproc          1.00           79    0\n')
+    ok, detail = gate.judge_rss(text, ceilings)
+    self.assertTrue(ok, detail)
+    self.assertIn('99% of its ceiling', detail)
+    # Over a ceiling, a failing exit status, a missing row and no ceilings.
+    self.assertFalse(gate.judge_rss(text.replace('79', '81'), ceilings)[0])
+    self.assertFalse(gate.judge_rss(text.replace('40    0', '40    1'),
+                                    ceilings)[0])
+    ok, detail = gate.judge_rss(text.split('== RSS cxx')[0], ceilings)
+    self.assertFalse(ok)
+    self.assertIn('cxx/release/inproc: no measurement', detail)
+    self.assertFalse(gate.judge_rss(text, {})[0])
+    # Rows outside a block are not taken for a measurement.
+    self.assertFalse(gate.judge_rss('inproc 1.0 5 0\n', ceilings)[0])
 
   def test_stress_rule(self) -> None:
     lines = ''.join(
@@ -899,6 +1096,73 @@ class RssGeneratorTest(unittest.TestCase):
       self.assertRegex(run.stdout, r'^\d+\n$')
 
 
+class OptPlumbingTest(unittest.TestCase):
+  '''eccp's -O mapping and cpfe-cir-2p's forwarding of --cir_opt_level.'''
+
+  def map_options(self, enabled: str, argument: str) -> str:
+    '''The --cir_opt_level that eccp's cir_map_opt_level adds for the
+    argument of -O (empty if none).'''
+    text = (BIN.parent.parent / 'util' / 'eccp.sh').read_text()
+    start = text.index('cir_map_opt_level()')
+    end = text.index('}  # cir_map_opt_level', start)
+    script = (text[start:end + 1] + '\nfeoptions=\ncir_map_opt_level "$1"\n'
+              'printf "%s" "$feoptions"\n')
+    proc = subprocess.run(
+      ['sh', '-c', script, 'sh', argument], text = True,
+      stdout = subprocess.PIPE, env = {**os.environ,
+                                       'EDG_CIR_MAP_OPT_LEVEL': enabled})
+    return proc.stdout.strip()
+
+  def test_eccp_maps_the_levels(self) -> None:
+    expected = {'': 1, '0': 0, '1': 1, '2': 2, '3': 3, '4': 3, '07': 3,
+                '02': 2, 'g': 1, 's': 2, 'z': 2, 'fast': 3}
+    for argument, level in expected.items():
+      self.assertEqual(self.map_options('1', argument),
+                       f"--cir_opt_level={level}", argument)
+    # Nothing for an unknown argument, and nothing at all unless the base
+    # turns the mapping on (the other configurations are unchanged).
+    self.assertEqual(self.map_options('1', 'x'), '')
+    self.assertEqual(self.map_options('1', '2x'), '')
+    for argument in ('', '2', 'fast'):
+      self.assertEqual(self.map_options('', argument), '')
+      self.assertEqual(self.map_options('0', argument), '')
+
+  def test_two_process_wrapper_forwards_the_level(self) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      fe = root / 'fe'
+      fe.write_text('#!/bin/sh\nfor a in "$@"; do echo "$a"; done '
+                    '> "$FE_ARGS"\ncat /dev/null > "$FE_STREAM_ARG"\n'
+                    'for a in "$@"; do case "$a" in --ecil_output=*) '
+                    ': > "${a#--ecil_output=}";; esac; done\n')
+      tool = root / 'tool'
+      tool.write_text('#!/bin/sh\necho "$@" > "$TOOL_ARGS"\n')
+      for path in (fe, tool):
+        path.chmod(0o755)
+      env = {**os.environ, 'CPFE_CIR_BIN': str(fe), 'EDG_CIR_TOOL': str(tool),
+             'FE_ARGS': str(root / 'fe.args'),
+             'FE_STREAM_ARG': str(root / 'stream'),
+             'TOOL_ARGS': str(root / 'tool.args')}
+
+      def level(*options: str) -> str:
+        subprocess.run([str(BIN / 'cpfe-cir-2p'), *options,
+                        f"--gen_c_file_name={root / 'out.s'}", 'x.c'],
+                       env = env, check = True)
+        return (root / 'tool.args').read_text()
+
+      self.assertIn(' -O0 ', level('-w'))
+      self.assertIn(' -O2 ', level('--cir_opt_level=2', '-w'))
+      # The last one wins (the options of a test follow the defaults), also
+      # when the number has leading zeros.
+      self.assertIn(' -O0 ', level('--cir_opt_level=2', '--cir_opt_level=0'))
+      self.assertIn(' -O3 ', level('--cir_opt_level=0', '--cir_opt_level=03'))
+      # The front end still gets the option and the other arguments in order.
+      level('--cir_opt_level=1', '-w')
+      args = (root / 'fe.args').read_text().split()
+      self.assertEqual(args[0:3], ['--ecil_output=' + args[0].split('=', 1)[1],
+                                   '--cir_opt_level=1', '-w'])
+
+
 class CheckpointTest(unittest.TestCase):
   def test_headroom(self) -> None:
     self.assertEqual(checkpoint.headroom_gb('Avail\n 126G\n'), 126)
@@ -968,9 +1232,10 @@ class CheckpointTest(unittest.TestCase):
 
   def test_protected_trees(self) -> None:
     self.assertIn('m3-final', checkpoint.PROTECTED_TREES)
+    self.assertIn('m4-final', checkpoint.PROTECTED_TREES)
 
   def test_default_tree_is_not_stale(self) -> None:
-    self.assertEqual(checkpoint.DEFAULT_TREE, 'm31-int')
+    self.assertEqual(checkpoint.DEFAULT_TREE, 'm41-int')
 
 
 if __name__ == '__main__':

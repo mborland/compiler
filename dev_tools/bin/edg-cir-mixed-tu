@@ -7,9 +7,13 @@
 
 '''Link programs made of translation units from two compilers and run them.
 
-Status: skeleton for M4 (not wired into the gate).  For every case (a
-directory) it builds the program four ways and checks that all of them behave
-alike:
+Step `mixed-tu` of edg-cir-gate-evidence (--with-m4) runs it once with g++ and
+once with clang as the reference compiler, and checks the result table: one
+row per case and direction and host (cases x 2 directions x 2 hosts), each
+PASS, or XFAIL for a direction that the case lists in its xfail file; an XPASS
+(a listed direction that passes) fails the step, so a stale xfail line is
+removed.  For every case it builds the program four ways and checks that all
+of them behave alike:
 
   all-ref     a.cpp and b.cpp with the reference compiler (g++): the baseline
   ref+ours    a.cpp with the reference compiler, b.cpp with cpfe-cir
@@ -43,6 +47,10 @@ have:
                 then expects: a negative case)
   ref_*.cpp     more files, always compiled with the reference compiler
                 (a driver that cannot be compiled by cpfe-cir yet)
+  levels        optimization levels, e.g. "0 2": the case is built (both
+                translation units, whoever compiles them) at each of them
+                and its rows are named <case>@O0, <case>@O2; -O options of
+                the flags file give way to them
   xfail         the directions (e.g. "ref+ours ours+ref") that fail today (an
                 M4 case lists the directions that cannot work yet); they are
                 reported XFAIL (expected failure) and, if they pass, XPASS
@@ -58,7 +66,8 @@ build/gcc-cir and build/cir:
 
 The cases are in dev_tools/cir-mixed-tu-cases (--cases DIR for others).
 Exit status: 0 if every result is PASS, XFAIL, XPASS or SKIP, 1 otherwise, 2
-for a setup problem.  A direction that did not run never reports PASS.
+for a setup problem (the gate step is stricter: see above).  A direction that
+did not run never reports PASS.
 '''
 
 import argparse
@@ -156,10 +165,11 @@ def run(command: List[str], cwd: Path, env: Optional[Dict[str, str]] = None,
 
 
 class Case:
-  '''A case directory.'''
-  def __init__(self, path: Path) -> None:
+  '''A case directory, or one optimization level of it (see `levels`).'''
+  def __init__(self, path: Path, level: Optional[int] = None) -> None:
     self.path = path
-    self.name = path.name
+    self.level = level
+    self.name = path.name + (f"@O{level}" if level is not None else '')
 
   def read(self, name: str) -> Optional[str]:
     file = self.path / name
@@ -167,16 +177,32 @@ class Case:
 
   @property
   def flags(self) -> List[str]:
-    return (self.read('flags') or '').split()
+    flags = (self.read('flags') or '').split()
+    if self.level is None:
+      return flags
+    # A case with levels is built at each of them: -O options of the flags
+    # file give way to the level (-O0 is the default of both compilers).
+    flags = [f for f in flags if not re.match(r'-O\w*$', f)]
+    return flags + ([f"-O{self.level}"] if self.level else [])
 
   @property
   def xfail(self) -> List[str]:
     return (self.read('xfail') or '').split()
 
 
+def expand_case(path: Path) -> List[Case]:
+  '''The cases of a directory: one, or one per level of its `levels` file
+  (named <directory>@O<level>).'''
+  levels = (path / 'levels')
+  if levels.exists():
+    return [Case(path, int(token)) for token in levels.read_text().split()]
+  return [Case(path)]
+
+
 def find_cases(root: Path) -> List[Case]:
-  return [Case(p) for p in sorted(root.iterdir())
-          if (p / 'a.cpp').exists() and (p / 'b.cpp').exists()]
+  return [case for p in sorted(root.iterdir())
+          if (p / 'a.cpp').exists() and (p / 'b.cpp').exists()
+          for case in expand_case(p)]
 
 
 def build_and_run(toolchain: Toolchain, case: Case, work: Path, who: str,
@@ -405,6 +431,18 @@ class SelfTest(unittest.TestCase):
                                'build').link_flags, [])
     self.assertEqual(self.toolchain().link_flags, [])
 
+  def test_levels_make_one_case_per_level(self) -> None:
+    case = self.make_case('lv', 'int main() { return 0; }\n', 'int x;\n',
+                          flags = '-O1 -fno-inline\n', levels = '0 2\n')
+    cases = expand_case(case.path)
+    self.assertEqual([c.name for c in cases], ['lv@O0', 'lv@O2'])
+    self.assertEqual(cases[0].flags, ['-fno-inline'])
+    self.assertEqual(cases[1].flags, ['-fno-inline', '-O2'])
+    plain = self.make_case('plain', 'int main() { return 0; }\n', 'int x;\n',
+                           flags = '-O1\n')
+    self.assertEqual([c.name for c in expand_case(plain.path)], ['plain'])
+    self.assertEqual(Case(plain.path).flags, ['-O1'])
+
   def test_find_cases(self) -> None:
     self.make_case('c1', '', '')
     (self.root / 'not-a-case').mkdir()
@@ -452,7 +490,7 @@ def main() -> None:
       if not (path / 'a.cpp').exists():
         print(f"edg-cir-mixed-tu: {item} is not a case", file = sys.stderr)
         sys.exit(2)
-      selected.append(Case(path))
+      selected.extend(expand_case(path))
   else:
     selected = find_cases(cases_dir)
   if args.list:
@@ -466,12 +504,13 @@ def main() -> None:
   toolchain = Toolchain(args.ref, args.link, args.std, root, args.fe_build)
   directions = [*DIRECTIONS, *(['all-ours'] if args.all_ours else [])]
   bad = 0
-  print(f"{'case':<32}{'direction':<12}{'result':<11}detail")
+  width = max([32] + [len(c.name) + 2 for c in selected])
+  print(f"{'case':<{width}}{'direction':<12}{'result':<11}detail")
   for case in selected:
     for direction, result, detail in run_case(toolchain, case, directions,
                                               args.timeout,
                                               args.skip_unsupported):
-      print(f"{case.name:<32}{direction:<12}{result:<11}{detail}",
+      print(f"{case.name:<{width}}{direction:<12}{result:<11}{detail}",
             flush = True)
       if result not in ('PASS', 'XFAIL', 'XPASS', 'SKIP'):
         bad += 1

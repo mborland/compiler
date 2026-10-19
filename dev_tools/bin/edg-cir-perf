@@ -32,6 +32,21 @@ Two measurements, both with the non-ASan release front end
           `fe` (the front end writing the ECIL stream, the work of the writer)
           and `cir` (edg-cir on the saved stream, the work of the library)
 
+  big -O2 / cxx -O2 (--levels 0,2)  the same two measurements with
+          --cir_opt_level=2 in the front end and `edg-cir -O2`, stored as
+          `big_O2` and `big_cxx_O2`
+  realworld  header-heavy translation units of dev_tools/cir-realworld
+          (libstdc++: containers, algorithms, iostream, regex, chrono,
+          functional, memory; Boost, with --boost-include: container,
+          algorithm, lexical_cast, multiprecision, format, range,
+          circular_buffer, mp11) at -O0 and -O2 (--levels): ours (the
+          front end under cachegrind, then edg-cir: instructions and
+          the minimum wall time), `clang` and `clang -fclangir` (the minimum
+          wall and CPU time of the whole compiler; with
+          --clang-instructions also its instructions, under valgrind, which
+          is slow), for information.  A unit that CIR cannot compile is listed with its
+          error and not measured; the clang rows are made anyway
+
 Run it inside the cir-env image from the repository root, after building
 cir_src (build/cir) and the release front end:
 
@@ -186,11 +201,12 @@ def run_eccp(tools: Tools, wrapper: Path, source: Path, options: List[str],
   return proc.returncode
 
 
-def count_edg_cir(tools: Tools, stream: Path, work: Path) -> Tuple[int, int]:
+def count_edg_cir(tools: Tools, stream: Path, work: Path, level: int = 0
+                  ) -> Tuple[int, int]:
   '''(instructions, rc) of edg-cir --emit=asm on a stream, under cachegrind.'''
   out = work / 'cir.cg'
   proc = subprocess.run(
-    [*VALGRIND, f"--cachegrind-out-file={out}", tools.edg_cir,
+    [*VALGRIND, f"--cachegrind-out-file={out}", tools.edg_cir, f"-O{level}",
      '--emit=asm', '-o', str(work / 'cir.s'), str(stream)],
     cwd = work, env = tools.counted_env, stdout = subprocess.PIPE,
     stderr = subprocess.STDOUT, text = True
@@ -218,10 +234,11 @@ def read_edg_cir_stats(tools: Tools, stream: Path, work: Path
           'cir_walks': int(match.group(3))}
 
 
-def time_edg_cir(tools: Tools, stream: Path, work: Path) -> None:
+def time_edg_cir(tools: Tools, stream: Path, work: Path, level: int = 0
+                 ) -> None:
   subprocess.run(
     [sys.executable, str(tools.timer), str(work / 'cir.time'),
-     tools.edg_cir, '--emit=asm', '-o',
+     tools.edg_cir, f"-O{level}", '--emit=asm', '-o',
      str(work / 'cir.s'), str(stream)],
     cwd = work, env = tools.env, stdout = subprocess.DEVNULL,
     stderr = subprocess.DEVNULL
@@ -229,8 +246,10 @@ def time_edg_cir(tools: Tools, stream: Path, work: Path) -> None:
 
 
 def measure_big(tools: Tools, source: Path, repeat: int,
-                flags: Optional[List[str]] = None) -> Dict[str, dict]:
-  '''Measure the four configurations of the big file (flags: C or C++).'''
+                flags: Optional[List[str]] = None, level: int = 0
+                ) -> Dict[str, dict]:
+  '''Measure the four configurations of the big file (flags: C or C++), at
+  an optimization level (the front end's --cir_opt_level and edg-cir's -O).'''
   flags = flags or ['--c11']
   results: Dict[str, dict] = {}
   work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf-big.'))
@@ -241,10 +260,10 @@ def measure_big(tools: Tools, source: Path, repeat: int,
       if row == '2p-edg-cir':
         if not stream.exists():
           continue
-        ir, rc = count_edg_cir(tools, stream, work)
+        ir, rc = count_edg_cir(tools, stream, work, level)
         for _ in range(repeat):
           (work / 'cir.time').unlink(missing_ok = True)
-          time_edg_cir(tools, stream, work)
+          time_edg_cir(tools, stream, work, level)
           times.append(read_times(work / 'cir.time'))
       else:
         extra = {}
@@ -252,6 +271,10 @@ def measure_big(tools: Tools, source: Path, repeat: int,
           extra['EDG_CPFE_DEFAULT_OPTIONS'] = f"--ecil_output={stream}"
         elif row == 'keep':
           extra['EDG_CPFE_DEFAULT_OPTIONS'] = '--ecil_keep_regions'
+        if level:
+          extra['EDG_CPFE_DEFAULT_OPTIONS'] = (
+            extra.get('EDG_CPFE_DEFAULT_OPTIONS', '') +
+            f" --cir_opt_level={level}").strip()
         # Run 0 counts instructions; the others time the same command.
         for index in range(repeat + 1):
           run_dir = work / f"{row}-{index}"
@@ -512,6 +535,140 @@ def summarize_corpus(per_case: Dict[str, dict]) -> dict:
   }
 
 
+REALWORLD_FLAGS = ['--c++17', '-w']
+
+
+class Compilers:
+  '''clang and clang -fclangir under cachegrind (a stripped copy of the
+  compiler, so that valgrind does not read its debug info).'''
+
+  def __init__(self, tools: Tools, work: Path) -> None:
+    prefix = tools.env.get('EDG_LLVM_CIR_PREFIX', '')
+    self.clang = Path(prefix) / 'bin' / 'clang'
+    self.resource = subprocess.run(
+      [str(self.clang), '-print-resource-dir'], stdout = subprocess.PIPE,
+      text = True).stdout.strip()
+    copy = work / 'clang-stripped'
+    subprocess.run(['strip', '--strip-all', '-o', str(copy),
+                    str(self.clang.resolve())], check = True)
+    copy.chmod(0o755)
+    self.counted = copy
+
+  def command(self, source: Path, flags: List[str], level: int, clangir: bool
+              ) -> List[str]:
+    return [f"-O{level}", '-c', '-std=c++17', '-w', '-x', 'c++',
+            *(['-fclangir'] if clangir else []), '-resource-dir',
+            self.resource, *flags, str(source), '-o', '/dev/null']
+
+
+def realworld_units(directory: Path) -> List[Path]:
+  return sorted(directory.glob('libstdcxx/*.cpp')) + \
+    sorted(directory.glob('boost/*.cpp'))
+
+
+def measure_unit(tools: Tools, compilers: Compilers, source: Path,
+                 boost: str, level: int, repeat: int, count_clang: bool
+                 ) -> Dict[str, object]:
+  '''One unit at one level: ours (front end + edg-cir), clang, clang
+  -fclangir: instructions and the minimum wall time.'''
+  result: Dict[str, object] = {}
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf-rw.'))
+  try:
+    shutil.copy2(source, work / source.name)
+    include = [f"-I{boost}"] if boost and 'boost' in source.parts else []
+    stream = work / 'unit.ecil'
+    extra = {'EDG_USE_SYSTEM_HEADERS': '1',
+             'EDG_CPFE_DEFAULT_OPTIONS':
+             f"--ecil_output={stream} --cir_opt_level={level}"
+             if level else f"--ecil_output={stream}"}
+    run_dir = work / 'fe'
+    run_dir.mkdir()
+    shutil.copy2(source, run_dir / source.name)
+    rc = run_eccp(tools, tools.fe_counted, run_dir / source.name,
+                  [*REALWORLD_FLAGS, *include], run_dir, extra)
+    fe_ir = sum(cachegrind_total(p) for p in run_dir.glob('fe.*.cg'))
+    if rc != 0 or not stream.exists() or not stream.stat().st_size:
+      result['error'] = f"front end exit status {rc}"
+    else:
+      ir, rc = count_edg_cir(tools, stream, work, level)
+      if rc != 0 or not ir:
+        result['error'] = f"edg-cir exit status {rc}"
+      else:
+        walls = []
+        for _ in range(repeat):
+          (work / 'cir.time').unlink(missing_ok = True)
+          timed = work / 'timed'
+          timed.mkdir(exist_ok = True)
+          shutil.copy2(source, timed / source.name)
+          (timed / 'fe.time').unlink(missing_ok = True)
+          run_eccp(tools, tools.fe_timed, timed / source.name,
+                   [*REALWORLD_FLAGS, *include], timed, dict(extra))
+          time_edg_cir(tools, stream, work, level)
+          walls.append(read_times(timed / 'fe.time')[0] +
+                       read_times(work / 'cir.time')[0])
+        result.update({'fe_ir': fe_ir, 'cir_ir': ir, 'ir': fe_ir + ir,
+                       'wall_s': round(min(walls), 3)})
+    for name, clangir in (('clang', False), ('clangir', True)):
+      command = compilers.command(source, include, level, clangir)
+      if count_clang:
+        # (valgrind makes a compiler about 50 times slower: opt-in)
+        out = work / f"{name}.cg"
+        proc = subprocess.run(
+          [*VALGRIND, f"--cachegrind-out-file={out}", str(compilers.counted),
+           *command], cwd = work, env = tools.env, stdout = subprocess.PIPE,
+          stderr = subprocess.STDOUT, text = True)
+        if proc.returncode == 0 and out.exists():
+          result[f"{name}_ir"] = cachegrind_total(out)
+      timefile = work / f"{name}.time"
+      failed = ''
+      for _ in range(repeat):
+        proc = subprocess.run(
+          [sys.executable, str(tools.timer), str(timefile),
+           str(compilers.clang), *command], cwd = work, env = tools.env,
+          stdout = subprocess.PIPE, stderr = subprocess.STDOUT, text = True)
+        if proc.returncode != 0:
+          lines = [l for l in proc.stdout.splitlines() if 'error' in l]
+          failed = (lines[0] if lines else
+                    f"exit status {proc.returncode}")[:160]
+          break
+      if failed:
+        result[f"{name}_error"] = failed
+        continue
+      lines = timefile.read_text().splitlines() if timefile.exists() else []
+      walls = [float(l.split()[0]) for l in lines if l.strip()]
+      cpus = [float(l.split()[1]) + float(l.split()[2])
+              for l in lines if l.strip()]
+      result[f"{name}_wall_s"] = round(min(walls), 3) if walls else 0.0
+      result[f"{name}_cpu_s"] = round(min(cpus), 3) if cpus else 0.0
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+  return result
+
+
+def measure_realworld(tools: Tools, root: Path, args: argparse.Namespace,
+                      levels: List[int]) -> Dict[str, dict]:
+  '''The real-world units at each level: unit -> "O<level>" -> result.'''
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf-clang.'))
+  try:
+    compilers = Compilers(tools, work)
+    results: Dict[str, dict] = {}
+    for source in realworld_units(root / args.realworld_dir):
+      name = f"{source.parent.name}/{source.stem}"
+      results[name] = {}
+      for level in levels:
+        print(f"realworld: {name} -O{level}", flush = True)
+        results[name][f"O{level}"] = measure_unit(
+          tools, compilers, source, args.boost_include, level, args.repeat,
+          args.clang_instructions)
+        if args.json:
+          # partial result: a long run is not lost if it is interrupted
+          Path(args.json + '.partial').write_text(json.dumps(
+            {'realworld': results}, indent = 1, sort_keys = True) + '\n')
+    return results
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+
+
 def delta(before: float, after: float) -> str:
   if not before:
     return 'n/a'
@@ -585,6 +742,43 @@ def format_table(new: dict, base: Optional[dict]) -> str:
         lambda v: f"{v:.2f}")
     row(f"{prefix}: peak RSS MB", old.get('rss_mb'), entry['rss_mb'],
         lambda v: f"{v:.0f}")
+  for level in (2,):
+    for section, label in ((f"big_O{level}", 'big TU'),
+                           (f"big_cxx_O{level}", 'C++ TU')):
+      old_section = (base or {}).get(section, {})
+      for name in BIG_ROWS:
+        entry = new.get(section, {}).get(name)
+        if not entry or not entry['ir']:
+          continue
+        prefix = f"{label} -O{level} {name}"
+        old = old_section.get(name, {})
+        row(f"{prefix}: instructions (M)", old.get('ir'), entry['ir'])
+        row(f"{prefix}: peak RSS MB", old.get('rss_mb'), entry['rss_mb'],
+            lambda v: f"{v:.0f}")
+  realworld = new.get('realworld', {})
+  base_realworld = (base or {}).get('realworld', {})
+  for unit, by_level in sorted(realworld.items()):
+    for level_name, entry in sorted(by_level.items()):
+      prefix = f"real-world {unit} {level_name}"
+      old = base_realworld.get(unit, {}).get(level_name, {})
+      if 'error' in entry:
+        lines.append(f"| {prefix}: CIR cannot compile it ({entry['error']}) "
+                     f"| n/a |" + (' n/a |  |' if base else ''))
+      else:
+        row(f"{prefix}: ours instructions (M)", old.get('ir'), entry['ir'])
+        row(f"{prefix}: ours wall s", old.get('wall_s'), entry['wall_s'],
+            lambda v: f"{v:.2f}")
+      for name in ('clang', 'clangir'):
+        if f"{name}_ir" in entry:
+          row(f"{prefix}: {name} instructions (M)", old.get(f"{name}_ir"),
+              entry[f"{name}_ir"])
+        if f"{name}_wall_s" in entry:
+          row(f"{prefix}: {name} wall s", old.get(f"{name}_wall_s"),
+              entry[f"{name}_wall_s"], lambda v: f"{v:.2f}")
+        if f"{name}_error" in entry:
+          lines.append(f"| {prefix}: {name} cannot compile it "
+                       f"({entry[f'{name}_error']}) | n/a |" +
+                       (' n/a |  |' if base else ''))
   base_streams = (base or {}).get('streams', {})
   for name, entry in new.get('streams', {}).items():
     prefix = f"stream {name} ({entry['bytes'] // 1024} KB) edg-cir"
@@ -647,7 +841,23 @@ def main() -> None:
   parser.add_argument('--fe-build', default = 'build/gcc-release-cir',
                       help = 'build directory of the (non-ASan) cpfe-cir')
   parser.add_argument('--only', default = 'big,corpus',
-                      help = 'comma separated: big, cxx, corpus, streams')
+                      help = 'comma separated: big, cxx, corpus, streams, '
+                             'realworld')
+  parser.add_argument('--levels', default = '0',
+                      help = 'optimization levels of big, cxx and realworld '
+                             '(for example 0,2); level N above 0 is stored '
+                             'as big_ON, big_cxx_ON')
+  parser.add_argument('--clang-instructions', action = 'store_true',
+                      help = 'also count the instructions of clang and '
+                             'clang -fclangir on the real-world units '
+                             '(under valgrind: about 50 times slower)')
+  parser.add_argument('--realworld-dir', default = 'dev_tools/cir-realworld',
+                      help = 'directory of the real-world units '
+                             '(libstdcxx/*.cpp, boost/*.cpp)')
+  parser.add_argument('--boost-include', default = '',
+                      help = 'a directory with the Boost headers (merged '
+                             'into one tree): the Boost units are measured '
+                             'only with it; it must be inside the workspace')
   parser.add_argument('--stream', action = 'append', default = [],
                       help = 'also measure edg-cir on this ECIL stream file, '
                              'or on the generated stream KIND:N (ecil-stress-'
@@ -697,6 +907,7 @@ def main() -> None:
   root = Path(args.root).resolve()
   sys.path.insert(0, str(root / 'dev_tools/pylibs'))
   only = [s for s in args.only.split(',') if s]
+  levels = [int(x) for x in args.levels.split(',')]
   work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf.'))
   result: Dict[str, object] = {
     'meta': {'fe_build': args.fe_build, 'big_functions': args.big_functions,
@@ -714,7 +925,9 @@ def main() -> None:
           check = True, stdout = subprocess.DEVNULL
         )
       print(f"big: {big}", flush = True)
-      result['big'] = measure_big(tools, big.resolve(), args.repeat)
+      for level in levels:
+        result['big' + (f"_O{level}" if level else '')] = measure_big(
+          tools, big.resolve(), args.repeat, None, level)
     if 'cxx' in only:
       source = work / 'big.cpp'
       subprocess.run(
@@ -723,11 +936,15 @@ def main() -> None:
          str(source)], check = True, stdout = subprocess.DEVNULL
       )
       print(f"cxx: {source}", flush = True)
-      cxx = measure_big(tools, source, args.repeat, ['--c++17'])
-      cxx.update(measure_cgen(tools, args.cgen_build, source, args.repeat,
-                              ['--c++17']))
-      result['big_cxx'] = cxx
+      for level in levels:
+        cxx = measure_big(tools, source, args.repeat, ['--c++17'], level)
+        if not level:
+          cxx.update(measure_cgen(tools, args.cgen_build, source,
+                                  args.repeat, ['--c++17']))
+        result['big_cxx' + (f"_O{level}" if level else '')] = cxx
       result['meta']['cxx_functions'] = args.cxx_functions
+    if 'realworld' in only:
+      result['realworld'] = measure_realworld(tools, root, args, levels)
     if 'streams' in only or args.stream:
       specs = args.stream or ['cxx_funcs:6000']
       result['streams'] = measure_streams(tools, root, specs, args.repeat)

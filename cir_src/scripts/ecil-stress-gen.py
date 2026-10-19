@@ -181,9 +181,9 @@ def gen(kind, n):
                '  STR 12 "f"', "  TY_FUNC 21 1 0 []"]
         # record R_i { R_{i+1} m; } ... the innermost holds an int
         base = 100
-        out.append("  TY_ARRAY %d 1 1 0" % (base + n + 1))
         for i in range(n + 1):
             out.append("  TY_RECORD_DECL %d 0 nil" % (base + i))
+        out.append("  TY_ARRAY %d 1 1 0" % (base + n + 1))
         for i in range(n, -1, -1):
             inner = base + i + 1 if i < n else 1
             out.append("  TY_RECORD_BODY %d 4 4 4 0 1" % (base + i))

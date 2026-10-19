@@ -1,5 +1,5 @@
-; expect: version stream needs ECIL minor >= 3
-ecil 1.3 features=0x0
+; expect: version stream needs ECIL minor >= 4
+ecil 1.4 features=0x0
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   HDR_TARGET 1 nil nil 64 64 6

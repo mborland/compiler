@@ -1,0 +1,30 @@
+; A FIELD of a glvalue made by DEREF is bounded again by the field's type: only
+; the glvalue DEREF makes itself may be zeroed beyond its type (as a whole
+; multiple).  8 bytes through an int member would write into the next member.
+; RUN: cat %S/Inputs/header12_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: error [1001]: ZERO_BYTES of 8 bytes through a glvalue of a 4-byte type: more than the object it designates
+
+frame DECLS
+  STR 100 "S"
+  STR 102 "f"
+  TY_RECORD_DECL 201 0 100
+  TY_RECORD_BODY 201 8 8 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 1 4 nil nil nil 0
+  TY_PTR 202 201
+  TY_FUNC 204 11 0 []
+  DECL_FUNC 300 204 0 1 102
+frame REGION
+  FUNC_BEGIN 300 0
+  LOCAL 1 201 nil 4 0
+  LREF 1
+  ADDR
+  DEREF
+  FIELD 201 0
+  ZERO_BYTES 8
+  FUNC_END 1
+frame END
+  END auto 0

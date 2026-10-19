@@ -3,7 +3,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
     T *pl = new (buf) T(1);
             ^
 
-ecil 1.2 features=0x0000000a
+ecil 1.3 features=0x0000000a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""

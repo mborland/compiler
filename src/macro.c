@@ -11377,6 +11377,20 @@ Enter symbols for the predefined macros of GNU/clang C and C++.
                              /*cannot_be_redefined=*/TRUE,
                              /*ref_suppresses_pch_file=*/FALSE);
   }  /* if */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* As gcc does, define __OPTIMIZE__ when optimizing and __NO_INLINE__ when
+     not.  (gcc also defines __OPTIMIZE_SIZE__ for -Os and __FAST_MATH__ for
+     -Ofast; the CIR back end does not distinguish those levels.) */
+  if (cir_opt_level > 0) {
+    (void)enter_predef_macro("1", "__OPTIMIZE__",
+                             /*cannot_be_redefined=*/FALSE,
+                             /*ref_suppresses_pch_file=*/FALSE);
+  } else {
+    (void)enter_predef_macro("1", "__NO_INLINE__",
+                             /*cannot_be_redefined=*/FALSE,
+                             /*ref_suppresses_pch_file=*/FALSE);
+  }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 }  /* init_gnu_predefined_macros */
 
 
@@ -11536,6 +11550,17 @@ that occurred.
     *error_code = ec_missing_macro_name;
     goto error_exit;
   }  /* if */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* The predefined macro file is scraped from a compiler at -O0, so it
+     defines __NO_INLINE__.  At an optimization level of 1 or more gcc does
+     not define that macro (init_gnu_predefined_macros defines __OPTIMIZE__
+     instead). */
+  if (mode_value && cir_opt_level > 0 &&
+      strncmp(ptr, "__NO_INLINE__", 13) == 0 &&
+      (ptr[13] == ' ' || ptr[13] == '\t')) {
+    mode_value = FALSE;
+  }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   if (mode_value) {
     /* The macro should be defined based on the mode parameters.  Set up to
        process the macro definition as if it were a #define in a source

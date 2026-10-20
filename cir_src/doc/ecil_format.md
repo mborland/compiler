@@ -1,6 +1,6 @@
 # ECIL — EDG CIR IL stream format
 
-Status: **v1.3, open** (session 4, from gate M4.1: supp key `noinline` (14) and several keys per supp blob (section 6); more 1.3 additions come at M5a, and 1.3 freezes at the M5 gate). **v1.2** (gate M4a, session 3: section 12: virtual functions, virtual bases, RTTI, exceptions and pointers to members). 1.2 is frozen at the M4 gate; additions and corrections found while implementing it (for example `NEW_ARRAY_SIZE_THROW`) are part of 1.2 until then. **v1.1** (gate M3.1, session 3: section 11.12). **v1.0** was frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
+Status: **v1.3, open** (session 4: section 13 lists the 1.3 additions of gates M4.1 and M5a; 1.3 freezes at the M5 gate). **v1.2** (gate M4a, session 3: section 12: virtual functions, virtual bases, RTTI, exceptions and pointers to members). 1.2 is frozen at the M4 gate; additions and corrections found while implementing it (for example `NEW_ARRAY_SIZE_THROW`) are part of 1.2 until then. **v1.1** (gate M3.1, session 3: section 11.12). **v1.0** was frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
 orchestrator.
 
 - **Normative source.** The definitions live in
@@ -73,7 +73,8 @@ frame   := u32 payload_len | u8 kind | u8 flags | u16 reserved(=0) | payload
 | 1 | `SUPP` | ignorable | Some frames carry supp blobs (they are also flagged per frame) |
 | 2 | `REFS` | ignorable | `F_REGION` frames end with a `REFS` record |
 | 3 | `LATE_NAMES` | ignorable | `NAME_BIND` records may appear |
-| 4–15 | — | ignorable | Reserved; 0 in v0 |
+| 4 | `INLINE_HINTS` (1.3) | ignorable | `DECL_FUNC` carries `INLINE_HINT` exactly. The consumer takes `inlinehint` from `INLINE_HINT`, and from `INLINE` when the bit is clear (13). |
+| 5–15 | — | ignorable | Reserved; 0 in v0 |
 | 16–31 | — | required | Reserved; 0 in v0 |
 
 A record whose feature bit is clear is a format error. That covers `LOC`
@@ -171,10 +172,11 @@ For example, a dropped `noinline` function carries both
 | 8 `readable_name` | sid |
 | 9 `section` | sid |
 | 10 `visibility` | uint |
-| 11 `used` | true |
+| 11 `used` (1.3) | true |
 | 12 `explicit_align` | uint |
 | 13 `unsupported_reason` (1.1) | bin: UTF-8 text, at most 255 bytes |
 | 14 `noinline` (1.3) | true |
+| 15 `nonnull_ptrs` (1.3) | uint mask |
 
 **`unsupported_reason`** (1.1) may follow a `DECL_FUNC` or `DECL_VAR` that
 has `UNSUPPORTED` set, and only such a record; it appears at most once per
@@ -201,6 +203,36 @@ Its value is `true`.
 - **Older readers.** A 1.2 reader accepts a 1.3 stream that uses no newer
   opcode or flag (section 9) and skips key 14. It compiles the function
   without the attribute, which is the 1.2 behavior.
+
+**`used`** (1.3) may follow a `DECL_FUNC` or `DECL_VAR`, and only those.
+Its value is `true`.
+- **Meaning.** It is the GNU `used` attribute: the entity is kept even if
+  nothing references it.
+- **Consumer.** For a definition, the consumer adds the entity to
+  `llvm.compiler.used`, as clang and clangir do. It is a root for lazy
+  emission and for every erase rule.
+- **Sticky**, like `noinline`. The writer sends it on every issue.
+
+**`nonnull_ptrs`** (1.3) may follow a `TY_FUNC`, and only a `TY_FUNC`.
+- **Value.** A uint mask. Bit 0 means the result is a reference. Bit i+1
+  means parameter i (counting the implicit object parameter, which a
+  non-static member function lists first) is a reference or the object
+  parameter. No bit above `nparams` may be set.
+- **Identity.** The mask is part of the function type's identity. Two
+  `TY_FUNC` that differ only in the mask are different types.
+- **Consumer.** It may mark those pointers `nonnull` and `noundef` on
+  declarations, definitions and calls through that type, and add the
+  following, as clang does for references and `this`:
+  - **A class pointee** may be a base subobject. Use its non-virtual size
+    and non-virtual alignment (`CLASS_INFO` `nvsize`/`nvalign`), unless the
+    class is final; for a final class or a class without `CLASS_INFO`, use
+    the complete size and alignment.
+  - **Any other complete object pointee:** `dereferenceable(size)` and
+    `align(alignment)` of the pointee.
+  - **An incomplete pointee:** no `dereferenceable`. A function pointee:
+    neither `dereferenceable` nor `align`.
+- **Writer.** A writer that sends the key passes a real object to every
+  call it marks (see 11.9, static invoker).
 
 ## 7. Identifiers
 
@@ -1135,8 +1167,10 @@ diagnosed "unsupported".
 - **Static invoker.** For a lambda without captures, the writer synthesizes
   the static invoker (the conversion to a function pointer) when it is
   used, for generic lambdas too. The invoker's body calls the call operator
-  with a null object pointer and forwards the parameters. Its linkage and
-  `COMDAT` are those of the call operator.
+  and forwards the parameters. In a stream that uses `nonnull_ptrs` (1.3),
+  the object argument is the address of a local of the closure type, as in
+  clang's `unused.capture`. Otherwise it may be a null object pointer (1.2).
+  Its linkage and `COMDAT` are those of the call operator.
 
 ### 11.10 Templates and retraction
 
@@ -1843,3 +1877,23 @@ DUP DEREF INIT_ZERO
 In both, the library stores `{-1, 0}`, not zero bytes: the unlisted members
 of the constant, and `INIT_ZERO` of the typed glvalue, take the expanded
 null constant (12.7). `ZERO_BYTES` on `h` is an error.
+
+## 13. ECIL 1.3 (M4.1 and M5)
+
+1.3 adds facts for optimization and one GNU attribute. Section 9's minor
+rules apply: a 1.2 reader accepts a 1.3 stream that uses only the new supp
+keys and skips them, and it rejects the new `CALL` and `DECL_FUNC` flags.
+
+| Addition | Where | Since |
+| --- | --- | --- |
+| Supp key 14 `noinline` | 6 | gate M4.1 |
+| Several keys per supp blob, each at most once | 6 | gate M4.1 |
+| Supp key 11 `used` | 6 | gate M5a (writer and consumer in slices S1/S2) |
+| Supp key 15 `nonnull_ptrs` on `TY_FUNC` | 6 | gate M5a (slice S2) |
+| `CALL` flag `ALLOC_EXPR` (0x40): the allocation or deallocation call of a new- or delete-expression, or of `__builtin_operator_new`/`delete`. The consumer may add `builtin` to a call of a replaceable global operator. It is rejected in streams of minor 2 or lower. | 13 | gate M5a (slice S2) |
+| The static invoker passes a real closure object when `nonnull_ptrs` is used | 11.9 | gate M5a (slice S2) |
+| `DECL_FUNC` flag `EXTERN_C` (0x100): a C++ function with C language linkage. The consumer omits `noundef` on its result, as clang does. | 13 | gate M5a (slice S2) |
+| `DECL_FUNC` flag `INLINE_HINT` (0x200): declared with the `inline` specifier, or a lambda's call operator. The writer sets the feature bit `INLINE_HINTS` (3) when it sends the flag exactly. With the bit, the consumer takes `inlinehint` from `INLINE_HINT`; without it, from `INLINE`. Minor-3 streams of the gate-M4.1 writer have neither, so they keep their hints. `INLINE` keeps its meaning, "an inline function" (`constexpr`, in-class and implicit members included). | 3, 13 | gate M5a (slice S2) |
+| `ZERO_BYTES` validation (a tightening for every minor) | 11 | gate M4.1 |
+
+1.3 freezes at the M5 gate.

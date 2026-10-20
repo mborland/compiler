@@ -54,7 +54,7 @@ Rules for callers and implementers:
 extern "C" {
 #endif /* __cplusplus */
 
-#define EDG_CIR_API_VERSION 1
+#define EDG_CIR_API_VERSION 2
 
 #if defined(_WIN32)
 #if defined(EDG_CIR_BUILDING_LIBRARY)
@@ -110,6 +110,16 @@ typedef enum an_edg_cir_severity {
                         /* Trace decoded records (checking builds). */
 #define EDG_CIR_FLAG_KEEP_GOING          0x0010u
                         /* After an unsupported construct, keep going. */
+#define EDG_CIR_FLAG_EAGER_BODIES        0x0020u
+                        /* API 2: emit every function body when its frame
+                           arrives, instead of deferring discardable bodies
+                           to finish (lazy emission); for identity checks
+                           and A/B runs. */
+#define EDG_CIR_FLAG_NO_LLVM_PASSES      0x0040u
+                        /* API 2: skip the LLVM IR pass pipeline (GlobalDCE
+                           at -O0, the default pipeline at -O1 and up).  The
+                           code generation level is unchanged.  For comparing
+                           LLVM IR before optimization. */
 
 /*
 Diagnostic callback.  message is NUL-terminated and valid only during the
@@ -156,6 +166,13 @@ typedef struct an_edg_cir_options {
   const char   *const *llvm_args;
                                  /* NULL-terminated, passed to LLVM's
                                     command-line parser once per process. */
+  uint32_t      chunk_functions; /* API 2: function bodies per chunk when
+                                    the module is lowered in chunks; 0 =
+                                    the library default. */
+  uint32_t      chunk_threshold; /* API 2: lower in chunks only when the
+                                    translation unit has at least this many
+                                    emitted function bodies; 0 = the library
+                                    default, UINT32_MAX = never. */
 } an_edg_cir_options;
 
 /* An opaque session that consumes one ECIL stream. */

@@ -16,10 +16,10 @@ struct Der : Tm<int> {
   void f() override { printf("Der::f\n"); }
 };
 int main() {
-  Tm<char> tc;
+  Tm<char> tc{};    /* value-initialized: v is read below */
   Tm<char> &r = tc;
   r.f();
-  Der d;
+  Der d{};
   Tm<int> *p = &d;
   p->f();
   return p->get() + tc.get();

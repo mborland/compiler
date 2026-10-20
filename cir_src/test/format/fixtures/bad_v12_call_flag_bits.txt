@@ -1,4 +1,4 @@
-; expect: format CALL operand 4: unknown flag bits 0x40
+; expect: format CALL operand 4: unknown flag bits 0x80
 ecil 1.2 features=0x00000000
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
@@ -145,7 +145,7 @@ frame REGION
   LREF 1
   LOAD 0
   CONST_INT 1 1
-  CALL 33 13 2 64
+  CALL 33 13 2 128
   DROP
   LREF 1
   LOAD 0

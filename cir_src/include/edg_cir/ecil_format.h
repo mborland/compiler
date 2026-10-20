@@ -53,6 +53,10 @@ know one rejects the stream.
                         /* F_REGION frames end with a REFS record. */
 #define ECIL_FEATURE_LATE_NAMES 0x00000008u
                         /* NAME_BIND records may appear. */
+#define ECIL_FEATURE_INLINE_HINTS 0x00000010u
+                        /* 1.3: DECL_FUNC carries INLINE_HINT exactly; the
+                           consumer takes inlinehint from INLINE_HINT, and
+                           from INLINE when this bit is clear. */
 
 /*
 Frame header: u32 payload_len, u8 kind, u8 flags, u16 reserved (0).  The
@@ -578,6 +582,14 @@ typedef enum an_ecil_catch_kind {
 #define ECIL_DECL_FUNC_NOTHROW          0x80u
                         /* 1.2: the function cannot throw (front end
                            predicate only). */
+#define ECIL_DECL_FUNC_EXTERN_C         0x100u
+                        /* 1.3: a C++ function with C language linkage
+                           (extern "C"); clang gives its result no noundef. */
+#define ECIL_DECL_FUNC_INLINE_HINT      0x200u
+                        /* 1.3: declared with the inline specifier, or a
+                           lambda's call operator (clang's inlinehint).  With
+                           the INLINE_HINTS feature bit the consumer takes
+                           the hint from this flag, not from INLINE. */
 
 #define ECIL_DECL_VAR_DEFINITION        0x01u
 #define ECIL_DECL_VAR_CONST             0x02u
@@ -656,6 +668,12 @@ typedef enum an_ecil_catch_kind {
 #define ECIL_CALL_VTT                   0x20u
                         /* 1.2 (CALL): a VTT_ADDR operand follows
                            argument 0. */
+#define ECIL_CALL_ALLOC_EXPR            0x40u
+                        /* 1.3 (CALL): the allocation or deallocation call of
+                           a new- or delete-expression, or a call of
+                           __builtin_operator_new/delete; the consumer may
+                           mark a replaceable global operator call builtin
+                           (allocation elision). */
 
 #define ECIL_CAST_NONNULL               0x01u
                         /* v1 (BASE_CAST, DERIVED_CAST; 1.2 VBASE_CAST):
@@ -713,12 +731,18 @@ typedef enum an_ecil_supp_key {
   esk_readable_name = 8,
   esk_section       = 9,
   esk_visibility    = 10,
-  esk_used          = 11,
+  esk_used          = 11, /* 1.3: true; on a DECL_FUNC or DECL_VAR.  GNU
+                             used: keep the definition (llvm.compiler.used)
+                             and treat it as a root.  Sticky. */
   esk_explicit_align = 12,
   esk_unsupported_reason = 13, /* 1.1: bin, UTF-8, at most 255 bytes; on a
                                   DECL_FUNC or DECL_VAR with UNSUPPORTED. */
-  esk_noinline      = 14  /* 1.3: true; on a DECL_FUNC.  The function must
+  esk_noinline      = 14, /* 1.3: true; on a DECL_FUNC.  The function must
                              not be inlined (GNU noinline).  Sticky. */
+  esk_nonnull_ptrs  = 15  /* 1.3: uint mask; on a TY_FUNC.  Bit 0: the
+                             result is a reference; bit i+1: parameter i is
+                             a reference or the implicit object parameter.
+                             Part of the function type's identity. */
 } an_ecil_supp_key;
 
 #endif /* ECIL_FORMAT_H */

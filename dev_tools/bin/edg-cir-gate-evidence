@@ -29,41 +29,93 @@ in the table; `--steps-for AREAS` only prints the set and exits.  The mapping
 
   writer     the ECIL writer, the FE side of the stream: cir-suite (the
              writer goldens), corpus, cpp-corpus, asm-diff, cpp-asm-diff,
-             modes, cpp-modes, poison
-  library    cir_src (the library): ctest (with lit), corpus, cpp-corpus,
-             asm-diff, cpp-asm-diff
+             modes, cpp-modes, poison, opt-corpus, writer-stress,
+             cpp-writer-stress, symbols, mixed-tu
+  library    cir_src (the library): ctest (with lit), cir-suite (the cirgen
+             run tests), corpus, cpp-corpus, asm-diff, cpp-asm-diff,
+             opt-corpus, modes, cpp-modes
   fe-options CIR-gated front end options and macros: release-smoke
   linkage    symbol names, linkage, comdats: symbols, mixed-tu
   eccp       util/eccp.sh and the eccp configuration of the base (how the
-             tests compile): cir-suite, corpus, cpp-corpus
+             tests compile): cir-suite, corpus, cpp-corpus, opt-corpus,
+             mixed-tu
   tests      the CIR tests and their recorded expectations: cir-suite,
              corpus, cpp-corpus
+  tests-triage     the opt triage file: opt-corpus
+  tests-crashes    the excused crashes file: crash-sweep
+  tests-smoke      the smoke lists: smoke, cpp-smoke, opt-corpus,
+                   release-smoke
+  tests-reference  the expectations of the reference configurations
+                   (edg_x86_64*, not the CIR ones): day
   tooling    dev_tools only: tools-test (the self-tests of the tools)
+  pylibs     dev_tools/pylibs (edgdocker and edgtest run every step): smoke,
+             day (with tooling for the self-tests)
+  twop       the two-process front end cpfe-cir-2p (with eccp and tooling):
+             smoke, cpp-smoke, modes, cpp-modes
+  goldens    edg-cir-ecil-dump, used by every writer golden (with tooling):
+             cir-suite
+  summary    edg-cir-summary, which buckets every edgy step (with tooling):
+             smoke, cpp-smoke, cir-suite, corpus, cpp-corpus
   toolchain  a new LLVM/MLIR/ClangIR pin (the M5p gate): ctest, smoke,
              cpp-smoke, cir-suite, corpus, cpp-corpus, opt-corpus, asm-diff,
              cpp-asm-diff, mixed-tu, symbols, eh-probes, m4-stress,
              cpp-stress, crash-sweep, perf, rss, stress (deep nesting under
              256 KB: a new pin can bring recursion back) and release-smoke
              (the only end-to-end run of release-only behavior, LLVM
-             assertions off); skipped for the reasons of TOOLCHAIN_SKIPS
+             assertions off); skipped for the reasons of TOOLCHAIN_SKIPS.
+             A pin bump that also changes cir_src files declares
+             toolchain,library (the library adds modes and cpp-modes)
   shared-src a change in a src/ file that every back end compiles (not
              CIR-gated): identity, isolation, day
 
+The cheap, relevant steps belong to the areas; the expensive ones
+(crash-sweep, perf, rss, stress, cpp-stress, m4-stress) run at toolchain and
+milestone gates only, so a writer or library slice that touches nothing a
+crash, a memory or a speed gate would notice does not pay for them: say in
+the slice's report why it cannot affect them.
+
 The areas are checked against the change set, so that a lean gate cannot
 leave out what the change touches: with --lean-base REF (the files of
-`git diff --name-only REF` and the untracked files of the tree) or
---changed-files FILE (one path a line, "-" for the standard input; for a tree
-without git, like the box's), every file is mapped to an area by AREA_RULES
-(cir_src/LLVM_REVISION and the Docker image files: toolchain; other cir_src:
-library; src/ecil_* and src/cir_be*: writer; other src/: shared-src;
-util/eccp.sh and bases/docker/cir-env: eccp; dev_tools/cir-mixed-tu-cases:
-linkage; other dev_tools: tooling; tests: tests; documentation and Changes
-files: none), and --lean fails unless the steps of the declared areas
+`git diff --name-only --no-renames REF` and the untracked files of the tree)
+or --changed-files FILE (one path a line, "-" for the standard input; for a
+tree without git, like the box's), every file is mapped to one or more areas
+by AREA_RULES, and --lean fails unless the steps of the declared areas
 include the steps of every area that the change set needs (toolchain covers
-library, for instance, but not shared-src).  A file that no rule maps fails
-too (add a rule).  --no-area-check skips the check (the report must say why).
-A step that no listed area selects is not run in a lean gate; say in the
-gate's report why the change set cannot affect it.
+eccp, for instance, but not shared-src).  The rules:
+
+  cir_src/LLVM_REVISION, the Docker image files        toolchain
+  cir_src/include/edg_cir/ (src/ecil_write.h includes
+      those headers)                                   library, writer
+  other cir_src                                        library
+  src/ecil_*, src/cir_be*                              writer
+  src/cmd_line.*, src/macro.*                          shared-src, writer,
+                                                       fe-options
+  other src/ (the CIR-gated writer hooks are in
+      scope_stk.c, lower_name.c, mem_manage.c,
+      class_decl.c, fe_wrapup.c, and any front end
+      change alters the streamed IL)                   shared-src, writer
+  util/eccp.sh, bases/docker/cir-env                   eccp
+  dev_tools/cir-mixed-tu-cases                         linkage
+  dev_tools/pylibs                                     tooling, pylibs
+  dev_tools/bin/cpfe-cir-2p                            tooling, eccp, twop
+  dev_tools/bin/edg-cir-ecil-dump                      tooling, goldens
+  dev_tools/bin/edg-cir-summary                        tooling, summary
+  other dev_tools                                      tooling
+  tests: the filter files cir-opt-triage.txt,
+      cir-excused-crashes.txt and cir-*-smoke.txt         tests-triage,
+                                                          -crashes, -smoke
+  tests/.edgy/config.json, tests/tests/ outside cir/ (the day
+      suite runs the primary suites)                     tests, tests-reference
+  expectations of every configuration but edg_x86_64_cir* tests-reference
+  other tests (the CIR expectations and tests, filters)   tests
+  documentation and Changes files                      none
+
+A file that no rule maps fails the check (add a rule).  --lean with no changed
+file at all fails too (a gate with nothing to check is a mistake, usually a
+wrong --lean-base) unless --allow-empty-change-set is given.  --no-area-check
+skips the check (the report must say why).  A step that no listed area
+selects is not run in a lean gate; say in the gate's report why the change
+set cannot affect it.
 
 Steps (names for --only/--skip):
 
@@ -220,6 +272,7 @@ ninja then rebuilds nothing and the evidence is for the old code.
 
 import argparse
 import difflib
+import fnmatch
 import importlib.machinery
 import importlib.util
 import json
@@ -257,13 +310,23 @@ LONG_STEPS: Tuple[str, ...] = ()
 # The steps of a lean gate (--lean, --steps-for) by the area of the change.
 AREA_STEPS = {
   'writer': ('cir-suite', 'corpus', 'cpp-corpus', 'asm-diff',
-             'cpp-asm-diff', 'modes', 'cpp-modes', 'poison'),
-  'library': ('ctest', 'corpus', 'cpp-corpus', 'asm-diff', 'cpp-asm-diff'),
+             'cpp-asm-diff', 'modes', 'cpp-modes', 'poison', 'opt-corpus',
+             'writer-stress', 'cpp-writer-stress', 'symbols', 'mixed-tu'),
+  'library': ('ctest', 'cir-suite', 'corpus', 'cpp-corpus', 'asm-diff',
+              'cpp-asm-diff', 'opt-corpus', 'modes', 'cpp-modes'),
   'fe-options': ('release-smoke',),
   'linkage': ('symbols', 'mixed-tu'),
-  'eccp': ('cir-suite', 'corpus', 'cpp-corpus'),
+  'eccp': ('cir-suite', 'corpus', 'cpp-corpus', 'opt-corpus', 'mixed-tu'),
   'tests': ('cir-suite', 'corpus', 'cpp-corpus'),
+  'tests-triage': ('opt-corpus',),
+  'tests-crashes': ('crash-sweep',),
+  'tests-smoke': ('smoke', 'cpp-smoke', 'opt-corpus', 'release-smoke'),
+  'tests-reference': ('day',),
   'tooling': ('tools-test',),
+  'pylibs': ('smoke', 'day'),
+  'twop': ('smoke', 'cpp-smoke', 'modes', 'cpp-modes'),
+  'goldens': ('cir-suite',),
+  'summary': ('smoke', 'cpp-smoke', 'cir-suite', 'corpus', 'cpp-corpus'),
   'toolchain': ('ctest', 'smoke', 'cpp-smoke', 'cir-suite', 'corpus',
                 'cpp-corpus', 'opt-corpus', 'asm-diff', 'cpp-asm-diff',
                 'mixed-tu', 'symbols', 'eh-probes', 'm4-stress',
@@ -286,30 +349,57 @@ TOOLCHAIN_SKIPS = {
   'cpp-stress-asan': "covered by ctest's ASan preset",
   'tools-test': 'no tooling change',
 }
-# The area of a changed file: the first rule whose prefix the path starts
-# with (or, for a name starting with '*', whose suffix it ends with) decides;
-# None means that the file needs no gate step (documentation).  A path that
-# no rule matches is an error of the area check.
-AREA_RULES: Tuple[Tuple[str, Optional[str]], ...] = (
-  ('cir_src/LLVM_REVISION', 'toolchain'),
-  ('dev_tools/docker/llvm-cir/', 'toolchain'),
-  ('dev_tools/docker/cir-env/', 'toolchain'),
-  ('dev_tools/bin/edg-build-llvm-cir', 'toolchain'),
-  ('cir_src/doc/', None),
-  ('cir_src/', 'library'),
-  ('src/Changes', None),
-  ('src/ecil_', 'writer'),
-  ('src/cir_be', 'writer'),
-  ('src/', 'shared-src'),
-  ('util/eccp.sh', 'eccp'),
-  ('bases/docker/cir-env/', 'eccp'),
-  ('dev_tools/cir-mixed-tu-cases/', 'linkage'),
-  ('dev_tools/', 'tooling'),
-  ('tests/', 'tests'),
-  ('doc/', None),
-  ('dev_annex/', None),
-  ('*.md', None),
-  ('*Changes', None),
+# The areas of a changed file: the first rule whose pattern matches decides.
+# A pattern with `*` is a glob over the whole path (so `*.md` matches in any
+# directory), any other pattern is a prefix.  An empty tuple needs no gate
+# step (documentation); a path that no rule matches is an error of the area
+# check.
+AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+  ('cir_src/LLVM_REVISION', ('toolchain',)),
+  ('dev_tools/docker/llvm-cir/', ('toolchain',)),
+  ('dev_tools/docker/cir-env/', ('toolchain',)),
+  ('dev_tools/bin/edg-build-llvm-cir', ('toolchain',)),
+  ('cir_src/doc/', ()),
+  # src/ecil_write.h includes these headers: a change reaches the writer.
+  ('cir_src/include/edg_cir/', ('library', 'writer')),
+  ('cir_src/', ('library',)),
+  ('src/Changes', ()),
+  ('src/ecil_', ('writer',)),
+  ('src/cir_be', ('writer',)),
+  ('src/cmd_line.', ('shared-src', 'writer', 'fe-options')),
+  ('src/macro.', ('shared-src', 'writer', 'fe-options')),
+  # The CIR-gated writer hooks live in scope_stk.c, lower_name.c,
+  # mem_manage.c, class_decl.c and fe_wrapup.c, and any front end change
+  # alters the IL that is streamed.
+  ('src/', ('shared-src', 'writer')),
+  ('util/eccp.sh', ('eccp',)),
+  ('bases/docker/cir-env/', ('eccp',)),
+  ('dev_tools/cir-mixed-tu-cases/', ('linkage',)),
+  ('dev_tools/pylibs/', ('tooling', 'pylibs')),
+  # The product front end of every _2p run.
+  ('dev_tools/bin/cpfe-cir-2p', ('tooling', 'eccp', 'twop')),
+  # Used by every writer golden.
+  ('dev_tools/bin/edg-cir-ecil-dump', ('tooling', 'goldens')),
+  # Buckets the results of every edgy step.
+  ('dev_tools/bin/edg-cir-summary', ('tooling', 'summary')),
+  ('dev_tools/', ('tooling',)),
+  ('tests/.edgy/filters/cir-opt-triage.txt', ('tests-triage',)),
+  ('tests/.edgy/filters/cir-excused-crashes.txt', ('tests-crashes',)),
+  ('tests/.edgy/filters/cir-*-smoke.txt', ('tests-smoke',)),
+  # The edgy configuration and the tests of the primary suites reach the
+  # day suite too (the cir suite is a secondary one that the day suite does
+  # not run); the expectations of every configuration but the CIR ones are
+  # the reference's.
+  ('tests/.edgy/config.json', ('tests', 'tests-reference')),
+  ('tests/expectations/edg_x86_64_cir', ('tests',)),
+  ('tests/expectations/', ('tests-reference',)),
+  ('tests/tests/cir/', ('tests',)),
+  ('tests/tests/', ('tests', 'tests-reference')),
+  ('tests/', ('tests',)),
+  ('doc/', ()),
+  ('dev_annex/', ()),
+  ('*.md', ()),
+  ('*Changes', ()),
 )
 # The synthetic C++ stress streams (cir_src/scripts/ecil-stress-gen.py) of
 # the cpp-stress steps: normal sizes, and the smaller ASan sizes.
@@ -619,22 +709,24 @@ def lean_steps(areas: List[str]) -> Tuple[List[str], Dict[str, str]]:
   return steps, reasons
 
 
-def area_of(path: str) -> Optional[str]:
-  '''The area of a changed file by AREA_RULES: None for a file that needs no
-  step (documentation), 'unmapped' for a path that no rule matches.'''
-  for pattern, area in AREA_RULES:
-    if (path.endswith(pattern[1:]) if pattern.startswith('*')
-        else path.startswith(pattern)):
-      return area
-  return 'unmapped'
+def areas_of(path: str) -> Tuple[str, ...]:
+  '''The areas of a changed file by AREA_RULES: an empty tuple for a file
+  that needs no step (documentation), ('unmapped',) for a path that no rule
+  matches.'''
+  for pattern, areas in AREA_RULES:
+    if '*' in pattern:
+      if fnmatch.fnmatchcase(path, pattern):
+        return areas
+    elif path.startswith(pattern):
+      return areas
+  return ('unmapped',)
 
 
 def required_areas(paths: List[str]) -> Dict[str, List[str]]:
-  '''The areas that a change set needs (area -> its files), by area_of.'''
+  '''The areas that a change set needs (area -> its files), by areas_of.'''
   needed: Dict[str, List[str]] = {}
   for path in paths:
-    area = area_of(path)
-    if area:
+    for area in areas_of(path):
       needed.setdefault(area, []).append(path)
   return needed
 
@@ -660,13 +752,14 @@ def uncovered_areas(paths: List[str], areas: List[str]) -> List[str]:
 
 def changed_paths(tree: Path, base: str, listing: str) -> List[str]:
   '''The changed files for the area check: the lines of the file `listing`
-  ("-": the standard input), else `git diff --name-only <base>` and the
-  untracked files of the tree.'''
+  ("-": the standard input), else `git diff --name-only --no-renames <base>`
+  (a renamed file counts as a deletion and an addition, so both paths are
+  listed) and the untracked files of the tree.'''
   if listing:
     text = sys.stdin.read() if listing == '-' else Path(listing).read_text()
     return [line.strip() for line in text.splitlines() if line.strip()]
   paths: List[str] = []
-  for command in (['git', 'diff', '--name-only', base],
+  for command in (['git', 'diff', '--name-only', '--no-renames', base],
                   ['git', 'ls-files', '--others', '--exclude-standard']):
     proc = subprocess.run(command, cwd = tree, text = True,
                           stdout = subprocess.PIPE, stderr = subprocess.PIPE)
@@ -2772,6 +2865,9 @@ def main() -> None:
   parser.add_argument('--changed-files', default = '', metavar = 'FILE',
                       help = 'the area check of --lean: the changed files, '
                              'one path a line ("-": standard input)')
+  parser.add_argument('--allow-empty-change-set', action = 'store_true',
+                      help = '--lean with no changed file at all (it fails '
+                             'otherwise: usually a wrong --lean-base)')
   parser.add_argument('--no-area-check', action = 'store_true',
                       help = '--lean without comparing the areas with the '
                              'change set')
@@ -2946,6 +3042,11 @@ def main() -> None:
       problems = uncovered_areas(paths, lean_areas)
       print(f"change set: {len(paths)} file(s), areas "
             f"{','.join(sorted(required_areas(paths))) or 'none'}")
+      if args.lean and not paths and not args.allow_empty_change_set:
+        parser.error('--lean with an empty change set: nothing differs '
+                     f"from {args.lean_base or args.changed_files} (a wrong "
+                     '--lean-base?); --allow-empty-change-set if that is '
+                     'meant')
       if problems:
         parser.error('; '.join(problems))
     lean_set, skip_reasons = lean_steps(lean_areas)

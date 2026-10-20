@@ -11,11 +11,13 @@ stream from a file (or stdin) and produce CIR, LLVM IR, assembly or an
 object.  A thin client of the C API (it never sees LLVM).
 
   edg-cir [-o out] [--emit=cir|cir-lowered|llvm|bc|asm|obj] [-O0..-O3]
-          [--verify-each] [--keep-going] [--triple=T] [--stats] [--trace]
-          [--version] file.ecil|-
+          [--verify-each] [--keep-going] [--no-llvm-passes] [--eager-bodies]
+          [--chunk-functions=N] [--chunk-threshold=N] [--triple=T] [--stats]
+          [--trace] [--version] file.ecil|-
 */
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -45,8 +47,9 @@ Print the usage and return the usage exit code.
 {
   std::fprintf(stderr,
       "usage: edg-cir [-o out] [--emit=cir|cir-lowered|llvm|bc|asm|obj] "
-      "[-O0..-O3] [--verify-each] [--keep-going] [--triple=T] [--stats] "
-      "[--trace] [--version] file.ecil|-\n");
+      "[-O0..-O3] [--verify-each] [--keep-going] [--no-llvm-passes] "
+      "[--eager-bodies] [--chunk-functions=N] [--chunk-threshold=N] "
+      "[--triple=T] [--stats] [--trace] [--version] file.ecil|-\n");
   return 64;
 }  /* usage */
 
@@ -100,6 +103,16 @@ the API status code (1..9), or 64 for a usage error.
       options.flags |= EDG_CIR_FLAG_PRINT_STATS;
     } else if (std::strcmp(arg, "--trace") == 0) {
       options.flags |= EDG_CIR_FLAG_TRACE;
+    } else if (std::strcmp(arg, "--no-llvm-passes") == 0) {
+      options.flags |= EDG_CIR_FLAG_NO_LLVM_PASSES;
+    } else if (std::strncmp(arg, "--chunk-functions=", 18) == 0) {
+      options.chunk_functions =
+          static_cast<uint32_t>(std::strtoul(arg + 18, nullptr, 10));
+    } else if (std::strncmp(arg, "--chunk-threshold=", 18) == 0) {
+      options.chunk_threshold =
+          static_cast<uint32_t>(std::strtoul(arg + 18, nullptr, 10));
+    } else if (std::strcmp(arg, "--eager-bodies") == 0) {
+      options.flags |= EDG_CIR_FLAG_EAGER_BODIES;
     } else if (std::strcmp(arg, "--disable-cir-passes") == 0) {
       options.flags |= EDG_CIR_FLAG_DISABLE_CIR_PASSES;
     } else if (std::strncmp(arg, "--triple=", 9) == 0) {

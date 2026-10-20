@@ -28,11 +28,18 @@ compared up to the numbering of values, metadata and attribute groups only:
 every attribute group is resolved to its attributes at the function or call
 that uses it, and the module level (declarations, globals, module flags and
 other metadata) is compared too, so a changed attribute (nounwind, noundef,
-dso_local, local_unnamed_addr, ...) or declaration is a difference.  IR
-classes: `ir-identical`; `ir-copies` (function bodies the same after dropping
-alloca, load, store, getelementptr, bitcast, lifetime and
-memcpy/memmove/memset instructions: the record copies; module level equal);
-`ir-module` (bodies equal, module level different); `ir-other`.  A file is
+dso_local, local_unnamed_addr, ...) or declaration is a difference.  The
+numbering of unnamed basic blocks is ignored.  IR classes, split by where the
+difference is (body or module level) and by what it is: `ir-identical`;
+`ir-attrs` (only attributes differ, on calls inside bodies or on functions,
+parameters, returns and declarations at module level: the `nounwind` and
+`noundef` kind of change); `ir-copies` (function bodies the same after
+dropping alloca, load, store, getelementptr, bitcast, lifetime and
+memcpy/memmove/memset instructions: the record copies; attributes aside);
+`ir-module` (bodies equal, module level different beyond attributes: a
+declaration, a global, a flag); `ir-other` (an instruction of a body
+differs, or the set of functions).  The worst class of a file wins (other,
+module, copies, attrs).  A file is
 `backend-only` only when its IR is `ir-identical` and its assembly differs:
 upstream LLVM code generation, nothing the library or the lowering did.
 
@@ -48,6 +55,7 @@ usage:
   asm_churn_classify.py --streams DIR OLD_EDG_CIR NEW_EDG_CIR [--opt=-O0] [-j N]
                                                compile every .ecil of DIR with
                                                both tools first
+  --self-test                                  check the IR classes
   -v prints the files of every class but `identical`.
 In directory mode a file that exists only in NEW is reported as
 `only-new` (a file only in OLD is `status`).  Prints the counts per class (and
@@ -214,17 +222,27 @@ def attr_groups(text):
 
 
 def resolve_attrs(line, groups):
-    """Replace every #N attribute-group reference by the group's attributes."""
-    return re.sub(r"#(\d+)\b", lambda m: "{" + groups.get(m.group(1), "?") +
-                  "}", line)
+    """Replace every #N attribute-group reference by ATTR(the attributes)."""
+    return re.sub(r"#(\d+)\b", lambda m: "ATTR(" + groups.get(m.group(1), "?")
+                  + ")", line)
+
+
+ATTR_TEXT_RE = re.compile(r"ATTR\([^()]*\)")
 
 
 def norm_ir(line, groups):
-    """Up to value, metadata and attribute-group numbering only."""
+    """Up to value, block-label, metadata and attribute-group numbering."""
     line = resolve_attrs(line, groups)
+    line = re.sub(r"^\d+:", "L:", line.strip())
     line = re.sub(r"%\d+", "%v", line)
     line = re.sub(r"!\d+", "!M", line)
     return re.sub(r"\s+", " ", line).strip()
+
+
+def without_attrs(lines):
+    """The lines with every resolved attribute set removed."""
+    return [re.sub(r"\s+", " ", ATTR_TEXT_RE.sub("", l)).strip()
+            for l in lines]
 
 
 def split_ir(text):
@@ -253,6 +271,14 @@ def split_ir(text):
 
 
 def classify_ir(old_text, new_text):
+    """
+    ir-identical; ir-attrs (only attributes differ: function, parameter,
+    return and call attributes such as nounwind or noundef, in bodies and at
+    module level); ir-copies (bodies equal after dropping the record-copy
+    instructions); ir-module (bodies equal, module level differs beyond
+    attributes); ir-other (a body differs, or the function sets differ).  The
+    worst class of the file wins: other > module > copies > attrs.
+    """
     ga, gb = attr_groups(old_text), attr_groups(new_text)
     fa, ma = split_ir(old_text)
     fb, mb = split_ir(new_text)
@@ -260,21 +286,76 @@ def classify_ir(old_text, new_text):
         return "ir-other"
     ma = sorted(norm_ir(l, ga) for l in ma if l.strip())
     mb = sorted(norm_ir(l, gb) for l in mb if l.strip())
-    worst = "ir-identical"
+    copies = False
+    attrs = False
     for name in fa:
         a = [norm_ir(l, ga) for l in fa[name] if l.strip()]
         b = [norm_ir(l, gb) for l in fb[name] if l.strip()]
         if a == b:
             continue
+        if without_attrs(a) == without_attrs(b):
+            attrs = True
+            continue
         da = [l for l in a if not IR_MEM_RE.match(l)]
         db = [l for l in b if not IR_MEM_RE.match(l)]
-        if da == db:
-            worst = "ir-copies"
+        if without_attrs(da) == without_attrs(db):
+            copies = True
         else:
             return "ir-other"
+    result = "ir-identical"
     if ma != mb:
-        return "ir-module"
-    return worst
+        result = "ir-attrs" if sorted(without_attrs(ma)) == \
+            sorted(without_attrs(mb)) else "ir-module"
+    if result == "ir-module":
+        return result
+    if copies:
+        return "ir-copies"
+    if attrs or result == "ir-attrs":
+        return "ir-attrs"
+    return result
+
+
+SELF_TEST_IR = """; ModuleID = 'x'
+declare void @g(ptr) #1
+define void @f(ptr %0) #0 {
+1:
+  %2 = alloca i32
+  call void @g(ptr %0) #1
+  br label %3
+3:
+  ret void
+}
+attributes #0 = { noinline }
+attributes #1 = { nounwind }
+"""
+
+
+def self_test():
+    """The IR classes on one function with seven kinds of change."""
+    t = SELF_TEST_IR
+    cases = [
+        ("ir-identical", t),
+        ("ir-identical", t.replace("1:", "5:").replace("3:", "7:")
+         .replace("label %3", "label %7")),
+        ("ir-attrs", t.replace("call void @g(ptr %0) #1",
+                               "call void @g(ptr %0) #2")
+         + "attributes #2 = { }\n"),
+        ("ir-attrs", t.replace("declare void @g(ptr) #1",
+                               "declare void @g(ptr) #0")),
+        ("ir-copies", t.replace("%2 = alloca i32\n",
+                                "%2 = alloca i32\n  %9 = alloca i64\n")),
+        ("ir-module", t.replace("declare void @g(ptr) #1",
+                                "declare void @g(ptr) #1\ndeclare void @h()")),
+        ("ir-other", t.replace("ret void", "unreachable")),
+    ]
+    bad = 0
+    for want, new in cases:
+        got = classify_ir(t, new)
+        if got != want:
+            print("self-test: wanted %s, got %s" % (want, got))
+            bad += 1
+    print("self-test: %d of %d wrong" % (bad, len(cases)))
+    return 1 if bad else 0
 
 
 def compile_one(tool, stream, opt, emit="asm"):
@@ -285,6 +366,8 @@ def compile_one(tool, stream, opt, emit="asm"):
 
 
 def main():
+    if len(sys.argv) == 2 and sys.argv[1] == "--self-test":
+        return self_test()
     ap = argparse.ArgumentParser()
     ap.add_argument("a")
     ap.add_argument("b")

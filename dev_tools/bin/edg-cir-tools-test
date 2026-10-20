@@ -16,12 +16,15 @@ by edg-cir-gate-evidence), the C++ feature buckets of edg-cir-summary, the
 pruning and disk headroom helpers of edg-cir-checkpoint.
 '''
 
+import contextlib
 import importlib.machinery
+import io
 import importlib.util
 import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -1324,64 +1327,180 @@ class LeanSteps(unittest.TestCase):
 
 
 class LeanAreas(unittest.TestCase):
-  def test_the_area_of_a_file(self):
+  def test_the_areas_of_a_file(self):
     expected = {
-      'cir_src/LLVM_REVISION': 'toolchain',
-      'dev_tools/docker/llvm-cir/Dockerfile': 'toolchain',
-      'dev_tools/docker/cir-env/Dockerfile': 'toolchain',
-      'dev_tools/bin/edg-build-llvm-cir': 'toolchain',
-      'cir_src/lib/cirgen/expr.cpp': 'library',
-      'cir_src/scripts/asm_churn_classify.py': 'library',
-      'cir_src/doc/research/m5_baseline.md': None,
-      'src/ecil_write.c': 'writer',
-      'src/cir_be.c': 'writer',
-      'src/cmd_line.c': 'shared-src',
-      'src/CMakeLists.txt': 'shared-src',
-      'src/Changes': None,
-      'util/eccp.sh': 'eccp',
-      'bases/docker/cir-env/gcc/edg_eccp_config': 'eccp',
-      'dev_tools/cir-mixed-tu-cases/s3-x/a.cpp': 'linkage',
-      'dev_tools/bin/edg-cir-gate-evidence': 'tooling',
-      'tests/expectations/edg_x86_64_cir/edg.log': 'tests',
-      'tests/tests/cir/config/c-side-file/test.mft.cpp': 'tests',
-      'cir_design_guidance.md': None,
-      'doc/source/code_style.rst': None,
-      'benchmarks/x': 'unmapped'}
-    for path, area in expected.items():
-      self.assertEqual(gate.area_of(path), area, path)
+      'cir_src/LLVM_REVISION': ('toolchain',),
+      'dev_tools/docker/llvm-cir/Dockerfile': ('toolchain',),
+      'dev_tools/docker/cir-env/Dockerfile': ('toolchain',),
+      'dev_tools/bin/edg-build-llvm-cir': ('toolchain',),
+      'cir_src/lib/cirgen/expr.cpp': ('library',),
+      'cir_src/scripts/asm_churn_classify.py': ('library',),
+      'cir_src/include/edg_cir/ecil.h': ('library', 'writer'),
+      'cir_src/doc/research/m5_baseline.md': (),
+      'src/ecil_write.c': ('writer',),
+      'src/cir_be.c': ('writer',),
+      'src/cmd_line.c': ('shared-src', 'writer', 'fe-options'),
+      'src/cmd_line.h': ('shared-src', 'writer', 'fe-options'),
+      'src/macro.c': ('shared-src', 'writer', 'fe-options'),
+      'src/scope_stk.c': ('shared-src', 'writer'),
+      'src/mem_manage.c': ('shared-src', 'writer'),
+      'src/CMakeLists.txt': ('shared-src', 'writer'),
+      'src/Changes': (),
+      'util/eccp.sh': ('eccp',),
+      'bases/docker/cir-env/gcc/edg_eccp_config': ('eccp',),
+      'dev_tools/cir-mixed-tu-cases/s3-x/a.cpp': ('linkage',),
+      'dev_tools/bin/edg-cir-gate-evidence': ('tooling',),
+      'dev_tools/pylibs/edgdocker/__init__.py': ('tooling', 'pylibs'),
+      'dev_tools/bin/cpfe-cir-2p': ('tooling', 'eccp', 'twop'),
+      'dev_tools/bin/edg-cir-ecil-dump': ('tooling', 'goldens'),
+      'dev_tools/bin/edg-cir-summary': ('tooling', 'summary'),
+      'tests/expectations/edg_x86_32/edg.log': ('tests-reference',),
+      'tests/expectations/edg_x86_32_cp/edg.log': ('tests-reference',),
+      'tests/.edgy/config.json': ('tests', 'tests-reference'),
+      'tests/tests/edg/daveed/d00393a/test.mft.cpp':
+        ('tests', 'tests-reference'),
+      'tests/tests/imported/gnu/c/x.sft.c': ('tests', 'tests-reference'),
+      'tests/expectations/edg_x86_64_cir/edg.log': ('tests',),
+      'tests/expectations/edg_x86_64_cir_2p/edg.log': ('tests',),
+      'tests/expectations/edg_x86_64/edg.log': ('tests-reference',),
+      'tests/expectations/edg_x86_64_cp/edg.log': ('tests-reference',),
+      'tests/tests/cir/config/c-side-file/test.mft.cpp': ('tests',),
+      'tests/.edgy/filters/cir-opt-triage.txt': ('tests-triage',),
+      'tests/.edgy/filters/cir-excused-crashes.txt': ('tests-crashes',),
+      'tests/.edgy/filters/cir-c-smoke.txt': ('tests-smoke',),
+      'tests/.edgy/filters/cir-cpp-smoke.txt': ('tests-smoke',),
+      'tests/.edgy/filters/cir-c-corpus.txt': ('tests',),
+      'cir_design_guidance.md': (),
+      'doc/source/code_style.rst': (),
+      'benchmarks/x': ('unmapped',)}
+    for path, areas in expected.items():
+      self.assertEqual(gate.areas_of(path), areas, path)
 
   def test_required_areas_group_the_files(self):
     needed = gate.required_areas(['src/a.c', 'src/b.c', 'README.md',
                                   'util/eccp.sh'])
     self.assertEqual(needed, {'shared-src': ['src/a.c', 'src/b.c'],
+                              'writer': ['src/a.c', 'src/b.c'],
                               'eccp': ['util/eccp.sh']})
 
   def test_a_covering_set_has_no_problem(self):
     paths = ['cir_src/LLVM_REVISION', 'cir_src/lib/cirgen/expr.cpp',
              'dev_tools/bin/edg-cir-tools-test']
-    self.assertEqual(gate.uncovered_areas(paths, ['toolchain', 'tooling']), [])
+    self.assertEqual(gate.uncovered_areas(
+      paths, ['toolchain', 'library', 'tooling']), [])
+
+  def test_a_pin_bump_with_library_files_needs_the_library_area(self):
+    # toolchain does not run modes and cpp-modes (opt-corpus compares the
+    # modes over the smoke lists), which a library change needs.
+    problems = gate.uncovered_areas(
+      ['cir_src/LLVM_REVISION', 'cir_src/lib/cirgen/expr.cpp'],
+      ['toolchain'])
+    self.assertEqual(len(problems), 1)
+    self.assertIn('area library', problems[0])
+    self.assertIn('modes', problems[0])
 
   def test_an_uncovered_area_is_a_problem(self):
     # toolchain runs the corpora and the suite that an eccp change needs, but
-    # not the identity steps of a shared src/ change.
-    problems = gate.uncovered_areas(['src/cmd_line.c', 'util/eccp.sh'],
-                                    ['toolchain'])
-    self.assertEqual(len(problems), 1)
-    self.assertIn('area shared-src', problems[0])
-    self.assertIn('identity', problems[0])
+    # not the identity steps of a shared src/ change nor the writer's.
+    problems = ' | '.join(gate.uncovered_areas(
+      ['src/cmd_line.c', 'util/eccp.sh'], ['toolchain']))
+    self.assertIn('area shared-src', problems)
+    self.assertIn('identity', problems)
+    self.assertIn('area writer', problems)
+    self.assertIn('poison', problems)
+    self.assertNotIn('area eccp', problems)
+    self.assertNotIn('area fe-options', problems)
 
-  def test_eccp_needs_the_corpora_and_the_suite(self):
+  def test_the_whole_src_change_set_needs_shared_src_and_writer(self):
+    self.assertEqual(gate.uncovered_areas(
+      ['src/scope_stk.c'], ['shared-src', 'writer']), [])
+    self.assertTrue(gate.uncovered_areas(['src/scope_stk.c'], ['writer']))
+    self.assertTrue(gate.uncovered_areas(['src/scope_stk.c'],
+                                         ['shared-src']))
+    self.assertEqual(gate.uncovered_areas(
+      ['src/cmd_line.c'], ['shared-src', 'writer', 'fe-options']), [])
+
+  def test_the_edg_cir_headers_need_library_and_writer(self):
+    paths = ['cir_src/include/edg_cir/ecil.h']
+    self.assertTrue(gate.uncovered_areas(paths, ['library']))
+    self.assertEqual(gate.uncovered_areas(paths, ['library', 'writer']), [])
+
+  def test_eccp_needs_the_corpora_the_suite_and_more(self):
     # fe-options runs release-smoke only: too narrow for an eccp change.
     self.assertTrue(gate.uncovered_areas(['util/eccp.sh'], ['fe-options']))
-    for steps in (('cir-suite', 'corpus', 'cpp-corpus'),):
-      self.assertTrue(set(steps) <= set(gate.AREA_STEPS['eccp']))
+    self.assertGreaterEqual(set(gate.AREA_STEPS['eccp']), {
+      'cir-suite', 'corpus', 'cpp-corpus', 'opt-corpus', 'mixed-tu'})
     self.assertEqual(gate.uncovered_areas(['util/eccp.sh'], ['eccp']), [])
 
-  def test_toolchain_covers_the_library_but_not_the_writer(self):
-    self.assertEqual(gate.uncovered_areas(['cir_src/lib/x.cpp'],
-                                          ['toolchain']), [])
-    self.assertTrue(gate.uncovered_areas(['src/ecil_write.c'],
-                                         ['toolchain']))
+  def test_the_step_sets_of_the_slice_areas(self):
+    self.assertEqual(set(gate.AREA_STEPS['library']), {
+      'ctest', 'cir-suite', 'corpus', 'cpp-corpus', 'asm-diff',
+      'cpp-asm-diff', 'opt-corpus', 'modes', 'cpp-modes'})
+    self.assertEqual(set(gate.AREA_STEPS['writer']), {
+      'cir-suite', 'corpus', 'cpp-corpus', 'asm-diff', 'cpp-asm-diff',
+      'modes', 'cpp-modes', 'poison', 'opt-corpus', 'writer-stress',
+      'cpp-writer-stress', 'symbols', 'mixed-tu'})
+    expensive = {'crash-sweep', 'perf', 'rss', 'stress', 'cpp-stress',
+                 'm4-stress'}
+    for area in ('library', 'writer', 'eccp', 'tests', 'linkage',
+                 'fe-options', 'pylibs'):
+      self.assertFalse(expensive & set(gate.AREA_STEPS[area]), area)
+    self.assertTrue(expensive <= set(gate.AREA_STEPS['toolchain']))
+
+  def test_the_filters_of_the_tests_have_their_own_steps(self):
+    self.assertEqual(gate.AREA_STEPS['tests-triage'], ('opt-corpus',))
+    self.assertEqual(gate.AREA_STEPS['tests-crashes'], ('crash-sweep',))
+    self.assertEqual(set(gate.AREA_STEPS['tests-smoke']),
+                     {'smoke', 'cpp-smoke', 'opt-corpus', 'release-smoke'})
+    self.assertEqual(gate.AREA_STEPS['tests-reference'], ('day',))
+    steps, _ = gate.lean_steps(['tests-triage'])
+    self.assertEqual(steps, ['build', 'opt-corpus'])
+    self.assertEqual(gate.uncovered_areas(
+      ['tests/.edgy/filters/cir-excused-crashes.txt'], ['tests-crashes']), [])
+    self.assertTrue(gate.uncovered_areas(
+      ['tests/expectations/edg_x86_64/edg.log'], ['tests']))
+
+  def test_the_two_process_front_end_needs_the_smoke_lists_and_modes(self):
+    paths = ['dev_tools/bin/cpfe-cir-2p']
+    problems = ' | '.join(gate.uncovered_areas(paths, ['tooling']))
+    for area in ('eccp', 'twop'):
+      self.assertIn(f"area {area}", problems)
+    self.assertEqual(gate.uncovered_areas(
+      paths, ['tooling', 'eccp', 'twop']), [])
+    self.assertEqual(set(gate.AREA_STEPS['twop']),
+                     {'smoke', 'cpp-smoke', 'modes', 'cpp-modes'})
+
+  def test_the_dump_and_the_summary_tools_reach_the_steps_that_use_them(self):
+    self.assertEqual(gate.AREA_STEPS['goldens'], ('cir-suite',))
+    self.assertEqual(set(gate.AREA_STEPS['summary']), {
+      'smoke', 'cpp-smoke', 'cir-suite', 'corpus', 'cpp-corpus'})
+    self.assertTrue(gate.uncovered_areas(['dev_tools/bin/edg-cir-ecil-dump'],
+                                         ['tooling']))
+    self.assertEqual(gate.uncovered_areas(
+      ['dev_tools/bin/edg-cir-ecil-dump'], ['tooling', 'goldens']), [])
+    self.assertEqual(gate.uncovered_areas(
+      ['dev_tools/bin/edg-cir-summary'], ['tooling', 'summary']), [])
+    self.assertTrue(gate.uncovered_areas(['dev_tools/bin/edg-cir-summary'],
+                                         ['tooling', 'goldens']))
+
+  def test_the_edgy_config_and_the_primary_tests_reach_the_day_suite(self):
+    for path in ('tests/.edgy/config.json', 'tests/tests/edg/x/test.sft.c'):
+      self.assertTrue(gate.uncovered_areas([path], ['tests']), path)
+      self.assertEqual(gate.uncovered_areas(
+        [path], ['tests', 'tests-reference']), [], path)
+    # the cir suite is a secondary one: no day run for its tests
+    self.assertEqual(gate.uncovered_areas(
+      ['tests/tests/cir/config/x.sft.c'], ['tests']), [])
+    # the other configurations' expectations are the reference's
+    self.assertEqual(gate.uncovered_areas(
+      ['tests/expectations/edg_x86_32/edg.log'], ['tests-reference']), [])
+    self.assertTrue(gate.uncovered_areas(
+      ['tests/expectations/edg_x86_32/edg.log'], ['tests']))
+
+  def test_pylibs_runs_smoke_and_day_and_the_self_tests(self):
+    paths = ['dev_tools/pylibs/edgtest/runtest.py']
+    self.assertTrue(gate.uncovered_areas(paths, ['tooling']))
+    self.assertEqual(gate.uncovered_areas(paths, ['tooling', 'pylibs']), [])
 
   def test_an_unmapped_file_is_a_problem(self):
     problems = gate.uncovered_areas(['benchmarks/x'], ['toolchain'])
@@ -1410,6 +1529,93 @@ class LeanAreas(unittest.TestCase):
       (root / 'new.txt').write_text('x')
       self.assertEqual(gate.changed_paths(root, 'HEAD', ''),
                        ['a.txt', 'new.txt'])
+
+  def test_a_rename_lists_both_paths(self):
+    # Without --no-renames git names only the new path, and a file that
+    # moved out of an area would hide the area it left.
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      def git(*args):
+        subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t',
+                        *args], cwd = root, check = True,
+                       stdout = subprocess.DEVNULL)
+      git('init', '-q')
+      (root / 'src').mkdir()
+      (root / 'src' / 'a.c').write_text('int x;\n' * 20)
+      git('add', '.')
+      git('commit', '-q', '-m', 'one')
+      (root / 'tests').mkdir()
+      git('mv', 'src/a.c', 'tests/a.c')
+      self.assertEqual(gate.changed_paths(root, 'HEAD', ''),
+                       ['src/a.c', 'tests/a.c'])
+
+  def run_gate(self, *arguments):
+    return subprocess.run([sys.executable, str(BIN / 'edg-cir-gate-evidence'),
+                           *arguments], text = True, stdout = subprocess.PIPE,
+                          stderr = subprocess.STDOUT)
+
+  def test_lean_with_no_changed_file_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      listing = Path(tmp) / 'files.txt'
+      listing.write_text('\n')
+      proc = self.run_gate('--lean', 'toolchain', '--changed-files',
+                           str(listing))
+      self.assertEqual(proc.returncode, 2, proc.stdout)
+      self.assertIn('empty change set', proc.stdout)
+      self.assertIn('--allow-empty-change-set', proc.stdout)
+      # --steps-for only prints the set, so it needs no change set.
+      proc = self.run_gate('--steps-for', 'toolchain', '--changed-files',
+                           str(listing))
+      self.assertEqual(proc.returncode, 0, proc.stdout)
+
+  def test_lean_refuses_an_uncovered_change_set(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      listing = Path(tmp) / 'files.txt'
+      listing.write_text('src/scope_stk.c\n')
+      proc = self.run_gate('--lean', 'library', '--changed-files',
+                           str(listing))
+      self.assertEqual(proc.returncode, 2, proc.stdout)
+      self.assertIn('area shared-src', proc.stdout)
+
+
+class CheckpointLean(unittest.TestCase):
+  def test_the_upload_status_is_the_ssh_status(self):
+    calls = []
+    def fake_run(command, **kwargs):
+      calls.append((command, kwargs))
+      return subprocess.CompletedProcess(command, 255)
+    original = checkpoint.subprocess.run
+    checkpoint.subprocess.run = fake_run
+    try:
+      status = checkpoint.upload_changed_files('~/x/out', 'src/a.c\n')
+    finally:
+      checkpoint.subprocess.run = original
+    self.assertEqual(status, 255)
+    self.assertEqual(calls[0][1]['input'], 'src/a.c\n')
+    self.assertIn('cat > ~/x/out/changed-files.txt', calls[0][0][-1])
+
+  def test_an_empty_change_set_stops_before_any_sync(self):
+    def not_reachable():
+      return True
+    gate_tool = checkpoint.load_gate_tool()
+    gate_tool.changed_paths = lambda *args: []
+    saved = (checkpoint.box_reachable, checkpoint.load_gate_tool,
+             sys.argv, os.getcwd())
+    checkpoint.box_reachable = not_reachable
+    checkpoint.load_gate_tool = lambda: gate_tool
+    sys.argv = ['edg-cir-checkpoint', '--lean', 'toolchain', '--tree',
+                'no-such-tree']
+    os.chdir(BIN.parent.parent)
+    try:
+      with self.assertRaises(SystemExit) as raised, \
+           contextlib.redirect_stdout(io.StringIO()), \
+           contextlib.redirect_stderr(io.StringIO()):
+        checkpoint.main()
+    finally:
+      (checkpoint.box_reachable, checkpoint.load_gate_tool,
+       sys.argv, directory) = saved
+      os.chdir(directory)
+    self.assertEqual(raised.exception.code, 2)
 
 
 if __name__ == '__main__':

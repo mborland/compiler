@@ -713,15 +713,26 @@ No change needed.
 1. **Next milestone**: an M5.1 first (size-based chunk threshold and the
    re-runs, the attr-diff RISK rows, the cheap MISSED facts; §6), or
    straight to M6?
+
+M5.1 Only.
+
 2. **attr-diff gating**: keep the step FAIL until the RISK rows are
    checked, or record the checked rows as known entries so the step can
    pass?
+
+Record the checked rows as known entries so the step can pass.
+
 3. **The EDG mangler issue** (§4.2) is an FE change outside the CIR gate
    that changes symbols for every back end. Should the CIR project fix it,
    or report it as FE maintenance?
+
+CIR should fix it.
+
 4. **Box disk**: 45 GB free (90% used). May the next session prune
    `m5p-int` and `m41-int` (already pruned to their evidence and KEEP
    markers) or `m3-final`/`m4-final` after taking the M5 baselines?
+
+Prune everything that's not needed. You are allowed to delete anything you make.
 
 ## 9. Gate evidence
 

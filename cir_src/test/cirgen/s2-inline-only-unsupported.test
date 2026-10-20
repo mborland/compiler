@@ -1,0 +1,36 @@
+; An INLINE_ONLY function whose definition the writer dropped as unsupported
+; and that is referenced is a plain declaration, in the default mode as with
+; --keep-going: its definition lives in another translation unit (C99 inline
+; or gnu_inline semantics), so the dropped body loses nothing.  One that
+; nothing references is erased without a warning too (glibc's fortify headers
+; would warn at every <stdio.h> otherwise): unused_inl.  (A dropped
+; external function is an error, see unsupported-ext.)
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s --implicit-check-not=warning --implicit-check-not=error --implicit-check-not=unused_inl
+; RUN: %edg-cir -O2 --emit=obj -o %t.o %t.ecil 2>&1 | %FileCheck %s --check-prefix=QUIET --allow-empty
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYM
+
+; CHECK: cir.func private @inl(!s32i{{.*}}) -> !s32i
+; CHECK-NOT: unused_inl
+; QUIET-NOT: {{warning|error}}
+; SYM-DAG: U inl
+; SYM-DAG: T main
+
+frame DECLS
+  STR 10 "inl"
+  STR 11 "main"
+  STR 12 "unused_inl"
+  TY_FUNC 20 1 0 [1]
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 20 0 48 10
+  DECL_FUNC 41 21 0 9 11
+  DECL_FUNC 42 20 0 48 12
+frame REGION
+  FUNC_BEGIN 41 0
+  CONST_INT 1 7
+  CALL 40 20 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

@@ -353,6 +353,7 @@ constant is made in the function's own class and adjusted at run time
         first = cir::IntAttr::get(word, static_cast<int64_t>(slot) * 8 + 1);
       } else {
         fn->referenced = true;
+        address_uses_.push_back({fn_entity_, fn});
         first = cir::GlobalViewAttr::get(
             word, mlir::FlatSymbolRefAttr::get(
                       mlir::cast<cir::FuncOp>(fn->op).getSymNameAttr()));
@@ -366,6 +367,7 @@ constant is made in the function's own class and adjusted at run time
       result = compat::method_attr_virtual(own_type, slot * 8);
     } else {
       fn->referenced = true;
+      address_uses_.push_back({fn_entity_, fn});
       result = compat::method_attr_symbol(
           own_type, mlir::cast<cir::FuncOp>(fn->op).getSymNameAttr());
     }

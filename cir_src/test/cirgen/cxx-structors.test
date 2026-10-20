@@ -14,12 +14,12 @@
 ; RUN: %t.exe
 ; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
 
-; CHECK-DAG: cir.func private @_ZN1EC1Ei(!cir.ptr<!rec_E>, !s32i) alias(@_ZN1EC2Ei)
-; CHECK-DAG: cir.func private @_ZN1ED1Ev(!cir.ptr<!rec_E>) alias(@_ZN1ED2Ev)
+; CHECK-DAG: cir.func private @_ZN1EC1Ei(!cir.ptr<!rec_E>{{.*}}, !s32i{{.*}}) alias(@_ZN1EC2Ei)
+; CHECK-DAG: cir.func private @_ZN1ED1Ev(!cir.ptr<!rec_E>{{.*}}) alias(@_ZN1ED2Ev)
 ; CHECK-DAG: cir.func comdat("_ZN1WC5Ei") weak_odr dso_local @_ZN1WC2Ei
-; CHECK-DAG: cir.func weak_odr private @_ZN1WC1Ei(!cir.ptr<!rec_W>, !s32i) alias(@_ZN1WC2Ei)
+; CHECK-DAG: cir.func weak_odr private @_ZN1WC1Ei(!cir.ptr<!rec_W>{{.*}}, !s32i{{.*}}) alias(@_ZN1WC2Ei)
 ; CHECK-DAG: cir.func comdat("_ZN1WD5Ev") weak_odr dso_local @_ZN1WD2Ev
-; CHECK-DAG: cir.func weak_odr private @_ZN1WD1Ev(!cir.ptr<!rec_W>) alias(@_ZN1WD2Ev)
+; CHECK-DAG: cir.func weak_odr private @_ZN1WD1Ev(!cir.ptr<!rec_W>{{.*}}) alias(@_ZN1WD2Ev)
 ; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_ZN1IC2Ei
 ; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_ZN1ID2Ev
 ; CHECK-DAG: cir.func internal private dso_local @_ZL1PC2Ei

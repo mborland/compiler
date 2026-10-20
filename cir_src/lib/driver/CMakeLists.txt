@@ -4,7 +4,7 @@
 llvm_map_components_to_libnames(edg_cir_llvm_libs
   core support targetparser analysis passes codegen asmprinter mc
   bitwriter ipo scalaropts instcombine transformutils
-  x86codegen x86desc x86info)
+  x86codegen x86desc x86info linker)
 
 set(edg_cir_mlir_clang_libs
   clangCIR clangCIRLoweringDirectToLLVM clangCIRLoweringCommon
@@ -17,6 +17,7 @@ set(edg_cir_mlir_clang_libs
 # Our objects (also reusable by the static bundle).
 add_library(edg_cir_objects OBJECT
   capi.cpp
+  chunk.cpp
   cir_module.cpp
   pipeline.cpp
   session.cpp
@@ -27,6 +28,8 @@ add_library(edg_cir_objects OBJECT
   ../cirgen/expr.cpp
   ../cirgen/function.cpp
   ../cirgen/globals.cpp
+  ../cirgen/lazy.cpp
+  ../cirgen/signature.cpp
   ../cirgen/types.cpp)
 target_include_directories(edg_cir_objects PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/../cirgen")

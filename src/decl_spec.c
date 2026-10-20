@@ -11905,6 +11905,9 @@ storage_class_specifier:
         } else {
           decl_specifiers_seen |= DS_INLINE;
           *output_flags |= DSO_INLINE;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+          state->decl_modifiers.cir_inline_keyword = TRUE;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
           copy_source_position(pos_curr_token, state->inline_pos);
         }  /* if */
         break;

@@ -3,7 +3,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
     E *e = new (buf) E;
            ^
 
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -18,12 +18,12 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_VOID 4
   STR 5 "C"
   TY_RECORD_DECL 5 0 5
   TY_PTR 6 5
-  TY_FUNC 7 4 0 [6]
+  TY_FUNC 7 4 0 [6] supp{15: 2}
   STR 6 "v"
   TY_RECORD_BODY 5 4 4 4 12 1
   REC_FIELD 1 0 nil nil 6 0
@@ -49,8 +49,8 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame REGION
-  TY_FUNC 10 4 0 [6, 1]
+frame REGION supp
+  TY_FUNC 10 4 0 [6, 1] supp{15: 2}
   STR 10 "_ZN1CC1Ei"
   DECL_FUNC 11 10 0 2 10
   STR 11 "_ZN1CC2Ei"
@@ -87,7 +87,7 @@ frame REGION
   TY_PTR 16 15
   TY_FUNC 17 1 1 [16]
   STR 15 "printf"
-  DECL_FUNC 18 17 0 0 15
+  DECL_FUNC 18 17 0 256 15
   TY_ARRAY 19 15 7 0
   STR 16 ".str"
   DECL_VAR 20 19 2 11 0 16
@@ -123,7 +123,7 @@ frame REGION
   C_STRING 24 "C::new %lu\x0a\x00"
   VAR_INIT 25
   STR 20 "malloc"
-  DECL_FUNC 26 22 0 0 20
+  DECL_FUNC 26 22 0 256 20
   FUNC_BEGIN 23 0
   PARAM 1 2 2 18 0
   BLOCK_BEGIN
@@ -152,7 +152,7 @@ frame REGION
   C_STRING 29 "C::delete\x0a\x00"
   VAR_INIT 30
   STR 24 "free"
-  DECL_FUNC 31 27 0 0 24
+  DECL_FUNC 31 27 0 256 24
   FUNC_BEGIN 28 0
   PARAM 1 21 21 22 0
   FUNC_EH_SPEC 1 []
@@ -224,11 +224,11 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 30 "D"
   TY_RECORD_DECL 40 0 30
   TY_PTR 41 40
-  TY_FUNC 42 4 0 [41]
+  TY_FUNC 42 4 0 [41] supp{15: 2}
   TY_RECORD_BODY 40 4 4 4 12 1
   REC_FIELD 1 0 nil nil 6 0
   STR 31 "_ZN1DC1Ev"
@@ -316,11 +316,11 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 39 "E"
   TY_RECORD_DECL 53 0 39
   TY_PTR 54 53
-  TY_FUNC 55 4 0 [54]
+  TY_FUNC 55 4 0 [54] supp{15: 2}
   TY_RECORD_BODY 53 4 4 4 0 1
   REC_FIELD 1 0 nil nil 6 0
   STR 40 "_ZN1EC1Ev"
@@ -352,8 +352,8 @@ frame REGION
 frame REGION
   TY_FUNC 59 21 0 [2, 21]
   STR 43 "_ZnwmPv"
-  DECL_FUNC 60 59 0 130 43
-  DECL_FUNC 60 59 3 195 43
+  DECL_FUNC 60 59 0 642 43
+  DECL_FUNC 60 59 3 707 43
   FUNC_BEGIN 60 0
   PARAM 1 2 2 nil 0
   PARAM 2 21 21 22 0
@@ -401,12 +401,12 @@ frame REGION
   LREF 3
   LREF 2
   LOAD 0
-  CALL 23 22 1 0
+  CALL 23 22 1 64
   STORE 2 0
   CLEANUP_BEGIN 2 nil 1
   LREF 3
   LOAD 0
-  CALL 28 27 1 0
+  CALL 28 27 1 64
   CLEANUP_BODY
   LREF 3
   LOAD 0
@@ -425,12 +425,12 @@ frame REGION
   LREF 6
   LREF 5
   LOAD 0
-  CALL 23 22 1 0
+  CALL 23 22 1 64
   STORE 2 0
   CLEANUP_BEGIN 2 nil 1
   LREF 6
   LOAD 0
-  CALL 28 27 1 0
+  CALL 28 27 1 64
   CLEANUP_BODY
   LREF 6
   LOAD 0
@@ -456,14 +456,14 @@ frame REGION
   LOAD 0
   LREF 9
   LOAD 0
-  CALL 33 32 2 0
+  CALL 33 32 2 64
   STORE 2 0
   CLEANUP_BEGIN 2 nil 1
   LREF 10
   LOAD 0
   LREF 9
   LOAD 0
-  CALL 37 36 2 0
+  CALL 37 36 2 64
   CLEANUP_BODY
   LREF 10
   LOAD 0
@@ -515,12 +515,12 @@ frame REGION
   LREF 13
   LREF 12
   LOAD 0
-  CALL 47 22 1 0
+  CALL 47 22 1 64
   STORE 2 0
   CLEANUP_BEGIN 2 nil 1
   LREF 13
   LOAD 0
-  CALL 50 27 1 0
+  CALL 50 27 1 64
   CLEANUP_BODY
   LREF 13
   LOAD 0
@@ -557,7 +557,7 @@ frame REGION
   ADDR
   CAST 12 16
   CAST 11 21
-  CALL 60 59 2 0
+  CALL 60 59 2 64
   CAST 11 54
   DUP
   CALL 56 55 1 0

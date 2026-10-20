@@ -20,6 +20,9 @@ exception, longjmp or exit crosses this boundary.
 #include "llvm/Config/llvm-config.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+#include "mlir/IR/AsmState.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/Pass/PassManager.h"
 
 #include "session.h"
 
@@ -42,6 +45,11 @@ option.
     std::vector<const char *> argv;
     llvm::raw_string_ostream errors(message);
 
+    /* MLIR's pass manager, printer and context command-line options
+       (print-ir, timing, ...) exist only when registered. */
+    mlir::registerPassManagerCLOptions();
+    mlir::registerAsmPrinterCLOptions();
+    mlir::registerMLIRContextCLOptions();
     argv.push_back("edg_cir");
     for (const char *const *p = args; p != nullptr && *p != nullptr; ++p)
       argv.push_back(*p);
@@ -276,6 +284,11 @@ Open a session, consume the ECIL file ("-" is stdin), finish and close.
         result = edg_cir_session_finish(session);
     }
   }
+  /* A run that failed before the finish still reports its statistics (the
+     finish of a failed session only prints the chunked-lowering note and
+     releases the crash recovery hold). */
+  if (session != nullptr && result != EDG_CIR_OK)
+    (void)session->finish();
   edg_cir_session_close(session);
   return result;
 }  /* edg_cir_process_file */

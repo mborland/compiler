@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''The full late-name check of the ECIL writer on the large units (gate step
+names-check).
+
+In a CHECKING build the writer mangles a function again after it was sent and
+asserts that its name did not change (ecil_resolve_late_names in
+src/ecil_type.c).  To save time the check looks at the first
+ECIL_NAME_CHECK_ALL eligible functions of a translation unit and one in
+ECIL_NAME_CHECK_STRIDE of the rest; `ECIL_CHECK_ALL_NAMES=1` in the
+environment checks all of them.  This tool exercises the full check where the
+sample skips names: the pinned real-world units (edg-cir-perf's PINNED_UNITS,
+Boost needs --boost-include) and the generated files of --functions (6000) C
+and C++ functions.
+
+Run it inside the cir-env image from the repository root, after building the
+checking front end build/gcc-cir (the debug preset):
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-names-check
+
+Per unit it makes the ECIL stream with the front end twice, as the test
+configurations do (eccp -S, the stream kept), once as it is and once with
+ECIL_CHECK_ALL_NAMES=1, and checks that
+
+  1. the front end succeeds without the variable (a unit that does not compile
+     fails the step), and with it, with the same exit status;
+  2. the output has no `ECIL: the name of a function changed` line and no
+     assertion or internal error;
+  3. the two streams are byte-identical (the check changes nothing that is
+     written).
+
+Non-vacuity: the full check differs from the sampled one only in a
+translation unit with more eligible functions than ECIL_NAME_CHECK_ALL (read
+from src/ecil_type.c, 2000 if it is not there), so at least one unit must
+have more DECL_FUNC records than that in its stream (counted with ecil-dump;
+an upper bound of the eligible functions, the generated 6000-function files
+have them all), else the run exercises nothing extra and fails.  The front
+end binary must also contain the name ECIL_CHECK_ALL_NAMES (the check is
+compiled only into CHECKING builds, but the release preset has it too, so this
+is a guard against a build without the code, not the proof): a front end
+without it is a setup problem (exit status 2).
+
+Exit status: 0 if every check holds, 1 if one fails, 2 for a setup problem.
+The last line is `RESULT: PASS` or `RESULT: FAIL`.
+'''
+
+import argparse
+import concurrent.futures
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+BIN = Path(__file__).resolve().parent
+
+ENV_NAME = 'ECIL_CHECK_ALL_NAMES'
+NAME_CHANGED_RE = re.compile(r'ECIL: the name of a function changed')
+FAILURE_RE = re.compile(r'assertion failed|internal error|AddressSanitizer|'
+                        r'Segmentation fault', re.I)
+
+
+def load_tool(name: str):
+  '''Import dev_tools/bin/<name> (a file without .py) as a module.'''
+  loader = importlib.machinery.SourceFileLoader(
+    name.replace('-', '_'), str(BIN / name))
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+def has_check(binary: str) -> bool:
+  '''Whether the front end binary has the check compiled in (its code reads
+  the environment variable by name).'''
+  try:
+    return ENV_NAME.encode() in Path(binary).read_bytes()
+  except OSError:
+    return False
+
+
+class Made:
+  '''One front end run: exit status, its output and the stream it wrote.'''
+
+  def __init__(self, status: int, output: str, stream: Optional[bytes]
+               ) -> None:
+    self.status = status
+    self.output = output
+    self.stream = stream
+
+
+def make_stream(root: Path, exports: Dict[str, str], source: Path,
+                options: List[str], all_names: bool, timeout: int) -> Made:
+  env = dict(os.environ)
+  env.update(exports)
+  env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+  env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+  env['EDG_USE_SYSTEM_HEADERS'] = '1'
+  env['KEEP_FE'] = exports['CPFE_CIR']
+  env['CPFE'] = str(root / 'cir_src/scripts/keep-stream-fe.sh')
+  env.pop(ENV_NAME, None)
+  if all_names:
+    env[ENV_NAME] = '1'
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-names.'))
+  try:
+    shutil.copy2(source, work / source.name)
+    env['KEEP_STREAM'] = str(work / 'stream')
+    try:
+      proc = subprocess.run(
+        [str(root / 'util/eccp.sh'), '-S', *options, source.name], cwd = work,
+        env = env, stdout = subprocess.PIPE, stderr = subprocess.STDOUT,
+        text = True, errors = 'replace', timeout = timeout)
+      status, output = proc.returncode, proc.stdout
+    except subprocess.TimeoutExpired:
+      status, output = 124, 'timeout'
+    stream = work / 'stream.ecil'
+    return Made(status, output, stream.read_bytes() if stream.exists()
+                else None)
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+
+
+def name_check_limit(root: Path) -> int:
+  '''ECIL_NAME_CHECK_ALL of the writer (src/ecil_type.c): the number of
+  eligible functions that the sampled check looks at in full.'''
+  try:
+    match = re.search(r'#define\s+ECIL_NAME_CHECK_ALL\s+(\d+)',
+                      (root / 'src/ecil_type.c').read_text(errors = 'replace'))
+  except OSError:
+    match = None
+  return int(match.group(1)) if match else 2000
+
+
+def count_decl_funcs(dump: str, stream: bytes) -> int:
+  '''The DECL_FUNC records of a stream (ecil-dump text).'''
+  with tempfile.NamedTemporaryFile(prefix = 'edg-cir-names.',
+                                   suffix = '.ecil') as handle:
+    handle.write(stream)
+    handle.flush()
+    proc = subprocess.run([dump, handle.name], stdout = subprocess.PIPE,
+                          stderr = subprocess.DEVNULL, text = True,
+                          errors = 'replace')
+  return len(re.findall(r'^\s*DECL_FUNC\b', proc.stdout, re.M))
+
+
+def judge_coverage(counts: Dict[str, int], limit: int) -> List[str]:
+  '''The problems of the non-vacuity check: no unit has more DECL_FUNC
+  records than the sampled check looks at in full.'''
+  if counts and max(counts.values()) > limit:
+    return []
+  largest = max(counts.items(), key = lambda item: item[1],
+                default = ('none', 0))
+  return [f"vacuous: no unit has more than {limit} DECL_FUNC records (the "
+          f"largest, {largest[0]}, has {largest[1]}), so the full check "
+          f"looks at the same functions as the sampled one"]
+
+
+def judge_unit(name: str, plain: Made, full: Made) -> List[str]:
+  '''The problems of one unit (checks 1 to 3 of the docstring).'''
+  problems: List[str] = []
+  if plain.status != 0 or plain.stream is None:
+    problems.append(f"{name}: the front end fails without {ENV_NAME} (exit "
+                    f"status {plain.status})")
+    return problems
+  if full.status != plain.status:
+    problems.append(f"{name}: exit status {full.status} with {ENV_NAME}, "
+                    f"{plain.status} without")
+  for line in full.output.splitlines():
+    if NAME_CHANGED_RE.search(line):
+      problems.append(f"{name}: {line.strip()[:200]}")
+      break
+  else:
+    failure = FAILURE_RE.search(full.output)
+    if failure:
+      problems.append(f"{name}: {failure.group(0)} with {ENV_NAME}")
+  if full.stream != plain.stream:
+    problems.append(f"{name}: the stream with {ENV_NAME} differs from the "
+                    f"stream without it")
+  return problems
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2])
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--fe-build', default = 'build/gcc-cir',
+                      help = 'build directory of the checking cpfe-cir')
+  parser.add_argument('--functions', type = int, default = 6000,
+                      help = 'functions of the generated C and C++ files '
+                             '(0: only the pinned units)')
+  parser.add_argument('--boost-include', default = '',
+                      help = 'the Boost headers (inside the workspace) for '
+                             'the Boost units')
+  parser.add_argument('-j', dest = 'jobs', type = int,
+                      default = os.cpu_count() or 1)
+  parser.add_argument('--timeout', type = int, default = 1800)
+  parser.add_argument('--json', default = '')
+  args = parser.parse_args()
+
+  root = Path(args.root).resolve()
+  rss = load_tool('edg-cir-rss')
+  perf = load_tool('edg-cir-perf')
+  exports = rss.load_exports(root / args.fe_build / 'environment.sh')
+  fe = exports.get('CPFE_CIR', '')
+  if not fe or not Path(fe).exists():
+    print(f"edg-cir-names-check: no cpfe-cir (build {args.fe_build}; run "
+          f"from the repository root)", file = sys.stderr)
+    sys.exit(2)
+  if not has_check(fe):
+    print(f"edg-cir-names-check: {fe} does not have the name check compiled "
+          f"in ({ENV_NAME} is not in the binary): it is not a CHECKING "
+          f"build, so the run would check nothing", file = sys.stderr)
+    sys.exit(2)
+  dump = exports.get('ECIL_DUMP', '')
+  if not dump or not Path(dump).exists():
+    print(f"edg-cir-names-check: no ecil-dump (ECIL_DUMP of "
+          f"{args.fe_build}/environment.sh; build build/cir)",
+          file = sys.stderr)
+    sys.exit(2)
+  boost = str((root / args.boost_include).resolve()) \
+    if args.boost_include else ''
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-names-src.'))
+  try:
+    units: List[Tuple[str, Path, List[str]]] = []
+    for unit in perf.PINNED_UNITS:
+      include = [f"-I{boost}"] if boost and unit.startswith('boost/') else []
+      units.append((unit, root / 'dev_tools/cir-realworld' / f"{unit}.cpp",
+                    [*perf.REALWORLD_FLAGS, *include]))
+    if args.functions:
+      source = work / f"c{args.functions}.c"
+      rss.generate_functions(args.functions, source)
+      units.append((f"generated/c{args.functions}", source, ['--gcc']))
+      source = work / f"cxx{args.functions}.cpp"
+      rss.generate_cxx_functions(args.functions, source)
+      units.append((f"generated/cxx{args.functions}", source, ['--c++17']))
+
+    def one(item: Tuple[str, Path, List[str]]
+            ) -> Tuple[str, List[str], int, int]:
+      name, source, options = item
+      if not source.exists():
+        return name, [f"{name}: no such unit"], 0, 0
+      plain = make_stream(root, exports, source, options, False,
+                          args.timeout)
+      full = make_stream(root, exports, source, options, True, args.timeout)
+      return (name, judge_unit(name, plain, full), len(plain.stream or b''),
+              count_decl_funcs(dump, plain.stream) if plain.stream else 0)
+
+    problems: List[str] = []
+    lines: List[str] = []
+    with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+      results = list(pool.map(one, units))
+    counts: Dict[str, int] = {}
+    for name, unit_problems, size, functions in results:
+      problems += unit_problems
+      counts[name] = functions
+      lines.append(f"{name}: {'FAIL' if unit_problems else 'ok'}"
+                   f" ({size // 1024} KB stream, {functions} DECL_FUNC)")
+    limit = name_check_limit(root)
+    problems += judge_coverage(counts, limit)
+    print(f"{len(results)} unit(s) with {ENV_NAME}=1; the front end checks "
+          f"every function name (the sample checks {limit} in full)")
+    print('\n'.join(lines))
+    for problem in problems:
+      print(f"  FAIL {problem}")
+    if args.json:
+      Path(args.json).write_text(json.dumps(
+        {'units': [r[0] for r in results], 'decl_funcs': counts,
+         'limit': limit, 'problems': problems},
+        indent = 1) + '\n')
+    print(f"RESULT: {'PASS' if not problems else 'FAIL'}")
+    sys.exit(1 if problems else 0)
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+
+
+if __name__ == '__main__':
+  main()

@@ -395,8 +395,9 @@ void test_api_versions(const std::vector<uint8_t> &stream)
 API 2 added two fields and two flags.  A caller built against API 1 (a
 struct that ends before chunk_functions, api_version 1) is accepted and
 gets the defaults of the new fields; the new flags and the chunk fields are
-accepted from an API 2 caller (no behavior yet); a caller from the future is
-refused; a struct that is too short to hold the header is refused.
+accepted from an API 2 caller and take effect (the chunked-lowering note of
+the statistics says so: threshold 1 forces chunking, UINT32_MAX never chunks,
+0 selects the defaults); a caller from the future is refused; a struct that is too short to hold the header is refused.
 */
 {
   an_edg_cir_options options;
@@ -409,8 +410,8 @@ refused; a struct that is too short to hold the header is refused.
   CHECK(api1_size > 3 * sizeof(uint32_t) && api1_size < sizeof options,
         "API 1 struct size %u", api1_size);
   edg_cir_options_init(&options);
-  CHECK(options.struct_size == sizeof options && options.chunk_functions == 0 &&
-            options.chunk_threshold == 0,
+  CHECK(options.struct_size == sizeof options &&
+            options.chunk_functions == 0 && options.chunk_threshold == 0,
         "defaults of the API 2 fields");
   /* An API 1 caller: the bytes past its struct are garbage (here: ones). */
   {
@@ -450,21 +451,61 @@ refused; a struct that is too short to hold the header is refused.
           "API 2 flags output");
   }
   {
-    a_capture on;
+    /* threshold: UINT32_MAX never chunks, 1 forces it (a module with one
+       function body or more), 0 is the default (this module is far below
+       it).  The stream has two function bodies. */
+    static const uint32_t thresholds[3] = {0xffffffffu, 1, 0};
+    std::string outputs[3];
+    const std::vector<uint8_t> bodies = assemble(
+        std::string(header_text) +
+        "frame DECLS\n  STR 10 \"f\"\n  STR 11 \"main\"\n"
+        "  TY_FUNC 20 1 0 []\n  DECL_FUNC 30 20 0 1 10\n"
+        "  DECL_FUNC 31 20 0 9 11\n"
+        "frame REGION\n  FUNC_BEGIN 30 0\n  CONST_INT 1 0\n"
+        "  RETURN_STMT true\n  FUNC_END 0\n  FUNC_BEGIN 31 0\n"
+        "  CALL 30 20 0 0\n  RETURN_STMT true\n  FUNC_END 0\n"
+        "frame END\n  END auto 0\n");
 
-    edg_cir_options_init(&options);
-    options.output_kind = EDG_CIR_OUTPUT_LLVM_IR;
-    options.write_callback = write_cb;
-    options.write_user_data = &on;
-    options.chunk_functions = 3;
-    options.chunk_threshold = 0xffffffffu;
-    on.caller = std::this_thread::get_id();
-    CHECK(edg_cir_session_open(&options, &session) == EDG_CIR_OK &&
-              edg_cir_session_consume(session, stream.data(), stream.size()) ==
-                  EDG_CIR_OK &&
-              edg_cir_session_finish(session) == EDG_CIR_OK,
-          "chunk fields accepted");
-    edg_cir_session_close(session);
+    for (int k = 0; k < 3; ++k) {
+      a_capture on;
+      size_t at;
+
+      edg_cir_options_init(&options);
+      options.output_kind = EDG_CIR_OUTPUT_LLVM_IR;
+      options.write_callback = write_cb;
+      options.write_user_data = &on;
+      options.diagnostic_callback = diag_cb;
+      options.diagnostic_user_data = &on;
+      options.flags = EDG_CIR_FLAG_PRINT_STATS;
+      options.chunk_functions = 3;
+      options.chunk_threshold = thresholds[k];
+      on.caller = std::this_thread::get_id();
+      CHECK(edg_cir_session_open(&options, &session) == EDG_CIR_OK &&
+                edg_cir_session_consume(session, bodies.data(),
+                                        bodies.size()) == EDG_CIR_OK &&
+                edg_cir_session_finish(session) == EDG_CIR_OK,
+            "chunk fields accepted");
+      edg_cir_session_close(session);
+      outputs[k] = on.bytes;
+      for (const std::string &message : on.messages) {
+        const char *key = "stats: chunked lowering: ";
+
+        if ((at = message.find(key)) != std::string::npos) {
+          unsigned long chunks = 0, size = 0;
+
+          std::sscanf(message.c_str() + at + std::strlen(key),
+                      "%lu chunks of at most %lu", &chunks, &size);
+          CHECK(size == 3, "chunk size %lu", size);
+          CHECK(k == 1 ? chunks >= 2 : chunks == 0,
+                "threshold %u: %lu chunks", thresholds[k], chunks);
+          break;
+        }
+        CHECK(&message != &on.messages.back(),
+              "no chunked-lowering note (threshold %u)", thresholds[k]);
+      }
+    }
+    CHECK(outputs[0] == outputs[1] && outputs[0] == outputs[2],
+          "chunked and whole-module output are the same");
   }
   edg_cir_options_init(&options);
   options.api_version = EDG_CIR_API_VERSION + 1;

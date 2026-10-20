@@ -15,7 +15,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
   void nested_subscript() { *getp3() = arr[(*getp2() = obj, 0)]; }
                                                                  ^
 
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -52,28 +52,18 @@ frame REGION
   DECL_VAR 11 10 0 0 0 11
   FUNC_BEGIN 7 0
   BLOCK_BEGIN
-  LOCAL 1 1 nil 0 0
-  LREF 1
-  CONST_INT 1 10
-  STORE 2 0
   GREF 8
   FIELD 4 0
   DUP
   LOAD 0
-  LREF 1
-  LOAD 0
+  CONST_INT 1 10
   ADD 1
   STORE 0 0
-  LOCAL 2 1 nil 0 0
-  LREF 2
-  CONST_INT 1 10
-  STORE 2 0
   GREF 9
   FIELD 4 0
   DUP
   LOAD 0
-  LREF 2
-  LOAD 0
+  CONST_INT 1 10
   ADD 1
   STORE 0 0
   GREF 11

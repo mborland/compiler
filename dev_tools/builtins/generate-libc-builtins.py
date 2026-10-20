@@ -27,13 +27,30 @@ exclusions below remove those; each has its reason.
 The output is a header with one array, builtin_libc_names, sorted by strcmp
 and ended by a NULL, and its length, num_builtin_libc_names.
 
+With --clang-builtins-inc it also writes src/builtin_libc_attrs.h (--attrs-
+output): which of those functions are pure, const, noreturn or nothrow.  The
+scrapes carry no such data, so it comes from Clang's own table,
+clang/Basic/Builtins.inc of the pinned LLVM (the table that clangir uses to
+give a library call memory(read) or memory(none), or noreturn).  Only the
+unconditional attribute letters count: U (pure), c (const), r (noreturn) and
+n (nothrow, but not for the cancellation points fprintf, vprintf, vfprintf).
+The letters e (const when -fno-math-errno) and g (const when FP exceptions are
+ignored) do not, because Linux has math-errno on: sin and its relatives stay
+ordinary calls (not const).  A name with U or c and e or g together loses the
+pure or const claim, and is reported.  Only names of builtin_libc_names are
+taken.
+
 Usage:
   generate-libc-builtins.py [-o src/builtin_libc.h] [--builtins-dir DIR]
                             [--report]
+                            [--clang-builtins-inc PATH --llvm-sha SHA
+                             --attrs-output src/builtin_libc_attrs.h]
 
 --builtins-dir defaults to the directory of this script.  Without -o the
 header goes to stdout.  --report prints the size of the derived set and the
-exclusions applied, to stderr.
+exclusions applied, to stderr.  PATH is the Builtins.inc of the LLVM build
+(for the cir-env image: /edg/llvm-cir/include/clang/Basic/Builtins.inc) and
+SHA the LLVM commit it comes from, which the header names.
 '''
 
 import argparse
@@ -164,6 +181,174 @@ def derive_twins(files: List[Path]) -> Set[str]:
   return agree - disagree
 
 
+# One entry of Builtins.inc: name, type, attributes, header, languages.
+_INC_REGEX = re.compile(
+  r'StrOffsets\{\d+ /\* (.*?) \*/, \d+ /\* (.*?) \*/, \d+ /\* (.*?) \*/, '
+  r'\d+\}, HeaderDesc::(\w+), (\w+)')
+
+
+def signature_classes(clang_type: str) -> str:
+  '''The classes of the result and the parameters of a Clang type string:
+  i for an integer, f for a floating type, p for a pointer, v for void, x for
+  a va_list (not checked) and . for the ellipsis.  The front end compares them
+  with the declaration of the routine, so that a function with the name of a
+  library function and another signature gets no attribute.  Only the part of
+  Clang's encoding that these library functions use is understood; anything
+  else is an error.'''
+  classes = ''
+  i = 0
+  while i < len(clang_type):
+    while i < len(clang_type) and clang_type[i] in 'SULWNZOY':
+      i += 1
+    base = clang_type[i]
+    i += 1
+    if base in 'bcswiz':
+      cls = 'i'
+    elif base in 'fd':
+      cls = 'f'
+    elif base == 'v':
+      cls = 'v'
+    elif base == 'a':
+      cls = 'x'
+    elif base == '.':
+      cls = '.'
+    else:
+      sys.exit(f"unsupported type letter {base!r} in {clang_type!r}")
+    while i < len(clang_type) and clang_type[i] in 'CVD':
+      i += 1
+    if i < len(clang_type) and clang_type[i] == '*':
+      cls = 'p'
+      while i < len(clang_type) and clang_type[i] in '*CVDR':
+        i += 1
+    classes += cls
+  return classes
+
+
+# Library functions that Clang's table marks nothrow (n) but that the CIR back
+# end does not: a cancellation point (pthread_cancel unwinds through it, which
+# runs the cleanups of C++ frames) is not nothrow, as glibc's declarations say.
+NOTHROW_EXCLUSIONS: Dict[str, str] = {
+  'fprintf': 'cancellation point (glibc declares it without nothrow)',
+  'vprintf': 'cancellation point (glibc declares it without nothrow)',
+  'vfprintf': 'cancellation point (glibc declares it without nothrow)',
+}
+
+
+def derive_attrs(inc: Path, libc: Set[str]
+                 ) -> Tuple[List[Tuple[str, str, str, str]], List[str]]:
+  '''The pure, const, noreturn and nothrow library builtins of Clang's table
+  as (name, attr, nothrow, signature classes) sorted by name, and the notes on
+  what was left out.  attr is 'U' (pure), 'c' (const), 'r' (noreturn) or '-',
+  nothrow is 'n' or '-'.
+
+  Only the plain library functions named in libc are taken (the spelling X,
+  not __builtin_X).  The letters U and c count when no letter of a condition
+  (e, g) comes with them; n is unconditional, except for the functions of
+  NOTHROW_EXCLUSIONS.'''
+  found: Dict[str, Tuple[str, str, str, str]] = {}
+  notes: List[str] = []
+  for line in inc.read_text(errors = 'replace').splitlines():
+    match = _INC_REGEX.search(line)
+    if not match:
+      continue
+    name, types, attrs, _, languages = match.groups()
+    if name not in libc or 'f' not in attrs:
+      continue
+    if languages not in ('ALL_LANGUAGES', 'ALL_GNU_LANGUAGES'):
+      if any(letter in attrs for letter in 'Ucrn'):
+        notes.append(f"{name} ({attrs}): only in {languages}, left out")
+      continue
+    attr = 'c' if 'c' in attrs else 'U' if 'U' in attrs else \
+           'r' if 'r' in attrs else '-'
+    if attr in 'Uc' and ('e' in attrs or 'g' in attrs):
+      notes.append(f"{name} ({attrs}): conditional, pure/const left out")
+      attr = '-'
+    nothrow = 'n' if 'n' in attrs else '-'
+    if nothrow == 'n' and name in NOTHROW_EXCLUSIONS:
+      notes.append(f"{name} ({attrs}): not nothrow, "
+                   f"{NOTHROW_EXCLUSIONS[name]}")
+      nothrow = '-'
+    if attr != '-' or nothrow != '-':
+      found[name] = (name, attr, nothrow, signature_classes(types))
+  return [found[name] for name in sorted(found)], notes
+
+
+def format_attr_table(entries: List[Tuple[str, str, str, str]]) -> str:
+  '''The array of the entries, ended by an entry without a name.'''
+  lines = []
+  current = ' '
+  for name, attr, nothrow, signature in entries:
+    item = f' {{"{name}", \'{attr}\', \'{nothrow}\', "{signature}"}},'
+    if len(current) + len(item) > 79:
+      lines.append(current)
+      current = ' '
+    current += item
+  lines.append(current)
+  body = '\n'.join(lines)
+  return f'''static constexpr a_builtin_libc_attr
+                builtin_libc_attrs[] = {{
+{body}
+  {{NULL, 0, 0, NULL}}
+}};'''
+
+
+def format_attrs_header(entries: List[Tuple[str, str, str, str]],
+                        sha: str) -> str:
+  '''The text of src/builtin_libc_attrs.h.'''
+  return f'''/*
+Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+Exceptions.
+See https://edgcpp.org/LICENSE.txt for license information.
+SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+*/
+
+/*
+
+builtin_libc_attrs.h -- The C library builtins that are pure or const
+
+*/
+
+/* Conditionally open the "edg" namespace. */
+BEGIN_EDG_NAMESPACE
+
+/*------------------Beginning of automatically generated code---------------*/
+/* Generated by dev_tools/builtins/generate-libc-builtins.py from
+clang/Basic/Builtins.inc of LLVM {sha}; do not edit.  Regenerate with
+
+  dev_tools/builtins/generate-libc-builtins.py -o src/builtin_libc.h \\
+      --clang-builtins-inc <Builtins.inc of that LLVM> --llvm-sha {sha} \\
+      --attrs-output src/builtin_libc_attrs.h
+
+(the Builtins.inc of the cir-env image is
+/edg/llvm-cir/include/clang/Basic/Builtins.inc).  See the script for the
+rule. */
+
+/*
+The names of builtin_libc_names that Clang's table marks pure ('U': the
+function reads memory and has no other effect), const ('c': it reads no
+memory), noreturn ('r') and nothrow ('n'), without a condition ('-' for none),
+with the classes of the result and the parameters (i integer, f floating, p
+pointer, v void).  The CIR back end sends supp keys pure and const, the
+NORETURN flag and the NOTHROW flag (C++ only) for a function of C language
+linkage that has one of these names and that signature.  Sorted by name and
+ended by an entry without a name.
+*/
+struct a_builtin_libc_attr {{
+  const char  *name;
+  char        attr;
+  char        nothrow;
+  const char  *signature;
+}};
+
+{format_attr_table(entries)}
+
+/*--------------------End of automatically generated code-----------------*/
+
+/* Conditionally close the "edg" namespace. */
+END_EDG_NAMESPACE
+'''
+
+
 def format_header(names: List[str], scrape_count: int) -> str:
   '''The text of src/builtin_libc.h.'''
   lines = []
@@ -226,6 +411,13 @@ def main() -> None:
                       help = 'write the header here (default: stdout)')
   parser.add_argument('--builtins-dir',
                       default = str(Path(__file__).resolve().parent))
+  parser.add_argument('--clang-builtins-inc', default = '',
+                      help = 'Builtins.inc of the pinned LLVM: also write '
+                             'the pure and const names')
+  parser.add_argument('--llvm-sha', default = '',
+                      help = 'the LLVM commit of Builtins.inc')
+  parser.add_argument('--attrs-output', default = '',
+                      help = 'write builtin_libc_attrs.h here')
   parser.add_argument('--report', action = 'store_true',
                       help = 'print the size of the set and the exclusions '
                              'to stderr')
@@ -258,6 +450,22 @@ def main() -> None:
     Path(args.output).write_text(text)
   else:
     sys.stdout.write(text)
+
+  if args.clang_builtins_inc:
+    if not args.llvm_sha or not args.attrs_output:
+      sys.exit('--clang-builtins-inc needs --llvm-sha and --attrs-output')
+    inc = Path(args.clang_builtins_inc)
+    entries, notes = derive_attrs(inc, set(result))
+    if args.report:
+      print(f"{sum(1 for e in entries if e[1] == 'U')} pure, "
+            f"{sum(1 for e in entries if e[1] == 'c')} const, "
+            f"{sum(1 for e in entries if e[1] == 'r')} noreturn and "
+            f"{sum(1 for e in entries if e[2] == 'n')} nothrow names; "
+            f"{len(notes)} left out", file = sys.stderr)
+      for note in notes:
+        print(f"  {note}", file = sys.stderr)
+    Path(args.attrs_output).write_text(
+      format_attrs_header(entries, args.llvm_sha))
 
 
 if __name__ == '__main__':

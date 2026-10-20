@@ -1,0 +1,281 @@
+; S2: argument attributes (key 15 noundef/nonnull/dereferenceable/align, noundef
+; on the other parameters) stay with their parameters when CallConvLowering
+; changes the signature.  The stream is the ECIL writer's output for
+;
+;   struct Big { long a, b, c; };  struct Pair { long a, b; };
+;   struct A { int x; Big m(int &r); };  struct V : virtual A { V(int &r); };
+;   Big A::m(int &r);  long takes(Big b, int &r);  long takesp(Pair p, int &r);
+;
+; (the masks of key 15 added: bit 1 the object parameter, bit 2 the reference
+; after it).  Checked on definitions and on calls:
+;  - an sret result is inserted before `this` (A::m): the object parameter and
+;    the reference keep their attributes, the sret pointer has its own;
+;  - a record passed in memory (Big, byval) before a reference: noundef byval
+;    on the copy, the reference is unchanged;
+;  - a record expanded into two scalars (Pair) before a reference: the
+;    scalars have no attribute, the reference is still the third parameter;
+;  - the hidden VTT parameter of a base constructor (V::C2) sits between
+;    `this` and the reference: noundef only.
+; RUN: %ecil-asm %s -o %t.ecil
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s
+
+; CHECK: define dso_local void @_ZN1A1mERi(ptr dead_on_unwind noalias writable sret(%struct.Big) align 8 %0, ptr noundef nonnull align 4 dereferenceable(4) %1, ptr noundef nonnull align 4 dereferenceable(4) %2)
+; CHECK: define dso_local noundef i64 @_Z5takes3BigRi(ptr noundef byval(%struct.Big) align 8 %0, ptr noundef nonnull align 4 dereferenceable(4) %1)
+; CHECK: define dso_local noundef i64 @_Z6takesp4PairRi(i64 %0, i64 %1, ptr noundef nonnull align 4 dereferenceable(4) %2)
+; CHECK: define dso_local void @_ZN1VC1ERi(ptr noundef nonnull align 8 dereferenceable(8) %0, ptr noundef nonnull align 4 dereferenceable(4) %1)
+; CHECK: define dso_local void @_ZN1VC2ERi(ptr noundef nonnull align 8 dereferenceable(8) %0, ptr noundef %1, ptr noundef nonnull align 4 dereferenceable(4) %2)
+; CHECK: define dso_local noundef i32 @main()
+; CHECK: call void @_ZN1A1mERi(ptr dead_on_unwind writable sret(%struct.Big) align 8 %{{.*}}, ptr noundef nonnull align 4 dereferenceable(4) %{{.*}}, ptr noundef nonnull align 4 dereferenceable(4) %{{.*}})
+; CHECK: call void @_ZN1VC1ERi(ptr noundef nonnull align 8 dereferenceable(8) %{{.*}}, ptr noundef nonnull align 4 dereferenceable(4) %{{.*}})
+; CHECK: call noundef i64 @_Z5takes3BigRi(ptr noundef byval(%struct.Big) align 8 %{{.*}}, ptr noundef nonnull align 4 dereferenceable(4) %{{.*}})
+; CHECK: call noundef i64 @_Z6takesp4PairRi(i64 %{{.*}}, i64 %{{.*}}, ptr noundef nonnull align 4 dereferenceable(4) %{{.*}})
+
+ecil 1.2 features=0x0000000a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "aas_t.cc"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  STR 5 "Big"
+  TY_RECORD_DECL 4 0 5
+  STR 6 "A"
+  TY_RECORD_DECL 5 0 6
+  TY_PTR 6 5
+  TY_PTR 7 1
+  TY_FUNC 8 4 0 [6, 7] supp{15: 6}
+  STR 7 "a"
+  STR 8 "b"
+  STR 9 "c"
+  TY_RECORD_BODY 4 24 24 8 0 3
+  REC_FIELD 3 0 nil nil 7 0
+  REC_FIELD 3 8 nil nil 8 0
+  REC_FIELD 3 16 nil nil 9 0
+  STR 10 "x"
+  TY_RECORD_BODY 5 4 4 4 0 1
+  REC_FIELD 1 0 nil nil 10 0
+  STR 11 "_ZN1A1mERi"
+  DECL_FUNC 9 8 0 0 11
+  DECL_FUNC 9 8 0 1 11
+  STR 12 "this"
+  STR 13 "r"
+  FUNC_BEGIN 9 0
+  PARAM 1 6 6 12 1
+  PARAM 2 7 7 13 0
+  BLOCK_BEGIN
+  LOCAL 3 4 8 0 0
+  LREF 3
+  AGG_INIT_BEGIN 4 0
+  AGG_SEL 0
+  LREF 2
+  LOAD 0
+  DEREF
+  LOAD 0
+  CAST 0 3
+  STORE 0 0
+  AGG_SEL 1
+  C_INT 3 0
+  INIT_CONST
+  AGG_SEL 2
+  C_INT 3 0
+  INIT_CONST
+  AGG_INIT_END
+  LREF 3
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_FUNC 10 3 0 [4, 7] supp{15: 4}
+  STR 14 "_Z5takes3BigRi"
+  DECL_FUNC 11 10 0 0 14
+  DECL_FUNC 11 10 0 1 14
+  FUNC_BEGIN 11 0
+  PARAM 1 4 4 8 0
+  PARAM 2 7 7 13 0
+  BLOCK_BEGIN
+  LREF 1
+  FIELD 4 0
+  LOAD 0
+  LREF 2
+  LOAD 0
+  DEREF
+  LOAD 0
+  CAST 0 3
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 15 "Pair"
+  TY_RECORD_DECL 12 0 15
+  TY_FUNC 13 3 0 [12, 7] supp{15: 4}
+  TY_RECORD_BODY 12 16 16 8 0 2
+  REC_FIELD 3 0 nil nil 7 0
+  REC_FIELD 3 8 nil nil 8 0
+  STR 16 "_Z6takesp4PairRi"
+  DECL_FUNC 14 13 0 0 16
+  DECL_FUNC 14 13 0 1 16
+  STR 17 "p"
+  FUNC_BEGIN 14 0
+  PARAM 1 12 12 17 0
+  PARAM 2 7 7 13 0
+  BLOCK_BEGIN
+  LREF 1
+  FIELD 12 0
+  LOAD 0
+  LREF 1
+  FIELD 12 1
+  LOAD 0
+  ADD 1
+  LREF 2
+  LOAD 0
+  DEREF
+  LOAD 0
+  CAST 0 3
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_VOID 15
+  STR 18 "V"
+  TY_RECORD_DECL 16 0 18
+  TY_PTR 17 16
+  TY_FUNC 18 15 0 [17, 7] supp{15: 6}
+  TY_VPTR 19
+  TY_RECORD_BODY 16 16 12 8 4 2
+  REC_FIELD 19 0 nil nil nil 1
+  REC_FIELD 5 8 nil nil nil 65
+  STR 19 "1V"
+  CLASS_MANGLE 16 19
+  CLASS_INFO 16 8 8 nil 0
+  CLASS_BASES 16 [1, 1]
+  STR 20 "_ZN1VC1ERi"
+  DECL_FUNC 20 18 0 0 20
+  STR 21 "_ZN1VC2ERi"
+  DECL_FUNC 21 18 0 0 21
+  STRUCTOR 20 21 2
+  DECL_FUNC 20 18 0 1 20
+  DECL_FUNC 21 18 0 1 21
+  CLASS_VFUNCS 16 []
+  CLASS_OVERRIDES 16 []
+  FUNC_BEGIN 20 0
+  PARAM 1 17 17 12 1
+  PARAM 2 7 7 13 0
+  VPTR_INIT
+  BLOCK_BEGIN
+  LOCAL 3 1 nil 0 0
+  LREF 3
+  LREF 2
+  LOAD 0
+  DEREF
+  LOAD 0
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  VBASE_CAST 16 5 3
+  DEREF
+  FIELD 5 0
+  LREF 3
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 21 0
+  PARAM 1 17 17 12 1
+  PARAM 2 7 7 13 0
+  VPTR_INIT
+  BLOCK_BEGIN
+  LOCAL 3 1 nil 0 0
+  LREF 3
+  LREF 2
+  LOAD 0
+  DEREF
+  LOAD 0
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  VBASE_CAST 16 5 1
+  DEREF
+  FIELD 5 0
+  LREF 3
+  LOAD 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_FUNC 22 1 0 []
+  STR 22 "main"
+  DECL_FUNC 23 22 0 8 22
+  DECL_FUNC 23 22 0 9 22
+  STR 23 "i"
+  STR 24 "v"
+  FUNC_BEGIN 23 0
+  BLOCK_BEGIN
+  LOCAL 1 1 23 0 0
+  LREF 1
+  C_INT 1 1
+  INIT_CONST
+  LOCAL 2 5 7 0 0
+  LOCAL 3 4 8 0 0
+  LREF 3
+  LREF 2
+  ADDR
+  LREF 1
+  ADDR
+  CALL 9 8 2 0
+  STORE 0 0
+  LOCAL 4 12 17 0 0
+  LREF 4
+  C_AGG_BEGIN 12
+  C_SEL 0
+  C_INT 3 1
+  C_SEL 1
+  C_INT 3 2
+  C_AGG_END
+  INIT_CONST
+  LOCAL 5 16 24 0 0
+  LREF 5
+  ADDR
+  LREF 1
+  ADDR
+  CALL 20 18 2 0
+  LREF 3
+  LOAD 0
+  LREF 1
+  ADDR
+  CALL 11 10 2 0
+  LREF 4
+  LOAD 0
+  LREF 1
+  ADDR
+  CALL 14 13 2 0
+  ADD 1
+  CAST 0 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  STR 25 "1A"
+  CLASS_MANGLE 5 25
+  CLASS_INFO 5 4 4 nil 0
+  CLASS_BASES 5 []
+  DECL_ABI_DATA 24 2 5 3 3 nil
+  DECL_ABI_DATA 25 2 16 3 3 nil
+  DECL_ABI_DATA 26 0 16 3 3 nil
+  DECL_ABI_DATA 27 1 16 3 3 nil
+frame NAMES
+frame END
+  END 8 0

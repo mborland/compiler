@@ -5,24 +5,16 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -e 200 --no_wrap --no_wrap_diagnostics
 
 Warning: CIR back end: the initializer of "pv1a" uses an alias or weakref attribute, which the CIR back end does not support; the definition is dropped
 
+Error: CIR back end: the initializer of "pv3a" uses an alias or weakref attribute, which the CIR back end does not support; the definition is dropped
+
 Warning: CIR back end: the initializer of "pv4a" uses an alias or weakref attribute, which the CIR back end does not support; the definition is dropped
 
 Warning: CIR back end: the initializer of "pf1a" uses an alias, ifunc or weakref attribute, which the CIR back end does not support; the definition is dropped
 
 Warning: CIR back end: the initializer of "pf2a" uses an alias, ifunc or weakref attribute, which the CIR back end does not support; the definition is dropped
 
+Error: CIR back end: the initializer of "pf3a" uses an alias, ifunc or weakref attribute, which the CIR back end does not support; the definition is dropped
+
 Warning: CIR back end: the initializer of "pf4a" uses an alias, ifunc or weakref attribute, which the CIR back end does not support; the definition is dropped
 
-Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: inline assembly
-
-Error: CIR back end: the definition of 'pv1a' was dropped: it uses a construct the CIR back end cannot express: an alias or weakref attribute
-
-Error: CIR back end: the definition of 'pv4a' was dropped: it uses a construct the CIR back end cannot express: an alias or weakref attribute
-
-Error: CIR back end: the definition of 'pf1a' was dropped: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
-
-Error: CIR back end: the definition of 'pf2a' was dropped: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
-
-Error: CIR back end: the definition of 'pf4a' was dropped: it uses a construct the CIR back end cannot express: an alias, ifunc or weakref attribute
-
-6 errors detected in the compilation of "Test_name.c".
+2 errors detected in the compilation of "Test_name.c".

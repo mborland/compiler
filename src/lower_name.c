@@ -16202,6 +16202,9 @@ STATIC_THREAD a_tu_table
                 tu_memo;        /* The answers for entities asked about. */
 STATIC_THREAD a_boolean
                 tu_found;       /* A template argument is a local template. */
+STATIC_THREAD a_boolean
+                tu_provisional; /* The walk met a closure whose parent is not
+                                   recorded (yet): the answer may change. */
 
 static size_t tu_hash(an_il_entry_kind kind, void *entity)
 /*
@@ -16514,6 +16517,7 @@ recursion on the nesting of the entities.
   tu_queued.generation++;
   tu_queued.count = 0;
   tu_found = FALSE;
+  tu_provisional = FALSE;
   tu_push(kind, entity);
   while (!result && tu_stack_size > 0) {
     a_tu_item  item = tu_stack[--tu_stack_size];
@@ -16588,6 +16592,18 @@ recursion on the nesting of the entities.
 
         reproducible = cssp != NULL &&
                        cssp->lambda_subject_to_trans_unit_corresp;
+        if (cssp != NULL && is_immediate_class_type(t)) {
+          a_class_type_supplement_ptr  ctsp = class_type_supp(t);
+
+          /* The parent of a closure in a default argument or in an
+             initializer is recorded after the closure is made (and by
+             later passes): until then the closure is treated as unnamed. */
+          if (cssp->lambda_immediately_inside_default_arg_expression ||
+              ctsp->defined_in_variable_initializer ||
+              ctsp->defined_in_field_initializer) {
+            tu_provisional = TRUE;
+          }  /* if */
+        }  /* if */
       }  /* if */
       if (t->source_corresp.name_linkage ==
                                           (a_name_linkage_kind)nlk_internal ||
@@ -16644,13 +16660,10 @@ STATIC_THREAD a_boolean
 void cir_tu_local_names_are_final(void)
 /*
 From now on the answers of cir_entity_is_tu_local are final (the late names
-are being resolved): drop what was remembered and remember the answers.
-Before that an entity's answer can change (a lambda whose parent is not
-recorded yet is treated as unnamed).
+are being resolved): remember every answer.  What was remembered before is
+kept: it is only answers of FALSE (see cir_entity_is_tu_local).
 */
 {
-  tu_memo.generation++;
-  tu_memo.count = 0;
   tu_memo_enabled = TRUE;
 }  /* cir_tu_local_names_are_final */
 
@@ -16658,13 +16671,21 @@ recorded yet is treated as unnamed).
 a_boolean cir_entity_is_tu_local(an_il_entry_kind kind, void *entity)
 /*
 The answer of tu_walk, remembered for each entity asked about once the names
-are final (the walk is linear in the entities reachable from it).
+are final (the walk is linear in the entities reachable from it).  Before
+that an answer of TRUE can change (a lambda whose parent is not recorded yet
+is treated as unnamed, and an unnamed class can get a name for linkage
+purposes), and so can an answer of FALSE that depends on a closure in a
+default argument or an initializer, whose parent is recorded later (the walk
+then sets tu_provisional); otherwise nothing the walk looks at becomes local
+to the translation unit later.  So a FALSE that is not provisional is
+remembered at once, for an entity of the file scope (those of a function's
+memory region are gone when it is freed, and their addresses are used again).
 */
 {
   a_tu_item  *memo = NULL;
   a_boolean  result;
 
-  if (tu_memo_enabled && tu_memo.capacity != 0) {
+  if (tu_memo.capacity != 0) {
     memo = tu_table_slot(&tu_memo, kind, entity);
     if (memo->entity != entity || memo->kind != kind ||
         memo->generation != tu_memo.generation) {
@@ -16675,7 +16696,8 @@ are final (the walk is linear in the entities reachable from it).
     result = memo->result;
   } else {
     result = tu_walk(kind, entity);
-    if (tu_memo_enabled) {
+    if (tu_memo_enabled ||
+        (!result && !tu_provisional && in_file_scope(entity))) {
       tu_table_add(&tu_memo, kind, entity)->result = result;
     }  /* if */
   }  /* if */

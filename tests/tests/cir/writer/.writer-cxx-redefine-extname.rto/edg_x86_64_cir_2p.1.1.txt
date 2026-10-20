@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --gnu_version=999999 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -20,7 +20,7 @@ frame REGION
   DECL_FUNC 5 4 0 0 5
   DECL_FUNC 5 4 0 1 5
   STR 6 "old_name"
-  DECL_FUNC 6 4 0 0 6
+  DECL_FUNC 6 4 0 256 6
   FUNC_BEGIN 5 0
   BLOCK_BEGIN
   CALL 6 4 0 0
@@ -29,7 +29,7 @@ frame REGION
   FUNC_END 0
 frame GLOBALS
   STR 7 "new_name"
-  DECL_FUNC 6 4 0 0 7
+  DECL_FUNC 6 4 0 256 7
 frame NAMES
 frame END
   END 4 0

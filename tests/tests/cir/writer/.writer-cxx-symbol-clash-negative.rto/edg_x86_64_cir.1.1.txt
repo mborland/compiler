@@ -4,7 +4,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++14 Test_name.c
                                    ^
 
 1 error detected in the compilation of "Test_name.c".
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -19,7 +19,7 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_FUNC 4 1 0 []
   STR 5 "_Z5use_tv"
   DECL_FUNC 5 4 0 0 5
@@ -34,7 +34,7 @@ frame REGION
   TY_PTR 8 6
   TY_INT 9 8 true 1 1
   TY_PTR 10 9
-  TY_FUNC 11 7 0 [8, 10]
+  TY_FUNC 11 7 0 [8, 10] supp{15: 2}
   STR 9 "_ZN1TC1EPc"
   DECL_FUNC 12 11 0 0 9
   STR 10 "_ZN1TC2EPc"

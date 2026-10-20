@@ -1,0 +1,123 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --gcc Test_name.c
+ecil 1.3 features=0x00000012
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 201112 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  TY_FUNC 4 1 0 [1]
+  STR 5 "ai"
+  DECL_FUNC 5 4 1 2 5 supp{16: true}
+  DECL_FUNC 5 4 1 3 5 supp{16: true}
+  STR 6 "x"
+  FUNC_BEGIN 5 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 7 "cold_fn"
+  DECL_FUNC 6 4 0 0 7 supp{17: true}
+  DECL_FUNC 6 4 0 1 7 supp{17: true}
+  FUNC_BEGIN 6 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 8 "hot_fn"
+  DECL_FUNC 7 4 0 0 8 supp{18: true}
+  DECL_FUNC 7 4 0 1 8 supp{18: true}
+  FUNC_BEGIN 7 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 9 "caller"
+  DECL_FUNC 8 4 0 0 9
+  DECL_FUNC 8 4 0 1 9
+  STR 10 "later"
+  DECL_FUNC 9 4 0 0 10
+  FUNC_BEGIN 8 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CALL 9 4 1 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  DECL_FUNC 9 4 0 1 10 supp{18: true}
+  FUNC_BEGIN 9 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 11 "plain"
+  DECL_FUNC 10 4 0 0 11
+  DECL_FUNC 10 4 0 1 11
+  FUNC_BEGIN 10 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 12 "use"
+  DECL_FUNC 11 4 0 0 12
+  DECL_FUNC 11 4 0 1 12
+  FUNC_BEGIN 11 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CALL 5 4 1 0
+  LREF 1
+  LOAD 0
+  CALL 6 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 7 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 8 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 10 4 1 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame END
+  END 9 0

@@ -1,0 +1,20 @@
+; MLIR's own debugging options reach the lowering pass manager through
+; llvm_args (edg-cir --llvm-arg): printing the IR after every pass.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --llvm-arg=--mlir-print-ir-after-all --emit=llvm %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: IR Dump After {{.*}}
+; CHECK: IR Dump After {{.*}}ConvertCIRToLLVM
+
+frame DECLS
+  TY_FUNC 21 1 0 []
+  STR 100 "f"
+  DECL_FUNC 40 21 0 9 100
+frame REGION
+  FUNC_BEGIN 40 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

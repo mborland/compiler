@@ -1,0 +1,43 @@
+; S2: clang's `inlinehint`.  When the writer sets the feature bit
+; INLINE_HINTS (0x10) the hint comes from DECL_FUNC INLINE_HINT (0x200: the
+; `inline` keyword or a lambda's call operator) and INLINE (0x02: also
+; in-class definitions, constexpr, implicit members) gives none; without the
+; bit it comes from INLINE.  At -O0 there is none (clang marks the functions
+; noinline instead; inlining is off).
+; RUN: sed 's/^ecil 1.2 features=0x00000000/ecil 1.3 features=0x00000010/' %S/Inputs/header12_cxx_eh.txt > %t.exact.h
+; RUN: sed 's/^ecil 1.2 features=0x00000000/ecil 1.3 features=0x00000000/' %S/Inputs/header12_cxx_eh.txt > %t.approx.h
+; RUN: cat %t.exact.h %s > %t.exact.txt
+; RUN: cat %t.approx.h %s > %t.approx.txt
+; RUN: %ecil-asm %t.exact.txt -o %t.exact.ecil
+; RUN: %ecil-asm %t.approx.txt -o %t.approx.ecil
+; RUN: %edg-cir -O2 --emit=cir %t.exact.ecil | %FileCheck %s --check-prefix=EXACT
+; RUN: %edg-cir -O2 --emit=cir %t.approx.ecil | %FileCheck %s --check-prefix=APPROX
+; RUN: %edg-cir -O0 --emit=cir %t.exact.ecil | %FileCheck %s --check-prefix=O0 --implicit-check-not=inline_hint
+
+; EXACT-DAG: cir.func inline_hint {{.*}}@keyword()
+; EXACT-DAG: cir.func dso_local @in_class()
+; EXACT-DAG: cir.func inline_hint {{.*}}@both()
+; APPROX-DAG: cir.func inline_hint {{.*}}@in_class()
+; APPROX-DAG: cir.func dso_local @keyword()
+; O0: cir.func {{.*}}@keyword()
+
+frame DECLS
+  STR 100 "keyword"
+  STR 101 "in_class"
+  STR 102 "both"
+  TY_FUNC 21 11 0 []
+  DECL_FUNC 40 21 0 513 100
+  DECL_FUNC 41 21 0 3 101
+  DECL_FUNC 42 21 0 515 102
+frame REGION
+  FUNC_BEGIN 40 0
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  RETURN_STMT false
+  FUNC_END 0
+frame END
+  END auto 0

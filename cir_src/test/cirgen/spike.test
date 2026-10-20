@@ -11,7 +11,7 @@
 ; RUN: %t.exe
 
 ; CHECK: cir.global external dso_local @g = #cir.int<5> : !s32i align(4)
-; CHECK: cir.func {{.*}}@f(%arg0: !s32i, %arg1: !s32i) -> !s32i
+; CHECK: cir.func {{.*}}@f(%arg0: !s32i{{.*}}, %arg1: !s32i{{.*}}) -> !s32i
 ; CHECK: cir.ternary
 ; CHECK: cir.func {{.*}}@main() -> !s32i
 ; CHECK: cir.for

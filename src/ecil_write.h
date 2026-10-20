@@ -48,6 +48,13 @@ cpfe-cir.cmakedef) for every build type, because the stream depends on them:
   NEW_AND_DELETE_FOR_ARRAY_CAN_BE_FOLDED_INTO_RUNTIME_ROUTINE is 1: with 0 the
   front end chooses another delete[] for the free-on-throw cleanup of a new[]
   (the sized one), which the goldens and probes have not been checked with.
+
+  DECL_MODIFIERS_IN_USE is how the front end tells the writer that the inline
+  specifier was written (update_routine_decl_modifiers is compiled only then,
+  and it is where INLINE_HINT's source is noted).  It is TRUE on a host that
+  has the thread_local specifier (Linux), and FALSE in a native macOS build of
+  cpfe-cir.  Where it is FALSE the writer does not send INLINE_HINT and does
+  not claim the INLINE_HINTS feature: ECIL_INLINE_HINTS says which.
 */
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
 #if NEW_CAN_BE_FOLDED_INTO_CTOR
@@ -60,6 +67,11 @@ cpfe-cir.cmakedef) for every build type, because the stream depends on them:
 #error NEW_AND_DELETE_FOR_ARRAY_CAN_BE_FOLDED_INTO_RUNTIME_ROUTINE must be 1
 #endif /* !NEW_AND_DELETE_FOR_ARRAY_CAN_BE_FOLDED_INTO_RUNTIME_ROUTINE */
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR && DECL_MODIFIERS_IN_USE
+#define ECIL_INLINE_HINTS TRUE
+#else /* !(BACK_END_TYPE == BACK_END_TYPE_CIR && DECL_MODIFIERS_IN_USE) */
+#define ECIL_INLINE_HINTS FALSE
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR && DECL_MODIFIERS_IN_USE */
 
 #ifndef ECIL_ID_IN_PREFIX
 #define ECIL_ID_IN_PREFIX FALSE
@@ -147,7 +159,44 @@ extern void ecil_buf_put_bytes(an_ecil_buffer *buf,
                                const void     *bytes,
                                size_t         length);
 
-extern void ecil_put_uint(an_ecil_buffer *buf, uint64_t value);
+/* The general path of ecil_put_uint (the buffer must grow, or is failed). */
+extern void ecil_put_uint_slow(an_ecil_buffer *buf, uint64_t value);
+
+static inline void ecil_put_uint(an_ecil_buffer *buf, uint64_t value)
+/*
+Append an unsigned integer in its shortest encoding.  The usual case, a
+buffer with room for the longest encoding, is done here.
+*/
+{
+  if (buf->capacity - buf->size >= 9 && !buf->failed) {
+    unsigned char  *p = (unsigned char *)buf->data + buf->size;
+
+    if (value <= ECIL_TAG_FIXUINT_MAX) {
+      p[0] = (unsigned char)value;
+      buf->size += 1;
+    } else if (value <= 0xFF) {
+      p[0] = ECIL_TAG_U8;
+      p[1] = (unsigned char)value;
+      buf->size += 2;
+    } else if (value <= 0xFFFF) {
+      p[0] = ECIL_TAG_U16;
+      p[1] = (unsigned char)value;
+      p[2] = (unsigned char)(value >> 8);
+      buf->size += 3;
+    } else if (value <= 0xFFFFFFFFu) {
+      p[0] = ECIL_TAG_U32;
+      p[1] = (unsigned char)value;
+      p[2] = (unsigned char)(value >> 8);
+      p[3] = (unsigned char)(value >> 16);
+      p[4] = (unsigned char)(value >> 24);
+      buf->size += 5;
+    } else {
+      ecil_put_uint_slow(buf, value);
+    }  /* if */
+  } else {
+    ecil_put_uint_slow(buf, value);
+  }  /* if */
+}  /* ecil_put_uint */
 
 extern void ecil_put_int(an_ecil_buffer *buf, int64_t value);
 
@@ -208,9 +257,6 @@ extern void ecil_frame_truncate(an_ecil_frame *frame, an_ecil_mark mark);
 Record helpers.  A record is ecil_rec_begin, then exactly the opcode's
 arity of operand calls, then ecil_rec_end (checked in CHECKING builds).
 */
-extern void ecil_rec_begin(an_ecil_frame *frame, unsigned int opcode);
-
-extern void ecil_arg_uint(an_ecil_frame *frame, uint64_t value);
 
 extern void ecil_arg_int(an_ecil_frame *frame, int64_t value);
 
@@ -238,8 +284,6 @@ extern void ecil_arg_int128(an_ecil_frame *frame,
                             uint64_t      low,
                             uint64_t      high,
                             a_boolean     is_signed);
-
-extern void ecil_rec_end(an_ecil_frame *frame);
 
 /*
 A supp blob under construction (spec 6): the key and value pairs of one
@@ -272,17 +316,6 @@ extern void ecil_supp_text(an_ecil_supp *supp,
    ecil_rec_end) with the blob, if it has a pair, and set HAS_SUPP on the
    frame.  The builder is empty afterwards. */
 extern void ecil_rec_supp_end(an_ecil_frame *frame, an_ecil_supp *supp);
-
-extern void ecil_rec0(an_ecil_frame *frame, unsigned int opcode);
-
-extern void ecil_rec1(an_ecil_frame *frame,
-                      unsigned int  opcode,
-                      uint64_t      a);
-
-extern void ecil_rec2(an_ecil_frame *frame,
-                      unsigned int  opcode,
-                      uint64_t      a,
-                      uint64_t      b);
 
 /*
 Writer internals shared by ecil_write.c, ecil_type.c, ecil_const.c and
@@ -385,6 +418,20 @@ typedef enum an_ecil_gid_kind {
 #define ECIL_VARIANT_BASE     2u  /* C2, D2: base subobjects. */
 #define ECIL_VARIANT_DELETING 3u  /* D0: the deleting destructor. */
 
+/* The facts of a DECL_FUNC that go in its supp blob, and that a re-issue
+   keeps and compares (the attributes of the declarations add up). */
+#define ECIL_FACT_NOINLINE 0x01u        /* esk_noinline. */
+#define ECIL_FACT_USED     0x02u        /* esk_used. */
+#define ECIL_FACT_PURE     0x04u        /* esk_pure. */
+#define ECIL_FACT_CONST    0x08u        /* esk_const. */
+#define ECIL_FACT_ALWAYS_INLINE 0x10u   /* esk_always_inline. */
+#define ECIL_FACT_COLD     0x20u        /* esk_cold. */
+#define ECIL_FACT_HOT      0x40u        /* esk_hot. */
+#define ECIL_FACT_NORETURN 0x80u        /* A library function that does not
+                                           return (not sent: the flag). */
+#define ECIL_FACT_NOTHROW  0x100u       /* A library function that does not
+                                           throw (not sent: the flag). */
+
 /* Everything the writer remembers about a G-id. */
 typedef struct an_ecil_gid_info {
   an_ecil_gid_kind
@@ -407,7 +454,8 @@ typedef struct an_ecil_gid_info {
   uint32_t      decl_name;
   unsigned int  decl_flags;
   unsigned int  decl_linkage;
-  a_boolean     decl_noinline;    /* DECL_FUNC: the noinline key was sent. */
+  unsigned int  decl_facts;       /* DECL_FUNC: ECIL_FACT_* sent in the supp
+                                     blob (sticky). */
   a_boolean     decl_emitted;
   /* A constructor or destructor has two G-ids (spec 11.4): the complete
      variant C1/D1 and the base variant C2/D2; each names the other. */
@@ -425,6 +473,144 @@ typedef struct an_ecil_gid_info {
 /* Why the current function or initializer cannot be expressed, or NULL.  The
    text is owned by the stream. */
 extern const char *ecil_unsupported_reason;
+
+/* TRUE while a function body is written under the rules of cfront 2.1
+   (which accept a jump past the initialization of an object with a
+   destructor): the scope regions are followed, and a case or goto label with
+   a cleanup open is diagnosed. */
+extern a_boolean ecil_jump_check_enabled;
+
+#if CHECKING
+/* What the first operand of a record introduces. */
+enum an_ecil_intro_kind {
+  eik_none,
+  eik_sid,          /* STR: a string id. */
+  eik_gid,          /* TY_*: a G-id, which must be the next. */
+  eik_gid_or_reissue,
+                    /* DECL_*: the next G-id, or an earlier one (re-issue). */
+  eik_gid_existing, /* TY_RECORD_BODY: an introduced G-id. */
+  eik_lid,          /* LOCAL, PARAM, MATERIALIZE_TEMP, LABEL: an L-id. */
+  eik_function      /* FUNC_BEGIN: the L-ids start over. */
+};
+
+/* The tables of the record checks (built by ecil_build_check_tables on first
+   use) and the check of an introduced id. */
+extern signed char ecil_arity_table[256];
+
+extern unsigned char ecil_intro_table[256];
+
+extern a_boolean ecil_tables_ready;
+
+extern void ecil_build_check_tables(void);
+
+extern void ecil_check_introduction(unsigned int kind, uint64_t id);
+
+extern void ecil_arg_uint_slow(an_ecil_frame *frame, uint64_t value);
+#endif /* CHECKING */
+
+/*
+The record helpers are inline: a record costs a few instructions, and the
+general paths (a buffer that must grow, the checks that are not routine) are
+out of line.
+*/
+extern void ecil_rec_begin_slow(an_ecil_frame *frame, unsigned int opcode);
+
+static inline void ecil_rec_begin(an_ecil_frame *frame, unsigned int opcode)
+/*
+Start a record: write its opcode byte.
+*/
+{
+  an_ecil_buffer  *buf = frame->current;
+  a_boolean       fast = frame->pending_operands == -1 &&
+                         !ecil_jump_check_enabled &&
+                         buf->size < buf->capacity && !buf->failed;
+
+#if CHECKING
+  fast = fast && opcode < 256 && ecil_tables_ready &&
+         ecil_arity_table[opcode] >= 0;
+#endif /* CHECKING */
+  if (fast) {
+#if CHECKING
+    frame->pending_operands = ecil_arity_table[opcode];
+    frame->intro_kind = ecil_intro_table[opcode];
+#endif /* CHECKING */
+    buf->data[buf->size] = (char)(unsigned char)opcode;
+    buf->size++;
+  } else {
+    ecil_rec_begin_slow(frame, opcode);
+  }  /* if */
+}  /* ecil_rec_begin */
+
+
+static inline void ecil_arg_uint(an_ecil_frame *frame, uint64_t value)
+/*
+Append an unsigned operand.
+*/
+{
+#if CHECKING
+  if (frame->intro_kind == eik_none && frame->pending_operands > 0) {
+    frame->pending_operands--;
+    ecil_put_uint(frame->current, value);
+  } else {
+    ecil_arg_uint_slow(frame, value);
+  }  /* if */
+#else /* !CHECKING */
+  ecil_put_uint(frame->current, value);
+#endif /* CHECKING */
+}  /* ecil_arg_uint */
+
+
+static inline void ecil_rec_end(an_ecil_frame *frame)
+/*
+Finish a record.  In CHECKING builds, verify that it received exactly the
+operands its opcode declares.
+*/
+{
+  /* A record abandoned half-built because a construct is unsupported is
+     discarded with its body or constant, so it need not be complete. */
+  check_assertion(frame->pending_operands == 0 ||
+                  frame->pending_operands == -1 ||
+                  ecil_unsupported_reason != NULL);
+  frame->pending_operands = -1;
+}  /* ecil_rec_end */
+
+
+static inline void ecil_rec0(an_ecil_frame *frame, unsigned int opcode)
+/*
+Write a record with no operands.
+*/
+{
+  ecil_rec_begin(frame, opcode);
+  ecil_rec_end(frame);
+}  /* ecil_rec0 */
+
+
+static inline void ecil_rec1(an_ecil_frame *frame,
+                             unsigned int  opcode,
+                             uint64_t      a)
+/*
+Write a record with one unsigned operand.
+*/
+{
+  ecil_rec_begin(frame, opcode);
+  ecil_arg_uint(frame, a);
+  ecil_rec_end(frame);
+}  /* ecil_rec1 */
+
+
+static inline void ecil_rec2(an_ecil_frame *frame,
+                             unsigned int  opcode,
+                             uint64_t      a,
+                             uint64_t      b)
+/*
+Write a record with two unsigned operands.
+*/
+{
+  ecil_rec_begin(frame, opcode);
+  ecil_arg_uint(frame, a);
+  ecil_arg_uint(frame, b);
+  ecil_rec_end(frame);
+}  /* ecil_rec2 */
 
 /* The length of the longest prefix of text that is at most max bytes long
    and does not end inside a UTF-8 sequence. */
@@ -554,14 +740,23 @@ extern void ecil_remember_drop_reason(uint32_t gid, const char *text);
    for VAR_INIT: its dynamic elements are zero (their STATIC_INIT follows). */
 extern a_boolean ecil_skip_dynamic_elements;
 
-/* Send DECL_VAR (an introduction or a re-issue) and remember its facts. */
+/* Send DECL_VAR (an introduction or a re-issue) and remember its facts.
+   used: the variable has the GNU used attribute (supp key used). */
 extern void ecil_emit_decl_var(an_ecil_frame *frame,
                                uint32_t      gid,
                                uint32_t      type,
                                unsigned int  linkage,
                                unsigned int  flags,
                                uint32_t      alignment,
-                               uint32_t      name_sid);
+                               uint32_t      name_sid,
+                               a_boolean     used);
+
+/* TRUE if the variable has the GNU used attribute. */
+extern a_boolean ecil_variable_is_used(a_variable_ptr var);
+
+/* The front end calls this (update_routine_decl_modifiers): the inline
+   specifier was written in a declaration of the routine. */
+extern void ecil_note_inline_specifier(a_routine_ptr rout);
 
 /* Append the value of an integer constant (64 or 128 bits wide). */
 extern void ecil_arg_integer_constant(an_ecil_frame *frame,
@@ -1021,12 +1216,6 @@ extern void ecil_abort(void);
 extern void ecil_stream_finish_back_end(void);
 
 extern void ecil_stream_close(void);
-
-/* TRUE while a function body is written under the rules of cfront 2.1
-   (which accept a jump past the initialization of an object with a
-   destructor): the scope regions are followed, and a case or goto label with
-   a cleanup open is diagnosed. */
-extern a_boolean ecil_jump_check_enabled;
 
 /* TRUE for -fwrapv semantics: never send the nsw flag. */
 extern a_boolean ecil_wrapv;

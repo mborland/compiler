@@ -12,7 +12,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --cfront_2.1 Test_name.c
   }
   ^
 
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -39,7 +39,7 @@ frame REGION supp
   TY_RECORD_BODY 7 1 0 1 12 0
   STR 8 "d"
   TY_PTR 8 7
-  TY_FUNC 9 4 0 [8]
+  TY_FUNC 9 4 0 [8] supp{15: 2}
   STR 9 "_ZN1DD1Ev"
   DECL_FUNC 10 9 1 0 9
   STR 10 "_ZN1DD2Ev"

@@ -30,18 +30,58 @@ Symbols that only one side has are counted, not compared.  A difference is
 
   <category> | <level or *> | <detail> | <reason>
 
-where the detail is exactly what the report prints after the category
-(`only-ours:noundef`, `only-clangir:nonnull`, ...).  Exit status: 0 if every
+or, for the category `pair`, the name of a pair matcher (PAIR_MATCHERS): the
+two differences of a pair of callees that only a pairing can tell apart,
+within one function (`structor-variants`: we call the complete-object C1 or
+D1 of a class where clangir calls its base variant C2 or D2, with the same
+number of parameters; `builtin-mem-calls`: we call memcpy, memmove or memset
+where clangir has the llvm.mem* intrinsic, explaining only the intrinsic's
+fixed attributes and our argument noundef and nounwind).  The detail of an
+ordinary entry is exactly what the report prints after the category
+(`only-ours:noundef`, `only-clangir:nonnull`, ...), or a glob with `*` that
+matches it (`only-ours:_ZSt7forward*`: every attribute of the calls of any
+instantiation of std::forward that only ours has).  Exit status: 0 if every
 difference is explained and at least one symbol was compared (a run that
 compared nothing fails), 1 otherwise, 2 for a setup problem.  The report ends
 with the number of translation units that clang -fclangir could not compile.
 
 At -O1 and above the comparison is only meaningful if our IR is taken before
-the LLVM passes, as clang's is.  `edg-cir` does not have that switch yet (it
-needs a library flag, EDG_CIR_FLAG_NO_LLVM_PASSES, which this tool passes as
---no-llvm-passes when `edg-cir --help` lists it); until then the levels above
-0 compare our optimized IR with clang's unoptimized IR, and the report says
-so.
+the LLVM passes, as clang's is: the tool passes `--no-llvm-passes`
+(EDG_CIR_FLAG_NO_LLVM_PASSES) to edg-cir when `edg-cir --help` lists it.  A
+library without it would compare our optimized IR with clang's unoptimized IR;
+the report says so, and --require-no-llvm-passes makes that a setup problem
+(exit status 2) for a gate.
+
+The known-differences file (tests/.edgy/filters/cir-attr-known.txt is the one
+of the gate) is checked when it is read (a bad one is a setup problem): every
+entry has a comment line directly above it (what the difference is) and a
+reason in its last field (why it is accepted: at least 8 characters, not
+`none`, `todo`, `-` or `?`), and no entry is listed twice.  --json writes the
+entries that explained something (`known_used`), so that a stale entry can be
+found.
+
+Only the high-value attributes are gated (HIGH_VALUE_RE): nounwind, noundef,
+nonnull, dereferenceable, align, memory(...), mustprogress, noreturn, builtin,
+nobuiltin, inlinehint and alwaysinline.  An unexplained difference in one of
+them fails the run, unless it is only about a callee that one side does not
+call (the call-set difference).  Everything else, the call-set differences,
+norecurse, cold, uwtable, sret, the metadata and the rest, is the residue: it
+is counted by category, printed, written with --residue and kept in the
+--json, and does not affect the exit status.  Known entries explain
+differences of any attribute.
+
+Gate use (step attr-diff of edg-cir-gate-evidence), over the probe set
+(`--filter` twice, the C and C++ smoke lists) and the pinned real-world units
+(`--units pinned --system-headers --boost-include DIR`, with
+--require-compared: a pinned unit that clang -fclangir or we cannot compile,
+or that compares no symbol at a level, fails the run).
+
+nounwind coverage (--nounwind-target): over the symbols that both sides have,
+the share of definitions and of declarations with the function attribute
+`nounwind` (and, for information, of the callees whose call sites carry it),
+ours against clang -fclangir; the target of slice S2 is that ours is at least
+clangir's share for definitions and for declarations.  The report always
+prints the counts; with the option the exit status is 1 if a share is below.
 
 Run it inside the cir-env image from the repository root:
 
@@ -49,12 +89,15 @@ Run it inside the cir-env image from the repository root:
       --filter @tests/.edgy/filters/cir-c-smoke.txt --levels 0,2
   ... --filter @tests/.edgy/filters/cir-cpp-smoke.txt --cxx
   ... path/to/file.cpp ...          # plain sources (C++ unless *.c)
+  ... --units pinned --system-headers --boost-include .tmp/boost-inc
   ... --self-test
 '''
 
 import argparse
+import fnmatch
 import importlib.machinery
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -236,16 +279,46 @@ def compare(ours: Dict[str, Function], theirs: Dict[str, Function]
           len(set(theirs) - set(ours)), differences)
 
 
+BAD_REASONS = {'', 'none', 'todo', '-', '?', 'tbd'}
+
+
+def validate_known(path: str) -> Tuple[List[Tuple[str, str, str, str]],
+                                       List[str]]:
+  '''(the entries, the problems) of a known-differences file: an entry is
+  `<category> | <level or *> | <detail> | <reason>`, with a comment line
+  directly above it, a reason of at least 8 characters that is not a
+  placeholder, and no duplicate.'''
+  entries: List[Tuple[str, str, str, str]] = []
+  problems: List[str] = []
+  previous = ''
+  seen: Set[Tuple[str, str, str]] = set()
+  for number, raw in enumerate(Path(path).read_text().splitlines(), 1):
+    line = raw.strip()
+    if line and not line.startswith('#'):
+      parts = [p.strip() for p in line.split('|', 3)]
+      where = f"{path}:{number}"
+      if len(parts) != 4:
+        problems.append(f"{where}: not `category | level | detail | reason`")
+      else:
+        if parts[3].lower() in BAD_REASONS or len(parts[3]) < 8:
+          problems.append(f"{where}: no real reason ({parts[3]!r})")
+        if not previous.startswith('#'):
+          problems.append(f"{where}: no comment line directly above the "
+                          f"entry")
+        if parts[0] == 'pair' and parts[2] not in PAIR_MATCHERS:
+          problems.append(f"{where}: no pair matcher {parts[2]!r} (the "
+                          f"matchers are {', '.join(PAIR_MATCHERS)})")
+        key = (parts[0], parts[1], parts[2])
+        if key in seen:
+          problems.append(f"{where}: listed twice ({' | '.join(key)})")
+        seen.add(key)
+        entries.append((parts[0], parts[1], parts[2], parts[3]))
+    previous = line
+  return entries, problems
+
+
 def read_known(path: str) -> List[Tuple[str, str, str, str]]:
-  known = []
-  if path:
-    for line in Path(path).read_text().splitlines():
-      line = line.strip()
-      if line and not line.startswith('#'):
-        parts = [p.strip() for p in line.split('|', 3)]
-        if len(parts) == 4:
-          known.append((parts[0], parts[1], parts[2], parts[3]))
-  return known
+  return validate_known(path)[0] if path else []
 
 
 def explained(known: List[Tuple[str, str, str, str]], level: int,
@@ -255,6 +328,173 @@ def explained(known: List[Tuple[str, str, str, str]], level: int,
         known_detail == detail:
       return True
   return False
+
+
+def known_entry(known: List[Tuple[str, str, str, str]], level: int,
+                category: str, detail: str
+                ) -> Optional[Tuple[str, str, str, str]]:
+  '''The entry of the known-differences list that explains a difference.'''
+  for entry in known:
+    if entry[0] == category and entry[1] in ('*', str(level)) and \
+        (fnmatch.fnmatchcase(detail, entry[2]) if '*' in entry[2]
+         else entry[2] == detail):
+      return entry
+  return None
+
+
+def nounwind_counts(ours: Dict[str, Function], theirs: Dict[str, Function]
+                    ) -> Dict[str, List[int]]:
+  '''Over the symbols that both have: kind -> [total, ours with nounwind,
+  clangir with nounwind], kinds `define`, `declare` (the function attribute)
+  and `call` (callees whose call sites carry nounwind, per caller).'''
+  counts = {'define': [0, 0, 0], 'declare': [0, 0, 0], 'call': [0, 0, 0]}
+  for symbol in set(ours) & set(theirs):
+    a, b = ours[symbol], theirs[symbol]
+    kind = 'define' if a.defined and b.defined else \
+      'declare' if not a.defined and not b.defined else ''
+    if kind:
+      counts[kind][0] += 1
+      counts[kind][1] += 'nounwind' in a.attributes
+      counts[kind][2] += 'nounwind' in b.attributes
+    if a.defined and b.defined:
+      for callee in set(a.calls) | set(b.calls):
+        counts['call'][0] += 1
+        counts['call'][1] += 'fn:nounwind' in a.calls.get(callee, ())
+        counts['call'][2] += 'fn:nounwind' in b.calls.get(callee, ())
+  return counts
+
+
+PAIR_MATCHERS = ('structor-variants', 'builtin-mem-calls')
+MEM_NAMES = ('memcpy', 'memmove', 'memset')
+STRUCTOR_RE = re.compile(r'(C1E|D1E)')
+# The attributes of the llvm.mem* intrinsics that only clangir's calls and
+# declarations have (the intrinsic's fixed attributes), and the ones that only
+# our call of the library function has.  Any other attribute of the two
+# callees (align, dereferenceable, nonnull, noalias or memory on our call, ...)
+# is a real difference and stays.
+MEM_ONLY_CLANGIR = re.compile(
+  r'^(?:fn:(?:nocallback|nofree|nosync|nounwind|willreturn)|'
+  r'fn:memory\(argmem:.*\)|'
+  r'arg\d+:(?:noalias|nocapture|captures\(none\)|writeonly|readonly|immarg|'
+  r'align \d+))$')
+MEM_ONLY_OURS = re.compile(r'^(?:arg\d+:noundef|fn:nounwind)$')
+
+
+def split_call_detail(detail: str) -> Optional[Tuple[str, str, str]]:
+  '''(only-ours or only-clangir, callee, attribute) of the detail of a
+  `call` difference.'''
+  match = re.match(r'^(only-ours|only-clangir):(.+?):((?:fn|ret|arg\d+):.*)$',
+                   detail)
+  return (match.group(1), match.group(2), match.group(3)) if match else None
+
+
+def structor_partner(callee: str) -> List[str]:
+  '''The names that `callee` has with one complete-object structor (C1E or
+  D1E) of its mangling turned into the base variant (C2E or D2E): the form
+  clangir calls where we call the complete-object one.  One occurrence is
+  changed at a time, so only the same class and the same parameters pair.'''
+  names = []
+  for match in STRUCTOR_RE.finditer(callee):
+    names.append(callee[:match.start() + 1] + '2' + callee[match.end() - 1:])
+  return names
+
+
+def explain_pairs(diffs: List[Tuple[str, str, str]], enabled: Set[str],
+                  ours: Optional[Dict[str, Function]] = None,
+                  theirs: Optional[Dict[str, Function]] = None
+                  ) -> Dict[int, str]:
+  '''The differences of one function (indexes into `diffs`, each (symbol,
+  category, detail) of compare()) that the named pair matchers explain:
+  index -> matcher.  `ours` and `theirs` are the parsed modules, for the
+  declarations of the callees.
+
+  structor-variants: ours calls the complete-object structor C1 or D1 of a
+  class where clangir calls its base variant C2 or D2: the attributes that
+  both calls have are explained, one pair of callees at a time; an attribute
+  that only one of the two has stays.  The two callees must have the same
+  number of parameters on their declare or define lines, so a C2 or D2 that
+  takes a VTT (a class with virtual bases) never pairs.  Without the modules
+  nothing pairs.
+
+  builtin-mem-calls: ours calls memcpy, memmove or memset (the library
+  functions that __builtin_memcpy and the like are sent as) where clangir has
+  the llvm.memcpy, llvm.memmove or llvm.memset intrinsic (llvm.memcpy.inline
+  is matched on purpose): only the fixed attributes of the intrinsic that
+  only clangir has (MEM_ONLY_CLANGIR) and the argument noundef and nounwind
+  that only ours has (MEM_ONLY_OURS) are explained; any other attribute, such
+  as an align, dereferenceable, nonnull, noalias or memory of ours, stays.'''
+  calls: Dict[Tuple[str, str], Dict[str, int]] = {}
+  for index, (_, category, detail) in enumerate(diffs):
+    parts = split_call_detail(detail) if category == 'call' else None
+    if parts:
+      calls.setdefault((parts[0], parts[1]), {})[parts[2]] = index
+  explained: Dict[int, str] = {}
+  if 'structor-variants' in enabled and ours is not None and \
+      theirs is not None:
+    for (side, callee), attributes in list(calls.items()):
+      if side != 'only-ours' or callee not in ours:
+        continue
+      for partner in structor_partner(callee):
+        other = calls.get(('only-clangir', partner))
+        if not other or partner not in theirs or \
+            len(ours[callee].params) != len(theirs[partner].params):
+          continue
+        for attribute in set(attributes) & set(other):
+          explained[attributes[attribute]] = 'structor-variants'
+          explained[other[attribute]] = 'structor-variants'
+  if 'builtin-mem-calls' in enabled:
+    for (side, callee), attributes in list(calls.items()):
+      if side != 'only-ours' or callee not in MEM_NAMES:
+        continue
+      for (other_side, other_callee), other in calls.items():
+        if other_side == 'only-clangir' and \
+            other_callee.startswith(f"llvm.{callee}."):
+          for attribute, index in attributes.items():
+            if MEM_ONLY_OURS.match(attribute):
+              explained[index] = 'builtin-mem-calls'
+          for attribute, index in other.items():
+            if MEM_ONLY_CLANGIR.match(attribute):
+              explained[index] = 'builtin-mem-calls'
+  return explained
+
+
+# The attributes that the step gates (m5_design.md section 9): an unexplained
+# difference in one of them fails the run.  Every other difference (the set of
+# callees that only one side calls, norecurse, cold, uwtable, sret, metadata,
+# ...) is the residue: it is counted by category and reported, not gated.
+HIGH_VALUE_RE = re.compile(
+  r'^(?:nounwind|noundef|nonnull|dereferenceable(?:_or_null)?\(.*\)|align \d+|'
+  r'memory\(.*\)|mustprogress|noreturn|builtin|nobuiltin|inlinehint|'
+  r'alwaysinline)$')
+
+
+def difference_attribute(category: str, detail: str) -> str:
+  '''The attribute (or metadata kind) that a difference is about: for the
+  detail `only-ours:noundef` it is `noundef`, for a call difference
+  `only-ours:callee:arg0:noundef` it is `noundef`, for `md` the kind.'''
+  if category == 'call':
+    parts = split_call_detail(detail)
+    if parts:
+      return parts[2].split(':', 1)[1]
+  elif category == 'md':
+    return 'md:' + detail.split(':', 1)[-1]
+  return detail.split(':', 1)[-1]
+
+
+def classify_difference(category: str, detail: str, callset: bool
+                        ) -> Tuple[bool, str]:
+  '''(gated, residue key) of a difference: gated if it is about a
+  high-value attribute and not the presence of a callee on one side only
+  (`callset`, which is residue whatever its attribute).  The key names the
+  residue: `callset`, `md:tbaa`, `fn norecurse`, `param sret`, ...'''
+  attribute = difference_attribute(category, detail)
+  if callset:
+    return False, 'callset'
+  if category != 'md' and HIGH_VALUE_RE.match(attribute):
+    return True, ''
+  kind = 'param' if category.startswith('param') else category
+  name = re.match(r'[\w:.-]*', attribute).group(0) or attribute
+  return False, f"{kind} {name}" if kind != 'md' else name
 
 
 def load_tool(name: str):
@@ -319,12 +559,16 @@ def find_cases(root: Path, spec: str, cxx: bool
 
 
 class Runner:
-  def __init__(self, root: Path, fe_build: str, timeout: int) -> None:
+  def __init__(self, root: Path, fe_build: str, timeout: int,
+               system_headers: bool = False) -> None:
     self.diff = load_tool('edg-cir-run-diff')
     self.base = self.diff.Toolchain(root, fe_build, 'g++')
     self.timeout = timeout
     self.env = dict(self.base.env)
-    self.env.pop('EDG_USE_SYSTEM_HEADERS', None)
+    if not system_headers:
+      # (the tests bring their own headers; the real-world units need the
+      # system ones, as edg-cir-perf gives them)
+      self.env.pop('EDG_USE_SYSTEM_HEADERS', None)
     prefix = self.env.get('EDG_LLVM_CIR_PREFIX', '')
     self.clang = str(Path(prefix) / 'bin' / 'clang') if prefix else 'clang'
     help_text = subprocess.run(
@@ -364,6 +608,27 @@ class Runner:
     return 'ok', '', out
 
 
+# (case, level) -> nounwind_counts of the last run_one (read by main)
+NOUNWIND: Dict[Tuple[str, int], Dict[str, List[int]]] = {}
+# (case, level) -> (our functions, clangir's functions), for the pair matchers
+MODULES: Dict[Tuple[str, int], Tuple[Dict[str, Function],
+                                     Dict[str, Function]]] = {}
+
+
+def unit_cases(root: Path, units: str, boost: str
+               ) -> List[Tuple[str, Path, List[str]]]:
+  '''(name, source, options) of the real-world units (`pinned` or names).'''
+  perf = load_tool('edg-cir-perf')
+  names = [n for item in units.split(',') if item
+           for n in (perf.PINNED_UNITS if item == 'pinned' else (item,))]
+  cases = []
+  for name in names:
+    include = [f"-I{boost}"] if boost and name.startswith('boost/') else []
+    cases.append((name, root / 'dev_tools/cir-realworld' / f"{name}.cpp",
+                  ['--gnu_version=140000', *perf.REALWORLD_FLAGS, *include]))
+  return cases
+
+
 def run_one(runner: Runner, name: str, source: Path, options: List[str],
             levels: List[int]
             ) -> Tuple[bool, Dict[int, Tuple[int, int, int,
@@ -387,8 +652,11 @@ def run_one(runner: Runner, name: str, source: Path, options: List[str],
       if mine is None:
         note = f"ours {state}: " + ' '.join(text.split())[-120:]
         continue
-      results[level] = compare(parse_ir(mine.read_text()),
-                               parse_ir(theirs.read_text()))
+      ours_ir = parse_ir(mine.read_text())
+      theirs_ir = parse_ir(theirs.read_text())
+      results[level] = compare(ours_ir, theirs_ir)
+      NOUNWIND[(name, level)] = nounwind_counts(ours_ir, theirs_ir)
+      MODULES[(name, level)] = (ours_ir, theirs_ir)
   return True, results, note
 
 
@@ -477,12 +745,39 @@ def main() -> None:
     formatter_class = argparse.RawDescriptionHelpFormatter,
     epilog = __doc__.split('\n', 2)[2])
   parser.add_argument('sources', nargs = '*')
-  parser.add_argument('--filter', default = '',
+  parser.add_argument('--filter', action = 'append', default = [],
                       help = '"@file" or comma separated prefixes of tests, '
-                             'as for edgy (single-file cases only)')
+                             'as for edgy (single-file cases only); '
+                             'repeatable')
+  parser.add_argument('--units', default = '',
+                      help = 'real-world units (dev_tools/cir-realworld; '
+                             '`pinned` or names like libstdcxx/chrono)')
+  parser.add_argument('--system-headers', action = 'store_true',
+                      help = 'compile with the system headers (the '
+                             'real-world units need them)')
+  parser.add_argument('--boost-include', default = '',
+                      help = 'the Boost headers for the Boost units')
   parser.add_argument('--levels', default = '0,2')
   parser.add_argument('--known', default = '',
                       help = 'file of explained differences')
+  parser.add_argument('--json', default = '',
+                      help = 'write the result here (counts, unexplained '
+                             'differences, the known entries that were '
+                             'used, per case results, nounwind coverage)')
+  parser.add_argument('--residue', default = '',
+                      help = 'write the differences that are not gated (the '
+                             'residue) by category here')
+  parser.add_argument('--require-compared', action = 'store_true',
+                      help = 'every case must compare symbols at every '
+                             'level (clang -fclangir and ours must compile '
+                             'it): for the pinned units')
+  parser.add_argument('--require-no-llvm-passes', action = 'store_true',
+                      help = 'a setup problem if edg-cir lacks '
+                             '--no-llvm-passes and a level above 0 is asked')
+  parser.add_argument('--nounwind-target', action = 'store_true',
+                      help = 'exit status 1 if our share of definitions or '
+                             'of declarations with nounwind is below '
+                             'clang -fclangir\'s')
   parser.add_argument('--root', default = '.')
   parser.add_argument('--fe-build', default = 'build/gcc-cir')
   parser.add_argument('--timeout', type = int, default = 120)
@@ -497,8 +792,12 @@ def main() -> None:
   root = Path(args.root).resolve()
   levels = [int(x) for x in args.levels.split(',')]
   cases: List[Tuple[str, Path, List[str]]] = []
-  if args.filter:
-    cases += find_cases(root, args.filter, False)
+  for spec in args.filter:
+    cases += find_cases(root, spec, False)
+  if args.units:
+    boost = str((root / args.boost_include).resolve()) \
+      if args.boost_include else ''
+    cases += unit_cases(root, args.units, boost)
   for item in args.sources:
     path = Path(item).resolve()
     is_c = path.suffix == '.c'
@@ -506,32 +805,99 @@ def main() -> None:
                   ['--gnu_version=140000', *(['--gcc'] if is_c else
                                              ['--c++17'])]))
   if not cases:
-    parser.error('no sources: give files or --filter')
-  runner = Runner(root, args.fe_build, args.timeout)
+    parser.error('no sources: give files, --filter or --units')
+  missing = [name for name, source, _ in cases if not source.exists()]
+  if missing:
+    print(f"edg-cir-attr-diff: no such source: {', '.join(missing)}",
+          file = sys.stderr)
+    sys.exit(2)
+  known: List[Tuple[str, str, str, str]] = []
+  if args.known:
+    known, known_problems = validate_known(args.known)
+    if known_problems:
+      print('edg-cir-attr-diff: the known-differences file is not valid:\n  '
+            + '\n  '.join(known_problems), file = sys.stderr)
+      sys.exit(2)
+  runner = Runner(root, args.fe_build, args.timeout, args.system_headers)
   if not runner.base.ready():
     print(f"edg-cir-attr-diff: no CPFE_CIR and EDG_CIR_TOOL in "
           f"{args.fe_build}/environment.sh", file = sys.stderr)
     sys.exit(2)
-  known = read_known(args.known)
+  if args.require_no_llvm_passes and levels != [0] and \
+     not runner.no_llvm_passes:
+    print('edg-cir-attr-diff: edg-cir has no --no-llvm-passes (a library '
+          'without EDG_CIR_FLAG_NO_LLVM_PASSES)', file = sys.stderr)
+    sys.exit(2)
   total = {level: [0, 0, 0] for level in levels}
   unexplained: List[Tuple[int, str, str, str, str]] = []
   counts: Dict[Tuple[int, str], int] = {}
+  used: Set[Tuple[str, str, str, str]] = set()
+  explained_count = 0
+  residue: Dict[Tuple[int, str], int] = {}
+  residue_examples: Dict[Tuple[int, str], List[str]] = {}
   no_clangir: List[str] = []
   ours_failed = 0
+  uncompared: List[str] = []
+  per_case: Dict[str, Dict[str, object]] = {}
+  nounwind = {level: {'define': [0, 0, 0], 'declare': [0, 0, 0],
+                      'call': [0, 0, 0]} for level in levels}
   for name, source, options in cases:
     ok, results, note = run_one(runner, name, source, options, levels)
+    per_case[name] = {'clangir': ok, 'note': note,
+                      'compared': {str(l): r[0] for l, r in results.items()}}
     if not ok:
       no_clangir.append(f"{name}: {note}")
+      uncompared.append(f"{name}: clang -fclangir cannot compile it")
       continue
     if note:
       ours_failed += 1
+    for level in levels:
+      if level not in results or results[level][0] == 0:
+        uncompared.append(f"{name} -O{level}: no symbol compared"
+                          f"{' (' + note + ')' if note else ''}")
     for level, (compared, only_ours, only_theirs, diffs) in results.items():
       total[level][0] += compared
       total[level][1] += only_ours
       total[level][2] += only_theirs
-      for symbol, category, detail in diffs:
-        if not explained(known, level, category, detail):
-          unexplained.append((level, name, symbol, category, detail))
+      for kind, values in NOUNWIND.get((name, level), {}).items():
+        for index in range(3):
+          nounwind[level][kind][index] += values[index]
+      # the pair matchers work on the differences of one function
+      by_symbol: Dict[str, List[int]] = {}
+      for index, (symbol, _, _) in enumerate(diffs):
+        by_symbol.setdefault(symbol, []).append(index)
+      pair_entries = {e[2]: e for e in known
+                      if e[0] == 'pair' and e[1] in ('*', str(level))}
+      paired: Dict[int, str] = {}
+      if pair_entries:
+        for indexes in by_symbol.values():
+          modules = MODULES.get((name, level), (None, None))
+          for position, matcher in explain_pairs(
+              [diffs[i] for i in indexes], set(pair_entries), *modules
+              ).items():
+            paired[indexes[position]] = matcher
+      for index, (symbol, category, detail) in enumerate(diffs):
+        entry = known_entry(known, level, category, detail) \
+          if index not in paired else pair_entries[paired[index]]
+        if entry:
+          used.add(entry)
+          explained_count += 1
+        else:
+          callset = False
+          if category == 'call':
+            parts = split_call_detail(detail)
+            if parts and (name, level) in MODULES:
+              mine, theirs = MODULES[(name, level)]
+              callset = not (
+                parts[1] in getattr(mine.get(symbol), 'calls', {}) and
+                parts[1] in getattr(theirs.get(symbol), 'calls', {}))
+          gated, key = classify_difference(category, detail, callset)
+          if gated:
+            unexplained.append((level, name, symbol, category, detail))
+          else:
+            residue[(level, key)] = residue.get((level, key), 0) + 1
+            residue_examples.setdefault((level, key), []).append(
+              f"{name} {symbol}: {category} {detail}")
         counts[(level, f"{category} {detail}")] = counts.get(
           (level, f"{category} {detail}"), 0) + 1
   print(f"{len(cases)} translation unit(s); clang -fclangir could not "
@@ -548,13 +914,68 @@ def main() -> None:
     print(f"  -O{level} {count:6d}  {kind}")
   for line in no_clangir[:5]:
     print(f"  clangir cannot compile: {line}")
-  print(f"{len(unexplained)} unexplained difference(s)")
+  print(f"{explained_count} explained difference(s) by {len(used)} known "
+        f"entr{'y' if len(used) == 1 else 'ies'} of {len(known)}; "
+        f"{len(unexplained)} unexplained difference(s) in the gated "
+        f"attributes; {sum(residue.values())} difference(s) of the residue "
+        f"(not gated, {len(residue)} categories)")
   for level, name, symbol, category, detail in unexplained[:args.show]:
     print(f"  -O{level} {name} {symbol}: {category} {detail}")
+  if args.residue:
+    lines = ['# The differences of the residue: not gated (m5_design.md '
+             'section 9), reported by category.',
+             '# level  count  category (examples)']
+    for (level, key), count in sorted(residue.items(),
+                                      key = lambda item: (item[0][0],
+                                                          -item[1])):
+      example = residue_examples[(level, key)][0]
+      lines.append(f"-O{level} {count:6d}  {key}  (e.g. {example[:140]})")
+    Path(args.residue).write_text('\n'.join(lines) + '\n')
+  exit_code = 1 if unexplained else 0
   nothing = [level for level in levels if total[level][0] == 0]
   if nothing:
     print(f"FAIL: nothing was compared at -O{', -O'.join(map(str, nothing))}")
-  sys.exit(1 if unexplained or nothing else 0)
+    exit_code = 1
+  if args.require_compared and uncompared:
+    print(f"FAIL: {len(uncompared)} case(s) compared nothing:")
+    for line in uncompared[:10]:
+      print(f"  {line}")
+    exit_code = 1
+  below = []
+  for level in levels:
+    for kind in ('define', 'declare', 'call'):
+      n, mine, theirs = nounwind[level][kind]
+      share = lambda v: f"{100.0 * v / n:.1f}%" if n else 'n/a'
+      print(f"nounwind -O{level} {kind}: {n} common; ours {mine} "
+            f"({share(mine)}), clangir {theirs} ({share(theirs)})")
+      if kind != 'call' and n and mine < theirs:
+        below.append(f"-O{level} {kind}s: ours {share(mine)} < clangir "
+                     f"{share(theirs)}")
+  if args.nounwind_target:
+    if below:
+      print('FAIL: nounwind coverage below clangir\'s share: ' +
+            '; '.join(below))
+      exit_code = 1
+    elif not any(nounwind[level]['define'][0] for level in levels):
+      print('FAIL: nounwind coverage: no definition was compared')
+      exit_code = 1
+  if args.json:
+    Path(args.json).write_text(json.dumps({
+      'cases': per_case,
+      'compared': {str(l): v[0] for l, v in total.items()},
+      'only_ours': {str(l): v[1] for l, v in total.items()},
+      'only_clangir': {str(l): v[2] for l, v in total.items()},
+      'explained': explained_count,
+      'unexplained': [list(u) for u in unexplained],
+      'residue': {f"{l}|{k}": c for (l, k), c in sorted(residue.items())},
+      'known_used': sorted(' | '.join(e) for e in used),
+      'known_entries': len(known),
+      'uncompared': uncompared,
+      'nounwind': {str(l): v for l, v in nounwind.items()},
+      'nounwind_below': below,
+      'no_llvm_passes': runner.no_llvm_passes,
+      'exit': exit_code}, indent = 1) + '\n')
+  sys.exit(exit_code)
 
 
 if __name__ == '__main__':

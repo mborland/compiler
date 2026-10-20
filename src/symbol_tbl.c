@@ -16948,6 +16948,9 @@ declaration modifiers.
   decl_modifiers->flags = DM_NONE;
   decl_modifiers->direct_linkage_specifier = FALSE;
   decl_modifiers->marked_as_gnu_extension = FALSE;
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  decl_modifiers->cir_inline_keyword = FALSE;
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if MICROSOFT_EXTENSIONS_ALLOWED
   decl_modifiers->is_deprecated = FALSE;
   decl_modifiers->is_microsoft_intrinsic = FALSE;

@@ -1,0 +1,163 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=140000 Test_name.c
+ecil 1.3 features=0x0000001a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  TY_VOID 4
+  TY_INT 5 8 true 1 1
+  TY_PTR 6 5
+  STR 5 "S"
+  TY_RECORD_DECL 7 0 5
+  TY_PTR 8 7
+  TY_PTR 9 4
+  TY_FUNC 10 4 0 [6, 8, 9] supp{15: 4}
+  TY_RECORD_BODY 7 1 1 1 0 0
+  STR 6 "_Z3usePcR1SPv"
+  DECL_FUNC 11 10 0 0 6
+  DECL_FUNC 11 10 0 1 6
+  STR 7 "b"
+  STR 8 "s"
+  STR 9 "f"
+  STR 10 "Guard"
+  TY_RECORD_DECL 12 0 10
+  TY_RECORD_BODY 12 1 0 1 12 0
+  STR 11 "g"
+  TY_PTR 13 12
+  TY_FUNC 14 4 0 [13] supp{15: 2}
+  STR 12 "_ZN5GuardD1Ev"
+  DECL_FUNC 15 14 0 128 12
+  STR 13 "_ZN5GuardD2Ev"
+  DECL_FUNC 16 14 0 128 13
+  STRUCTOR 15 16 1
+  TY_FUNC 17 2 0 [6]
+  STR 14 "strlen"
+  DECL_FUNC 18 17 0 384 14
+  TY_FUNC 19 9 0 [9, 9, 2]
+  STR 15 "memcpy"
+  DECL_FUNC 20 19 0 384 15
+  TY_FLOAT 21 3 8 8
+  TY_FUNC 22 21 0 [21]
+  STR 16 "sin"
+  DECL_FUNC 23 22 0 384 16
+  TY_FUNC 24 1 1 [6, 6]
+  STR 17 "sprintf"
+  DECL_FUNC 25 24 0 384 17
+  TY_ARRAY 26 5 2 0
+  STR 18 ".str"
+  DECL_VAR 27 26 2 11 0 18
+  C_STRING 26 "x\x00"
+  VAR_INIT 27
+  TY_FUNC 28 1 1 [9, 6]
+  STR 19 "fprintf"
+  DECL_FUNC 29 28 0 256 19
+  TY_FUNC 30 1 0 [9, 9]
+  TY_PTR 31 30
+  TY_FUNC 32 4 0 [9, 2, 2, 31]
+  STR 20 "qsort"
+  DECL_FUNC 33 32 0 256 20
+  TY_FUNC 34 4 0 []
+  TY_PTR 35 34
+  TY_FUNC 36 1 0 [35]
+  STR 21 "atexit"
+  DECL_FUNC 37 36 0 256 21
+  TY_FUNC 38 1 0 [1]
+  STR 22 "isalnum"
+  DECL_FUNC 39 38 0 384 22 supp{4: true}
+  STR 23 "_ZN2ns6strlenEPKc"
+  DECL_FUNC 40 17 0 0 23
+  STR 24 "abs"
+  DECL_FUNC 41 38 0 384 24 supp{5: true}
+  TY_FUNC 42 2 0 [8, 6] supp{15: 2}
+  STR 25 "_ZN1S6strlenEPKc"
+  DECL_FUNC 43 42 0 0 25
+  STR 26 "abort"
+  DECL_FUNC 44 34 0 388 26
+  FUNC_BEGIN 11 0
+  PARAM 1 6 6 7 0
+  PARAM 2 8 8 8 0
+  PARAM 3 9 9 9 0
+  BLOCK_BEGIN
+  LOCAL 4 12 11 0 0
+  CLEANUP_BEGIN 3 nil 0
+  LREF 4
+  ADDR
+  CALL 15 14 1 0
+  CLEANUP_BODY
+  LREF 1
+  LOAD 0
+  CALL 18 17 1 4
+  DROP
+  LREF 1
+  LOAD 0
+  CAST 11 9
+  LREF 1
+  LOAD 0
+  CAST 11 9
+  CONST_INT 2 1
+  CALL 20 19 3 4
+  DROP
+  CONST_FLOAT 21 f64:0x3ff0000000000000
+  CALL 23 22 1 4
+  DROP
+  LREF 1
+  LOAD 0
+  GREF 27
+  ADDR
+  ADDR_OFFSET 6 0
+  CALL 25 24 2 5
+  DROP
+  LREF 3
+  LOAD 0
+  GREF 27
+  ADDR
+  ADDR_OFFSET 6 0
+  CALL 29 28 2 5
+  DROP
+  LREF 1
+  LOAD 0
+  CAST 11 9
+  CONST_INT 2 1
+  CONST_INT 2 1
+  CONST_NULL 31
+  CALL 33 32 4 4
+  CONST_NULL 35
+  CALL 37 36 1 4
+  DROP
+  CONST_INT 1 1
+  CALL 39 38 1 4
+  DROP
+  LREF 1
+  LOAD 0
+  CALL 40 17 1 4
+  DROP
+  CONST_INT 1 1
+  CALL 41 38 1 4
+  DROP
+  LREF 2
+  LOAD 0
+  DEREF
+  ADDR
+  LREF 1
+  LOAD 0
+  CALL 43 42 2 4
+  DROP
+  CALL 44 34 0 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 4 0

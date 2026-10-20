@@ -267,19 +267,6 @@ front end has them enabled (--no_exceptions turns them off).
   return !C_mode() && exceptions_enabled;
 }  /* ecil_has_exceptions */
 
-#if CHECKING
-/* What the first operand of a record introduces. */
-enum an_ecil_intro_kind {
-  eik_none,
-  eik_sid,          /* STR: a string id. */
-  eik_gid,          /* TY_*: a G-id, which must be the next. */
-  eik_gid_or_reissue,
-                    /* DECL_*: the next G-id, or an earlier one (re-issue). */
-  eik_gid_existing, /* TY_RECORD_BODY: an introduced G-id. */
-  eik_lid,          /* LOCAL, PARAM, MATERIALIZE_TEMP, LABEL: an L-id. */
-  eik_function      /* FUNC_BEGIN: the L-ids start over. */
-};
-#endif /* CHECKING */
 
 /* Buffer and tag encoders. */
 
@@ -408,9 +395,10 @@ check for room.
 }  /* ecil_buf_put_tagged */
 
 
-void ecil_put_uint(an_ecil_buffer *buf, uint64_t value)
+void ecil_put_uint_slow(an_ecil_buffer *buf, uint64_t value)
 /*
-Append an unsigned integer in its shortest encoding.
+Append an unsigned integer in its shortest encoding (the general path of the
+inline ecil_put_uint: the buffer may have to grow or may have failed).
 */
 {
   if (value <= ECIL_TAG_FIXUINT_MAX) {
@@ -424,7 +412,7 @@ Append an unsigned integer in its shortest encoding.
   } else {
     ecil_buf_put_tagged(buf, ECIL_TAG_U64, value, 8);
   }  /* if */
-}  /* ecil_put_uint */
+}  /* ecil_put_uint_slow */
 
 
 void ecil_put_int(an_ecil_buffer *buf, int64_t value)
@@ -706,12 +694,11 @@ string tables, so dropping them would leave later references dangling.
 
 /* Per-opcode tables for the record checks: the operand count and what the
    first operand introduces.  Built on first use from ecil_opcode_arity. */
-static signed char  ecil_arity_table[256];
-static unsigned char
-                    ecil_intro_table[256];
-static a_boolean    ecil_tables_ready;
+signed char     ecil_arity_table[256];
+unsigned char   ecil_intro_table[256];
+a_boolean       ecil_tables_ready;
 
-static void ecil_build_check_tables(void)
+void ecil_build_check_tables(void)
 /*
 Build the per-opcode tables of the record checks.
 */
@@ -748,7 +735,7 @@ Build the per-opcode tables of the record checks.
 }  /* ecil_build_check_tables */
 
 
-static void ecil_check_introduction(unsigned int kind, uint64_t id)
+void ecil_check_introduction(unsigned int kind, uint64_t id)
 /*
 Account for the id a record introduces (see ecil_check_all_introduced).  A
 new G-id or sid must be the highest introduced so far plus 1 (spec 7).
@@ -969,9 +956,11 @@ an object that was not constructed, so it is diagnosed.
 }  /* ecil_track_regions */
 
 
-void ecil_rec_begin(an_ecil_frame *frame, unsigned int opcode)
+void ecil_rec_begin_slow(an_ecil_frame *frame, unsigned int opcode)
 /*
-Start a record: write its opcode byte.
+Start a record: write its opcode byte.  (ecil_rec_begin is inline and comes
+here when a table is not built yet, the buffer must grow or the scope regions
+are followed.)
 */
 {
   check_assertion(frame->pending_operands == -1);
@@ -990,7 +979,7 @@ Start a record: write its opcode byte.
     ecil_track_regions(opcode);
   }  /* if */
   ecil_buf_put_byte(frame->current, opcode);
-}  /* ecil_rec_begin */
+}  /* ecil_rec_begin_slow */
 
 
 #if CHECKING
@@ -1007,9 +996,11 @@ Account for one operand of the open record.
 #endif /* CHECKING */
 
 
-void ecil_arg_uint(an_ecil_frame *frame, uint64_t value)
+#if CHECKING
+void ecil_arg_uint_slow(an_ecil_frame *frame, uint64_t value)
 /*
-Append an unsigned operand.
+Append an unsigned operand (the general path of the inline ecil_arg_uint: the
+operand introduces an id, or the record has no operand left).
 */
 {
 #if CHECKING
@@ -1020,7 +1011,8 @@ Append an unsigned operand.
 #endif /* CHECKING */
   ecil_note_operand(frame);
   ecil_put_uint(frame->current, value);
-}  /* ecil_arg_uint */
+}  /* ecil_arg_uint_slow */
+#endif /* CHECKING */
 
 
 void ecil_arg_int(an_ecil_frame *frame, int64_t value)
@@ -1124,21 +1116,6 @@ Append a 128-bit integer operand.
 }  /* ecil_arg_int128 */
 
 
-void ecil_rec_end(an_ecil_frame *frame)
-/*
-Finish a record.  In CHECKING builds, verify that it received exactly the
-operands its opcode declares.
-*/
-{
-  /* A record abandoned half-built because a construct is unsupported is
-     discarded with its body or constant, so it need not be complete. */
-  check_assertion(frame->pending_operands == 0 ||
-                  frame->pending_operands == -1 ||
-                  ecil_unsupported_reason != NULL);
-  frame->pending_operands = -1;
-}  /* ecil_rec_end */
-
-
 void ecil_supp_begin(an_ecil_supp *supp)
 /*
 Start a supp blob (spec 6).
@@ -1226,42 +1203,6 @@ payload (supp8 if it fits in one byte, else supp16), then the pairs.
   supp->num_pairs = 0;
   supp->last_key = 0;
 }  /* ecil_rec_supp_end */
-
-
-void ecil_rec0(an_ecil_frame *frame, unsigned int opcode)
-/*
-Write a record with no operands.
-*/
-{
-  ecil_rec_begin(frame, opcode);
-  ecil_rec_end(frame);
-}  /* ecil_rec0 */
-
-
-void ecil_rec1(an_ecil_frame *frame, unsigned int opcode, uint64_t a)
-/*
-Write a record with one unsigned operand.
-*/
-{
-  ecil_rec_begin(frame, opcode);
-  ecil_arg_uint(frame, a);
-  ecil_rec_end(frame);
-}  /* ecil_rec1 */
-
-
-void ecil_rec2(an_ecil_frame *frame,
-               unsigned int  opcode,
-               uint64_t      a,
-               uint64_t      b)
-/*
-Write a record with two unsigned operands.
-*/
-{
-  ecil_rec_begin(frame, opcode);
-  ecil_arg_uint(frame, a);
-  ecil_arg_uint(frame, b);
-  ecil_rec_end(frame);
-}  /* ecil_rec2 */
 
 
 /* Strings and types. */
@@ -2379,9 +2320,12 @@ nothing.
           preamble[11] = (char)((ECIL_VERSION_MINOR >> 8) & 0xFF);
           /* Features: SUPP (ECIL 1.1: a dropped declaration carries its
              reason; the preamble goes out before any frame, so the bit says
-             that frames may carry a blob); LATE_NAMES for C++ (NAME_BIND in
-             F_NAMES); LOCATIONS is off. */
+             that frames may carry a blob); INLINE_HINTS (1.3: DECL_FUNC
+             carries INLINE_HINT exactly, where ECIL_INLINE_HINTS);
+             LATE_NAMES for C++ (NAME_BIND in F_NAMES); LOCATIONS is off. */
           preamble[12] = (char)(ECIL_FEATURE_SUPP |
+                                (ECIL_INLINE_HINTS ?
+                                        ECIL_FEATURE_INLINE_HINTS : 0) |
                                 (C_mode() ? 0 : ECIL_FEATURE_LATE_NAMES));
           preamble[13] = 0;
           preamble[14] = 0;

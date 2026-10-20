@@ -7,7 +7,7 @@
 ; RUN: gcc %t.o -o %t.exe -lm
 ; RUN: %t.exe
 
-; CHECK-DAG: cir.call @add2({{.*}}) nothrow : (!s32i, !s32i) -> !s32i
+; CHECK-DAG: cir.call @add2({{.*}}) nothrow : ({{.*}}) -> !s32i
 ; CHECK-DAG: cir.cast bitcast {{.*}} !cir.ptr<!cir.func<(...) -> !s32i>>
 ; CHECK-DAG: cir.call {{%[0-9]+}}(
 ; CHECK-DAG: cir.func {{.*}}@knr

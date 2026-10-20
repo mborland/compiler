@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --gnu_version=999999 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -14,12 +14,12 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_VOID 4
   STR 5 "S"
   TY_RECORD_DECL 5 0 5
   TY_PTR 6 5
-  TY_FUNC 7 4 0 [6]
+  TY_FUNC 7 4 0 [6] supp{15: 2}
   STR 6 "v"
   TY_RECORD_BODY 5 4 4 4 0 1
   REC_FIELD 1 0 nil nil 6 0

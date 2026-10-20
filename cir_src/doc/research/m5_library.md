@@ -1059,3 +1059,88 @@ inside our own code after the verifier.
   `m5_nounwind.py`, `m5_probe.sh`, `m5_rwu.sh`); none of them is in the
   repository.
 
+
+## 12. M6 residue (S2 round 2 and S3, cir-lib)
+
+What the S2 round 2 attr-diff run left, and the facts behind the answers
+given at the S2+S4 checkpoint.  Counts are `edg-cir-attr-diff` at the S2+S4
+checkpoint (probe 2456, pinned 2437 unexplained) and after round 2 (probe
+1129, pinned 2261).
+
+**Answers**
+
+- **-O0 and a deleted call (`torture/pr101373`).** The CIR and the LLVM IR
+  keep the call of a `const` function whose result is unused. The -O0 code
+  generator (FastISel) drops it: a call that is `nounwind willreturn
+  memory(none)` and unused is dead. clang -O0, `clang -fclangir -O0` and
+  g++ -O0 all segfault on this test (the test is an xfail for gcc,
+  PR100409); it is not a regression of ours, and the call stays at -O0 in
+  our IR. `torture/pr100382` was a real defect (item 10 used `nothrow`
+  where CIRGen uses `nounwind` on const and pure calls, so the call in a try
+  body was not an invoke); fixed, with `s2-pure-in-try.test`.
+- **`callq f@PLT` for external functions.** Not a change: the relocation
+  model has been PIC since M3, the library and the M5a binary give the same
+  `callq _Z3exti@PLT` for an external declaration, and clang (classic and
+  `-fclangir`, at -O0, with `-fPIE` as the default) gives the same line.
+  `-fno-pic` gives a direct call. Intended parity.
+- **Allocation elision.** `builtin` stays on the allocation-expression calls
+  (user decision).
+
+**Not closed: classified for M6**
+
+- *Needs the writer:* NORETURN and NOTHROW for the library builtins (`abort`,
+  `exit`, `memcmp`, ...: noreturn 76, nounwind about 90 on the probe),
+  `INLINE_HINT` for the implicitly declared special members (the
+  C2/D2 `inlinehint` only in clangir: 178 at -O2 on the probe, 37 on the
+  pinned units; clangir hints them, the writer excludes them), keys 16-18
+  (the library maps them: `alwaysinline`, `cold` with `optsize` at -O1 and
+  up on a definition, `hot`; clang adds them to the calls as well).
+- *clangir is incomplete:* the deleting destructor of a class with virtual
+  bases is `llvm.trap` in clangir (8 `_ZdlPvm` calls only on our side).
+- *Structors:* we call the complete variant (C1/D1, an alias of C2/D2, as
+  classic clang does), clangir calls the base variant (28 pinned, 90 probe,
+  distinct calls only on one side).
+- *Explicit instantiation declarations* (`extern template class
+  std::allocator<char>`): clangir defines `allocator<char>::allocator(const
+  allocator&)` and `~allocator()`, we declare them (6 `mustprogress`/`uwtable`
+  entries on the pinned units).
+- *Mangling* (EDG against clang): constructor templates with a defaulted
+  `enable_if` template parameter (`TnNSt9enable_if...`, 25 distinct calls on
+  the pinned units) and lambdas in `main` (`$_0` against `UlvE_`).
+- *Other call-set differences* (calls only one side has: 190 distinct calls
+  on the pinned units at -O0, 301 on the probe): inlining of
+  `__is_constant_evaluated`, memcpy intrinsics, sized against unsized
+  `operator delete` were not traced beyond the D0 case above (after round 2
+  the `_ZdlPvm` entries are the clangir-trap ones).
+- *norecurse* of C++ `main` is done (one attribute); `terminate()` is
+  nounwind in ours and not in clangir (4).
+
+**S3 notes**
+
+- **Default threshold: 4000 bodies** (`k_default_chunk_threshold` in
+  `lib/driver/chunk.h`), raised from 2000 after the M5 gate on the user's
+  decision: at 2000 the generated C++ TU chunked (13 chunks), paid +21%
+  lowering time and its library Ir was 102.6% of M5a at -O0 against the S1
+  target of 90%. **4000 does not close that miss (open):** the TU has about
+  6000 emitted bodies (3600 of them deferred and replayed), so it still lowers
+  in about 13 chunks at 4000 and the S1 target miss stays open. 4000 only
+  spares translation units of 2000 to 4000 bodies, such as the generated
+  c3000. The next session should consider a threshold on the estimated CIR
+  module size or on the expected peak instead of a body count, then re-run
+  perf, rss and slow-below-threshold. All S3 evidence in this document and in the gate was measured
+  at 2000 (the threshold curve, the pinned-unit and corpus identity, rss,
+  slow-below-threshold). Perf, rss and slow-below-threshold were not re-run at
+  4000; the next session should re-run them. No test depends on the default:
+  `chunk-lowering`, `chunk-failure`, `chunk-identity`, `no-llvm-passes` and
+  cir-config's chunk tools pass `--chunk-threshold` explicitly, and
+  `capi_tests`/`chunk-lowering` only expect 0 chunks for a module of a few
+  bodies.
+
+- At -O2 the assembly of a chunked module equals the whole-module assembly
+  except for the numeric suffix of local data symbols that an LLVM pass names
+  (`.L.crctable.1` against `.7`): the linker's declaration-to-definition
+  replacement counts name collisions in the symbol table (about 1.7% of the
+  corpus streams, forced to one function per chunk).
+- With debug information every chunk would make its own `DICompileUnit`.
+- Scripts: `box_chunk_identity.sh`, `box_chunk_o2.py`,
+  `chunk_identity_tests.py`; the measured curve is in the S3 report.

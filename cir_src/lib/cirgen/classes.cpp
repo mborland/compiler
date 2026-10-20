@@ -471,7 +471,7 @@ name when it declares one, else a new external declaration of the given type
     }
   }
   if (result != nullptr && found == library_names_.end() &&
-      (result->is_function ? result->has_body
+      (result->is_function ? result->body_arrived
                            : (result->flags & ECIL_DECL_VAR_DEFINITION) != 0 ||
                                  result->has_init)) {
     /* 12.9: a stream entity of the name is reused, unless it defines it. */
@@ -744,6 +744,7 @@ linkage and, for a vague one, its own comdat.  The body is the caller's.
   e.want = keep_string(want);
   e.symbol = claim_symbol(e.want, 0);
   e.has_body = true;
+  e.body_arrived = true;
   fn = compat::create_function(builder_, module_, loc(), e.symbol, type);
   e.op = fn.getOperation();
   fn.setLinkageAttr(linkage_attr(kind));
@@ -802,6 +803,7 @@ translation unit defining the target provides.
 
       result = define_library_function(name, type, target.linkage, vague);
       thunks_[key] = result;
+      thunk_pairs_.emplace_back(result, &target);
       build_thunk_body(*result, target, info);
     } else {
       result = library_entity(name, true, type, false);
@@ -855,6 +857,10 @@ alignment, as the flags of STRUCTOR_DELETING say.
     compat::set_unwind_tables(fn);
     if (is_nothrow_call(0, d.d1))
       fn->setAttr(nothrow_name_, unit_attr_);
+    /* As every function of C++11 and later (CIRGen's
+       checkIfFunctionMustProgress). */
+    if (!c_language_ && session_.header.standard >= 201103)
+      fn->setAttr(mustprogress_name_, unit_attr_);
     builder_.setInsertionPointToStart(entry);
     slot = builder_.createAlloca(loc(), cir::PointerType::get(param), "this",
                                  alignment_attr(align));
@@ -920,6 +926,8 @@ alignment, as the flags of STRUCTOR_DELETING say.
     } else {
       if (is_nothrow_call(0, d.del))
         attrs.push_back(nothrow_attr());
+      if (replaceable_operator(*d.del, nullptr))
+        attrs.push_back(mlir::NamedAttribute(builtin_name_, unit_attr_));
       d.del->calls.push_back(builder_.createCallOp(loc(), del, args, attrs));
       d.del->referenced = true;
     }

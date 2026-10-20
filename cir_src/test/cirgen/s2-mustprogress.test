@@ -1,0 +1,134 @@
+; S2: every function of C++11 and later is mustprogress (CIRGen's
+; checkIfFunctionMustProgress), unless it contains a trivial infinite loop: a
+; loop whose condition is a constant true (or absent, in a for) and whose body
+; is empty (`while (1) {}`, `for (;;) {}`, `do {} while (1);`), which the
+; forward-progress guarantee does not cover (C++26).  A loop with a body, a
+; false-able condition, or a for with a step is an ordinary loop.  So is a
+; loop whose condition is a comma expression that holds more than the constant
+; (`while ((v, 1)) {}` with a read, `while ((x++, 1)) {}`): clang cannot fold
+; such a condition.  C functions never get it.
+; RUN: cat %S/Inputs/header12_cxx_eh.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: cat %S/Inputs/header.txt %S/s2-mustprogress-c.inc > %t.c.txt
+; RUN: %ecil-asm %t.c.txt -o %t.c.ecil
+; RUN: %edg-cir --emit=cir %t.c.ecil | %FileCheck %s --check-prefix=C --implicit-check-not=mustprogress
+
+; CHECK-DAG: cir.func dso_local @plain() attributes {mustprogress,
+; CHECK-DAG: cir.func dso_local @loop_body() attributes {mustprogress,
+; CHECK-DAG: cir.func dso_local @for_step() attributes {mustprogress,
+; CHECK-DAG: cir.func dso_local @while_trivial() attributes {uwtable
+; CHECK-DAG: cir.func dso_local @for_trivial() attributes {uwtable
+; CHECK-DAG: cir.func dso_local @do_trivial() attributes {uwtable
+; CHECK-DAG: cir.func dso_local @while_read() attributes {mustprogress,
+; CHECK-DAG: cir.func dso_local @while_comma() attributes {mustprogress,
+; C: cir.func {{.*}}@cplain
+
+frame DECLS
+  STR 100 "plain"
+  STR 101 "loop_body"
+  STR 102 "for_step"
+  STR 103 "while_trivial"
+  STR 104 "for_trivial"
+  STR 105 "do_trivial"
+  STR 106 "g"
+  STR 107 "while_read"
+  STR 108 "while_comma"
+  TY_FUNC 21 11 0 []
+  DECL_VAR 300 1 0 1 4 106
+  DECL_FUNC 40 21 0 1 100
+  DECL_FUNC 41 21 0 1 101
+  DECL_FUNC 42 21 0 1 102
+  DECL_FUNC 43 21 0 1 103
+  DECL_FUNC 44 21 0 1 104
+  DECL_FUNC 45 21 0 1 105
+  DECL_FUNC 46 21 0 1 107
+  DECL_FUNC 47 21 0 1 108
+frame REGION
+  FUNC_BEGIN 40 0
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  WHILE_BEGIN
+  CONST_INT 1 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  GREF 300
+  CONST_INT 1 1
+  STORE 0 0
+  BLOCK_END
+  WHILE_END
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  FOR_BEGIN
+  FOR_COND 0
+  FOR_STEP 1
+  GREF 300
+  INC_DEC 2 0
+  DROP
+  FOR_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  FOR_END
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  WHILE_BEGIN
+  CONST_INT 1 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 44 0
+  FOR_BEGIN
+  FOR_COND 0
+  FOR_STEP 0
+  FOR_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  FOR_END
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 45 0
+  DO_BEGIN
+  BLOCK_BEGIN
+  BLOCK_END
+  DO_COND
+  CONST_INT 1 1
+  TO_BOOL
+  DO_END
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 46 0
+  WHILE_BEGIN
+  GREF 300
+  LOAD 0
+  DROP
+  CONST_INT 1 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 47 0
+  WHILE_BEGIN
+  GREF 300
+  INC_DEC 2 0
+  DROP
+  CONST_INT 1 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  RETURN_STMT false
+  FUNC_END 0
+frame END
+  END auto 0

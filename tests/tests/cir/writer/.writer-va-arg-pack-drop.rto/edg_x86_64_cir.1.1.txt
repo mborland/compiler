@@ -1,0 +1,81 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --gcc Test_name.c
+"Test_name.c", line 15: warning: CIR back end: the body of "wrap_sprintf" uses the builtin function __builtin_va_arg_pack, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+"Test_name.c", line 19: warning: CIR back end: the body of "wrap_len" uses the builtin function __builtin_va_arg_pack_len, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+ecil 1.3 features=0x00000012
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 201112 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  TY_INT 4 8 true 1 1
+  TY_PTR 5 4
+  TY_FUNC 6 1 1 [5, 5]
+  STR 5 "wrap_sprintf"
+  DECL_FUNC 7 6 0 2 5 supp{16: true}
+  DECL_FUNC 7 6 0 19 5 supp{16: true}
+  STR 6 "buf"
+  STR 7 "fmt"
+  STR 8 "sprintf"
+  DECL_FUNC 8 6 0 0 8
+  DECL_FUNC 7 6 0 50 5 supp{13: "the builtin function __builtin_va_arg_pack", 16: true}
+frame REGION supp
+  TY_FUNC 9 1 1 [1, 5]
+  STR 9 "wrap_len"
+  DECL_FUNC 10 9 0 2 9 supp{16: true}
+  DECL_FUNC 10 9 0 19 9 supp{16: true}
+  STR 10 "fd"
+  STR 11 "path"
+  DECL_FUNC 10 9 0 50 9 supp{13: "the builtin function __builtin_va_arg_pack_len", 16: true}
+frame REGION
+  TY_FUNC 11 1 0 [5, 1]
+  STR 12 "use"
+  DECL_FUNC 12 11 0 0 12
+  DECL_FUNC 12 11 0 1 12
+  STR 13 "b"
+  STR 14 "x"
+  TY_ARRAY 13 4 3 0
+  STR 15 ".str"
+  DECL_VAR 14 13 2 11 0 15
+  C_STRING 13 "%d\x00"
+  VAR_INIT 14
+  FUNC_BEGIN 12 0
+  PARAM 1 5 5 13 0
+  PARAM 2 1 1 14 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  GREF 14
+  ADDR
+  ADDR_OFFSET 5 0
+  LREF 2
+  LOAD 0
+  CALL 7 6 3 1
+  CONST_INT 1 1
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  CALL 10 9 3 1
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame END
+  END 5 0

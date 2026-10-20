@@ -1,0 +1,9 @@
+; Lazy emission against eager emission over the streams of the other cirgen
+; tests (virtual functions and thunks, virtual bases and construction
+; vtables, static locals, comdat groups, exceptions, member pointers, RTTI,
+; structors, retracted and dropped definitions): at -O0 and -O2 the assembly
+; is byte for byte the same, and the exit status agrees (a deferred body that
+; is never replayed may hide an emitter-only error: lazy succeeds where eager
+; fails, never the other way round).  More than ten of the streams defer a
+; body.
+; RUN: %python %scripts/lazy_identity_tests.py %S %ecil-asm %edg-cir %t.d

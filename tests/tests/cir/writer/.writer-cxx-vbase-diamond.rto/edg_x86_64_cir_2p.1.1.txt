@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -14,12 +14,12 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_VOID 4
   STR 5 "V"
   TY_RECORD_DECL 5 0 5
   TY_PTR 6 5
-  TY_FUNC 7 4 0 [6, 1]
+  TY_FUNC 7 4 0 [6, 1] supp{15: 2}
   TY_VPTR 8
   STR 6 "v"
   TY_RECORD_BODY 5 16 12 8 12 2
@@ -38,10 +38,10 @@ frame REGION
   DECL_FUNC 10 7 3 67 9
   STR 10 "this"
   STR 11 "x"
-  TY_FUNC 11 1 0 [6]
+  TY_FUNC 11 1 0 [6] supp{15: 2}
   STR 12 "_ZN1V1fEv"
   DECL_FUNC 12 11 0 2 12
-  TY_FUNC 13 4 0 [6]
+  TY_FUNC 13 4 0 [6] supp{15: 2}
   STR 13 "_ZN1VD1Ev"
   DECL_FUNC 14 13 0 130 13
   STR 14 "_ZN1VD2Ev"
@@ -60,7 +60,7 @@ frame REGION
   TY_PTR 21 20
   TY_FUNC 22 1 1 [21]
   STR 17 "printf"
-  DECL_FUNC 23 22 0 0 17
+  DECL_FUNC 23 22 0 256 17
   TY_ARRAY 24 20 7 0
   STR 18 ".str"
   DECL_VAR 25 24 2 11 0 18
@@ -125,11 +125,11 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 20 "L"
   TY_RECORD_DECL 28 0 20
   TY_PTR 29 28
-  TY_FUNC 30 4 0 [29]
+  TY_FUNC 30 4 0 [29] supp{15: 2}
   STR 21 "l"
   TY_RECORD_BODY 28 32 28 8 12 3
   REC_FIELD 8 0 nil nil nil 1
@@ -146,7 +146,7 @@ frame REGION
   STRUCTOR 31 32 2
   DECL_FUNC 31 30 3 67 23
   DECL_FUNC 32 30 3 67 24
-  TY_FUNC 33 1 0 [29]
+  TY_FUNC 33 1 0 [29] supp{15: 2}
   STR 25 "_ZN1L1fEv"
   DECL_FUNC 34 33 0 2 25
   STR 26 "_ZN1LD1Ev"
@@ -272,11 +272,11 @@ frame REGION
   VTT_ADDR 0 nil
   CALL 36 30 1 32
   FUNC_END 1
-frame REGION
+frame REGION supp
   STR 31 "R"
   TY_RECORD_DECL 41 0 31
   TY_PTR 42 41
-  TY_FUNC 43 4 0 [42]
+  TY_FUNC 43 4 0 [42] supp{15: 2}
   STR 32 "r"
   TY_RECORD_BODY 41 32 28 8 12 3
   REC_FIELD 8 0 nil nil nil 1
@@ -395,11 +395,11 @@ frame REGION
   VTT_ADDR 0 nil
   CALL 47 43 1 32
   FUNC_END 1
-frame REGION
+frame REGION supp
   STR 41 "D"
   TY_RECORD_DECL 51 0 41
   TY_PTR 52 51
-  TY_FUNC 53 4 0 [52]
+  TY_FUNC 53 4 0 [52] supp{15: 2}
   STR 42 "d"
   TY_RECORD_BODY 51 48 44 8 12 4
   REC_FIELD 28 0 nil nil nil 17
@@ -417,7 +417,7 @@ frame REGION
   STRUCTOR 54 55 2
   DECL_FUNC 54 53 3 67 44
   DECL_FUNC 55 53 3 67 45
-  TY_FUNC 56 1 0 [52]
+  TY_FUNC 56 1 0 [52] supp{15: 2}
   STR 46 "_ZN1D1fEv"
   DECL_FUNC 57 56 0 2 46
   STR 47 "_ZN1DD1Ev"
@@ -702,14 +702,14 @@ frame REGION
   LREF 5
   LREF 4
   LOAD 0
-  CALL 68 67 1 0
+  CALL 68 67 1 64
   STORE 2 0
   CLEANUP_BEGIN 2 nil 1
   LREF 5
   LOAD 0
   LREF 4
   LOAD 0
-  CALL 18 17 2 0
+  CALL 18 17 2 64
   CLEANUP_BODY
   LREF 5
   LOAD 0

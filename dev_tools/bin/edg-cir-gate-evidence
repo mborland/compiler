@@ -21,6 +21,11 @@ skipped when the command is repeated with --out of an earlier run (resume), and
 --only/--skip select steps. At the end a PASS/FAIL table is printed and written
 to `summary.md`.
 
+Milestone gates: `--milestone` runs every step (--with-cpp and --with-m4),
+so a full gate, the M5 gate in particular, always runs lazy-identity (lazy
+against eager emission over both corpora and the pinned units) with the C++,
+ABI, EH, optimization, attribute and chunking steps.
+
 Lean gates: `--lean AREAS` (a comma separated list of the areas that the
 change set touches) runs only the steps that those areas can affect, prints
 the chosen set first and records every other step as SKIPPED with the reason
@@ -67,6 +72,15 @@ in the table; `--steps-for AREAS` only prints the set and exits.  The mapping
              toolchain,library (the library adds modes and cpp-modes)
   shared-src a change in a src/ file that every back end compiles (not
              CIR-gated): identity, isolation, day
+
+Six areas are declared by the slices that need them and are not derived from
+files (but the known-differences file of attr-diff maps to `attr`): `lazy`
+(lazy-identity: S1, lazy emission), `speed` (perf, rss, stress, cpp-stress,
+m4-stress, crash-sweep: S1 and S3 change memory, speed and recursion),
+`crashes` (crash-sweep: S2), `attr` (attr-diff and the codequality report:
+S2, optimization facts), `chunk` (chunk-identity, chunk-rss,
+slow-below-threshold: S3, chunked lowering) and `names` (names-check: the full
+late-name check of the writer on the large units, for S4 checkpoints).
 
 The cheap, relevant steps belong to the areas; the expensive ones
 (crash-sweep, perf, rss, stress, cpp-stress, m4-stress) run at toolchain and
@@ -137,7 +151,11 @@ Steps (names for --only/--skip):
              edg-cir-summary); a LIB_CRASH never is), no KILLED/TIMEOUT test,
              and
              no difference from the recorded edg_x86_64_cir expectations
-             (unless --allow-status-changes)
+             (unless --allow-status-changes), and no PASS->not PASS case
+             against the statuses of --status-baseline (default the M5p
+             gate's) that tests/.edgy/filters/cir-status-triage.txt does not
+             list with a reason (a line for a case that did not regress is
+             stale and fails); cpp-corpus has the same check
   modes      in-process and two-process output identical over the corpus
   stress     edg-cir-stress (deep nesting through the two-process path)
   abi-diff   (--with-m4 or --only) edg-cir-abi-diff batch --vbases over
@@ -175,6 +193,59 @@ Steps (names for --only/--skip):
              cases of M4_STRESS_CASES (the sizes of research/m4_stress.md):
              passes iff every run succeeds within its time and memory limit
   tools-test the self-tests of the tools (dev_tools/bin/edg-cir-tools-test)
+  attr-diff  (--with-m4 or --only) edg-cir-attr-diff at -O0 and -O2 (ours
+             without the LLVM passes) over the C and C++ smoke lists and the
+             pinned real-world units, against the known-differences file
+             tests/.edgy/filters/cir-attr-known.txt (a comment above every
+             entry and a reason in it): passes iff nothing is unexplained in
+             the high-value attributes (nounwind, noundef, nonnull,
+             dereferenceable, align, memory, mustprogress, noreturn, builtin,
+             nobuiltin, inlinehint, alwaysinline; the other differences, the
+             call-set differences, norecurse, cold and the rest, are the
+             residue: counted by category and listed in residue.txt, not
+             gated), symbols were compared at every level, no pinned unit is
+             missing
+             (each compares symbols at each level), our share of definitions
+             and of declarations with nounwind on the pinned units is at least
+             clangir's, and no known entry is stale
+  codequality  (--with-m4 or --only) edg-cir-codequality: ours against clang,
+             clangir and g++ on the 10 kernels at -O2 (instructions and
+             .text); a report (geometric means in the detail), gated only
+             for the setup
+  chunk-identity  (--with-m4 or --only) edg-cir-chunk-identity: chunked
+             lowering forced to one function per chunk against unchunked at
+             -O0 over both corpora and on the pinned units at -O0 and -O2:
+             same exit status, diagnostics and assembly symbol by symbol, and
+             non-vacuous (the pinned units lower in 2 chunks or more)
+  chunk-rss  (--with-m4 or --only) edg-cir-chunk-rss: peak memory of edg-cir
+             on c3000, c6000, c12000 and cxx6000 (minimum of 3 runs) by
+             default, unchunked and with chunking forced on; passes iff the
+             forced peak of c12000 is at most --chunk-target (0.55) of the
+             baseline's (--chunk-baseline, the M5a curve) and every forced run
+             chunked; the pinned units are reported
+  names-check  (--with-m4 or --only) edg-cir-names-check: the front end
+             (the checking build build/gcc-cir) on the pinned real-world units
+             and generated 6000-function C and C++ files with
+             ECIL_CHECK_ALL_NAMES=1, which makes the writer's late-name check
+             look at every function name where it samples: no name changes,
+             the exit status and the stream are those of the run without the
+             variable
+  slow-below-threshold  (--with-m4 or --only) edg-cir-chunk-ir: the
+             instructions of edg-cir below the chunking threshold (both smoke
+             lists and a generated 500-function file) with the default
+             options equal those with chunking disabled
+  lazy-identity  (--with-m4 or --only) edg-cir-lazy-identity: lazy against
+             eager body emission (`edg-cir --eager-bodies`) at -O0 over the
+             pinned real-world units and both corpora: the same exit status
+             and diagnostics (emitter-only diagnostics of dropped bodies in
+             the eager run are findings, listed in eager-only.txt with their
+             diagnostics; they fail unless the case is in
+             tests/.edgy/filters/cir-lazy-triage.txt with a reason, and
+             always on a pinned unit), the same assembly symbol by symbol, the
+             oracle (nothing that lazy emission dropped is defined in the
+             eager assembly) and non-vacuity (deferred, replayed and dropped
+             bodies above 0 on every pinned unit, read from the library's
+             --stats notes: the docstring of the tool has their spelling)
   cpp-smoke  (--with-cpp or --only) cir-cpp-smoke through --cpp-configs
              (--types rp): buckets, pass rate per --c++NN mode, failures by
              C++ feature; fails on a crash, and (--cpp-smoke-all-pass) on any
@@ -251,7 +322,12 @@ Steps (names for --only/--skip):
              --perf-max-regression PERCENT (default
              DEFAULT_PERF_MAX_REGRESSION) makes an increase of an
              instruction count beyond it a failure; a baseline row that the
-             new run lacks (or has as 0) fails too
+             new run lacks (or has as 0) fails too.  --perf-realworld pinned
+             adds the pinned real-world units (their library and front end
+             instructions join the rows above; --boost-include for Boost)
+             and --perf-targets s1 the S1 targets (library instructions of
+             every pinned unit at most 70%, of the generated C++ unit at -O0
+             at most 90% of the baseline: edg-cir-perf --targets)
 
 For the step asm-diff, the baseline of a commit is made with this tree's
 scripts on a tree of that commit (a `git archive` of it will do):
@@ -296,11 +372,15 @@ STEPS = ('build', 'identity', 'isolation', 'smoke', 'cir-suite', 'corpus',
          'cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
          'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
          'cpp-asm-diff', 'crash-sweep', 'abi-diff', 'symbols', 'mixed-tu',
-         'eh-probes', 'm4-stress', 'opt-corpus', 'tools-test')
+         'eh-probes', 'm4-stress', 'opt-corpus', 'tools-test',
+         'lazy-identity', 'attr-diff', 'codequality', 'chunk-identity',
+         'chunk-rss', 'slow-below-threshold', 'names-check')
 # The steps of gate M4 (the ABI and EH harnesses); they run only with
 # --with-m4 or --only.
 M4_STEPS = ('abi-diff', 'symbols', 'mixed-tu', 'eh-probes', 'm4-stress',
-            'opt-corpus')
+            'opt-corpus', 'lazy-identity', 'attr-diff', 'codequality',
+            'chunk-identity', 'chunk-rss', 'slow-below-threshold',
+            'names-check')
 # The steps of the C++ milestones; they run only with --with-cpp or --only.
 CPP_STEPS = ('cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
              'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
@@ -333,6 +413,14 @@ AREA_STEPS = {
                 'cpp-stress', 'crash-sweep', 'perf', 'rss', 'stress',
                 'release-smoke'),
   'shared-src': ('identity', 'isolation', 'day'),
+  # Declared by the slices that need them, not derived from files:
+  'lazy': ('lazy-identity',),
+  'speed': ('perf', 'rss', 'stress', 'cpp-stress', 'm4-stress',
+            'crash-sweep'),
+  'crashes': ('crash-sweep',),
+  'attr': ('attr-diff', 'codequality'),
+  'chunk': ('chunk-identity', 'chunk-rss', 'slow-below-threshold'),
+  'names': ('names-check',),
 }
 # Why the steps that a new toolchain pin does not need are skipped (used
 # when `toolchain` is the only area of a lean gate).
@@ -384,6 +472,8 @@ AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
   ('dev_tools/bin/edg-cir-summary', ('tooling', 'summary')),
   ('dev_tools/', ('tooling',)),
   ('tests/.edgy/filters/cir-opt-triage.txt', ('tests-triage',)),
+  ('tests/.edgy/filters/cir-attr-known.txt', ('attr',)),
+  ('tests/.edgy/filters/cir-lazy-triage.txt', ('lazy',)),
   ('tests/.edgy/filters/cir-excused-crashes.txt', ('tests-crashes',)),
   ('tests/.edgy/filters/cir-*-smoke.txt', ('tests-smoke',)),
   # The edgy configuration and the tests of the primary suites reach the
@@ -413,6 +503,9 @@ CPP_STRESS_ASAN_CASES = ('cxx_locals:500 cxx_temps:1000 cxx_meminit:500 '
 PRESETS = ('linux-gcc-debug', 'linux-gcc-release', 'linux-clang-debug',
            'linux-i686-gcc-debug')
 BUILD_JOBS = 12  # overridden by --jobs
+# The jobs of slow-below-threshold: it counts instructions under valgrind and
+# flaked at 16 under load (the edg-cir runs time out), so it is not run wide.
+SLOW_JOBS = 2
 
 
 class Context:
@@ -444,7 +537,9 @@ STEP_TIMEOUTS = {
   'isolation': 900, 'writer-stress': 1800, 'cpp-writer-stress': 1800,
   'cpp-stress': 1800, 'cpp-stress-asan': 3600, 'abi-diff': 1800,
   'symbols': 1800, 'mixed-tu': 1800, 'eh-probes': 1800, 'm4-stress': 3600,
-  'opt-corpus': 10800,
+  'opt-corpus': 10800, 'lazy-identity': 3600, 'attr-diff': 5400,
+  'codequality': 3600, 'chunk-identity': 5400, 'chunk-rss': 3600,
+  'slow-below-threshold': 3600, 'names-check': 5400,
   'poison': 3600, 'release-smoke': 3600, 'crash-sweep': 5400
 }
 
@@ -684,6 +779,319 @@ def step_isolation(ctx: Context) -> Tuple[bool, str]:
   return code == 0, f"{passes} checks passed, {fails} failed"
 
 
+LAZY_TRIAGE = 'tests/.edgy/filters/cir-lazy-triage.txt'
+ATTR_KNOWN = 'tests/.edgy/filters/cir-attr-known.txt'
+ATTR_PROBE_FILTERS = ('@tests/.edgy/filters/cir-c-smoke.txt',
+                      '@tests/.edgy/filters/cir-cpp-smoke.txt')
+
+
+def judge_attr_diff(runs: Dict[str, Tuple[int, Optional[dict]]],
+                    entries: List[Tuple[str, str, str, str]]
+                    ) -> Tuple[bool, str]:
+  '''The rule of the step attr-diff: `runs` has, for the probe set and the
+  pinned units, the exit status of edg-cir-attr-diff and its JSON.  Every run
+  must exit 0 (no unexplained difference, symbols compared at every level, no
+  pinned unit missing, nounwind coverage at clangir's share on the pinned
+  units), ours must have run without the LLVM passes, and every entry of the
+  known-differences file must have explained something in one of the runs (a
+  stale entry fails).'''
+  problems: List[str] = []
+  parts: List[str] = []
+  used: set = set()
+  explained = unexplained = residue = 0
+  residue_kinds: Dict[str, int] = {}
+  for name, (code, data) in runs.items():
+    if data is None:
+      problems.append(f"{name}: no result (exit status {code})")
+      continue
+    compared = data['compared']
+    parts.append(f"{name}: " + ', '.join(
+      f"-O{l} {c} symbols" for l, c in sorted(compared.items())))
+    explained += data['explained']
+    unexplained += len(data['unexplained'])
+    used.update(data['known_used'])
+    for key, count in data.get('residue', {}).items():
+      residue += count
+      kind = key.split('|', 1)[1]
+      residue_kinds[kind] = residue_kinds.get(kind, 0) + count
+    if code != 0:
+      detail = []
+      if data['unexplained']:
+        detail.append(f"{len(data['unexplained'])} unexplained")
+      if data['uncompared']:
+        detail.append(f"{data['uncompared'][0]}")
+      if data['nounwind_below']:
+        detail.append('nounwind: ' + data['nounwind_below'][0])
+      if any(c == 0 for c in compared.values()):
+        detail.append('nothing compared')
+      problems.append(f"{name}: exit status {code}"
+                      f"{' (' + '; '.join(detail) + ')' if detail else ''}")
+    if not data.get('no_llvm_passes'):
+      problems.append(f"{name}: edg-cir ran with its LLVM passes")
+  stale = [' | '.join(e) for e in entries if ' | '.join(e) not in used]
+  if stale:
+    problems.append(f"{len(stale)} stale known-difference entr"
+                    f"{'y' if len(stale) == 1 else 'ies'} (it explains "
+                    f"nothing): {stale[0]}")
+  pinned = (runs.get('pinned') or (0, None))[1]
+  coverage = ''
+  if pinned:
+    nounwind = pinned['nounwind'].get('0', {})
+    cells = []
+    for kind in ('define', 'declare', 'call'):
+      n, mine, theirs = nounwind.get(kind, [0, 0, 0])
+      if n:
+        cells.append(f"{kind} {100.0 * mine / n:.0f}% vs "
+                     f"{100.0 * theirs / n:.0f}%")
+    coverage = '; nounwind (ours vs clangir, -O0): ' + ', '.join(cells)
+  top = ', '.join(f"{k} {v}" for k, v in sorted(
+    residue_kinds.items(), key = lambda item: -item[1])[:4])
+  detail = ('; '.join(parts) + f"; {explained} explained by {len(used)} of "
+            f"{len(entries)} known entries, {unexplained} unexplained in the "
+            f"gated attributes; residue (not gated) {residue}"
+            f"{' (' + top + ' ...)' if top else ''}" + coverage)
+  if problems:
+    return False, 'PROBLEMS: ' + ' | '.join(problems[:5]) + ' | ' + detail
+  return True, detail
+
+
+def step_attr_diff(ctx: Context) -> Tuple[bool, str]:
+  directory = ctx.out / 'attr-diff'
+  directory.mkdir(parents = True, exist_ok = True)
+  out = rel(ctx, directory)
+  known = shlex.quote(ATTR_KNOWN)
+  common = (f"python3 dev_tools/bin/edg-cir-attr-diff --levels 0,2 "
+            f"--known {known} --require-no-llvm-passes")
+  filters = ' '.join(f"--filter {shlex.quote(f)}"
+                     for f in ATTR_PROBE_FILTERS)
+  boost = shlex.quote(ctx.args.boost_include)
+  in_cir_env(ctx, 'attr-diff',
+             f"{common} {filters} --json {out}/probe.json "
+             f"--residue {out}/probe-residue.txt "
+             f"> {out}/probe.txt 2>&1; echo probe exit $?")
+  in_cir_env(ctx, 'attr-diff',
+             f"{common} --units pinned --system-headers "
+             f"--boost-include {boost} --require-compared "
+             f"--nounwind-target --json {out}/pinned.json "
+             f"--residue {out}/pinned-residue.txt "
+             f"> {out}/pinned.txt 2>&1; echo pinned exit $?")
+  # The residue (the differences that are not gated) of both runs, for the
+  # handoff.
+  with open(directory / 'residue.txt', 'w') as merged:
+    for name in ('probe', 'pinned'):
+      path = directory / f"{name}-residue.txt"
+      merged.write(f"== {name}\n" + (path.read_text() if path.exists()
+                                      else '(no residue file)\n'))
+  runs: Dict[str, Tuple[int, Optional[dict]]] = {}
+  for name in ('probe', 'pinned'):
+    text = _read_step_output(ctx, 'attr-diff', f"{name}.txt")
+    code = 2
+    path = directory / f"{name}.json"
+    data = json.loads(path.read_text()) if path.exists() else None
+    if data is not None:
+      code = data['exit']
+    elif 'not valid' in text or 'no such source' in text:
+      return False, f"{name}: " + text.strip().splitlines()[0][:200]
+    runs[name] = (code, data)
+  tool = _load_tool('edg-cir-attr-diff')
+  known_path = ctx.tree / ATTR_KNOWN
+  entries: List[Tuple[str, str, str, str]] = []
+  if known_path.exists():
+    entries, problems = tool.validate_known(str(known_path))
+    if problems:
+      return False, 'the known-differences file is not valid: ' + problems[0]
+  return judge_attr_diff(runs, entries)
+
+
+def judge_codequality(text: str, code: int, results: Optional[dict]
+                      ) -> Tuple[bool, str]:
+  '''The rule of the step codequality (a report: only the setup is gated):
+  edg-cir-codequality exits 0 (it exits 1 if CIR built no kernel, 2 for a
+  setup problem).  The detail has the geometric mean of ours against clang
+  over the kernels that both built.'''
+  match = re.search(r'^(\d+) kernel\(s\); CIR built (\d+)', text, re.M)
+  if code != 0 or not match or results is None:
+    return False, f"exit status {code}; " + (
+      match.group(0) if match else 'no kernel table')
+  cells: Dict[str, List[float]] = {'ir': [], 'text': []}
+  differs: List[str] = []
+  for kernel, rows in sorted(results.items()):
+    ours, clang = rows.get('ours', {}), rows.get('clang', {})
+    if 'error' in ours or 'error' in clang:
+      continue
+    for field in cells:
+      if ours.get(field) and clang.get(field):
+        cells[field].append(ours[field] / clang[field])
+    if clang.get('output') and ours.get('output') != clang.get('output'):
+      differs.append(kernel)
+
+  def geomean(values: List[float]) -> str:
+    if not values:
+      return 'n/a'
+    product = 1.0
+    for value in values:
+      product *= value
+    return f"x{product ** (1.0 / len(values)):.2f}"
+
+  detail = (f"{match.group(1)} kernels, CIR built {match.group(2)}; ours "
+            f"against clang (geometric mean): instructions "
+            f"{geomean(cells['ir'])}, .text {geomean(cells['text'])}"
+            f"{'; output DIFFERS: ' + ', '.join(differs) if differs else ''}"
+            f" (a report, not gated)")
+  return True, detail
+
+
+def step_codequality(ctx: Context) -> Tuple[bool, str]:
+  directory = ctx.out / 'codequality'
+  directory.mkdir(parents = True, exist_ok = True)
+  out = rel(ctx, directory)
+  code = in_cir_env(ctx, 'codequality',
+                    f"python3 dev_tools/bin/edg-cir-codequality "
+                    f"--json {out}/codequality.json > {out}/report.txt 2>&1")
+  text = _read_step_output(ctx, 'codequality', 'report.txt')
+  path = directory / 'codequality.json'
+  return judge_codequality(text, code, json.loads(path.read_text())
+                           if path.exists() else None)
+
+
+def step_chunk_identity(ctx: Context) -> Tuple[bool, str]:
+  (ctx.out / 'chunk-identity').mkdir(parents = True, exist_ok = True)
+  out = rel(ctx, ctx.out / 'chunk-identity')
+  boost = shlex.quote(ctx.args.boost_include)
+  code = in_cir_env(
+    ctx, 'chunk-identity',
+    f"python3 dev_tools/bin/edg-cir-chunk-identity -j {BUILD_JOBS} "
+    f"--boost-include {boost} --json {out}/verdicts.json "
+    f"> {out}/report.txt 2>&1")
+  return judge_lazy_identity(
+    _read_step_output(ctx, 'chunk-identity', 'report.txt'), code)
+
+
+def judge_chunk_rss(text: str, code: int) -> Tuple[bool, str]:
+  '''The rule of the step chunk-rss: edg-cir-chunk-rss exits 0 and ends
+  with `RESULT: PASS`; the detail is its target lines and its curve rows.'''
+  result = [l for l in text.splitlines() if l.startswith('RESULT:')]
+  targets = [l.strip() for l in text.splitlines() if ' target ' in l]
+  rows = [l.split() for l in text.splitlines()
+          if re.match(r'^(c|cxx)\d+\s', l)]
+  curve = ', '.join(f"{r[0]} " + '/'.join(r[1:4]) for r in rows)
+  passed = code == 0 and bool(result) and result[-1] == 'RESULT: PASS' and \
+    bool(rows)
+  fails = [l.strip() for l in text.splitlines() if l.startswith('FAIL')]
+  detail = (('; '.join(targets) if targets else 'no target') +
+            (f" | curve MB (default/unchunked/forced): {curve}"
+             if curve else ''))
+  if not passed:
+    detail = f"exit status {code}; " + '; '.join(fails[:3]) + ' | ' + detail
+  return passed, detail
+
+
+def step_chunk_rss(ctx: Context) -> Tuple[bool, str]:
+  directory = ctx.out / 'chunk-rss'
+  directory.mkdir(parents = True, exist_ok = True)
+  baseline = Path(ctx.args.chunk_baseline).expanduser()
+  if not baseline.exists():
+    return False, f"the curve baseline {baseline} does not exist"
+  shutil.copy2(baseline, directory / 'baseline.json')
+  out = rel(ctx, directory)
+  boost = shlex.quote(ctx.args.boost_include)
+  code = in_cir_env(
+    ctx, 'chunk-rss',
+    f"python3 dev_tools/bin/edg-cir-chunk-rss --baseline {out}/baseline.json "
+    f"--target c12000={ctx.args.chunk_target} --pinned "
+    f"--boost-include {boost} --json {out}/curve.json "
+    f"> {out}/report.txt 2>&1")
+  return judge_chunk_rss(_read_step_output(ctx, 'chunk-rss', 'report.txt'),
+                         code)
+
+
+def judge_slow_below_threshold(text: str, code: int) -> Tuple[bool, str]:
+  '''The rule of the step slow-below-threshold: edg-cir-chunk-ir exits 0
+  and ends with `RESULT: PASS`; the detail is its first two lines.'''
+  lines = [l.strip() for l in text.splitlines()]
+  result = [l for l in lines if l.startswith('RESULT:')]
+  summary = [l for l in lines if re.match(r'^\d+ streams:', l) or
+             l.startswith('largest excess')]
+  fails = [l for l in lines if l.startswith('FAIL')]
+  passed = code == 0 and bool(result) and result[-1] == 'RESULT: PASS' and \
+    bool(summary)
+  detail = ' | '.join(summary) if summary else 'no streams were counted'
+  if not passed:
+    detail = f"exit status {code}; " + '; '.join(fails[:3]) + ' | ' + detail
+  return passed, detail
+
+
+def step_slow_below_threshold(ctx: Context) -> Tuple[bool, str]:
+  (ctx.out / 'slow-below-threshold').mkdir(parents = True, exist_ok = True)
+  out = rel(ctx, ctx.out / 'slow-below-threshold')
+  code = in_cir_env(
+    ctx, 'slow-below-threshold',
+    f"python3 dev_tools/bin/edg-cir-chunk-ir -j {SLOW_JOBS} "
+    f"--json {out}/verdicts.json > {out}/report.txt 2>&1")
+  return judge_slow_below_threshold(
+    _read_step_output(ctx, 'slow-below-threshold', 'report.txt'), code)
+
+
+def judge_names_check(text: str, code: int) -> Tuple[bool, str]:
+  '''The rule of the step names-check: edg-cir-names-check exits 0 and ends
+  with `RESULT: PASS`; the detail is its first line (the units checked).'''
+  lines = [l.strip() for l in text.splitlines()]
+  result = [l for l in lines if l.startswith('RESULT:')]
+  summary = [l for l in lines if re.match(r'^\d+ unit\(s\)', l)]
+  fails = [l for l in lines if l.startswith('FAIL')]
+  passed = code == 0 and bool(result) and result[-1] == 'RESULT: PASS' and \
+    bool(summary)
+  detail = summary[0] if summary else 'no unit was checked'
+  if not passed:
+    detail = f"exit status {code}; " + '; '.join(fails[:3]) + ' | ' + detail
+  return passed, detail
+
+
+def step_names_check(ctx: Context) -> Tuple[bool, str]:
+  (ctx.out / 'names-check').mkdir(parents = True, exist_ok = True)
+  out = rel(ctx, ctx.out / 'names-check')
+  boost = shlex.quote(ctx.args.boost_include)
+  code = in_cir_env(
+    ctx, 'names-check',
+    f"python3 dev_tools/bin/edg-cir-names-check -j {BUILD_JOBS} "
+    f"--boost-include {boost} --json {out}/units.json "
+    f"> {out}/report.txt 2>&1")
+  return judge_names_check(
+    _read_step_output(ctx, 'names-check', 'report.txt'), code)
+
+
+def judge_lazy_identity(text: str, code: int) -> Tuple[bool, str]:
+  '''The rule of the step lazy-identity: the tool exits 0 and ends with
+  `RESULT: PASS`; the detail is its line per set (streams, identical,
+  eager-only, different, counters).'''
+  sets = [l.strip() for l in text.splitlines()
+          if re.match(r'^[\w-]+: \d+ streams', l)]
+  fails = [l.strip() for l in text.splitlines()
+           if l.strip().startswith('FAIL ')]
+  result = [l for l in text.splitlines() if l.startswith('RESULT:')]
+  passed = code == 0 and bool(result) and result[-1] == 'RESULT: PASS' and \
+    bool(sets) and not fails
+  detail = ' | '.join(sets) if sets else 'no set was checked'
+  if not passed:
+    detail = ('exit status %d; ' % code) + '; '.join(fails[:3]) + ' | ' + \
+      detail
+  return passed, detail
+
+
+def step_lazy_identity(ctx: Context) -> Tuple[bool, str]:
+  (ctx.out / 'lazy-identity').mkdir(parents = True, exist_ok = True)
+  out = rel(ctx, ctx.out / 'lazy-identity')
+  boost = shlex.quote(ctx.args.boost_include)
+  code = in_cir_env(
+    ctx, 'lazy-identity',
+    f"python3 dev_tools/bin/edg-cir-lazy-identity -j {BUILD_JOBS} "
+    f"--boost-include {boost} --json {out}/verdicts.json "
+    f"--eager-only-file {out}/eager-only.txt "
+    f"--triage {shlex.quote(LAZY_TRIAGE)} > {out}/report.txt 2>&1")
+  text = _read_step_output(ctx, 'lazy-identity', 'report.txt')
+  return judge_lazy_identity(text, code)
+
+
 def step_tools_test(ctx: Context) -> Tuple[bool, str]:
   code = in_cir_env(ctx, 'tools-test',
                     'python3 dev_tools/bin/edg-cir-tools-test')
@@ -691,6 +1099,14 @@ def step_tools_test(ctx: Context) -> Tuple[bool, str]:
   match = re.search(r'^Ran (\d+) tests?', text, re.M)
   return (code == 0 and bool(match),
           f"{match.group(1) if match else 'no'} self-tests ran")
+
+
+def default_steps(with_cpp: bool, with_m4: bool) -> List[str]:
+  '''The steps of a run without --only: the base ones, the C++ ones with
+  --with-cpp and the M4 ones (ABI, EH, optimization, lazy emission, attribute
+  and chunking steps) with --with-m4; --milestone is both.'''
+  return [s for s in STEPS if (with_cpp or s not in CPP_STEPS) and
+          (with_m4 or s not in M4_STEPS) and s not in LONG_STEPS]
 
 
 def lean_steps(areas: List[str]) -> Tuple[List[str], Dict[str, str]]:
@@ -873,6 +1289,120 @@ def step_cir_suite(ctx: Context) -> Tuple[bool, str]:
     if changes else '')
 
 
+STATUS_TRIAGE = 'tests/.edgy/filters/cir-status-triage.txt'
+
+
+def read_status_triage(path: Path) -> Tuple[Dict[Tuple[str, str, str], str],
+                                            List[str]]:
+  '''(the triaged cases, the problems) of the status triage file: one line
+  `<test path> | <variant> | <config or *> | <reason>` per PASS->not PASS
+  case of the corpus steps that is accepted; the reason has at least 8
+  characters and is no placeholder, and no case is listed twice.'''
+  table: Dict[Tuple[str, str, str], str] = {}
+  problems: List[str] = []
+  if not path.exists():
+    return table, problems
+  for number, raw in enumerate(path.read_text().splitlines(), 1):
+    line = raw.strip()
+    if not line or line.startswith('#'):
+      continue
+    parts = [p.strip() for p in line.split('|', 3)]
+    where = f"{path}:{number}"
+    if len(parts) != 4:
+      problems.append(f"{where}: not `path | variant | config | reason`")
+    elif parts[3].lower() in ('', 'none', 'todo', '-', '?', 'tbd') or \
+        len(parts[3]) < 8:
+      problems.append(f"{where}: no real reason ({parts[3]!r})")
+    elif (parts[0], parts[1], parts[2]) in table:
+      problems.append(f"{where}: listed twice")
+    else:
+      table[(parts[0], parts[1], parts[2])] = parts[3]
+  return table, problems
+
+
+def status_regressions(before: List[dict], after: List[dict]
+                       ) -> List[Tuple[str, str, str, str]]:
+  '''The cases that pass in `before` and do not pass in `after` (the result
+  lists of edg-cir-summary, matched by test path, variant and type): (path,
+  variant, status before, status after).  A case that only the baseline or
+  only the new run has is not a regression of its own.'''
+  old = {(r['path'], r.get('variant', ''), r.get('test_type', '')): r
+         for r in before}
+  found = []
+  for r in after:
+    key = (r['path'], r.get('variant', ''), r.get('test_type', ''))
+    base = old.get(key)
+    if base and base['bucket'] == 'PASS' and r['bucket'] != 'PASS':
+      found.append((key[0], key[1], base['status'], r['status']))
+  return sorted(found)
+
+
+def judge_status_regressions(label: str, before: List[dict],
+                             after: List[dict], config: str,
+                             triage: Dict[Tuple[str, str, str], str]
+                             ) -> Tuple[List[str], str]:
+  '''(problems, a note): every PASS->not PASS case against the baseline
+  statuses is a problem unless the triage file lists it (for its config or
+  `*`); a triage line for a case of this run that did not regress is stale.
+  `label` names the corpus in the messages.'''
+  problems: List[str] = []
+  if not before:
+    return [f"{label}: the baseline has no results for {config}"], ''
+  found = status_regressions(before, after)
+  accepted = 0
+  used = set()
+  for path, variant, was, now in found:
+    key = next((k for k in ((path, variant, config), (path, variant, '*'))
+                if k in triage), None)
+    if key:
+      used.add(key)
+      accepted += 1
+    else:
+      problems.append(f"{label}: {path} [{variant}] {was} -> {now}")
+  for key in triage:
+    if key[2] in (config, '*') and key not in used:
+      known = {(r['path'], r.get('variant', '')) for r in after}
+      if (key[0], key[1]) in known:
+        problems.append(f"{label}: stale status triage line {key[0]} "
+                        f"[{key[1]}]: the case did not regress")
+  return problems, (f"{len(found)} PASS->not PASS against the baseline "
+                    f"({accepted} triaged)")
+
+
+def load_status_baseline(ctx: Context, prefix: str, config: str
+                         ) -> Optional[List[dict]]:
+  '''The results of a corpus in the baseline directory (--status-baseline:
+  <prefix>_<config>.json, the summary JSON with its one config key); None if
+  the option is off (empty).'''
+  if not ctx.args.status_baseline:
+    return None
+  directory = Path(ctx.args.status_baseline).expanduser()
+  path = directory / f"{prefix}_{config}.json"
+  if not path.exists():
+    return []
+  data = json.loads(path.read_text())
+  return data.get(config) or next(iter(data.values()), [])
+
+
+def status_check(ctx: Context, step: str, prefix: str, config: str,
+                 results: List[dict]) -> Tuple[List[str], str]:
+  '''The status regression check of a corpus step against the baseline
+  statuses and the triage file (empty problems if the check is off).'''
+  before = load_status_baseline(ctx, prefix, config)
+  if before is None:
+    return [], ''
+  triage, triage_problems = read_status_triage(ctx.tree / STATUS_TRIAGE)
+  if triage_problems:
+    return triage_problems, ''
+  problems, note = judge_status_regressions(step, before, results, config,
+                                            triage)
+  if problems:
+    (ctx.out / step).mkdir(parents = True, exist_ok = True)
+    with open(ctx.out / step / 'status-regressions.txt', 'a') as handle:
+      handle.writelines(f"{config}: {p}\n" for p in problems)
+  return problems, note
+
+
 def step_corpus(ctx: Context) -> Tuple[bool, str]:
   data = _config_step(ctx, 'corpus', ctx.args.corpus_filter, ctx.args.types,
                       ('edg_x86_64_cir',))
@@ -918,7 +1448,12 @@ def step_corpus(ctx: Context) -> Tuple[bool, str]:
             f"(status-changes.txt)")
   if killed:
     detail += f"; KILLED/TIMEOUT {len(killed)}: {', '.join(killed[:3])}"
-  return not crashes and not killed and (
+  regress, note = status_check(ctx, 'corpus', 'c', 'edg_x86_64_cir', results)
+  if note:
+    detail += f"; {note}"
+  if regress:
+    detail += f"; STATUS REGRESSIONS: {'; '.join(regress[:3])}"
+  return not crashes and not killed and not regress and (
     not changes or ctx.args.allow_status_changes), detail
 
 
@@ -966,8 +1501,15 @@ def _cpp_run_step(ctx: Context, step: str, filters: str, types: str,
                  f"crashes" + (f" (+{len(preexisting)} same FE crash in the "
                                f"reference)" if preexisting else '') +
                  (f", {len(killed)} killed/timeout" if killed else ''))
-    ok = ok and bool(results) and not crashes and not killed and (
-      not require_all or passed == len(results))
+    regress: List[str] = []
+    if step == 'cpp-corpus':
+      regress, note = status_check(ctx, step, 'cpp', config, results)
+      if note:
+        parts[-1] += f", {note}"
+      if regress:
+        parts[-1] += f", STATUS REGRESSIONS: {'; '.join(regress[:3])}"
+    ok = ok and bool(results) and not crashes and not killed and \
+      not regress and (not require_all or passed == len(results))
   return ok, '; '.join(parts) + ' (summary-<config>.txt)'
 
 
@@ -2009,6 +2551,14 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
     # The library on a generated C++ stream (a first look at C++ shapes).
     only.append('streams')
     command += ' --stream cxx_funcs:6000'
+  if ctx.args.perf_realworld:
+    # The pinned real-world units (their library instructions are the
+    # targets of slice S1); the Boost ones need the Boost headers inside the
+    # tree.
+    only.append('realworld')
+    command += (f" --units {shlex.quote(ctx.args.perf_realworld)} "
+                f"--boost-include {shlex.quote(ctx.args.boost_include)} "
+                f"--no-clang")
   if 'cxx' in ctx.args.perf_only:
     # A generated C++ file through the front end (four configurations) and
     # through the default C generating front end and gcc.  The default
@@ -2054,9 +2604,20 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
   if compared == 0:
     problems.append('no row of the perf run could be compared with the '
                     'baseline')
+  passes = limit is None or worst <= limit
+  if ctx.args.perf_targets:
+    perf = _load_tool('edg-cir-perf')
+    targets_ok, report = perf.check_targets(before, after,
+                                            ctx.args.perf_targets)
+    (ctx.out / 'perf' / 'targets.txt').write_text('\n'.join(report) + '\n')
+    missed = [l for l in report if l.startswith('FAIL')]
+    detail += (f" | targets {ctx.args.perf_targets}: "
+               f"{'met' if targets_ok else 'MISSED'} ({len(report)} rows"
+               f"{'; ' + missed[0] if missed else ''}; targets.txt)")
+    passes = passes and targets_ok
   if problems:
     return False, 'PROBLEMS: ' + '; '.join(problems[:6]) + ' | ' + detail
-  return limit is None or worst <= limit, detail
+  return passes, detail
 
 
 def perf_worst_change(before: dict, after: dict
@@ -2093,6 +2654,24 @@ def perf_worst_change(before: dict, after: dict
         note(old, new)
       else:
         problems.append(f"corpus/{key} is missing or 0 in the new run")
+  # The real-world units, when this run measured them (--perf-realworld): a
+  # unit of the baseline that the run lacks, or that stopped compiling, fails.
+  if 'realworld' in after:
+    for unit, levels in before.get('realworld', {}).items():
+      for level_name, old_entry in levels.items():
+        if 'error' in old_entry:
+          continue
+        new_entry = after['realworld'].get(unit, {}).get(level_name, {})
+        for key in ('fe_ir', 'cir_ir'):
+          old = old_entry.get(key)
+          if not old:
+            continue
+          new = new_entry.get(key)
+          if new:
+            note(old, new)
+          else:
+            problems.append(f"realworld/{unit}/{level_name}/{key} is "
+                            f"missing or 0 in the new run")
   return (0.0 if worst is None else worst), compared, problems
 
 
@@ -2834,7 +3413,11 @@ STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'rss': step_rss,
   'day': step_day, 'ctest': step_ctest, 'asm-diff': step_asm_diff,
   'cpp-asm-diff': step_cpp_asm_diff,
-  'tools-test': step_tools_test,
+  'tools-test': step_tools_test, 'lazy-identity': step_lazy_identity,
+  'attr-diff': step_attr_diff, 'codequality': step_codequality,
+  'chunk-identity': step_chunk_identity, 'chunk-rss': step_chunk_rss,
+  'slow-below-threshold': step_slow_below_threshold,
+  'names-check': step_names_check,
   'crash-sweep': step_crash_sweep, 'abi-diff': step_abi_diff,
   'symbols': step_symbols, 'mixed-tu': step_mixed_tu,
   'eh-probes': step_eh_probes, 'm4-stress': step_m4_stress,
@@ -2924,6 +3507,27 @@ def main() -> None:
                       help = 'step perf fails if an instruction count grows '
                              'by more than this many percent (default '
                              f"{DEFAULT_PERF_MAX_REGRESSION})")
+  parser.add_argument('--perf-realworld', default = '', metavar = 'UNITS',
+                      help = 'the perf step also measures these real-world '
+                             'units (`pinned`: the pinned list, at the '
+                             '--perf-levels), for the S1 targets; needs '
+                             '--boost-include for the Boost units')
+  parser.add_argument('--perf-targets', default = '', metavar = 'NAME',
+                      help = 'the perf step also checks the targets of a '
+                             'slice (edg-cir-perf --targets; `s1`) against '
+                             'the baseline, which needs the same sections '
+                             '(the baseline of M5a has the real-world one)')
+  parser.add_argument('--boost-include', default = '.tmp/boost-inc',
+                      help = 'the Boost headers (merged into one tree, '
+                             'inside the tree) for the pinned Boost units '
+                             'of the perf step and the lazy-identity step')
+  parser.add_argument('--chunk-baseline',
+                      default = '~/edg-cir-config/m5a-base-rss-curve.json',
+                      help = 'the peak-memory curve of the baseline (step '
+                             'chunk-rss; copied into the evidence)')
+  parser.add_argument('--chunk-target', type = float, default = 0.55,
+                      help = 'the forced-chunking peak of c12000 may be at '
+                             'most this share of the baseline\'s (S3)')
   parser.add_argument('--perf-only', default = 'cxx',
                       help = 'extra measurements of the perf step: cxx (a '
                              'generated 6000-function C++ file, with the C '
@@ -2952,6 +3556,12 @@ def main() -> None:
   parser.add_argument('--step-timeout', action = 'append', default = [],
                       metavar = 'STEP=SECONDS',
                       help = 'a time limit for the commands of one step')
+  parser.add_argument('--milestone', action = 'store_true',
+                      help = 'the steps of a milestone gate (the M5 gate in '
+                             'particular): every step, which is --with-cpp '
+                             'and --with-m4; lazy-identity (lazy against '
+                             '--eager-bodies over both corpora and the '
+                             'pinned units) is one of them')
   parser.add_argument('--with-m4', action = 'store_true',
                       help = 'also run the steps of gate M4 (abi-diff, '
                              'symbols, mixed-tu, eh-probes, m4-stress)')
@@ -2992,6 +3602,14 @@ def main() -> None:
                              'M3 gate)')
   parser.add_argument('--smoke-filter',
                       default = '@tests/.edgy/filters/cir-c-smoke.txt')
+  parser.add_argument('--status-baseline',
+                      default = '~/edg-cir-config/m5p-base-status',
+                      help = 'directory with the statuses of the baseline '
+                             '(c_edg_x86_64_cir.json, cpp_<config>.json): '
+                             'the corpus and cpp-corpus steps fail on a '
+                             'PASS->not PASS case unless '
+                             'tests/.edgy/filters/cir-status-triage.txt has '
+                             'a line for it ("" turns the check off)')
   parser.add_argument('--opt-baseline-status',
                       default = '~/edg-cir-config/m5p-base-status',
                       help = 'directory with the -O0 statuses of both '
@@ -3062,9 +3680,8 @@ def main() -> None:
   BUILD_JOBS = args.jobs
   ctx = Context(args)
   ctx.out.mkdir(parents = True, exist_ok = True)
-  only = [s for s in args.only.split(',') if s] or [
-    s for s in STEPS if (args.with_cpp or s not in CPP_STEPS) and
-    (args.with_m4 or s not in M4_STEPS) and s not in LONG_STEPS]
+  only = [s for s in args.only.split(',') if s] or default_steps(
+    args.with_cpp or args.milestone, args.with_m4 or args.milestone)
   skip = set(s for s in args.skip.split(',') if s)
   unknown = [s for s in [*only, *skip] if s not in STEPS]
   if unknown:

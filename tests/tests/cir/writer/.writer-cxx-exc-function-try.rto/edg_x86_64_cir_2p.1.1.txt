@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -14,12 +14,12 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_VOID 4
   STR 5 "S2"
   TY_RECORD_DECL 5 0 5
   TY_PTR 6 5
-  TY_FUNC 7 4 0 [6]
+  TY_FUNC 7 4 0 [6] supp{15: 2}
   STR 6 "Q"
   TY_RECORD_DECL 8 0 6
   TY_RECORD_BODY 8 1 0 1 12 0
@@ -39,20 +39,20 @@ frame REGION
   DECL_FUNC 11 7 3 67 10
   STR 11 "this"
   TY_PTR 12 8
-  TY_FUNC 13 4 0 [12, 1]
+  TY_FUNC 13 4 0 [12, 1] supp{15: 2}
   STR 12 "_ZN1QC1Ei"
   DECL_FUNC 14 13 0 0 12
   STR 13 "_ZN1QC2Ei"
   DECL_FUNC 15 13 0 0 13
   STRUCTOR 14 15 0
-  TY_FUNC 16 4 0 [12]
+  TY_FUNC 16 4 0 [12] supp{15: 2}
   STR 14 "_ZN1QD1Ev"
   DECL_FUNC 17 16 0 128 14
   STR 15 "_ZN1QD2Ev"
   DECL_FUNC 18 16 0 128 15
   STRUCTOR 17 18 1
   TY_PTR 19 9
-  TY_FUNC 20 4 0 [19]
+  TY_FUNC 20 4 0 [19] supp{15: 2}
   STR 16 "_ZN1MC1Ev"
   DECL_FUNC 21 20 0 0 16
   STR 17 "_ZN1MC2Ev"
@@ -144,11 +144,11 @@ frame REGION
   BLOCK_END
   TRY_END
   FUNC_END 1
-frame REGION
+frame REGION supp
   STR 23 "V"
   TY_RECORD_DECL 29 0 23
   TY_PTR 30 29
-  TY_FUNC 31 4 0 [30]
+  TY_FUNC 31 4 0 [30] supp{15: 2}
   TY_VPTR 32
   TY_RECORD_BODY 29 8 8 8 12 1
   REC_FIELD 32 0 nil nil nil 1
@@ -209,11 +209,11 @@ frame REGION
   BLOCK_END
   TRY_END
   FUNC_END 1
-frame REGION
+frame REGION supp
   STR 32 "Del"
   TY_RECORD_DECL 43 0 32
   TY_PTR 44 43
-  TY_FUNC 45 4 0 [44, 1]
+  TY_FUNC 45 4 0 [44, 1] supp{15: 2}
   TY_RECORD_BODY 43 1 0 1 0 0
   STR 33 "_ZN3DelC1Ei"
   DECL_FUNC 46 45 0 2 33
@@ -222,7 +222,7 @@ frame REGION
   STRUCTOR 46 47 0
   DECL_FUNC 46 45 3 67 33
   DECL_FUNC 47 45 3 67 34
-  TY_FUNC 48 4 0 [44]
+  TY_FUNC 48 4 0 [44] supp{15: 2}
   STR 35 "_ZN3DelC1Ev"
   DECL_FUNC 49 48 0 0 35
   STR 36 "_ZN3DelC2Ev"

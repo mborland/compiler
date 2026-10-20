@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -154,7 +154,7 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 15 "_Z2c6b"
   DECL_FUNC 16 5 0 0 15
   DECL_FUNC 16 5 0 1 15
@@ -164,7 +164,7 @@ frame REGION
   STR 17 "a"
   TY_VOID 18
   TY_PTR 19 17
-  TY_FUNC 20 18 0 [19]
+  TY_FUNC 20 18 0 [19] supp{15: 2}
   STR 18 "_ZN1AC1Ev"
   DECL_FUNC 21 20 0 0 18
   STR 19 "_ZN1AC2Ev"
@@ -208,11 +208,11 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 23 "M"
   TY_RECORD_DECL 26 0 23
   TY_PTR 27 26
-  TY_FUNC 28 18 0 [27, 4]
+  TY_FUNC 28 18 0 [27, 4] supp{15: 2}
   STR 24 "m"
   TY_RECORD_BODY 26 4 4 4 0 1
   REC_FIELD 1 0 nil nil 24 0

@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Chunked against unchunked lowering of edg-cir (gate step chunk-identity).
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-cir (cpfe-cir) and build/cir (edg-cir):
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-chunk-identity
+
+It makes the ECIL streams of the sets below and compiles each one twice with
+`edg-cir -O<N> --emit=asm --stats`: unchunked (`--chunk-threshold=4294967295`,
+never chunk) and chunked with one function per chunk and chunking forced on
+(`--chunk-functions=1 --chunk-threshold=1`: the module is lowered in chunks
+whenever it has one emitted body or more).  Per stream and level it checks:
+
+  1. the exit status and the diagnostics are equal (a chunk that fails to
+     lower must be diagnosed, so a failing chunked run against a passing
+     unchunked one is a difference);
+  2. the assembly is the same symbol by symbol, as edg-cir-lazy-identity
+     compares it: the same function symbols, the same body for each (local
+     label numbers renumbered per function), the same remaining lines as a
+     multiset;
+  3. non-vacuity: the unchunked run reports 0 chunks; on every pinned
+     translation unit the chunked run reports at least 2 chunks of at most
+     one function; on the corpus sets at least one stream is chunked into 2
+     chunks or more and the report counts how many are.
+
+Sets (--sets): `pinned` (the pinned real-world units of edg-cir-perf at -O0
+and at -O2: the front end gets --cir_opt_level too), `cpp` and `c` (the
+corpus filters, at -O0).  The streams are made like edg-cir-lazy-identity
+makes them.
+
+The interface with the library (cir-lib), read from the notes of --stats on
+standard error:
+
+  stats: chunked lowering: <N> chunks of at most <K> functions
+
+printed in every run: N is the number of chunks the module was lowered in
+(the globals chunk included), 0 if it was lowered as one module, and K the
+chunk size in function bodies.  CHUNKS_RE below is the one place that knows
+the spelling.  The options are those of the API 2 contract
+(an_edg_cir_options::chunk_functions and chunk_threshold): 0 means the
+library default for both and UINT32_MAX for the threshold means never, so
+"forced on" is a threshold of 1, not 0 (--force-threshold changes it).  A
+library that prints no such line is a setup problem (exit status 2).
+
+Exit status: 0 if every check holds, 1 if one fails, 2 for a setup problem.
+The last line is `RESULT: PASS` or `RESULT: FAIL`.
+'''
+
+import argparse
+import collections
+import concurrent.futures
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+BIN = Path(__file__).resolve().parent
+
+CHUNKS_RE = re.compile(
+  r'stats: chunked lowering: (\d+) chunks of at most (\d+) functions')
+STATS_RE = re.compile(r'stats: ')
+NEVER = 4294967295
+SETS = ('pinned', 'cpp', 'c')
+PINNED_LEVELS = (0, 2)
+
+
+def load_tool(name: str):
+  '''Import dev_tools/bin/<name> (a file without .py) as a module.'''
+  loader = importlib.machinery.SourceFileLoader(
+    name.replace('-', '_'), str(BIN / name))
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+lazy = load_tool('edg-cir-lazy-identity')
+
+
+class Run:
+  '''The outcome of one edg-cir compile: exit status, assembly, diagnostics
+  (standard error without the stats notes) and the chunk counters.'''
+
+  def __init__(self, status: int, asm: str, error: str) -> None:
+    self.status = status
+    self.asm = asm
+    self.diagnostics: List[str] = []
+    self.chunks: Optional[Tuple[int, int]] = None
+    for line in error.splitlines():
+      match = CHUNKS_RE.search(line)
+      if match:
+        self.chunks = (int(match.group(1)), int(match.group(2)))
+      elif not STATS_RE.search(line) and line.strip():
+        self.diagnostics.append(line.strip())
+
+
+def run_edg_cir(tool: str, stream: Path, level: int, flags: List[str],
+                timeout: int) -> Run:
+  command = [tool, f"-O{level}", '--emit=asm', '--stats', '-o', '-', *flags,
+             str(stream)]
+  try:
+    proc = subprocess.run(command, stdout = subprocess.PIPE,
+                          stderr = subprocess.PIPE, text = True,
+                          errors = 'replace', timeout = timeout)
+  except subprocess.TimeoutExpired:
+    return Run(124, '', 'timeout')
+  return Run(proc.returncode, proc.stdout, proc.stderr)
+
+
+class Verdict:
+  '''What the checks say about one stream at one level.'''
+
+  def __init__(self, name: str) -> None:
+    self.name = name
+    self.kind = 'identical'          # identical | different | setup
+    self.problems: List[str] = []
+    self.byte_identical = False
+    self.chunks = 0                  # chunks of the chunked run
+
+
+def judge_pair(name: str, plain: Run, chunked: Run, pinned: bool) -> Verdict:
+  '''The checks 1 to 3 of the docstring on one pair of runs.'''
+  verdict = Verdict(name)
+  if plain.status == 64 or chunked.status == 64:
+    verdict.kind = 'setup'
+    verdict.problems.append('edg-cir does not know --chunk-functions or '
+                            '--chunk-threshold (exit status 64)')
+    return verdict
+  if plain.chunks is None or chunked.chunks is None:
+    verdict.kind = 'setup'
+    verdict.problems.append('no "stats: chunked lowering" line (a library '
+                            'without the S3 counters)')
+    return verdict
+  verdict.chunks = chunked.chunks[0]
+  if plain.chunks[0] != 0:
+    verdict.problems.append(f"the unchunked run lowered in "
+                            f"{plain.chunks[0]} chunks (0 expected)")
+  if plain.status != chunked.status or \
+     plain.diagnostics != chunked.diagnostics:
+    verdict.problems.append(
+      f"exit status {chunked.status} (chunked) against {plain.status} "
+      f"(unchunked) or different diagnostics: chunked "
+      f"{chunked.diagnostics[:2]}, unchunked {plain.diagnostics[:2]}")
+  elif plain.asm and chunked.asm:
+    problems, verdict.byte_identical = lazy.compare_asm(chunked.asm,
+                                                        plain.asm)
+    verdict.problems += problems
+  if pinned and plain.status == 0 and (chunked.chunks[0] < 2 or
+                                       chunked.chunks[1] != 1):
+    verdict.problems.append(
+      f"vacuous: {chunked.chunks[0]} chunks of at most {chunked.chunks[1]} "
+      f"functions on a pinned translation unit (2 or more of 1 expected)")
+  if verdict.problems:
+    verdict.kind = 'different'
+  return verdict
+
+
+def check_set(name: str, directory: Path, tool: str, level: int,
+              threshold: int, jobs: int, timeout: int, pinned: bool
+              ) -> List[Verdict]:
+  streams = sorted(directory.glob('*.ecil'))
+  forced = [f"--chunk-functions=1", f"--chunk-threshold={threshold}"]
+  never = [f"--chunk-threshold={NEVER}"]
+
+  def one(stream: Path) -> Verdict:
+    plain = run_edg_cir(tool, stream, level, never, timeout)
+    chunked = run_edg_cir(tool, stream, level, forced, timeout)
+    return judge_pair(f"{name}/O{level}/{stream.stem}", plain, chunked,
+                      pinned)
+
+  with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
+    return list(pool.map(one, streams))
+
+
+def summarize(sets: Dict[str, List[Verdict]]) -> Tuple[bool, List[str]]:
+  '''(passes, the report lines).'''
+  lines: List[str] = []
+  passes = True
+  for name, verdicts in sets.items():
+    kinds = collections.Counter(v.kind for v in verdicts)
+    chunked = sum(1 for v in verdicts if v.chunks >= 2)
+    lines.append(
+      f"{name}: {len(verdicts)} streams: {kinds['identical']} identical "
+      f"({sum(v.byte_identical for v in verdicts)} byte-identical), "
+      f"{kinds['different']} different, {kinds['setup']} setup problems; "
+      f"{chunked} lowered in 2 chunks or more (largest "
+      f"{max((v.chunks for v in verdicts), default = 0)})")
+    for v in verdicts:
+      if v.kind != 'identical' or v.problems:
+        passes = False
+        lines.append(f"  FAIL {v.name}: {'; '.join(v.problems)}")
+    if not verdicts:
+      passes = False
+      lines.append(f"  FAIL {name}: no stream was made")
+    elif not name.startswith('pinned') and not chunked and \
+        kinds['setup'] == 0:
+      passes = False
+      lines.append(f"  FAIL {name}: vacuous: no stream was chunked")
+  return passes, lines
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2])
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--sets', default = ','.join(SETS),
+                      help = f"comma separated: {', '.join(SETS)}")
+  parser.add_argument('--cpp-filter',
+                      default = '@tests/.edgy/filters/cir-cpp-corpus.txt')
+  parser.add_argument('--c-filter',
+                      default = '@tests/.edgy/filters/cir-c-corpus.txt')
+  parser.add_argument('--types', default = 'rp,lp')
+  parser.add_argument('--boost-include', default = '',
+                      help = 'the Boost headers (inside the workspace) for '
+                             'the Boost units of the pinned set')
+  parser.add_argument('--edg-cir', default = '',
+                      help = 'the edg-cir tool (default: EDG_CIR_TOOL of '
+                             'build/gcc-cir/environment.sh)')
+  parser.add_argument('--force-threshold', type = int, default = 1,
+                      help = 'the --chunk-threshold that forces chunking on '
+                             '(default 1: one emitted body or more)')
+  parser.add_argument('-j', dest = 'jobs', type = int,
+                      default = os.cpu_count() or 1)
+  parser.add_argument('--timeout', type = int, default = 600,
+                      help = 'limit of one edg-cir run (seconds)')
+  parser.add_argument('--keep', default = '',
+                      help = 'make the streams here and keep them')
+  parser.add_argument('--streams', action = 'append', default = [],
+                      metavar = 'SET=DIR',
+                      help = 'use the .ecil files of DIR for the set '
+                             '(pinned: DIR/O0 and DIR/O2) instead of '
+                             'making them')
+  parser.add_argument('--json', default = '',
+                      help = 'write the verdicts here')
+  args = parser.parse_args()
+
+  root = Path(args.root).resolve()
+  exports = lazy.load_exports(root / 'build/gcc-cir/environment.sh')
+  tool = args.edg_cir or exports.get('EDG_CIR_TOOL', '')
+  if not tool or not Path(tool).exists():
+    print('edg-cir-chunk-identity: no edg-cir (build build/cir; run from the '
+          'repository root)', file = sys.stderr)
+    sys.exit(2)
+  if args.boost_include:
+    # the front end runs in a scratch directory: the path must be absolute
+    args.boost_include = str((root / args.boost_include).resolve())
+  wanted = [s for s in args.sets.split(',') if s]
+  unknown = [s for s in wanted if s not in SETS]
+  if unknown:
+    print(f"edg-cir-chunk-identity: unknown set(s) {', '.join(unknown)}",
+          file = sys.stderr)
+    sys.exit(2)
+  given = dict(item.split('=', 1) for item in args.streams)
+  base = Path(args.keep) if args.keep else Path(
+    tempfile.mkdtemp(prefix = 'edg-cir-chunk-streams.'))
+  results: Dict[str, List[Verdict]] = {}
+  missing: List[str] = []
+  try:
+    for name in wanted:
+      if name == 'pinned':
+        for level in PINNED_LEVELS:
+          label = f"pinned-O{level}"
+          directory = Path(given['pinned']) / f"O{level}" \
+            if 'pinned' in given else base / label
+          if 'pinned' not in given:
+            directory.mkdir(parents = True, exist_ok = True)
+            print(f"making the {label} streams ...", flush = True)
+            missing += [f"O{level}/{u}" for u in lazy.make_pinned_streams(
+              root, directory, args.boost_include, exports, level)]
+          print(f"checking the {label} set ...", flush = True)
+          results[label] = check_set(label, directory, tool, level,
+                                     args.force_threshold, args.jobs,
+                                     args.timeout, True)
+        continue
+      directory = Path(given[name]) if name in given else base / name
+      if name not in given:
+        directory.mkdir(parents = True, exist_ok = True)
+        print(f"making the {name} streams ...", flush = True)
+        if not lazy.make_corpus_streams(
+            root, directory,
+            args.cpp_filter if name == 'cpp' else args.c_filter,
+            name == 'cpp', args.types, args.jobs):
+          print(f"edg-cir-chunk-identity: the {name} streams failed",
+                file = sys.stderr)
+          sys.exit(2)
+      print(f"checking the {name} set ...", flush = True)
+      results[name] = check_set(name, directory, tool, 0,
+                                args.force_threshold, args.jobs,
+                                args.timeout, False)
+    passes, lines = summarize(results)
+    for unit in missing:
+      passes = False
+      lines.append(f"  FAIL pinned/{unit}: the front end made no stream (a "
+                   f"pinned unit that does not compile fails the step)")
+    print('\n'.join(lines))
+    if any(v.kind == 'setup' for vs in results.values() for v in vs):
+      print('RESULT: FAIL (setup problem)')
+      sys.exit(2)
+    if args.json:
+      Path(args.json).write_text(json.dumps(
+        {n: [{'name': v.name, 'kind': v.kind, 'problems': v.problems,
+              'chunks': v.chunks, 'byte_identical': v.byte_identical}
+             for v in vs] for n, vs in results.items()}, indent = 1) + '\n')
+    print(f"RESULT: {'PASS' if passes else 'FAIL'}")
+    sys.exit(0 if passes else 1)
+  finally:
+    if not args.keep:
+      shutil.rmtree(base, ignore_errors = True)
+
+
+if __name__ == '__main__':
+  main()

@@ -10,9 +10,9 @@
 ; RUN: %t.exe
 ; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
 
-; CHECK-DAG: cir.func inline_hint comdat linkonce_odr dso_local @_Z6inlinev() -> !s32i
+; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_Z6inlinev() -> {{.*}}!s32i
 ; CHECK-DAG: cir.func comdat weak_odr dso_local @_Z4tmplIiEiT_(
-; CHECK-DAG: cir.func private @_Z8externalv() -> !s32i
+; CHECK-DAG: cir.func private @_Z8externalv() -> {{.*}}!s32i
 ; CHECK-DAG: cir.global constant linkonce_odr comdat dso_local @_Z2ivE = #cir.int<7> : !s32i
 ; CHECK-NOT: comdat @_Z8external
 

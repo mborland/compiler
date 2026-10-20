@@ -95,6 +95,8 @@ struct a_record_info {
   uint64_t                 size;
   uint64_t                 data_size;
   uint64_t                 nvsize;          /* CLASS_INFO; else data_size. */
+  uint64_t                 nvalign = 0;     /* CLASS_INFO; 0 without it. */
+  bool                     has_class_info = false;  /* CLASS_INFO seen. */
   uint64_t                 align;
   uint64_t                 gid = 0;         /* The record type's G-id. */
   bool                     awaiting_info;   /* A dynamic class whose CLASS_INFO
@@ -138,11 +140,18 @@ struct a_type {
   uint32_t         flags = 0;
   bool             variadic = false;
   bool             no_proto = false;
+  uint64_t         nonnull_mask = 0;   /* TY_FUNC supp key 15 (1.3): bit 0 the
+                                          result, bit i+1 parameter i is a
+                                          reference or `this`. */
   std::vector<uint64_t>
                    params;
   a_record_info   *record = nullptr;
   unsigned         float_format = 0;
 };  /* a_type */
+
+/* Whether a symbol is a replaceable global allocation or deallocation
+   function (globals.cpp). */
+bool is_replaceable_operator_name(std::string_view name, bool *is_new);
 
 /* Entities (functions and variables). */
 
@@ -162,12 +171,35 @@ struct a_entity {
                                             valid when named. */
   bool                       named = false;
   mlir::Operation           *op = nullptr;
-  bool                       has_body = false;
+  bool                       has_body = false;     /* Emitted (an eager body,
+                                                      or a replayed one). */
+  bool                       body_arrived = false; /* FUNC_BEGIN was seen:
+                                                      the body is emitted or
+                                                      deferred (lazy
+                                                      emission).  The checks
+                                                      of the stream use this
+                                                      one. */
+  int64_t                    deferred = -1;        /* Index in deferred_. */
+  bool                       trivial_loop = false;  /* A trivial infinite
+                                                      loop (no
+                                                      mustprogress). */
+  bool                       valueless_return = false;  /* A `return;` in a
+                                                      function with a
+                                                      result. */
+  bool                       used = false;         /* supp used (1.3):
+                                                      sticky; a root. */
   bool                       has_init = false;
   bool                       referenced = false;
   bool                       had_linkonce = false;  /* Was linkonce_odr. */
   bool                       no_inline = false;    /* supp noinline (1.3):
                                                       sticky. */
+  bool                       always_inline = false;  /* supp always_inline
+                                                      (16): sticky. */
+  bool                       cold = false;         /* supp cold (17). */
+  bool                       hot = false;          /* supp hot (18). */
+  unsigned                   memory = 0;           /* supp pure (1) or const
+                                                      (2): sticky, the
+                                                      stronger one. */
   bool                       in_structor = false;  /* In a STRUCTOR pair. */
   bool                       is_alias = false;     /* C1 as aliasee of C2. */
   bool                       has_vtt = false;      /* The base variant of a
@@ -185,6 +217,26 @@ struct a_entity {
   std::vector<cir::GetGlobalOp>
                              addresses;  /* get_global ops created. */
 };  /* a_entity */
+
+/* Lazy emission: the body of a discardable function, kept as its records
+   (FUNC_BEGIN to FUNC_END of the frame that carried it) until finish knows
+   whether the function is reachable. */
+struct a_deferred_fn {
+  std::vector<uint8_t>   bytes;
+  ecil::a_frame_info     frame;        /* Kind and flags of its frame. */
+  uint64_t               base_offset = 0;  /* Stream offset of bytes[0]. */
+  uint64_t               gid = 0;
+  a_entity              *entity = nullptr;
+  std::vector<uint32_t>  refs;         /* G-ids the validator looked up. */
+  uint64_t               this_class = 0;
+  bool                   vptr_init = false;
+  bool                   vtt_use = false;
+  std::vector<uint64_t>  agg_classes;  /* C_AGG_BEGIN class types: a vptr
+                                          in a constant names a vtable. */
+  std::vector<uint64_t>  statics;      /* Static locals initialized here
+                                          (STATIC_INIT_BEGIN G-ids). */
+  bool                   replayed = false;
+};  /* a_deferred_fn */
 
 /* A STRUCTOR pair: the complete (C1/D1) and the base (C2/D2) variant. */
 struct a_structor_pair {
@@ -343,6 +395,8 @@ struct a_frame {
   mlir::Value      tern_slot;          /* ternary with an aggregate result: the
                                           temporary both arms store into. */
   bool             has_cond = false;   /* for. */
+  bool             cond_true = false;  /* A loop whose condition is a
+                                          constant true (or absent). */
   mlir::Type       switch_type;        /* switch condition type. */
   size_t           target_base = 0;    /* agg_init target stack height. */
   /* cleanup code */
@@ -495,13 +549,47 @@ public:
   bool is_dropped_definition(const a_entity &e) const;
   void entity_liveness(
       std::unordered_set<const a_entity *> &live,
-      std::unordered_map<const a_entity *, std::vector<a_entity *>> &uses);
+      std::unordered_map<const a_entity *, std::vector<a_entity *>> &uses,
+      const std::unordered_map<const a_entity *, std::vector<a_entity *>>
+          *extra = nullptr,
+      const std::vector<a_entity *> *extra_roots = nullptr);
+  /* The entities that can be needed.  extra and extra_roots add edges and
+     roots that the module's symbol uses do not show (lazy emission). */
+  /* signature.cpp: LLVM attributes of parameters and results (S2). */
+  mlir::DictionaryAttr pointer_attributes(uint64_t pointer_gid,
+                                          bool with_noundef);
+  mlir::DictionaryAttr noundef_attributes(mlir::Type type);
+  bool strict_result(const a_entity *callee) const;
+  void apply_signature_attributes();
+  void call_signature_attributes(cir::CallOp op, const a_type &call_type,
+                                 const a_entity *callee, bool with_vtt);
+  bool lazy_can_defer(const a_entity &e,
+                      const ecil::a_record_context &context) const;
+  void lazy_begin(const ecil::a_record &r, a_entity &e,
+                  const ecil::a_record_context &context);
+  void lazy_note(const ecil::a_record &r);
+  bool replay_function(a_deferred_fn &d);
+  bool lazy_finish();
+  bool inline_only_declaration(const a_entity &e) const;
+  bool calls_own_symbol(cir::FuncOp fn) const;
+  bool lazy_erase_dropped();
+  /* Lazy emission (lazy.cpp). */
   /*
   Run at finish on the worker thread: final names and their one-pass
   substitution, record layout metadata, inline-only and unsupported-entity
   policy.  False: the session has an error.
   */
 
+  const std::vector<std::pair<std::string, bool>> &lazy_symbols() const
+    { return lazy_symbols_; }
+  /* The deferred bodies in stream order: the symbol they have in the output
+     and whether they were replayed (else dropped).  Filled at finish. */
+  const std::vector<std::string> &lazy_kept() const
+    { return lazy_kept_; }
+  /* The dropped bodies that the module still names (declarations left). */
+  /* The function bodies emitted so far (replayed ones included): the
+     size that chunked lowering is chosen by. */
+  uint64_t emitted_bodies() const { return emitted_bodies_; }
   uint64_t rename_count() const
     { return renames_applied_; }
   uint64_t walk_count() const
@@ -728,12 +816,19 @@ private:
   void convert_call_to_variadic(a_entity &e, cir::CallOp call);
   std::string_view claim_symbol(std::string_view want, uint64_t gid);
   std::string_view keep_string(std::string_view text);
+  uint64_t supp_uint(const ecil::a_record &r, uint64_t key) const;
+  unsigned supp_memory(const ecil::a_record &r) const;
   std::string_view unsupported_reason(const ecil::a_record &r);
   bool has_supp_flag(const ecil::a_record &r, uint64_t key) const;
   void assign_final_names();
   void apply_nobuiltin();
   void apply_substitution();
   void apply_function_attributes(a_entity &e, cir::FuncOp fn);
+  void emit_llvm_used();
+  bool inline_hint(const a_entity &e) const;
+  bool replaceable_operator(const a_entity &e, bool *is_new) const;
+  llvm::SmallVector<mlir::NamedAttribute>
+      new_result_attributes(const a_entity &e) const;
 
   /* function.cpp */
   bool func_begin(const ecil::a_record &r);
@@ -774,6 +869,13 @@ private:
   mlir::IntegerAttr alignment_attr(uint64_t align);
   cir::GlobalLinkageKindAttr linkage_attr(cir::GlobalLinkageKind kind);
   mlir::NamedAttribute nothrow_attr();
+  void add_memory_attributes(const a_entity &e,
+                             llvm::SmallVectorImpl<mlir::NamedAttribute>
+                                 &attrs);
+  void set_memory_attributes(const a_entity &e, mlir::Operation *op);
+  void add_temperature_attributes(const a_entity &e,
+                                  llvm::SmallVectorImpl<mlir::NamedAttribute>
+                                      &attrs);
   std::string label_name(uint64_t l);
 
   /* expr.cpp */
@@ -887,6 +989,10 @@ private:
   std::vector<a_entity *>                 redirected_;  /* C1s to erase. */
   std::vector<a_symbol_change>            symbol_changes_;
   uint64_t                                renames_applied_ = 0;
+  /* The thunks the library defined, with their targets (their attributes
+     are copied at finish). */
+  std::vector<std::pair<a_entity *, a_entity *>> thunk_pairs_;
+  uint64_t                   emitted_bodies_ = 0;
   uint64_t                                walks_done_ = 0;
   uint64_t                                pending_body_gid_ = 0;
 
@@ -911,10 +1017,35 @@ private:
                                                 with a handler head not yet
                                                 made, or -1. */
   size_t                                  drop_depth_ = 0;
+  /* Lazy emission (lazy.cpp). */
+  bool                                    lazy_ = false;
+  bool                                    replaying_ = false;
+  bool                                    skipping_ = false;  /* In a body
+                                                         being deferred. */
+  std::deque<a_deferred_fn>               deferred_;
+  std::vector<std::pair<std::string, bool>> lazy_symbols_;
+  std::vector<std::string>                lazy_kept_;
+  std::vector<a_entity *>                 lazy_dead_vars_;   /* Variables only
+                                         dropped bodies named. */
+  a_deferred_fn                          *deferring_ = nullptr;
+  const uint8_t                          *defer_begin_ = nullptr;
+  std::vector<uint32_t>                   sink_refs_;
+  const ecil::a_record_context           *cur_context_ = nullptr;
+  /* (user, function) pairs of method-pointer constants: the symbol sits in
+     a string attribute that the symbol-use walk cannot see.  A null user: a
+     constant outside any function. */
+  std::vector<std::pair<a_entity *, a_entity *>> address_uses_;
   size_t                                  record_depth_ = 0;
   /* Attributes built once (their uniquing lookups are not free). */
   mlir::UnitAttr                          unit_attr_;
   mlir::StringAttr                        nothrow_name_;
+  mlir::StringAttr                        mustprogress_name_;
+  mlir::StringAttr                        willreturn_name_;
+  mlir::StringAttr                        nounwind_name_;
+  mlir::StringAttr                        norecurse_name_;
+  mlir::StringAttr                        memory_effects_name_;
+  mlir::StringAttr                        builtin_name_;
+  mlir::StringAttr                        allocsize_name_;
   mlir::StringAttr                        noreturn_name_;
   mlir::IntegerAttr                       align_attrs_[16];   /* 1 << index */
   cir::GlobalLinkageKindAttr              linkage_attrs_[16]; /* by kind */

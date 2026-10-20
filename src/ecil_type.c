@@ -38,6 +38,7 @@ are visited, which breaks cycles.
 /* Defines builtin_libc_names: the libc/libm functions that are builtins,
    sorted and NULL-terminated, generated from the builtin tables. */
 #include "builtin_libc.h"
+#include "builtin_libc_attrs.h"
 
 #if ECIL_WRITER_ENABLED
 
@@ -429,10 +430,12 @@ void ecil_emit_decl_var(an_ecil_frame *frame,
                         unsigned int  linkage,
                         unsigned int  flags,
                         uint32_t      alignment,
-                        uint32_t      name_sid)
+                        uint32_t      name_sid,
+                        a_boolean     used)
 /*
 Emit DECL_VAR (an introduction or a re-issue) into the declaration section
-and remember its facts as the last ones emitted for the G-id.
+and remember its facts as the last ones emitted for the G-id.  used: the GNU
+used attribute (supp key 11, which comes before the unsupported reason).
 */
 {
   an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
@@ -450,11 +453,12 @@ and remember its facts as the last ones emitted for the G-id.
   } else {
     ecil_arg_nil(frame);
   }  /* if */
-  if ((flags & ECIL_DECL_VAR_UNSUPPORTED) != 0) {
+  if (used || (flags & ECIL_DECL_VAR_UNSUPPORTED) != 0) {
     an_ecil_supp  supp;
 
     ecil_supp_begin(&supp);
-    add_drop_reason(&supp, gid);
+    if (used) ecil_supp_true(&supp, esk_used);
+    if ((flags & ECIL_DECL_VAR_UNSUPPORTED) != 0) add_drop_reason(&supp, gid);
     ecil_rec_supp_end(frame, &supp);
   }  /* if */
   ecil_rec_end(frame);
@@ -489,8 +493,23 @@ flags), and a vague linkage becomes external as for a dropped function
   flags &= ~(unsigned int)(ECIL_DECL_VAR_DEFINITION | ECIL_DECL_VAR_TENTATIVE |
                            ECIL_DECL_VAR_COMDAT | ECIL_DECL_VAR_GUARDED);
   ecil_emit_decl_var(frame, gid, type, linkage,
-                     flags | ECIL_DECL_VAR_UNSUPPORTED, alignment, name_sid);
+                     flags | ECIL_DECL_VAR_UNSUPPORTED, alignment, name_sid,
+                     FALSE);
 }  /* ecil_emit_dropped_decl_var */
+
+
+a_boolean ecil_variable_is_used(a_variable_ptr var)
+/*
+Return TRUE if the variable has the GNU used attribute.
+*/
+{
+#if GNU_EXTENSIONS_ALLOWED
+  return var->has_gnu_used_attribute;
+#else /* !GNU_EXTENSIONS_ALLOWED */
+  (void)var;
+  return FALSE;
+#endif /* GNU_EXTENSIONS_ALLOWED */
+}  /* ecil_variable_is_used */
 
 
 /* Small introductions. */
@@ -1069,6 +1088,7 @@ parameter types (spec 8.2).
   size_t                        n = 0;
   uint32_t                      gid = 0;
   unsigned int                  flags = 0;
+  uint64_t                      nonnull_ptrs = 0;
   a_param_type_ptr              p;
   a_boolean                     no_proto = !supp->prototyped;
   a_boolean                     list_params = !no_proto || promote_params;
@@ -1079,7 +1099,7 @@ parameter types (spec 8.2).
     for (p = supp->param_type_list; p != NULL; p = p->next) n++;
   }  /* if */
   if (has_this) n++;
-  key = (uint32_t *)malloc((n + 3) * sizeof(uint32_t));
+  key = (uint32_t *)malloc((n + 5) * sizeof(uint32_t));
   params = (uint32_t *)malloc((n + 1) * sizeof(uint32_t));
   if (key == NULL || params == NULL) {
     ecil_note_unsupported("out of memory in the ECIL writer");
@@ -1088,23 +1108,36 @@ parameter types (spec 8.2).
 
     if (supp->has_ellipsis) flags |= ECIL_FUNC_TYPE_VARIADIC;
     if (no_proto) flags |= ECIL_FUNC_TYPE_NO_PROTO;
+    /* The pointers that are never null (esk_nonnull_ptrs, spec 6): a
+       reference result, a reference parameter and the object parameter.  The
+       mask is a function of the declared type alone, so a function has the
+       same one at every issue.  Parameters beyond the 63rd are not marked. */
+    if (is_reference_type(skip_typerefs(t->variant.routine.return_type))) {
+      nonnull_ptrs |= 1u;
+    }  /* if */
     if (has_this) {
       /* The object pointer comes first (spec 11.3). */
       params[i++] = known_type_id(f_implicit_this_param_type_of(t));
+      nonnull_ptrs |= 2u;
     }  /* if */
     if (list_params) {
       for (p = supp->param_type_list; p != NULL; p = p->next) {
         uint32_t  pg = known_type_id(p->type);
 
         if (no_proto) pg = ecil_promote_gid(frame, pg, p->type);
+        if (i < 63 && !C_mode() && is_reference_type(skip_typerefs(p->type))) {
+          nonnull_ptrs |= (uint64_t)1 << (i + 1);
+        }  /* if */
         params[i++] = pg;
       }  /* for */
     }  /* if */
     key[0] = (uint32_t)egk_func_type;
     key[1] = ret;
     key[2] = flags;
-    for (i = 0; i < n; i++) key[3 + i] = params[i];
-    gid = ecil_word_lookup(key, n + 3);
+    key[3] = (uint32_t)(nonnull_ptrs & 0xFFFFFFFFu);
+    key[4] = (uint32_t)(nonnull_ptrs >> 32);
+    for (i = 0; i < n; i++) key[5 + i] = params[i];
+    gid = ecil_word_lookup(key, n + 5);
     if (gid == 0) {
       gid = ecil_new_gid(egk_func_type);
       if (gid != 0) {
@@ -1113,13 +1146,20 @@ parameter types (spec 8.2).
 
         info->ref = ret;
         info->count = n;
-        ecil_word_register(key, n + 3, gid);
+        ecil_word_register(key, n + 5, gid);
         saved = ecil_frame_enter_decl(frame);
         ecil_rec_begin(frame, eop_ty_func);
         ecil_arg_uint(frame, gid);
         ecil_arg_uint(frame, ret);
         ecil_arg_uint(frame, flags);
         ecil_arg_array(frame, params, n);
+        if (nonnull_ptrs != 0) {
+          an_ecil_supp  mask_supp;
+
+          ecil_supp_begin(&mask_supp);
+          ecil_supp_uint(&mask_supp, esk_nonnull_ptrs, nonnull_ptrs);
+          ecil_rec_supp_end(frame, &mask_supp);
+        }  /* if */
         ecil_rec_end(frame);
         ecil_frame_leave_decl(frame, saved);
       }  /* if */
@@ -2489,6 +2529,11 @@ typedef struct a_name_entry {
   const char    *name;            /* NULL: an empty slot. */
   unsigned int  special_id;       /* 0 if none. */
   a_boolean     library;
+  unsigned int  library_facts;    /* ECIL_FACT_PURE or ECIL_FACT_CONST for a
+                                     library function that Clang's table
+                                     says is (builtin_libc_attrs.h), else 0. */
+  const char    *library_signature;
+                                  /* Its signature classes, if so. */
 } a_name_entry;
 
 #define NAME_TABLE_SLOTS 2048u    /* A power of two, above twice the names
@@ -2555,6 +2600,20 @@ Build the name table on first use; return FALSE if memory ran out.
         e->name = builtin_libc_names[i];
         e->library = TRUE;
       }  /* for */
+      for (i = 0; builtin_libc_attrs[i].name != NULL; i++) {
+        a_name_entry  *e = name_entry_slot(table, builtin_libc_attrs[i].name);
+
+        switch (builtin_libc_attrs[i].attr) {
+          case 'c': e->library_facts = ECIL_FACT_CONST; break;
+          case 'r': e->library_facts = ECIL_FACT_NORETURN; break;
+          case 'U': e->library_facts = ECIL_FACT_PURE; break;
+          default:  e->library_facts = 0; break;
+        }  /* switch */
+        if (builtin_libc_attrs[i].nothrow == 'n') {
+          e->library_facts |= ECIL_FACT_NOTHROW;
+        }  /* if */
+        e->library_signature = builtin_libc_attrs[i].signature;
+      }  /* for */
       for (i = 0; special_names[i].name != NULL; i++) {
         a_name_entry  *e = name_entry_slot(table, special_names[i].name);
 
@@ -2597,6 +2656,85 @@ written is a libc function.
 }  /* ecil_classify_function_name */
 
 
+static char type_class(a_type_ptr type)
+/*
+The class of a type for the signature check of a library function: i for an
+integer, f for a floating type, p for a pointer, v for void, ? for another.
+*/
+{
+  a_type_ptr  t = skip_typerefs(type);
+
+  return is_pointer_type(t) ? 'p' : is_integral_or_enum_type(t) ? 'i' :
+         is_real_floating_type(t) ? 'f' : is_void_type(t) ? 'v' : '?';
+}  /* type_class */
+
+
+static a_boolean routine_has_signature(a_routine_ptr rout, const char *sig)
+/*
+Return TRUE if the type of the routine has the classes of result and
+parameters that sig lists (see type_class; x is any type, a final . is the
+ellipsis).  A function declared without a prototype (a K&R declaration in C)
+is accepted when its result matches.
+*/
+{
+  a_type_ptr        t = skip_typerefs(rout->type);
+  a_param_type_ptr  param;
+  size_t            n = 1;
+  a_boolean         ok = type_class(t->variant.routine.return_type) == sig[0];
+
+  if (ok && rout_type_supp(t)->prototyped) {
+    for (param = rout_type_supp(t)->param_type_list; param != NULL && ok;
+         param = param->next) {
+      ok = sig[n] != '\0' && sig[n] != '.' &&
+           (sig[n] == 'x' || type_class(param->type) == sig[n]);
+      n++;
+    }  /* for */
+    if (sig[n] == '.') {
+      ok = ok && sig[n + 1] == '\0' && rout_type_supp(t)->has_ellipsis;
+    } else {
+      ok = ok && sig[n] == '\0' && !rout_type_supp(t)->has_ellipsis;
+    }  /* if */
+  }  /* if */
+  return ok;
+}  /* routine_has_signature */
+
+
+static unsigned int library_function_facts(a_routine_ptr rout)
+/*
+Return ECIL_FACT_PURE or ECIL_FACT_CONST, with ECIL_FACT_NORETURN and
+ECIL_FACT_NOTHROW added, for a library function that Clang's table
+(builtin_libc_attrs.h) says has no side effects, does not return or does not
+throw: a routine of C language linkage (in C, any; in C++, extern "C"), not a
+member, not static and without an asm label, whose name is in the table (also
+as __builtin_X) and whose result and parameters are of the classes that the
+table lists.  A function of another kind with the same name (a C++ function,
+a member, a static function) has none.
+*/
+{
+  unsigned int  facts = 0;
+  const char    *name = rout->source_corresp.name;
+
+  if (name != NULL &&
+      rout->special_kind == (a_special_function_kind)sfk_none &&
+      !rout->source_corresp.is_class_member &&
+      rout->storage_class != (a_storage_class)sc_static &&
+      (C_mode() || rout->source_corresp.name_linkage ==
+                                         (a_name_linkage_kind)nlk_external) &&
+      !(rout->gnu_extra_info != NULL &&
+        rout->gnu_extra_info->asm_name != NULL) && build_name_table()) {
+    const a_name_entry  *e;
+
+    if (strncmp(name, "__builtin_", 10) == 0) name += 10;
+    e = name_entry_slot(name_table, name);
+    if (e->name != NULL && e->library_facts != 0 &&
+        routine_has_signature(rout, e->library_signature)) {
+      facts = e->library_facts;
+    }  /* if */
+  }  /* if */
+  return facts;
+}  /* library_function_facts */
+
+
 /* The facts a DECL_FUNC carries. */
 typedef struct a_func_state {
   uint32_t      type;
@@ -2604,7 +2742,9 @@ typedef struct a_func_state {
   unsigned int  flags;
   uint32_t      name;
   a_boolean     late;             /* The name is not final: nil for now. */
-  a_boolean     noinline;         /* GNU noinline: supp key 14, sticky. */
+  unsigned int  facts;            /* ECIL_FACT_*: pure, const, used, noinline,
+                                     always_inline, cold, hot (supp keys 4,
+                                     5, 11, 14, 16, 17, 18), sticky. */
 } a_func_state;
 
 /* TRUE while the late names are being resolved (the file scope is complete,
@@ -2634,6 +2774,112 @@ is local to one.  Such an entity is gone when the file scope is complete.
   }  /* if */
   return result;
 }  /* routine_is_function_local */
+
+
+void ecil_note_inline_specifier(a_routine_ptr rout)
+/*
+Remember that the inline specifier was written in a declaration of the
+routine (called by the front end).  The bit is in the routine's IL entry
+prefix, so it goes with the routine's memory region, and it stays for every
+later issue, as the attributes of the declarations of a function add up.
+*/
+{
+#if ECIL_ID_IN_PREFIX
+  il_entry_prefix_of(rout).ecil_inline_specifier = TRUE;
+#else /* !ECIL_ID_IN_PREFIX */
+  (void)rout;
+#endif /* ECIL_ID_IN_PREFIX */
+}  /* ecil_note_inline_specifier */
+
+
+#if ECIL_INLINE_HINTS
+
+static a_boolean routine_has_inline_specifier(a_routine_ptr rout)
+/*
+Return TRUE if the inline specifier was written in a declaration of the
+routine.
+*/
+{
+  return (a_boolean)il_entry_prefix_of(rout).ecil_inline_specifier;
+}  /* routine_has_inline_specifier */
+
+
+static a_boolean template_pattern_has_inline_specifier(a_routine_ptr rout)
+/*
+Return TRUE for an instance of a function template (or of a member function
+of a class template) whose template has the inline specifier on any
+declaration, which is where clang takes the hint from: an out-of-class
+definition with "inline", a redeclaration that adds it after the instance
+was made.  An explicit specialization is a declaration of its own.
+*/
+{
+  a_boolean     result = FALSE;
+  a_symbol_ptr  sym = (a_symbol_ptr)rout->source_corresp.assoc_info;
+
+  if (!C_mode() && !rout->is_specialized && sym != NULL &&
+      (symbol_is(sym, sk_routine) || symbol_is(sym, sk_member_function)) &&
+      sym->variant.routine.instance_ptr != NULL) {
+    a_template_instance_ptr          tip = sym->variant.routine.instance_ptr;
+    a_template_symbol_supplement_ptr tssp;
+
+    tssp = template_supplement_for_symbol(tip->template_sym);
+    if (tssp != NULL && tssp->variant.function.routine != NULL) {
+      result = routine_has_inline_specifier(tssp->variant.function.routine);
+    }  /* if */
+  }  /* if */
+  return result;
+}  /* template_pattern_has_inline_specifier */
+
+
+static a_boolean routine_has_inline_hint(a_routine_ptr rout)
+/*
+Return TRUE for a routine that clang gives inlinehint: one declared with the
+inline specifier (not one that is inline because it is defined in its class or
+is constexpr) or an instance of a template that has it, an implicitly declared
+special member (clang declares those inline), and a member of a lambda's
+closure that clang's Sema declares inline: the call operator, the conversion
+to a function pointer and the static invoker.  Never one with the GNU
+attribute noinline or always_inline: those have a function attribute of their
+own instead.
+*/
+{
+  a_boolean  hint = routine_has_inline_specifier(rout);
+
+  if (!hint) hint = template_pattern_has_inline_specifier(rout);
+  if (!hint && !C_mode() && rout->compiler_generated &&
+      rout->source_corresp.is_class_member &&
+      (rout->special_kind == (a_special_function_kind)sfk_constructor ||
+       rout->special_kind == (a_special_function_kind)sfk_destructor ||
+       (rout->special_kind == (a_special_function_kind)sfk_operator &&
+        rout->variant.opname_kind == (an_opname_kind)onk_assign))) {
+    hint = TRUE;                        /* An implicitly declared member. */
+  }  /* if */
+#if MICROSOFT_EXTENSIONS_ALLOWED
+  if ((rout->decl_modifiers & (DM_MICROSOFT_INLINE | DM_FORCEINLINE)) != 0) {
+    hint = TRUE;                        /* __inline and __forceinline. */
+  }  /* if */
+#endif /* MICROSOFT_EXTENSIONS_ALLOWED */
+  if (!hint && !C_mode() && rout->source_corresp.is_class_member) {
+    a_type_ptr  cls = parent_class_of(rout);
+
+    if (type_is_lambda_closure(cls) &&
+        (rout->special_kind == (a_special_function_kind)sfk_conversion ||
+         rout->special_kind ==
+                          (a_special_function_kind)sfk_lambda_entry_point ||
+         rout == lambda_body_for_closure(cls))) {
+      hint = TRUE;
+    }  /* if */
+  }  /* if */
+#if GNU_EXTENSIONS_ALLOWED || MICROSOFT_EXTENSIONS_ALLOWED
+  if (rout->never_inline) hint = FALSE;         /* (noinline wins.) */
+#endif /* GNU_EXTENSIONS_ALLOWED || MICROSOFT_EXTENSIONS_ALLOWED */
+#if GNU_EXTENSIONS_ALLOWED
+  if (rout->always_inline) hint = FALSE;        /* (always_inline: no hint.) */
+#endif /* GNU_EXTENSIONS_ALLOWED */
+  return hint;
+}  /* routine_has_inline_hint */
+
+#endif /* ECIL_INLINE_HINTS */
 
 
 static const char *routine_symbol_text(a_routine_ptr rout,
@@ -2788,8 +3034,8 @@ static void check_routine_attributes(a_routine_ptr rout)
 Note as unsupported the GNU routine attributes whose meaning the code
 generator cannot reproduce by ignoring them (constructor, destructor, alias,
 ifunc, weakref).  Attributes that only affect optimization (noipa, noclone,
-used, unused, cold, hot, always_inline, pure, const, ...) are ignorable and
-need no code here; noinline is sent as a supp key of DECL_FUNC (ECIL 1.3).
+unused, cold, hot, always_inline, pure, const, ...) are ignorable and need no
+code here; noinline and used are sent as supp keys of DECL_FUNC (ECIL 1.3).
 */
 {
 #if GNU_EXTENSIONS_ALLOWED
@@ -2869,6 +3115,7 @@ entities may be gone, and a C++ name does not change after it is sent).
   a_routine_ptr lrout = rout;
   a_boolean     nested_unnamed = FALSE;
   a_boolean     local_vague = FALSE;
+  unsigned int  library_facts;
 
   if (!C_mode() && rout->special_kind ==
                           (a_special_function_kind)sfk_lambda_entry_point &&
@@ -2927,25 +3174,70 @@ entities may be gone, and a C++ name does not change after it is sent).
   }  /* if */
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   if (rout->is_inline) state->flags |= ECIL_DECL_FUNC_INLINE;
+#if ECIL_INLINE_HINTS
+  if (routine_has_inline_hint(rout)) {
+    state->flags |= ECIL_DECL_FUNC_INLINE_HINT;
+  }  /* if */
+#endif /* ECIL_INLINE_HINTS */
+  if (!C_mode() && rout->source_corresp.name_linkage ==
+                                         (a_name_linkage_kind)nlk_external) {
+    /* A C++ function with C language linkage: "C" is the name linkage of an
+       extern "C" function, "C++" that of the others (main and the functions
+       with an asm label included), "none" that of a local class's members. */
+    state->flags |= ECIL_DECL_FUNC_EXTERN_C;
+  }  /* if */
   if (rout_type_supp(t)->does_not_return) {
     state->flags |= ECIL_DECL_FUNC_NORETURN;
   }  /* if */
   if (rout == il_header.main_routine) state->flags |= ECIL_DECL_FUNC_IS_MAIN;
-  if (defining && (rout->definition_for_inlining_only ||
-                   rout->suppress_inline_body)) {
+  if ((defining || unsupported) && (rout->definition_for_inlining_only ||
+                                    rout->suppress_inline_body)) {
+    /* Also on the issue that drops the definition (a gnu_inline wrapper that
+       uses __builtin_va_arg_pack, say): without it the consumer takes the
+       dropped definition for an external one, which is an error even if
+       nothing refers to it. */
     state->flags |= ECIL_DECL_FUNC_INLINE_ONLY;
   }  /* if */
   if (unsupported) state->flags |= ECIL_DECL_FUNC_UNSUPPORTED;
+  state->facts = 0;
 #if GNU_EXTENSIONS_ALLOWED || MICROSOFT_EXTENSIONS_ALLOWED
-  state->noinline = rout->never_inline;
-#else /* !(GNU_EXTENSIONS_ALLOWED || MICROSOFT_EXTENSIONS_ALLOWED) */
-  state->noinline = FALSE;
+  if (rout->never_inline) state->facts |= ECIL_FACT_NOINLINE;
 #endif /* GNU_EXTENSIONS_ALLOWED || MICROSOFT_EXTENSIONS_ALLOWED */
+#if GNU_EXTENSIONS_ALLOWED
+  if (rout->has_gnu_used_attribute) state->facts |= ECIL_FACT_USED;
+  if (rout->is_pure) state->facts |= ECIL_FACT_PURE;
+  if (rout_type_supp(t)->is_const) state->facts |= ECIL_FACT_CONST;
+  if (rout->always_inline) state->facts |= ECIL_FACT_ALWAYS_INLINE;
+  {
+    /* cold and hot exclude each other (LLVM rejects both): the one written
+       first wins, as in gcc (the front end does not diagnose the pair). */
+    an_attribute_ptr  ap;
+
+    for (ap = rout->source_corresp.attributes;
+         ap != NULL && (state->facts & (ECIL_FACT_COLD | ECIL_FACT_HOT)) == 0;
+         ap = ap->next) {
+      if (ap->kind == (an_attribute_kind)ak_cold) {
+        state->facts |= ECIL_FACT_COLD;
+      } else if (ap->kind == (an_attribute_kind)ak_hot) {
+        state->facts |= ECIL_FACT_HOT;
+      }  /* if */
+    }  /* for */
+  }
+#endif /* GNU_EXTENSIONS_ALLOWED */
+  library_facts = library_function_facts(rout);
+  if ((library_facts & ECIL_FACT_NORETURN) != 0) {
+    /* abort, exit, _Exit and _exit do not return (Clang's table): the flag,
+       as for the attribute. */
+    state->flags |= ECIL_DECL_FUNC_NORETURN;
+  }  /* if */
+  state->facts |= library_facts &
+                  ~(ECIL_FACT_NORETURN | ECIL_FACT_NOTHROW);
   if (ecil_has_exceptions()) {
     /* NOTHROW only from the front end's own answer, and never taken back by
        a re-issue (a wrong NOTHROW skips cleanups: spec 12.6). */
     if ((gid != 0 && (ecil_gid_info(gid)->decl_flags &
                                       ECIL_DECL_FUNC_NOTHROW) != 0) ||
+        (library_facts & ECIL_FACT_NOTHROW) != 0 ||
         is_non_throwing_routine(rout)) {
       state->flags |= ECIL_DECL_FUNC_NOTHROW;
     }  /* if */
@@ -2982,15 +3274,22 @@ one emitted (spec 8.2: a re-issue updates the entity).
   const a_func_state *state = &sticky;
 
   if (info->decl_emitted) {
-    /* A re-issue never takes NOTHROW back (spec 12.6), nor noinline (the GNU
-       attributes of the declarations of a function add up, spec 6). */
+    /* A re-issue never takes NOTHROW back (spec 12.6), nor noinline or
+       used (the GNU attributes of the declarations of a function add up,
+       spec 6). */
     sticky.flags |= info->decl_flags & ECIL_DECL_FUNC_NOTHROW;
-    sticky.noinline = sticky.noinline || info->decl_noinline;
+    sticky.facts |= info->decl_facts;
+    if ((sticky.facts & ECIL_FACT_COLD) != 0 &&
+        (sticky.facts & ECIL_FACT_HOT) != 0) {
+      /* A later declaration added the other one: the first sent stays. */
+      sticky.facts &= (info->decl_facts & ECIL_FACT_HOT) != 0 ?
+                                          ~ECIL_FACT_COLD : ~ECIL_FACT_HOT;
+    }  /* if */
   }  /* if */
   if (!info->decl_emitted || info->decl_type != state->type ||
       info->decl_linkage != state->linkage ||
       info->decl_flags != state->flags || info->decl_name != state->name ||
-      info->decl_noinline != state->noinline) {
+      info->decl_facts != state->facts) {
     an_ecil_buffer  *saved = ecil_frame_enter_decl(frame);
 
     ecil_rec_begin(frame, eop_decl_func);
@@ -3006,11 +3305,33 @@ one emitted (spec 8.2: a re-issue updates the entity).
     {
       an_ecil_supp  supp;
 
+      /* (The keys are added in increasing order: 4, 5, 11, 13, 14, 16, 17,
+         18.) */
       ecil_supp_begin(&supp);
+      if ((state->facts & ECIL_FACT_PURE) != 0) {
+        ecil_supp_true(&supp, esk_pure);
+      }  /* if */
+      if ((state->facts & ECIL_FACT_CONST) != 0) {
+        ecil_supp_true(&supp, esk_const);
+      }  /* if */
+      if ((state->facts & ECIL_FACT_USED) != 0) {
+        ecil_supp_true(&supp, esk_used);
+      }  /* if */
       if ((state->flags & ECIL_DECL_FUNC_UNSUPPORTED) != 0) {
         add_drop_reason(&supp, gid);
       }  /* if */
-      if (state->noinline) ecil_supp_true(&supp, esk_noinline);
+      if ((state->facts & ECIL_FACT_NOINLINE) != 0) {
+        ecil_supp_true(&supp, esk_noinline);
+      }  /* if */
+      if ((state->facts & ECIL_FACT_ALWAYS_INLINE) != 0) {
+        ecil_supp_true(&supp, esk_always_inline);
+      }  /* if */
+      if ((state->facts & ECIL_FACT_COLD) != 0) {
+        ecil_supp_true(&supp, esk_cold);
+      }  /* if */
+      if ((state->facts & ECIL_FACT_HOT) != 0) {
+        ecil_supp_true(&supp, esk_hot);
+      }  /* if */
       ecil_rec_supp_end(frame, &supp);
     }
     ecil_rec_end(frame);
@@ -3031,7 +3352,7 @@ one emitted (spec 8.2: a re-issue updates the entity).
     info->decl_linkage = state->linkage;
     info->decl_flags = state->flags;
     info->decl_name = state->name;
-    info->decl_noinline = state->noinline;
+    info->decl_facts = state->facts;
     info->decl_emitted = TRUE;
   }  /* if */
 }  /* emit_func_decl_if_changed */
@@ -3083,7 +3404,7 @@ initializers calls it (spec 12.5).
       state.name = ecil_intern_cstring(frame,
                                        "__cxa_throw_bad_array_new_length");
       state.late = FALSE;
-      state.noinline = FALSE;
+      state.facts = 0;
       ecil_mark_symbol_name(state.name);
       emit_func_decl_if_changed(frame, gid, &state);
       symbol_binding_register(state.name, gid);
@@ -5181,14 +5502,22 @@ Remember a binding for ecil_emit_late_names.
   }  /* if */
 }  /* add_late_binding */
 
+#if CHECKING
+/* The sample of the check of the names sent early, in
+   ecil_resolve_late_names. */
+#define ECIL_NAME_CHECK_ALL    2000
+#define ECIL_NAME_CHECK_STRIDE 16
+#endif /* CHECKING */
+
 
 void ecil_resolve_late_names(an_ecil_frame *frame)
 /*
 The file scope is complete: every name is final.  Give each function that
 was sent without a name its name (re-issuing its declaration if its linkage
 or COMDAT changed, with a nil name), and remember the binding for
-ecil_emit_late_names.  In CHECKING builds re-mangle every function that was
-named when it was sent and assert that the name did not change.
+ecil_emit_late_names.  In CHECKING builds re-mangle the functions that were
+named when it was sent (all of a small translation unit, a sample of a large
+one) and assert that the name did not change.
 */
 {
   uint32_t  gid;
@@ -5281,13 +5610,22 @@ named when it was sent and assert that the name did not change.
     }  /* for */
 #if CHECKING
     /* After an error the mangler gives every type a bogus encoding, so the
-       names cannot be compared: the compilation fails anyway. */
+       names cannot be compared: the compilation fails anyway.  Mangling a
+       name again costs as much as the first time, so the check of a large
+       translation unit looks at the first ECIL_NAME_CHECK_ALL functions and
+       one in ECIL_NAME_CHECK_STRIDE of the rest (a deterministic sample);
+       ECIL_CHECK_ALL_NAMES in the environment checks them all. */
+    size_t     num_checkable = 0;
+    a_boolean  check_all = getenv("ECIL_CHECK_ALL_NAMES") != NULL;
+
     for (gid = 1; !is_at_least_one_error() && gid <= last; gid++) {
       an_ecil_gid_info  *info = ecil_gid_info(gid);
 
       if (info->kind == egk_func && (info->flags & ECIL_GF_LATE_NAME) == 0 &&
           (info->flags & ECIL_GF_FUNCTION_LOCAL) == 0 &&
-          info->entity != NULL && info->decl_name != 0) {
+          info->entity != NULL && info->decl_name != 0 &&
+          (++num_checkable <= ECIL_NAME_CHECK_ALL || check_all ||
+           num_checkable % ECIL_NAME_CHECK_STRIDE == 0)) {
         a_routine_ptr  rout = (a_routine_ptr)info->entity;
 
         if (!ecil_routine_is_filtered(rout) &&
@@ -5712,7 +6050,8 @@ its first reference.
           ecil_remember_drop_reason(gid, ecil_unsupported_reason);
         }  /* if */
         ecil_emit_decl_var(frame, gid, type, linkage, flags,
-                           (uint32_t)ecil_variable_alignment(var), name_sid);
+                           (uint32_t)ecil_variable_alignment(var), name_sid,
+                           ecil_variable_is_used(var));
       }  /* if */
     }  /* if */
   }  /* if */

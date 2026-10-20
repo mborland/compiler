@@ -1,0 +1,81 @@
+; S2 round 2: the supp keys always_inline (16), cold (17) and hot (18) of a
+; DECL_FUNC.  always_inline is the inline kind alwaysinline (unless noinline is
+; set as well: a function with both gets neither, as in CIRGen).  cold and hot
+; are the function attributes `cold` and `hot` and the same unit attributes on
+; every call of the function; a cold definition is also optsize at -O1 and up.
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s --check-prefix=CIR
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=O0
+; RUN: %edg-cir --emit=cir %t.ecil | grep @tepid | %FileCheck %s --check-prefix=TEPID --implicit-check-not=cold --implicit-check-not=hot
+; RUN: %edg-cir -O2 --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=O2
+
+; CIR-DAG: cir.func {{.*}}always_inline {{.*}}@ai(
+; CIR-DAG: cir.func {{.*}}@both(
+; CIR-DAG: cir.func {{.*}}@coldf({{.*}} attributes {{{.*}}cold
+; CIR-DAG: cir.func private @thr({{.*}} attributes {{{.*}}cold{{.*}}noreturn
+; CIR-DAG: cir.func private @hotf({{.*}} attributes {{{.*}}hot
+; CIR-DAG: cir.call @thr() {{.*}}cold
+; CIR-DAG: cir.call @hotf() {{.*}}hot
+; CIR-DAG: cir.call @coldf() {{.*}}cold
+; O0-DAG: define dso_local void @ai() #[[AI:[0-9]+]]
+; O0-DAG: define dso_local void @both() #[[BOTH:[0-9]+]]
+; O0-DAG: define dso_local void @coldf() #[[COLD:[0-9]+]]
+; O0-DAG: call void @thr() #[[CTHR:[0-9]+]]
+; O0-DAG: call void @hotf() #[[CHOT:[0-9]+]]
+; O0-DAG: call void @coldf() #[[CCOLD:[0-9]+]]
+; O0-DAG: attributes #[[CTHR]] = {{{.*}}cold
+; O0-DAG: attributes #[[CHOT]] = {{{.*}}hot
+; O0-DAG: attributes #[[CCOLD]] = {{{.*}}cold
+; O0-DAG: attributes #[[AI]] = {{{.*}}alwaysinline
+; O0-DAG: attributes #[[COLD]] = {{{.*}}cold
+; O0-NOT: optsize
+; A function with both cold and hot gets neither (LLVM's verifier rejects the
+; pair): tepid, its call and its declaration carry neither.
+; TEPID: cir.func {{.*}}@tepid()
+; TEPID: cir.call @tepid()
+; O2: attributes #{{[0-9]+}} = {{{.*}}cold{{.*}}optsize
+; O2: attributes #{{[0-9]+}} = {{{.*}}hot
+
+frame DECLS supp
+  STR 100 "ai"
+  STR 101 "both"
+  STR 102 "coldf"
+  STR 103 "thr"
+  STR 104 "hotf"
+  STR 105 "main"
+  STR 106 "tepid"
+  TY_FUNC 21 11 0 []
+  TY_FUNC 22 1 0 []
+  DECL_FUNC 40 21 0 3 100 supp{16: true}
+  DECL_FUNC 41 21 0 1 101 supp{16: true, 14: true}
+  DECL_FUNC 42 21 0 1 102 supp{17: true}
+  DECL_FUNC 43 21 0 4 103 supp{17: true}
+  DECL_FUNC 44 21 0 0 104 supp{18: true}
+  DECL_FUNC 46 21 0 1 106 supp{17: true, 18: true}
+  DECL_FUNC 45 22 0 9 105
+frame REGION
+  FUNC_BEGIN 40 0
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 46 0
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 45 0
+  CALL 43 21 0 0
+  CALL 44 21 0 0
+  CALL 42 21 0 0
+  CALL 40 21 0 0
+  CALL 41 21 0 0
+  CALL 46 21 0 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

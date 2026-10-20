@@ -1,0 +1,102 @@
+; An inline-only function (gnu_inline, C99 inline: its definition lives in
+; another translation unit) keeps an available_externally body at -O1 and up,
+; with three exceptions that stay plain declarations, as in clang:
+;  - a function whose body calls its own symbol (glibc's inline memchr calls
+;    __builtin_memchr, the same symbol; TailCallElim would make a loop, which
+;    is undefined behavior once the function is pure and willreturn;
+;    isTriviallyRecursive, PR9614): rec_fn;
+;  - a function whose self-call does not match its type (an address and an
+;    indirect call in CIR, not a direct call; clang sees through it): mis_fn;
+;  - a noinline function: nin_fn;
+;  - (and every inline-only function at -O0, see inline-only-drop).
+; An available_externally definition is in no comdat group (LLVM: "Declaration
+; may not be in a Comdat") and is not dso_local (its definition is in another
+; object, a shared one under PIC): ok_fn is linkonce_odr, COMDAT and
+; INLINE_ONLY; it also passes the verifier after every pass at -O2.
+; RUN: sed 's/features=0x00000000/features=0x00000002/' %S/Inputs/header12_cxx_eh.txt > %t.h
+; RUN: cat %t.h %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir -O2 --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=FORM --implicit-check-not=comdat
+; RUN: %edg-cir -O1 --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=FORM --implicit-check-not=comdat
+; RUN: %edg-cir -O2 --verify-each --emit=llvm %t.ecil | %FileCheck %s --check-prefix=OPT
+; RUN: %edg-cir -O2 --verify-each --emit=obj -o %t.o %t.ecil
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYM
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=O0
+
+; FORM-DAG: declare noundef i32 @rec_fn(i32 noundef)
+; FORM-DAG: declare noundef i32 @nin_fn(i32 noundef)
+; FORM-DAG: declare noundef i32 @mis_fn(i32 noundef)
+; FORM-DAG: define available_externally noundef i32 @ok_fn(i32 noundef %0)
+; The recursive and the noinline function are still called; the other one is
+; inlined at -O2.
+; OPT: define {{.*}}@main
+; OPT-DAG: call {{.*}}@rec_fn
+; OPT-DAG: call {{.*}}@nin_fn
+; OPT-DAG: call {{.*}}@mis_fn
+; OPT-NOT: call {{.*}}@ok_fn
+; SYM-DAG: U rec_fn
+; SYM-DAG: U nin_fn
+; SYM-DAG: U mis_fn
+; SYM-DAG: T main
+; O0-DAG: declare noundef i32 @rec_fn
+; O0-DAG: declare noundef i32 @ok_fn
+; O0-NOT: available_externally
+
+frame DECLS supp
+  STR 100 "ok_fn"
+  STR 101 "rec_fn"
+  STR 102 "nin_fn"
+  STR 103 "main"
+  STR 104 "mis_fn"
+  TY_FUNC 21 1 0 [1]
+  TY_FUNC 22 1 0 []
+  TY_FUNC 23 1 0 [1, 1]
+  DECL_FUNC 40 21 3 83 100
+  DECL_FUNC 41 21 0 19 101
+  DECL_FUNC 42 21 0 19 102 supp{14: true}
+  DECL_FUNC 43 22 0 9 103
+  DECL_FUNC 44 21 0 19 104
+frame REGION
+  FUNC_BEGIN 40 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CALL 41 21 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 44 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CONST_INT 1 0
+  CALL 44 23 2 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  CONST_INT 1 1
+  CALL 40 21 1 0
+  CONST_INT 1 2
+  CALL 41 21 1 0
+  ADD 1
+  CONST_INT 1 3
+  CALL 42 21 1 0
+  ADD 1
+  CONST_INT 1 4
+  CALL 44 21 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

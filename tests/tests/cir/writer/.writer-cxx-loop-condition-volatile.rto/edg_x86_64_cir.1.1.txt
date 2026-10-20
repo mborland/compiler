@@ -1,0 +1,227 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=140000 Test_name.c
+"Test_name.c", line 25: warning: expression has no effect
+  void plain_var() { while ((g, true)) {} }
+                             ^
+
+"Test_name.c", line 28: warning: expression has no effect
+  void tls_dynamic() { while ((tg, true)) {} }
+                               ^
+
+"Test_name.c", line 29: warning: expression has no effect
+  void tls_extern() { while ((te, true)) {} }
+                              ^
+
+"Test_name.c", line 30: warning: expression has no effect
+  void tls_local() { thread_local int x = t(); while ((x, true)) {} }
+                                                       ^
+
+Warning: CIR back end: the initializer of "tg" uses a thread_local variable that is initialized or destroyed dynamically, which the CIR back end does not support; the definition is dropped
+
+ecil 1.3 features=0x0000001a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  TY_FUNC 5 4 0 []
+  STR 5 "_Z12volatile_varv"
+  DECL_FUNC 6 5 0 0 5
+  DECL_FUNC 6 5 0 1 5
+  TY_BOOL 7 1 1
+  STR 6 "v"
+  DECL_VAR 8 1 0 0 0 6
+  FUNC_BEGIN 6 0
+  BLOCK_BEGIN
+  WHILE_BEGIN
+  GREF 8
+  LOAD 1
+  DROP
+  CONST_INT 7 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 7 "_Z15volatile_memberv"
+  DECL_FUNC 9 5 0 0 7
+  DECL_FUNC 9 5 0 1 7
+  STR 8 "S"
+  TY_RECORD_DECL 10 0 8
+  STR 9 "vol"
+  STR 10 "plain"
+  TY_RECORD_BODY 10 8 8 4 0 2
+  REC_FIELD 1 0 nil nil 9 0
+  REC_FIELD 1 4 nil nil 10 0
+  STR 11 "s"
+  DECL_VAR 11 10 0 0 0 11
+  FUNC_BEGIN 9 0
+  BLOCK_BEGIN
+  WHILE_BEGIN
+  GREF 11
+  FIELD 10 0
+  LOAD 1
+  DROP
+  CONST_INT 1 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 12 "_Z16volatile_pointerv"
+  DECL_FUNC 12 5 0 0 12
+  DECL_FUNC 12 5 0 1 12
+  TY_PTR 13 1
+  STR 13 "vreg"
+  DECL_VAR 14 13 0 0 0 13
+  FUNC_BEGIN 12 0
+  BLOCK_BEGIN
+  WHILE_BEGIN
+  GREF 14
+  LOAD 0
+  DEREF
+  LOAD 1
+  DROP
+  CONST_INT 7 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 14 "_Z9plain_varv"
+  DECL_FUNC 15 5 0 0 14
+  DECL_FUNC 15 5 0 1 14
+  FUNC_BEGIN 15 0
+  BLOCK_BEGIN
+  WHILE_BEGIN
+  CONST_INT 7 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 15 "_Z11expect_callv"
+  DECL_FUNC 16 5 0 0 15
+  DECL_FUNC 16 5 0 1 15
+  TY_FUNC 17 1 0 []
+  STR 16 "_Z1fv"
+  DECL_FUNC 18 17 0 0 16
+  TY_FUNC 19 3 0 [3, 3]
+  FUNC_BEGIN 16 0
+  BLOCK_BEGIN
+  WHILE_BEGIN
+  CONST_INT 3 1
+  CALL 18 17 0 0
+  CAST 0 3
+  BUILTIN 1 2 3
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 17 "_Z11expect_purev"
+  DECL_FUNC 20 5 0 0 17
+  DECL_FUNC 20 5 0 1 17
+  FUNC_BEGIN 20 0
+  BLOCK_BEGIN
+  WHILE_BEGIN
+  CONST_INT 3 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 18 "_Z11tls_dynamicv"
+  DECL_FUNC 21 5 0 0 18
+  DECL_FUNC 21 5 0 1 18
+  STR 19 "tg"
+  DECL_VAR 22 1 0 4 0 19
+  FUNC_BEGIN 21 0
+  BLOCK_BEGIN
+  WHILE_BEGIN
+  GREF 22
+  DROP
+  CONST_INT 7 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 20 "_Z10tls_externv"
+  DECL_FUNC 23 5 0 0 20
+  DECL_FUNC 23 5 0 1 20
+  STR 21 "te"
+  DECL_VAR 24 1 0 4 0 21
+  FUNC_BEGIN 23 0
+  BLOCK_BEGIN
+  WHILE_BEGIN
+  GREF 24
+  DROP
+  CONST_INT 7 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 22 "_Z9tls_localv"
+  DECL_FUNC 25 5 0 0 22
+  DECL_FUNC 25 5 0 1 22
+  STR 23 "_ZZ9tls_localvE1x"
+  DECL_VAR 26 1 1 277 0 23
+  STR 24 "_Z1tv"
+  DECL_FUNC 27 17 0 0 24
+  FUNC_BEGIN 25 0
+  BLOCK_BEGIN
+  STATIC_INIT_BEGIN 26 0
+  GREF 26
+  CALL 27 17 0 0
+  STORE 0 0
+  STATIC_INIT_END
+  WHILE_BEGIN
+  CONST_INT 7 1
+  TO_BOOL
+  WHILE_BODY
+  BLOCK_BEGIN
+  BLOCK_END
+  WHILE_END
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS supp
+  DECL_VAR 22 1 0 68 0 19 supp{13: "a thread_local variable that is initialized or destroyed dynamically"}
+frame NAMES
+frame END
+  END 12 0

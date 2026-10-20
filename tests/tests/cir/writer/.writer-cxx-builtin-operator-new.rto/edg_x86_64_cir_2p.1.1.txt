@@ -1,0 +1,75 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --clang --clang_version=190000 Test_name.c
+ecil 1.3 features=0x0000001a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  TY_PTR 5 4
+  TY_FUNC 6 5 0 [2]
+  STR 5 "_Z1fm"
+  DECL_FUNC 7 6 0 0 5
+  DECL_FUNC 7 6 0 1 5
+  STR 6 "n"
+  STR 7 "_Znwm"
+  DECL_FUNC 8 6 0 0 7
+  FUNC_BEGIN 7 0
+  PARAM 1 2 2 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CALL 8 6 1 64
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 9 4 0 [5]
+  STR 8 "_Z1gPv"
+  DECL_FUNC 10 9 0 0 8
+  DECL_FUNC 10 9 0 1 8
+  STR 9 "p"
+  STR 10 "_ZdlPv"
+  DECL_FUNC 11 9 0 128 10
+  FUNC_BEGIN 10 0
+  PARAM 1 5 5 9 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CALL 11 9 1 68
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 12 4 0 [5, 2]
+  STR 11 "_Z1hPvm"
+  DECL_FUNC 13 12 0 0 11
+  DECL_FUNC 13 12 0 1 11
+  STR 12 "_ZdlPvm"
+  DECL_FUNC 14 12 0 128 12
+  FUNC_BEGIN 13 0
+  PARAM 1 5 5 9 0
+  PARAM 2 2 2 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  LREF 2
+  LOAD 0
+  CALL 14 12 2 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 6 0

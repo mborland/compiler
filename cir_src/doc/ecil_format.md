@@ -1,6 +1,6 @@
 # ECIL — EDG CIR IL stream format
 
-Status: **v1.3, open** (session 4: section 13 lists the 1.3 additions of gates M4.1 and M5a; 1.3 freezes at the M5 gate). **v1.2** (gate M4a, session 3: section 12: virtual functions, virtual bases, RTTI, exceptions and pointers to members). 1.2 is frozen at the M4 gate; additions and corrections found while implementing it (for example `NEW_ARRAY_SIZE_THROW`) are part of 1.2 until then. **v1.1** (gate M3.1, session 3: section 11.12). **v1.0** was frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
+Status: **v1.3** (session 4: section 13 lists the 1.3 additions of gates M4.1, M5a and M5). 1.3 is frozen at the M5 gate (2026-10-20). **v1.2** (gate M4a, session 3: section 12: virtual functions, virtual bases, RTTI, exceptions and pointers to members). 1.2 is frozen at the M4 gate; additions and corrections found while implementing it (for example `NEW_ARRAY_SIZE_THROW`) are part of 1.2 until then. **v1.1** (gate M3.1, session 3: section 11.12). **v1.0** was frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
 orchestrator.
 
 - **Normative source.** The definitions live in
@@ -165,8 +165,8 @@ For example, a dropped `noinline` function carries both
 | 1 `nothrow` | true |
 | 2 `branch_hint` | 0 = unlikely, 1 = likely |
 | 3 `typedef_name` | sid |
-| 4 `pure` | true |
-| 5 `const` | true |
+| 4 `pure` (1.3 semantics) | true |
+| 5 `const` (1.3 semantics) | true |
 | 6 `align_assumed` | uint |
 | 7 `nrvo_var` | lid |
 | 8 `readable_name` | sid |
@@ -177,6 +177,9 @@ For example, a dropped `noinline` function carries both
 | 13 `unsupported_reason` (1.1) | bin: UTF-8 text, at most 255 bytes |
 | 14 `noinline` (1.3) | true |
 | 15 `nonnull_ptrs` (1.3) | uint mask |
+| 16 `always_inline` (1.3) | true |
+| 17 `cold` (1.3) | true |
+| 18 `hot` (1.3) | true |
 
 **`unsupported_reason`** (1.1) may follow a `DECL_FUNC` or `DECL_VAR` that
 has `UNSUPPORTED` set, and only such a record; it appears at most once per
@@ -203,6 +206,31 @@ Its value is `true`.
 - **Older readers.** A 1.2 reader accepts a 1.3 stream that uses no newer
   opcode or flag (section 9) and skips key 14. It compiles the function
   without the attribute, which is the 1.2 behavior.
+
+**`pure`** and **`const`** (semantics fixed in 1.3) may follow a
+`DECL_FUNC`. Their value is `true`.
+- **Sources.**
+  - The GNU `pure` and `const` attributes.
+  - Library functions with C language linkage that the front end knows as
+    builtins and that clang's builtin table (`Builtins.inc` at the LLVM
+    pin) marks unconditionally pure (`U`) or const (`c`), for example the
+    `<ctype.h>` classification functions.
+  - The writer's table is generated: `src/builtin_libc_attrs.h`. The
+    math-errno-dependent classes (`e`, `g`) are excluded, because Linux
+    defaults to math-errno on.
+- **Consumer.** `pure` gives the function and its direct calls
+  `memory(read)`; `const` gives `memory(none)`. Both imply `nounwind` and
+  `willreturn`, as clang's CodeGen gives them.
+- **Sticky.** If both appear, `const` wins.
+
+**`always_inline`, `cold`, `hot`** (1.3) may follow a `DECL_FUNC`. Their
+value is `true`.
+- **Meaning.** They are the GNU attributes of the same names. The consumer
+  maps them as clang does: `alwaysinline`, `cold`, `hot` on the function.
+  As in clang, a `cold` function also gets `optsize` unless it is
+  `optnone`.
+- **Sticky**, like `noinline`. `always_inline` together with `noinline` is
+  diagnosed by the FE.
 
 **`used`** (1.3) may follow a `DECL_FUNC` or `DECL_VAR`, and only those.
 Its value is `true`.
@@ -1434,7 +1462,7 @@ result. If both arms are terminated, the `TERN` is void.
 | --- | --- |
 | `HDR_LANG` | `exceptions` = 1 is valid: functions and calls may throw unless nothrow, `eh` and `all` cleanups are live, the records of 12.5 are allowed, and the library runs with exceptions on. With exceptions = 0, the 1.0 rule stays (every function and call is nothrow) and the records of 12.5 are errors. The supp key `esk_nothrow` is a hint only. |
 | `HDR_LANG` | `rtti` = 0: the RTTI slot of each vtable is null, typeinfo objects exist only for EH, and `TYPEID` and `DYNAMIC_CAST` are errors. `CLASS_MANGLE` is still required. |
-| `DECL_FUNC` | `NOTHROW` 0x80, from the FE's `is_non_throwing_routine` only. A wrong `NOTHROW` silently skips cleanups. A re-issue never clears it. |
+| `DECL_FUNC` | `NOTHROW` 0x80. Since 1.3 it has two sources: (1) the FE's `is_non_throwing_routine`; (2) a C-linkage library function (not static, no asm label, matching name and signature) that clang's builtin table at the LLVM pin marks unconditionally nothrow (`n`). Source 2 excludes the cancellation points glibc declares as throwing (`fprintf`, `vprintf`, `vfprintf`); the generated table is `src/builtin_libc_attrs.h`. A wrong `NOTHROW` silently skips cleanups. A re-issue never clears it. |
 | `CALL`, `CALL_INDIRECT`, `PM_CALL` | `NOTHROW` 0x08: the call type is non-throwing (`is_nothrow_type`). A call is nothrow iff it has the flag or its callee's `DECL_FUNC` has `NOTHROW`. |
 | `CALL` | `VIRTUAL` 0x10: argument 0 is already converted to `g`'s class, and the slot comes from `CLASS_VFUNCS`. The writer devirtualizes as clang does: it looks through the compiler-generated base-class conversion of the object, and the call is plain when the object is a complete object that is neither a reference nor an indirection (`local.f()`), when the object's class is `final`, or when the function is `final`. A plain call calls the final overrider of the named function in the object's class (from the FE's override list of that class), which is not the named function when a using-declaration names a base's function (`struct C : B { using A::f; }; C c; c.f();` calls `B::f`). When that final overrider's return type differs from the named function's (a covariant return), the call stays `VIRTUAL`, as in clang. |
 | `CALL` | `VTT` 0x20: a `VTT_ADDR` operand is inserted between argument 0 and argument 1, and `nargs` still counts the parameters of `t_call`. Required iff the callee is the base variant of a `has_vbases` pair. |
@@ -1889,6 +1917,8 @@ keys and skips them, and it rejects the new `CALL` and `DECL_FUNC` flags.
 | Supp key 14 `noinline` | 6 | gate M4.1 |
 | Several keys per supp blob, each at most once | 6 | gate M4.1 |
 | Supp key 11 `used` | 6 | gate M5a (writer and consumer in slices S1/S2) |
+| Supp keys 4 `pure` and 5 `const`: semantics fixed (memory(read)/memory(none), nounwind, willreturn) and their sources | 6 | slice S2 |
+| Supp keys 16 `always_inline`, 17 `cold`, 18 `hot` | 6 | slice S2 (round 2) |
 | Supp key 15 `nonnull_ptrs` on `TY_FUNC` | 6 | gate M5a (slice S2) |
 | `CALL` flag `ALLOC_EXPR` (0x40): the allocation or deallocation call of a new- or delete-expression, or of `__builtin_operator_new`/`delete`. The consumer may add `builtin` to a call of a replaceable global operator. It is rejected in streams of minor 2 or lower. | 13 | gate M5a (slice S2) |
 | The static invoker passes a real closure object when `nonnull_ptrs` is used | 11.9 | gate M5a (slice S2) |

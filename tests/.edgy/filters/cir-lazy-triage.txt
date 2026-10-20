@@ -1,0 +1,18 @@
+# Cases where the eager run of edg-cir diagnoses something that the lazy run
+# does not (the step lazy-identity, dev_tools/bin/edg-cir-lazy-identity).
+#
+# A deferred body that lazy emission never replays is checked by the reader
+# only, so the eager run, the only one that checks every body in the
+# emitter, can report emitter-only diagnostics (and fail) that the lazy run
+# lacks (m5_design.md section 10).  Every such case is a finding of the
+# step; it passes only if it is listed here.
+#
+# One case per line:
+#
+#   <set>/<stream> | <reason>
+#
+# where the set is cpp or c and the stream is the stem the report prints
+# (imported__gnu__cpp__x.sft.cpp.0).  The reason (at least 8 characters, not
+# a placeholder) says why the difference is acceptable.  A case twice, or one
+# that has no eager-only diagnostics any more, fails the step.  A pinned unit
+# is never listed.

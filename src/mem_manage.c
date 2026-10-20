@@ -1460,16 +1460,19 @@ memory because of the properties of rout.  scope is the scope of rout
     keep_memory = TRUE;
   } else if (rout->is_prototype_instantiation) {
     /* Without MAINTAIN_NEEDED_FLAGS nothing keeps the region of a prototype
-       instantiation, but later instantiations of the template read what the
-       file scope holds about it.  (The use of the variable of a structured
-       binding pack that this was first kept for, find_binding_for_pack, no
-       longer reads the region: scope_stk.c keeps what it needs in the pack
-       reference.  Freeing the region is still not safe: gnats-26823 then
-       fails an assertion in ecil_check_variable_use on a variable that an
-       address constant reaches, see doc/research/m31_reassessment.md.)  It
-       is not streamed
-       (ecil_routine_is_filtered); the region stays until the end of the
-       compilation. */
+       instantiation, but a requires-expression needs it: the first scan of
+       a requires-expression in a template context stores its tree (and
+       its parameter list), allocated in the current function's region, in
+       requires_ranges, which is not tied to the region, and a later
+       instantiation copies that tree instead of scanning the tokens again
+       (scan_requires_expr).  When the first scan was made while a
+       prototype instantiation was parsed, the tree is in this region.
+       Freeing it fails with a use of freed memory in the C++20 tests that
+       have requires-expressions (changes/EDGcpfe26103,
+       edg/cmeerw/gnats-26298 and others).  The region is not streamed
+       (ecil_routine_is_filtered) and stays until the end of the
+       compilation (it is about 0.4 MB on a 6000-function C++ file and
+       under 6 MB on a lambda-heavy one). */
     keep_memory = TRUE;
   } else if (scope->expr_node_refs != NULL) {
     /* A template argument in the file scope region refers to an expression

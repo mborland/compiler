@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -28,7 +28,7 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 7 "_Z7use_extv"
   DECL_FUNC 7 4 0 0 7
   DECL_FUNC 7 4 0 1 7
@@ -42,7 +42,7 @@ frame REGION
   STR 10 "r"
   TY_VOID 11
   TY_PTR 12 8
-  TY_FUNC 13 11 0 [12]
+  TY_FUNC 13 11 0 [12] supp{15: 2}
   STR 11 "_ZN1DC1Ev"
   DECL_FUNC 14 13 0 0 11
   STR 12 "_ZN1DC2Ev"
@@ -115,7 +115,7 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame GLOBALS
+frame GLOBALS supp
   STR 15 "_Z2vtIiE"
   DECL_VAR 18 1 0 1 0 15
   C_INT 1 7
@@ -145,7 +145,7 @@ frame GLOBALS
   C_INT 1 5
   VAR_INIT 6
   TY_PTR 25 21
-  TY_FUNC 26 11 0 [25]
+  TY_FUNC 26 11 0 [25] supp{15: 2}
   STR 22 "_ZN8NonConstC1Ev"
   DECL_FUNC 27 26 0 0 22
   STR 23 "_ZN8NonConstC2Ev"

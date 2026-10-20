@@ -12,7 +12,7 @@ ecil 1.2 features=0x0000000a
 ; RUN: g++ %t.o -o %t.exe
 ; RUN: %t.exe
 
-; CHECK-LABEL: cir.func {{.*}}@_ZN1LC2Ev(%arg0: !cir.ptr<!rec_L>, %arg1: !cir.ptr<!cir.ptr<!void>>)
+; CHECK-LABEL: cir.func {{.*}}@_ZN1LC2Ev(%arg0: !cir.ptr<!rec_L>{{.*}}, %arg1: !cir.ptr<!cir.ptr<!void>>{{.*}})
 ; CHECK-LABEL: cir.func {{.*}}@_ZN1MC1Ev(
 ; CHECK: cir.call @_ZN1VC2Ei(
 ; CHECK: cir.vtt.address_point @_ZTT1M, offset = 1

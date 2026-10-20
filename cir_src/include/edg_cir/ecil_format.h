@@ -739,10 +739,14 @@ typedef enum an_ecil_supp_key {
                                   DECL_FUNC or DECL_VAR with UNSUPPORTED. */
   esk_noinline      = 14, /* 1.3: true; on a DECL_FUNC.  The function must
                              not be inlined (GNU noinline).  Sticky. */
-  esk_nonnull_ptrs  = 15  /* 1.3: uint mask; on a TY_FUNC.  Bit 0: the
+  esk_nonnull_ptrs  = 15, /* 1.3: uint mask; on a TY_FUNC.  Bit 0: the
                              result is a reference; bit i+1: parameter i is
                              a reference or the implicit object parameter.
                              Part of the function type's identity. */
+  esk_always_inline = 16, /* 1.3: true; on a DECL_FUNC.  GNU always_inline.
+                             Sticky. */
+  esk_cold          = 17, /* 1.3: true; on a DECL_FUNC.  GNU cold.  Sticky. */
+  esk_hot           = 18  /* 1.3: true; on a DECL_FUNC.  GNU hot.  Sticky. */
 } an_ecil_supp_key;
 
 #endif /* ECIL_FORMAT_H */

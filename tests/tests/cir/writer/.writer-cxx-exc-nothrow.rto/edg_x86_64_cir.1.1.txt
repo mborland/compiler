@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -42,11 +42,11 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 10 "S"
   TY_RECORD_DECL 12 0 10
   TY_PTR 13 12
-  TY_FUNC 14 4 0 [13]
+  TY_FUNC 14 4 0 [13] supp{15: 2}
   TY_VPTR 15
   TY_RECORD_BODY 12 8 8 8 4 1
   REC_FIELD 15 0 nil nil nil 1

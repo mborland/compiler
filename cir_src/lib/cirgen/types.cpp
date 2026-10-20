@@ -169,9 +169,23 @@ attributes).
   unit_attr_ = builder_.getUnitAttr();
   nothrow_name_ = mlir::StringAttr::get(ctx_,
                                         cir::CIRDialect::getNoThrowAttrName());
+  builtin_name_ = mlir::StringAttr::get(
+      ctx_, cir::CIRDialect::getBuiltinAttrName());
+  allocsize_name_ = mlir::StringAttr::get(
+      ctx_, cir::CIRDialect::getAllocSizeAttrName());
+  norecurse_name_ = mlir::StringAttr::get(
+      ctx_, cir::CIRDialect::getNoRecurseAttrName());
+  nounwind_name_ = mlir::StringAttr::get(
+      ctx_, cir::CIRDialect::getNoUnwindAttrName());
+  willreturn_name_ = mlir::StringAttr::get(
+      ctx_, cir::CIRDialect::getWillReturnAttrName());
+  memory_effects_name_ = mlir::StringAttr::get(ctx_, "memory_effects");
+  mustprogress_name_ = mlir::StringAttr::get(
+      ctx_, cir::CIRDialect::getMustProgressAttrName());
   noreturn_name_ = mlir::StringAttr::get(
                       ctx_, cir::CIRDialect::getNoReturnAttrName());
   builder_.setInsertionPointToEnd(module_.getBody());
+  lazy_ = (session_.flags & EDG_CIR_FLAG_EAGER_BODIES) == 0;
 }  /* a_emitter::a_emitter */
 
 /* Types. */
@@ -466,6 +480,7 @@ Handle one type introduction record (TY_*, except the body records).
       t->variadic = (flags & ECIL_FUNC_TYPE_VARIADIC) != 0;
       t->no_proto = (flags & ECIL_FUNC_TYPE_NO_PROTO) != 0;
       t->cir = compat::function_type(inputs, ret->cir, t->variadic);
+      t->nonnull_mask = supp_uint(r, esk_nonnull_ptrs);
     }
     break;
   }
@@ -707,8 +722,11 @@ record of the new size.
   uint64_t nvsize = 0;
   a_type *t;
 
+  uint64_t nvalign = 0;
+
   uint_operand(r.ops[0], gid);
   uint_operand(r.ops[1], nvsize);
+  uint_operand(r.ops[2], nvalign);
   t = type_at(gid);
   if (t == nullptr) {
     ok = false;
@@ -720,6 +738,8 @@ record of the new size.
     uint64_t primary = 0;
 
     rec.nvsize = nvsize;
+    rec.nvalign = nvalign;
+    rec.has_class_info = true;
     rec.awaiting_info = false;
     pending_info_gid_ = 0;
     if (r.ops[3].kind != ecil::an_operand_kind::nil &&
@@ -731,6 +751,8 @@ record of the new size.
     a_record_info &rec = *t->record;
 
     rec.nvsize = nvsize;
+    rec.nvalign = nvalign;
+    rec.has_class_info = true;
     if (rec.base_type && rec.base_type_size != nvsize)
       rec.base_type = mlir::Type();
   } else {

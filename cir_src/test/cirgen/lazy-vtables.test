@@ -1,0 +1,24 @@
+; Lazy emission and the class facts: the functions that only a vtable, a VTT
+; or a construction vtable names (overriders, the destructor variants, the
+; deleting destructors, thunk targets, the constructors of virtual bases) are
+; reachable through the edges finish adds from the class facts, so none of
+; them is dropped.  Three streams of the S2 and S3 tests: a diamond with a
+; virtual base (VTT and construction vtables), covariant returns through
+; virtual bases (thunks), and RTTI with a hierarchy (typeinfo, structors).
+; The assembly is the same as with eager bodies.
+; RUN: %ecil-asm %S/cxx-s2-diamond.test -o %t.diamond.ecil
+; RUN: %edg-cir --stats --emit=asm -o %t.diamond.s %t.diamond.ecil 2>&1 | %FileCheck %s --check-prefix=DIAMOND
+; RUN: %edg-cir --eager-bodies --emit=asm -o %t.diamond.e.s %t.diamond.ecil
+; RUN: cmp %t.diamond.s %t.diamond.e.s
+; RUN: %ecil-asm %S/cxx-s2-covariant-vbase.test -o %t.cov.ecil
+; RUN: %edg-cir --stats --emit=asm -o %t.cov.s %t.cov.ecil 2>&1 | %FileCheck %s --check-prefix=COV
+; RUN: %edg-cir --eager-bodies --emit=asm -o %t.cov.e.s %t.cov.ecil
+; RUN: cmp %t.cov.s %t.cov.e.s
+; RUN: %ecil-asm %S/cxx-s3-rtti.test -o %t.rtti.ecil
+; RUN: %edg-cir --stats --emit=asm -o %t.rtti.s %t.rtti.ecil 2>&1 | %FileCheck %s --check-prefix=RTTI
+; RUN: %edg-cir --eager-bodies --emit=asm -o %t.rtti.e.s %t.rtti.ecil
+; RUN: cmp %t.rtti.s %t.rtti.e.s
+
+; DIAMOND: stats: lazy bodies: 15 deferred, 15 replayed, 0 dropped
+; COV: stats: lazy bodies: 15 deferred, 15 replayed, 0 dropped
+; RTTI: stats: lazy bodies: 16 deferred, 16 replayed, 0 dropped

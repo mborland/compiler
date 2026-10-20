@@ -19,6 +19,7 @@ delivered on the calling thread, statistics, finish.
 
 #include <sys/resource.h>
 
+#include "chunk.h"
 #include "cir_module.h"
 #include "emitter.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -285,11 +286,15 @@ Copy the options (strings included) and set up the stream reader.
     diagnostic_user_data(options.diagnostic_user_data),
     have_triple_override(options.target_triple_override != nullptr),
     opt_level(options.opt_level), flags(options.flags),
+    chunk_threshold(options.chunk_threshold),
     status(EDG_CIR_OK), finished(false), in_worker(false), tee(nullptr),
     crash_held(false), poisoned(false),
     stats_on((options.flags & EDG_CIR_FLAG_PRINT_STATS) != 0),
     last_line(0), last_column(0)
 {
+  stats.chunk_size = options.chunk_functions != 0
+                         ? options.chunk_functions
+                         : edg_cir::k_default_chunk_functions;
   if (options.output_path != nullptr)
     output_path = options.output_path;
   if (options.target_triple_override != nullptr)
@@ -476,6 +481,23 @@ requested.
   return accepted;
 }  /* an_edg_cir_session::consume_timed */
 
+void an_edg_cir_session::print_chunk_line()
+/*
+The chunked-lowering note: how many chunks the module was lowered in (the
+globals chunk included, 0 when it was lowered as one module) and the chunk
+size.  It is part of every --stats run, also of one that fails early.
+*/
+{
+  char line[128];
+
+  std::snprintf(line, sizeof line,
+                "stats: chunked lowering: %llu chunks of at most %llu "
+                "functions",
+                static_cast<unsigned long long>(stats.chunks),
+                static_cast<unsigned long long>(stats.chunk_size));
+  report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
+}  /* an_edg_cir_session::print_chunk_line */
+
 void an_edg_cir_session::print_stats()
 /*
 EDG_CIR_FLAG_PRINT_STATS: report the counters, stage times and peak memory as
@@ -484,6 +506,8 @@ notes.
 {
   char line[256];
   unsigned long long peak_kib = edg_cir::stats_peak_kib();
+
+  stats_printed = true;
   const a_session_stats &t = stats;
   double decode_ns = t.consume_ns > t.emit_ns
                          ? static_cast<double>(t.consume_ns - t.emit_ns) : 0;
@@ -521,6 +545,39 @@ notes.
                 static_cast<double>(t.lower_ns) / 1e6,
                 static_cast<double>(t.codegen_ns) / 1e6);
   report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
+  print_chunk_line();
+  std::snprintf(line, sizeof line,
+                "stats: lazy bodies: %llu deferred, %llu replayed, %llu "
+                "dropped",
+                static_cast<unsigned long long>(t.lazy_deferred),
+                static_cast<unsigned long long>(t.lazy_replayed),
+                static_cast<unsigned long long>(t.lazy_dropped));
+  report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
+  if (t.lazy_deferred != 0) {
+    std::snprintf(line, sizeof line,
+                  "stats: lazy detail: %llu bytes held, %llu variables erased "
+                  "with them, %llu dropped bodies named by %llu dead "
+                  "entities (erased with them); reachability %.2f ms, "
+                  "replay %.2f ms",
+                  static_cast<unsigned long long>(t.lazy_bytes),
+                  static_cast<unsigned long long>(t.lazy_vars),
+                  static_cast<unsigned long long>(t.lazy_kept),
+                  static_cast<unsigned long long>(t.lazy_namers),
+                  static_cast<double>(t.lazy_resolve_ns) / 1e6,
+                  static_cast<double>(t.lazy_replay_ns) / 1e6);
+    report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
+  }
+  /* EDG_CIR_LAZY_SYMBOLS (edg-cir --lazy-symbols): one note per deferred
+     body with the symbol it has in the output. */
+  if (emitter && std::getenv("EDG_CIR_LAZY_SYMBOLS") != nullptr) {
+    for (const auto &item : emitter->lazy_symbols())
+      report(EDG_CIR_SEVERITY_NOTE, edc_stats,
+             std::string("stats: lazy ") +
+                 (item.second ? "replayed " : "dropped ") + item.first);
+    for (const std::string &name : emitter->lazy_kept())
+      report(EDG_CIR_SEVERITY_NOTE, edc_stats,
+             "stats: lazy dead-named " + name);
+  }
   std::snprintf(line, sizeof line,
                 "stats: peak RSS KiB at start %llu, after emit %llu, finish "
                 "%llu, verify %llu, cir passes %llu, lower %llu",
@@ -607,6 +664,10 @@ Finish the stream and run the pipeline.
       edg_cir::release_crash_recovery();
       crash_held = false;
     }
+  }
+  if (stats_on && !stats_printed) {
+    stats_printed = true;
+    print_chunk_line();
   }
   return status;
 }  /* an_edg_cir_session::finish */

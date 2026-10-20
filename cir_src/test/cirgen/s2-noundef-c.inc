@@ -1,0 +1,17 @@
+frame DECLS
+  STR 100 "cf"
+  STR 101 "main"
+  TY_FUNC 40 1 0 [1]
+  TY_FUNC 41 1 0 []
+  DECL_FUNC 50 40 0 0 100
+  DECL_FUNC 51 41 0 9 101
+frame REGION
+  FUNC_BEGIN 51 0
+  CONST_INT 1 5
+  CALL 50 40 1 0
+  DROP
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

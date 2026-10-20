@@ -16,6 +16,11 @@
 ; RUN: g++ %t.o -o %t.exe
 ; RUN: %t.exe
 ; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
+; The attributes (S2 round 2): D0 is mustprogress (a C++11 function) and its
+; operator delete call has noundef arguments and `builtin nounwind`; a thunk
+; has noundef on its parameter and the nounwind of its target; main of C++ is
+; norecurse.
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=ATTRS
 
 ; CHECK-LABEL: cir.global {{.*}}@_ZTV1C = #cir.vtable<{#cir.const_array<[#cir.ptr<null> : !cir.ptr<!u8i>, #cir.global_view<@_ZTI1C> : !cir.ptr<!u8i>, #cir.global_view<@_ZN1CD1Ev> : !cir.ptr<!u8i>, #cir.global_view<@_ZN1CD0Ev> : !cir.ptr<!u8i>]> : !cir.array<!cir.ptr<!u8i> x 4>, #cir.const_array<[#cir.ptr<-16 : i64> : !cir.ptr<!u8i>, #cir.global_view<@_ZTI1C> : !cir.ptr<!u8i>, #cir.global_view<@_ZThn16_N1CD1Ev> : !cir.ptr<!u8i>, #cir.global_view<@_ZThn16_N1CD0Ev> : !cir.ptr<!u8i>]> : !cir.array<!cir.ptr<!u8i> x 4>}>
 ; CHECK-LABEL: cir.func {{.*}}@main
@@ -26,6 +31,15 @@
 ; SYMS-DAG: T _ZThn16_N1CD1Ev
 ; SYMS-DAG: T _ZThn16_N1CD0Ev
 ; SYMS-DAG: T _ZN1CD0Ev
+
+; ATTRS: define dso_local void @_ZN1CD0Ev(ptr noundef %{{[0-9]+}}) #[[D0:[0-9]+]]
+; ATTRS: call void @_ZdlPvm(ptr noundef %{{.*}}, i64 noundef 32) #[[DEL:[0-9]+]]
+; ATTRS: define dso_local noundef i32 @main() #[[MAIN:[0-9]+]]
+; ATTRS: define dso_local void @_ZThn16_N1CD1Ev(ptr noundef %{{[0-9]+}}) #[[THUNK:[0-9]+]]
+; ATTRS-DAG: attributes #[[D0]] = { mustprogress nounwind uwtable }
+; ATTRS-DAG: attributes #[[DEL]] = { builtin nounwind }
+; ATTRS-DAG: attributes #[[MAIN]] = { mustprogress norecurse nounwind uwtable }
+; ATTRS-DAG: attributes #[[THUNK]] = { nounwind uwtable }
 
 frame DECLS
   STR 11 "A"

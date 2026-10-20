@@ -1,0 +1,252 @@
+; A ?: whose result is a record (or other aggregate) does not carry the value
+; out of its arms with cir.yield: both arms store into a temporary and the value
+; is loaded after the ternary.  The CIR-to-CIR call conversion lowering of the
+; newer pins accepts a record value only in a store, a call, a return or a
+; member read; a yielded record is "not yet implemented" there (corpus case
+; opt/nrv5).  The program checks both arms at -O0 and -O2, in a function,
+; nested, as the initializer of a namespace-scope variable (a dynamic
+; initializer) and as the initializer of a static local.
+; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s --implicit-check-not='cir.yield %{{[0-9]+}} : !rec_S'
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %edg-cir -O2 --emit=obj -o %t.o2.o %t.ecil
+; RUN: gcc %t.o2.o -o %t.o2.exe
+; RUN: %t.o2.exe
+
+; CHECK: cir.ternary(
+; CHECK: cir.call @mk1
+; CHECK-NEXT: cir.store {{.*}} : !rec_S, !cir.ptr<!rec_S>
+; CHECK: cir.call @mk2
+; CHECK-NEXT: cir.store {{.*}} : !rec_S, !cir.ptr<!rec_S>
+
+frame DECLS
+  STR 10 "mk1"
+  STR 11 "mk2"
+  STR 12 "pick"
+  STR 13 "main"
+  STR 14 "S"
+  STR 15 "nested"
+  STR 16 "stat"
+  STR 17 "flag"
+  STR 18 "g_dyn"
+  STR 19 "s_loc"
+  TY_RECORD_DECL 31 0 14
+  TY_RECORD_BODY 31 8 8 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 1 4 nil nil nil 0
+  TY_FUNC 33 31 0 []
+  TY_FUNC 34 1 0 [1]
+  TY_FUNC 35 1 0 []
+  TY_FUNC 36 1 0 [1, 1]
+  DECL_FUNC 100 33 0 1 10
+  DECL_FUNC 101 33 0 1 11
+  DECL_FUNC 102 34 0 1 12
+  DECL_FUNC 103 35 0 9 13
+  DECL_FUNC 104 36 0 1 15
+  DECL_FUNC 105 34 0 1 16
+  DECL_VAR 120 1 0 1 4 17
+  DECL_VAR 121 31 0 1 4 18
+  DECL_VAR 122 31 1 273 4 19
+frame REGION
+  FUNC_BEGIN 100 0
+  LOCAL 1 31 nil 4 0
+  LREF 1
+  FIELD 31 0
+  CONST_INT 1 1
+  STORE 0 0
+  LREF 1
+  FIELD 31 1
+  CONST_INT 1 2
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 101 0
+  LOCAL 1 31 nil 4 0
+  LREF 1
+  FIELD 31 0
+  CONST_INT 1 3
+  STORE 0 0
+  LREF 1
+  FIELD 31 1
+  CONST_INT 1 4
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 102 0
+  PARAM 1 1 1 nil 0
+  LOCAL 2 31 nil 4 0
+  LREF 2
+  LREF 1
+  LOAD 0
+  TO_BOOL
+  TERN_BEGIN 31
+  CALL 100 33 0 0
+  TERN_ELSE
+  CALL 101 33 0 0
+  TERN_END
+  STORE 2 0
+  LREF 2
+  FIELD 31 0
+  LOAD 0
+  LREF 2
+  FIELD 31 1
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 104 0
+  PARAM 1 1 1 nil 0
+  PARAM 2 1 1 nil 0
+  LOCAL 3 31 nil 4 0
+  LREF 3
+  LREF 1
+  LOAD 0
+  TO_BOOL
+  TERN_BEGIN 31
+  LREF 2
+  LOAD 0
+  TO_BOOL
+  TERN_BEGIN 31
+  CALL 100 33 0 0
+  TERN_ELSE
+  CALL 101 33 0 0
+  TERN_END
+  TERN_ELSE
+  CALL 101 33 0 0
+  TERN_END
+  STORE 2 0
+  LREF 3
+  FIELD 31 0
+  LOAD 0
+  LREF 3
+  FIELD 31 1
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 105 0
+  PARAM 1 1 1 nil 0
+  STATIC_INIT_BEGIN 122 0
+  GREF 122
+  LREF 1
+  LOAD 0
+  TO_BOOL
+  TERN_BEGIN 31
+  CALL 100 33 0 0
+  TERN_ELSE
+  CALL 101 33 0 0
+  TERN_END
+  STORE 2 0
+  STATIC_INIT_END
+  GREF 122
+  FIELD 31 0
+  LOAD 0
+  GREF 122
+  FIELD 31 1
+  LOAD 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 103 0
+  CONST_INT 1 1
+  CALL 102 34 1 0
+  CONST_INT 1 3
+  CMP 5
+  IF_BEGIN false
+  CONST_INT 1 1
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  CALL 102 34 1 0
+  CONST_INT 1 7
+  CMP 5
+  IF_BEGIN false
+  CONST_INT 1 2
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 1
+  CONST_INT 1 1
+  CALL 104 36 2 0
+  CONST_INT 1 3
+  CMP 5
+  IF_BEGIN false
+  CONST_INT 1 3
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 1
+  CONST_INT 1 0
+  CALL 104 36 2 0
+  CONST_INT 1 7
+  CMP 5
+  IF_BEGIN false
+  CONST_INT 1 4
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  CONST_INT 1 1
+  CALL 104 36 2 0
+  CONST_INT 1 7
+  CMP 5
+  IF_BEGIN false
+  CONST_INT 1 5
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 1
+  CALL 105 34 1 0
+  CONST_INT 1 3
+  CMP 5
+  IF_BEGIN false
+  CONST_INT 1 6
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  CALL 105 34 1 0
+  CONST_INT 1 3
+  CMP 5
+  IF_BEGIN false
+  CONST_INT 1 7
+  RETURN_STMT true
+  IF_END
+  GREF 121
+  FIELD 31 0
+  LOAD 0
+  GREF 121
+  FIELD 31 1
+  LOAD 0
+  ADD 1
+  CONST_INT 1 3
+  CMP 5
+  IF_BEGIN false
+  CONST_INT 1 8
+  RETURN_STMT true
+  IF_END
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  STATIC_INIT_BEGIN 120 0
+  GREF 120
+  CONST_INT 1 1
+  STORE 2 0
+  STATIC_INIT_END
+  STATIC_INIT_BEGIN 121 0
+  GREF 121
+  GREF 120
+  LOAD 0
+  TO_BOOL
+  TERN_BEGIN 31
+  CALL 100 33 0 0
+  TERN_ELSE
+  CALL 101 33 0 0
+  TERN_END
+  STORE 2 0
+  STATIC_INIT_END
+frame END
+  END auto 0

@@ -316,3 +316,19 @@ contract opens ECIL 1.3 (`ecil_format.md` §6, §11.2). The plan is
 | Gate tooling | `perf` has a 2% default limit and requires a baseline. `rss` has per-row ceilings and covers the C++ generators. `eh-probes` requires at least 1 probe. `mixed-tu` checks its row count, names REF-FAIL rows and accepts only listed XFAILs. | Review part B |
 | ECIL 1.3 | Opened at M4.1 with key 14 and blobs with several keys. Freezes at the M5 gate. | `ecil_format.md` §6 |
 | Upstream pin | The drift study recommends 2d6f180e (M5p). The candidate builds with one adaptation and passes ctest and lit. | `research/m5_upstream_drift.md` |
+
+## 14. M5p: the llvm-project pin moves to 2d6f180e (session 4)
+
+The user chose the bump after the drift study (`research/m5_upstream_drift.md`)
+and cir-lib's candidate measurements (`research/m5_library.md` §6, placed at
+M5a). No local llvm-project patch is used.
+
+| Topic | Decision | Evidence |
+| --- | --- | --- |
+| Pin | `894bfff5` → `2d6f180e` (main, 2026-10-19). Images `edgcpp/{llvm-cir,cir-env}:latest` point at 2d6f180e. The rollback images are tagged `:894bfff5`. | `clang --version` in both images |
+| API adaptation | `LoweringLangOptionsAttr::get` gained an `hlsl` bool. `CIRCompat.h` passes every argument by name, so a reorder in a later bump fails loudly. | ctest 4/4 presets; lit 190/190 |
+| Aggregate `?:` (nrv5) | After upstream 036efe53, CallConvLowering rejects a record value that leaves a region through `cir.yield`. The aggregate conditional now stores each arm into a `tern.tmp` slot and loads after it, as clang's CIRGen writes into the destination. It is our only record-yielding path. | `cxx-tern-record` (plain, global dynamic init, static-local init, nested) at -O0 and -O2 |
+| What the pin changes | Every function gets `nounwind` (1af48d87), so the LSDA has no entries for calls that cannot throw. By-value records are coerced through memory (036efe53; the classification is unchanged). Constant arrays with trailing zeros lower as packed structs with a `zeroinitializer` tail (same bytes). Two -O2 corpus gains (`builtins-41`, `builtin-round-roundeven`); `c/pr78468` fixed. | asm attribution of all 94 C and 209 C++ changed files (`asm_churn_classify.py` plus the body-versus-module IR split); 0 unexplained |
+| Not fixed by the pin | Quadratic lowering of wide vtables and diamonds, nested-try CIRCanonicalize, FlattenCFG's array-element EH gap, G1–G8, the extern member-pointer CXXABI crash. The library workarounds stay. | Watch list before and after: none worse; perf instruction counts −1% to −3.4% |
+| Lean gates (user) | Small gates run the steps their change set can affect. `edg-cir-gate-evidence --lean AREAS` derives the required areas from `git diff` and refuses an uncovered set. The full gate runs once at M5. | Gate tool self-tests (78) |
+| Baselines | `m5p-base-*` (asm, cpp-asm, status, perf, rss), with rss ceilings re-derived from minimum-of-3 ASan runs | M5p evidence `checkpoint-20261019-171311` |

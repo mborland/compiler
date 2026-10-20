@@ -1,0 +1,61 @@
+; API 2: EDG_CIR_FLAG_NO_LLVM_PASSES (edg-cir --no-llvm-passes) skips the LLVM
+; IR pipeline: GlobalDCE at -O0 (a dead internal function stays) and the
+; default pipeline at -O2 (a small function is not inlined).  The code
+; generation level is unchanged: the object still links and runs.  The flag
+; is a no-op for the CIR output kinds.  --eager-bodies (EAGER_BODIES) and the
+; chunk options are accepted and change nothing yet.
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=llvm %t.ecil | %FileCheck %s --check-prefix=DCE
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=KEEP
+; RUN: %edg-cir -O2 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=INLINED
+; RUN: %edg-cir -O2 --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=KEEP2
+; RUN: %edg-cir --eager-bodies --chunk-functions=2 --chunk-threshold=1 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=DCE
+; RUN: %edg-cir -O2 --no-llvm-passes --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %edg-cir --emit=cir %t.ecil > %t.a.cir
+; RUN: %edg-cir --no-llvm-passes --emit=cir %t.ecil > %t.b.cir
+; RUN: cmp %t.a.cir %t.b.cir
+
+; DCE-NOT: @dead
+; DCE: define {{.*}} @main()
+; KEEP: define internal {{.*}} @dead()
+; KEEP: define {{.*}} @main()
+; INLINED-NOT: call {{.*}} @small()
+; KEEP2: define {{.*}} @main()
+; KEEP2: call {{.*}} @small()
+
+frame DECLS supp
+  STR 100 "small"
+  STR 101 "dead"
+  STR 102 "main"
+  STR 105 "cnt"
+  TY_FUNC 21 1 0 []
+  DECL_VAR 301 1 0 1 4 105
+  DECL_FUNC 40 21 0 1 100
+  DECL_FUNC 41 21 1 1 101
+  DECL_FUNC 42 21 0 9 102
+frame REGION
+  FUNC_BEGIN 40 0
+  GREF 301
+  GREF 301
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  CONST_INT 1 7
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  CALL 40 21 0 0
+  CONST_INT 1 1
+  SUB 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

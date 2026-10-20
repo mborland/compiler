@@ -198,7 +198,7 @@ void lower_and_emit(an_edg_cir_session &session, mlir::ModuleOp module,
                     llvm::raw_string_ostream &out)
 /*
 Lower the (CIR-pass-processed) module to LLVM IR, run GlobalDCE and the
-optimizer, and produce the requested LLVM-level output.  Sets
+optimizer (unless EDG_CIR_FLAG_NO_LLVM_PASSES), and produce the requested LLVM-level output.  Sets
 session.status on failure.
 */
 {
@@ -252,7 +252,10 @@ session.status on failure.
                                    : llvm::OptimizationLevel::O3;
       mpm = builder.buildPerModuleDefaultPipeline(level);
     }
-    mpm.run(*lowered, mam);
+    /* EDG_CIR_FLAG_NO_LLVM_PASSES: leave the module as lowered (to compare
+       the LLVM IR before optimization); code generation is unchanged. */
+    if ((session.flags & EDG_CIR_FLAG_NO_LLVM_PASSES) == 0)
+      mpm.run(*lowered, mam);
     go = session.status == EDG_CIR_OK;
   }
   lower_timer.reset();

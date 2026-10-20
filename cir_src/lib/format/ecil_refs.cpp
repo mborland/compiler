@@ -947,8 +947,10 @@ bool a_ref_checker::check_supp(const a_record &r, std::string &problem)
 The keys of a supp blob this reader understands.  A key appears at most once
 per blob (any key: a blob may hold several, since 1.3).  unsupported_reason
 (1.1) is UTF-8 text of at most 255 bytes on a DECL_FUNC or DECL_VAR that has
-UNSUPPORTED set.  noinline (1.3) is `true` on a DECL_FUNC; it is honored in
-streams of every minor (a reader that knows the key checks it whatever the
+UNSUPPORTED set.  noinline (1.3) is `true` on a DECL_FUNC; used (1.3) is
+`true` on a DECL_FUNC or DECL_VAR; nonnull_ptrs (1.3) is an unsigned mask on
+a TY_FUNC with no bit above the parameter count.  The 1.3 keys are checked in
+streams of every minor (a reader that knows a key checks it whatever the
 preamble says).  Unknown keys are skipped.
 */
 {
@@ -980,6 +982,38 @@ preamble says).  Unknown keys are skipped.
                     value.kind == an_operand_kind::uint) && value.u == 1)) {
         problem = "supp key noinline (14) is not true";
         ok = false;
+      }
+    } else if (key == esk_used) {
+      if (r.opcode != eop_decl_func && r.opcode != eop_decl_var) {
+        problem = "supp key used (11) is only valid on a DECL_FUNC or "
+                  "DECL_VAR";
+        ok = false;
+      } else if (!((value.kind == an_operand_kind::boolean ||
+                    value.kind == an_operand_kind::uint) && value.u == 1)) {
+        problem = "supp key used (11) is not true";
+        ok = false;
+      }
+    } else if (key == esk_nonnull_ptrs) {
+      if (r.opcode != eop_ty_func) {
+        problem = "supp key nonnull_ptrs (15) is only valid on a TY_FUNC";
+        ok = false;
+      } else if (value.kind != an_operand_kind::uint) {
+        problem = "supp key nonnull_ptrs (15) is not an unsigned integer";
+        ok = false;
+      } else {
+        an_array_reader params = array_elements(r.ops[3]);
+        uint64_t element = 0;
+        uint64_t nparams = 0;
+
+        while (next_uint_element(params, element))
+          ++nparams;
+        /* Bit 0 is the result, bit i+1 parameter i: bits 0..nparams. */
+        if (nparams + 1 < 64 && (value.u >> (nparams + 1)) != 0) {
+          problem = "supp key nonnull_ptrs (15) has a bit at or above " +
+                    number(nparams + 1) + " (the function type has " +
+                    number(nparams) + " parameters)";
+          ok = false;
+        }
       }
     } else if (key == esk_unsupported_reason) {
       if (!unsupported_decl) {

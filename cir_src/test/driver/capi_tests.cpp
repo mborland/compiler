@@ -17,6 +17,7 @@ edg_cir_*).
 
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -389,6 +390,96 @@ Error statuses, sticky errors and call-order rules.
   }
 }  /* test_errors */
 
+void test_api_versions(const std::vector<uint8_t> &stream)
+/*
+API 2 added two fields and two flags.  A caller built against API 1 (a
+struct that ends before chunk_functions, api_version 1) is accepted and
+gets the defaults of the new fields; the new flags and the chunk fields are
+accepted from an API 2 caller (no behavior yet); a caller from the future is
+refused; a struct that is too short to hold the header is refused.
+*/
+{
+  an_edg_cir_options options;
+  an_edg_cir_session *session = nullptr;
+  a_capture c;
+  const uint32_t api1_size =
+      static_cast<uint32_t>(offsetof(an_edg_cir_options, chunk_functions));
+
+  CHECK(EDG_CIR_API_VERSION == 2, "this test is for API 2");
+  CHECK(api1_size > 3 * sizeof(uint32_t) && api1_size < sizeof options,
+        "API 1 struct size %u", api1_size);
+  edg_cir_options_init(&options);
+  CHECK(options.struct_size == sizeof options && options.chunk_functions == 0 &&
+            options.chunk_threshold == 0,
+        "defaults of the API 2 fields");
+  /* An API 1 caller: the bytes past its struct are garbage (here: ones). */
+  {
+    unsigned char raw[sizeof options];
+
+    std::memset(raw, 0xff, sizeof raw);
+    std::memcpy(raw, &options, api1_size);
+    an_edg_cir_options *old = reinterpret_cast<an_edg_cir_options *>(raw);
+
+    old->struct_size = api1_size;
+    old->api_version = 1;
+    old->output_kind = EDG_CIR_OUTPUT_LLVM_IR;
+    old->write_callback = write_cb;
+    old->write_user_data = &c;
+    old->diagnostic_callback = diag_cb;
+    old->diagnostic_user_data = &c;
+    c.caller = std::this_thread::get_id();
+    CHECK(edg_cir_session_open(old, &session) == EDG_CIR_OK,
+          "API 1 sized caller");
+    CHECK(session != nullptr &&
+              edg_cir_session_consume(session, stream.data(), stream.size()) ==
+                  EDG_CIR_OK &&
+              edg_cir_session_finish(session) == EDG_CIR_OK,
+          "API 1 sized caller runs");
+    edg_cir_session_close(session);
+    CHECK(c.bytes.find("target triple") != std::string::npos,
+          "API 1 sized caller output");
+  }
+  {
+    a_capture on;
+
+    CHECK(run(stream, EDG_CIR_OUTPUT_LLVM_IR, on, 2,
+              EDG_CIR_FLAG_EAGER_BODIES | EDG_CIR_FLAG_NO_LLVM_PASSES) ==
+              EDG_CIR_OK,
+          "API 2 flags");
+    CHECK(on.bytes.find("target triple") != std::string::npos,
+          "API 2 flags output");
+  }
+  {
+    a_capture on;
+
+    edg_cir_options_init(&options);
+    options.output_kind = EDG_CIR_OUTPUT_LLVM_IR;
+    options.write_callback = write_cb;
+    options.write_user_data = &on;
+    options.chunk_functions = 3;
+    options.chunk_threshold = 0xffffffffu;
+    on.caller = std::this_thread::get_id();
+    CHECK(edg_cir_session_open(&options, &session) == EDG_CIR_OK &&
+              edg_cir_session_consume(session, stream.data(), stream.size()) ==
+                  EDG_CIR_OK &&
+              edg_cir_session_finish(session) == EDG_CIR_OK,
+          "chunk fields accepted");
+    edg_cir_session_close(session);
+  }
+  edg_cir_options_init(&options);
+  options.api_version = EDG_CIR_API_VERSION + 1;
+  CHECK(edg_cir_session_open(&options, &session) == EDG_CIR_ERROR_USAGE,
+        "a newer API is refused");
+  edg_cir_options_init(&options);
+  options.api_version = 0;
+  CHECK(edg_cir_session_open(&options, &session) == EDG_CIR_ERROR_USAGE,
+        "API 0 is refused");
+  edg_cir_options_init(&options);
+  options.struct_size = 8;
+  CHECK(edg_cir_session_open(&options, &session) == EDG_CIR_ERROR_USAGE,
+        "a struct too short for the header is refused");
+}  /* test_api_versions */
+
 #if EDG_CIR_TEST_HOOKS
 void test_crash_recovery(const std::vector<uint8_t> &stream)
 /*
@@ -744,6 +835,7 @@ Run the driver tests; return 0 when all pass.
     }
     test_chunking(stream);
     test_errors(stream, argv[2]);
+    test_api_versions(stream);
 #if EDG_CIR_TEST_HOOKS
     test_crash_recovery(stream);
 #endif

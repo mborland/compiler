@@ -468,8 +468,23 @@ Apply an ECIL cast kind.
     ok = format_error("unknown cast kind");
     break;
   }
-  if (ok)
+  if (ok && ck == cir::CastKind::floating &&
+      ((mlir::isa<cir::FP16Type>(v.getType()) &&
+        mlir::isa<cir::BF16Type>(to)) ||
+       (mlir::isa<cir::BF16Type>(v.getType()) &&
+        mlir::isa<cir::FP16Type>(to)))) {
+    /* The lowering of cir.cast floating chooses fpext or fptrunc by width;
+       _Float16 and __bf16 have one width and neither applies.  Go through
+       float, as clang's classic code generator does.  (Only this pair: other
+       same-width formats, such as binary128 against an IBM format, would
+       lose precision in a float detour.) */
+    mlir::Value widened = builder_.createCast(
+        loc(), ck, v, cir::SingleType::get(ctx_));
+
+    out = builder_.createCast(loc(), ck, widened, to);
+  } else if (ok) {
     out = builder_.createCast(loc(), ck, v, to);
+  }
   return ok;
 }  /* a_emitter::cast_value */
 

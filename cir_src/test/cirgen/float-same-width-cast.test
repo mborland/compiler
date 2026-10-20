@@ -1,0 +1,60 @@
+; A cast between two floating-point formats of one width (_Float16 and
+; __bf16) has neither fpext nor fptrunc: the lowering of cir.cast floating
+; chose fpext and LLVM asserted ("Invalid cast!", seen as a crash of
+; c/pr114907 with --keep-going).  The library goes through float, as clang's
+; classic code generator does: bf16 -> float -> half and half -> float -> bf16.
+; A same-format cast and a cast to a different width are unchanged.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=llvm %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s --check-prefix=CIR
+
+; CIR: cir.cast floating {{.*}} : !cir.bf16 -> !cir.float
+; CIR: cir.cast floating {{.*}} : !cir.float -> !cir.f16
+; CHECK-LABEL: define {{.*}} half @bf_to_h(bfloat
+; CHECK: fpext bfloat {{.*}} to float
+; CHECK: fptrunc float {{.*}} to half
+; CHECK-LABEL: define {{.*}} bfloat @h_to_bf(half
+; CHECK: fpext half {{.*}} to float
+; CHECK: fptrunc float {{.*}} to bfloat
+; CHECK-LABEL: define {{.*}} float @h_to_f(half
+; CHECK: fpext half {{.*}} to float
+; CHECK-NOT: fptrunc
+
+frame DECLS
+  TY_FLOAT 20 0 2 2
+  TY_FLOAT 21 1 2 2
+  TY_FUNC 30 20 0 [21]
+  TY_FUNC 31 21 0 [20]
+  TY_FUNC 32 9 0 [20]
+  STR 10 "bf_to_h"
+  STR 11 "h_to_bf"
+  STR 12 "h_to_f"
+  DECL_FUNC 100 30 0 1 10
+  DECL_FUNC 101 31 0 1 11
+  DECL_FUNC 102 32 0 1 12
+frame REGION
+  FUNC_BEGIN 100 0
+  PARAM 1 21 21 nil 0
+  LREF 1
+  LOAD 0
+  CAST 8 20
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 101 0
+  PARAM 1 20 20 nil 0
+  LREF 1
+  LOAD 0
+  CAST 8 21
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 102 0
+  PARAM 1 20 20 nil 0
+  LREF 1
+  LOAD 0
+  CAST 8 9
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

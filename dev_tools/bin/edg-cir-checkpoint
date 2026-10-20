@@ -65,8 +65,9 @@ With --lean AREAS the steps come from edg-cir-gate-evidence --lean (its
 docstring has the area mapping), and the areas are first checked, before
 anything is synced, against the files that differ from --lean-base (default
 HEAD, plus the untracked files); a change set that the areas do not cover is
-refused.  The list of files goes to the evidence directory
-(changed-files.txt) and the gate checks it again.
+refused, and so is an empty change set (--allow-empty-change-set).  The list
+of files goes to the evidence directory (changed-files.txt; a failed upload
+stops the run) and the gate checks it again.
 
 Every run records a tree fingerprint (a hash of src, cir_src, dev_tools/bin,
 tests/.edgy and cmake, without build directories) of this tree and of the box
@@ -212,6 +213,14 @@ def load_gate_tool():
   return module
 
 
+def upload_changed_files(out: str, text: str) -> int:
+  '''Write the list of changed files to <out>/changed-files.txt on the box;
+  the exit status of the ssh command.'''
+  return subprocess.run(['ssh', *ssh_options(), BOX,
+                         f"cat > {out}/changed-files.txt"],
+                        input = text, text = True).returncode
+
+
 def ssh(command: str, capture: bool = False) -> subprocess.CompletedProcess:
   return subprocess.run(
     ['ssh', *ssh_options(), BOX, command], text = True,
@@ -249,6 +258,9 @@ def main() -> None:
   parser.add_argument('--lean-base', default = 'HEAD', metavar = 'REF',
                       help = 'the commit that --lean compares the tree with '
                              '(default HEAD)')
+  parser.add_argument('--allow-empty-change-set', action = 'store_true',
+                      help = 'with --lean: no file differs from --lean-base '
+                             '(refused otherwise: usually a wrong base)')
   parser.add_argument('--quick', action = 'store_true',
                       help = f"only {QUICK_STEPS}")
   parser.add_argument('--prune', type = int, nargs = '?', const = 3,
@@ -321,6 +333,11 @@ def main() -> None:
     if problems:
       print('the declared areas do not cover the change set: '
             + '; '.join(problems), file = sys.stderr)
+      sys.exit(2)
+    if not paths and not args.allow_empty_change_set:
+      print(f"--lean with an empty change set: nothing differs from "
+            f"{args.lean_base} (a wrong --lean-base?); "
+            f"--allow-empty-change-set if that is meant", file = sys.stderr)
       sys.exit(2)
     changed = '\n'.join(paths) + '\n'
     steps = ','.join(gate_tool.lean_steps(areas)[0])
@@ -401,11 +418,16 @@ def main() -> None:
   if args.lean:
     # The gate picks the steps itself (and records why the others are
     # skipped); it checks the areas again against the list of changed files.
-    subprocess.run(['ssh', *ssh_options(), BOX,
-                    f"cat > {out}/changed-files.txt"], input = changed,
-                   text = True)
+    status = upload_changed_files(out, changed)
+    if status != 0:
+      print(f"could not upload the list of changed files to {out} (ssh "
+            f"status {status}); the gate would check nothing",
+            file = sys.stderr)
+      sys.exit(2)
     selection = ['--lean', args.lean, '--changed-files',
                  f"{out}/changed-files.txt"]
+    if args.allow_empty_change_set:
+      selection.append('--allow-empty-change-set')
   gate = [
     'python3', 'dev_tools/bin/edg-cir-gate-evidence', '--tree', '$T',
     '--tree-fingerprint', fingerprint,

@@ -88,9 +88,12 @@ Create a session.  The options struct may be older (smaller) than ours.
     result = EDG_CIR_ERROR_USAGE;
   } else {
     edg_cir_options_init(&local);
-    /* struct_size covers at least struct_size, api_version, output_kind. */
+    /* struct_size covers at least struct_size, api_version, output_kind.  A
+       caller of an older API (smaller struct) is accepted: the fields it
+       does not have keep their defaults.  A newer one is not. */
     if (options->struct_size < 3 * sizeof(uint32_t) ||
-        options->api_version != EDG_CIR_API_VERSION) {
+        options->api_version < 1 ||
+        options->api_version > EDG_CIR_API_VERSION) {
       result = EDG_CIR_ERROR_USAGE;
     } else {
       size_t n = options->struct_size < sizeof local ? options->struct_size

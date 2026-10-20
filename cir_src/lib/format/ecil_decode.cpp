@@ -672,24 +672,24 @@ it, a trailing supp blob).  The supp payload structure is checked.
 
 namespace {
 
-struct a_minor2_flags {
+struct a_minor_flags {
   uint8_t   opcode;
   uint8_t   operand;   /* Index of the flags operand. */
-  uint32_t  mask;      /* The bits that exist only from ECIL 1.2. */
+  uint32_t  mask;      /* The bits that exist only from `minor`. */
+  uint8_t   minor;     /* The ECIL minor that introduced them. */
   const char *names;
-};  /* a_minor2_flags */
-
-/* Flag bits of records that are older than 1.2: a 1.0 or 1.1 stream must not
-   use them (the reader would otherwise accept a 1.2 meaning in a stream that
-   says it predates it). */
-const a_minor2_flags minor2_flags[] = {
-  {eop_rec_field, 5, 0x40, "VIRTUAL_BASE"},
-  {eop_decl_func, 3, 0x80, "NOTHROW"},
-  {eop_structor, 2, 0x02, "HAS_VBASES"},
-  {eop_call, 3, 0x38, "NOTHROW, VIRTUAL or VTT"},
-  {eop_call_indirect, 2, 0x08, "NOTHROW"},
-  {eop_cleanup_begin, 2, 0x01, "DEACTIVATABLE"},
-  {eop_delete, 3, 0x38, "VIRTUAL, GLOBAL or DESTROYING"},
+};  /* a_minor_flags */
+const a_minor_flags minor_flags[] = {
+  {eop_rec_field, 5, 0x40, 2, "VIRTUAL_BASE"},
+  {eop_decl_func, 3, 0x80, 2, "NOTHROW"},
+  {eop_structor, 2, 0x02, 2, "HAS_VBASES"},
+  {eop_call, 3, 0x38, 2, "NOTHROW, VIRTUAL or VTT"},
+  {eop_call_indirect, 2, 0x08, 2, "NOTHROW"},
+  {eop_cleanup_begin, 2, 0x01, 2, "DEACTIVATABLE"},
+  {eop_delete, 3, 0x38, 2, "VIRTUAL, GLOBAL or DESTROYING"},
+  {eop_call, 3, 0x40, 3, "ALLOC_EXPR"},
+  {eop_decl_func, 3, 0x100, 3, "EXTERN_C"},
+  {eop_decl_func, 3, 0x200, 3, "INLINE_HINT"},
 };
 
 }  /* anonymous namespace */
@@ -773,15 +773,16 @@ Check operand kinds, flag masks and enumerator ranges against the schema.
                                                  : an_error_kind::format;
         error.message = buffer;
         result = false;
-      } else if (stream_minor < 2) {
-        for (const a_minor2_flags &g : minor2_flags) {
+      } else if (stream_minor < 3) {
+        for (const a_minor_flags &g : minor_flags) {
           if (g.opcode == record.opcode && g.operand == k &&
-              (v & g.mask) != 0) {
+              stream_minor < g.minor && (v & g.mask) != 0) {
             char buffer[200];
 
             std::snprintf(buffer, sizeof buffer, "%s operand %d: flag %s "
-                          "needs ECIL minor >= 2 (the stream says 1.%u)",
+                          "needs ECIL minor >= %u (the stream says 1.%u)",
                           info.name, k + 1, g.names,
+                          static_cast<unsigned>(g.minor),
                           static_cast<unsigned>(stream_minor));
             error.kind = an_error_kind::format;
             error.message = buffer;

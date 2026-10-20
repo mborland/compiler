@@ -2811,12 +2811,14 @@ fi
 # that base compiles every file as C++ unless told otherwise (a C test has
 # --gcc or another mode option), and the C side file of a C++ test needs its
 # names unmangled.  Limits: the options that name a language or dialect
-# (--c, --c++NN, --g++, --gcc, --clang*, --microsoft*, --strict*, -A, -a) and
+# (--c, --c++NN, --g++, --gcc, --clang*, --microsoft*, --strict*, -A, -a),
+# the options that only C++ has (--export, --exceptions, --rtti, their --no_
+# forms, -x: the test is C++ in a .c file, as edg/daveed/d00393a is) and
 # --multi_trans_unit (one front end run for all the files) suppress it, the
 # C++-only options that a C compile rejects are removed only for the
 # instantiation mode (-t<mode>, --instantiate, -T and
-# --[no_]auto_instantiation), and the main file is recognized by the name Test_name.c that the test driver
-# gives it.
+# --[no_]auto_instantiation), and the main file is recognized by the name
+# Test_name.c that the test driver gives it.
 #
 # Run through the list of .c files and compile.
 #
@@ -2831,7 +2833,9 @@ do
     case " $EDG_CPFE_DEFAULT_OPTIONS $feoptions " in
       *" --c "* | *" --c+"* | *" --c"[0-9]* | *" --g++"* | *" --gcc"* | \
       *" --clang"* | *" --microsoft"* | *" --strict"* | *" -A "* | \
-      *" -a "* | *" --multi_trans_unit"*) ;;
+      *" -a "* | *" --multi_trans_unit"* | *" --export "* | \
+      *" --exceptions "* | *" --no_exceptions "* | *" --rtti "* | \
+      *" --no_rtti "* | *" -x "*) ;;
       *) cir_c_option="--c" ;;
     esac
   fi

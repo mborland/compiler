@@ -653,6 +653,18 @@ class M4StepsTest(unittest.TestCase):
     self.assertFalse(ok)
     self.assertIn('cxx/release/inproc: no measurement', detail)
     self.assertFalse(gate.judge_rss(text, {})[0])
+    # A row measured several times counts with its minimum (the ASan
+    # in-process rows), and a failing exit status of any run fails it.
+    again = text + ('== RSS c asan\ninproc 1.00 120 0\n'
+                    '== RSS c asan\ninproc 1.00 95 0\n')
+    self.assertEqual(gate.parse_rss(again)[('c', 'asan', 'inproc')], (0, 90.0))
+    ok, detail = gate.judge_rss(
+      text.replace('inproc          1.00           90    0',
+                   'inproc          1.00          130    0') +
+      '== RSS c asan\ninproc 1.00 95 0\n', ceilings)
+    self.assertTrue(ok, detail)
+    self.assertFalse(gate.judge_rss(
+      text + '== RSS c asan\ninproc 1.00 95 1\n', ceilings)[0])
     # Rows outside a block are not taken for a measurement.
     self.assertFalse(gate.judge_rss('inproc 1.0 5 0\n', ceilings)[0])
 
@@ -1231,11 +1243,173 @@ class CheckpointTest(unittest.TestCase):
                          ['fresh1', 'fresh2', 'old1', 'old3'], directory)
 
   def test_protected_trees(self) -> None:
-    self.assertIn('m3-final', checkpoint.PROTECTED_TREES)
-    self.assertIn('m4-final', checkpoint.PROTECTED_TREES)
+    for tree in ('m3-final', 'm4-final', 'm41-int', 'm5p-int'):
+      self.assertIn(tree, checkpoint.PROTECTED_TREES)
 
   def test_default_tree_is_not_stale(self) -> None:
-    self.assertEqual(checkpoint.DEFAULT_TREE, 'm41-int')
+    # The default tree is wiped and rebuilt by every checkpoint, so it may
+    # not be one of the protected trees that hold gate evidence.
+    self.assertEqual(checkpoint.DEFAULT_TREE, 'm5-int')
+    self.assertNotIn(checkpoint.DEFAULT_TREE, checkpoint.PROTECTED_TREES)
+
+  def test_default_baselines_are_the_m5p_ones(self) -> None:
+    text = (BIN / 'edg-cir-checkpoint').read_text()
+    for name in ('m5p-base-asm', 'm5p-base-cpp-asm', 'm5p-base-perf.json'):
+      self.assertIn(name, text)
+    self.assertNotIn('m4-base', text)
+    gate_text = (BIN / 'edg-cir-gate-evidence').read_text()
+    self.assertIn("~/edg-cir-config/m5p-base-perf.json", gate_text)
+    self.assertIn("~/edg-cir-config/m5p-base-status", gate_text)
+    self.assertNotIn("~/edg-cir-config/m4-base", gate_text)
+
+
+class RssCeilings(unittest.TestCase):
+  def test_the_ceilings_are_the_m5p_measurements_plus_a_quarter(self) -> None:
+    measured = {('c', 'asan', 'inproc'): 682, ('tmpl', 'asan', 'inproc'): 988,
+                ('tmpl', 'asan', 'keep'): 1030, ('c', 'release', '2p-fe'): 68}
+    for key, megabytes in measured.items():
+      ceiling = gate.RSS_CEILINGS_MB[key]
+      self.assertGreaterEqual(ceiling, 1.25 * megabytes, key)
+      self.assertLess(ceiling, 1.25 * megabytes + 10, key)
+      self.assertEqual(ceiling % 10, 0, key)
+
+  def test_every_row_has_a_ceiling(self) -> None:
+    self.assertEqual(len(gate.RSS_CEILINGS_MB), 24)
+
+  def test_the_m5p_run_passes_its_own_ceilings(self) -> None:
+    rows = {
+      ('c', 'asan'): (682, 801, 115, 410),
+      ('cxx', 'asan'): (299, 317, 109, 153),
+      ('tmpl', 'asan'): (988, 1030, 502, 355),
+      ('c', 'release'): (448, 520, 68, 410),
+      ('cxx', 'release'): (191, 204, 61, 153),
+      ('tmpl', 'release'): (687, 711, 353, 355)}
+    text = ''
+    for (workload, build), values in rows.items():
+      text += f"== RSS {workload} {build}\n"
+      for name, value in zip(gate.RSS_ROWS, values):
+        text += f"{name} 1.00 {value} 0\n"
+    ok, detail = gate.judge_rss(text, gate.RSS_CEILINGS_MB)
+    self.assertTrue(ok, detail)
+
+
+class LeanSteps(unittest.TestCase):
+  def test_toolchain_matches_the_m5p_set(self):
+    steps, reasons = gate.lean_steps(['toolchain'])
+    self.assertEqual(set(steps), {
+      'build', 'ctest', 'smoke', 'cpp-smoke', 'cir-suite', 'corpus',
+      'cpp-corpus', 'opt-corpus', 'asm-diff', 'cpp-asm-diff', 'mixed-tu',
+      'symbols', 'eh-probes', 'm4-stress', 'cpp-stress', 'crash-sweep',
+      'perf', 'rss', 'stress', 'release-smoke'})
+    self.assertIn('compare-modes', reasons['modes'])
+    self.assertIn('compare-modes', reasons['cpp-modes'])
+    self.assertIn('ASan preset', reasons['cpp-stress-asan'])
+    self.assertNotIn('stress', reasons)
+    self.assertNotIn('release-smoke', reasons)
+    self.assertEqual(set(steps) | set(reasons), set(gate.STEPS))
+
+  def test_areas_combine_in_step_order(self):
+    steps, reasons = gate.lean_steps(['linkage', 'fe-options'])
+    self.assertEqual(steps, ['build', 'release-smoke', 'symbols', 'mixed-tu'])
+    self.assertIn('linkage', reasons['smoke'])
+
+  def test_tooling_alone_needs_no_build(self):
+    self.assertEqual(gate.lean_steps(['tooling'])[0], ['tools-test'])
+
+  def test_every_mapped_step_exists(self):
+    for steps in gate.AREA_STEPS.values():
+      for step in steps:
+        self.assertIn(step, gate.STEPS)
+        self.assertIn(step, gate.STEP_FUNCTIONS)
+
+
+class LeanAreas(unittest.TestCase):
+  def test_the_area_of_a_file(self):
+    expected = {
+      'cir_src/LLVM_REVISION': 'toolchain',
+      'dev_tools/docker/llvm-cir/Dockerfile': 'toolchain',
+      'dev_tools/docker/cir-env/Dockerfile': 'toolchain',
+      'dev_tools/bin/edg-build-llvm-cir': 'toolchain',
+      'cir_src/lib/cirgen/expr.cpp': 'library',
+      'cir_src/scripts/asm_churn_classify.py': 'library',
+      'cir_src/doc/research/m5_baseline.md': None,
+      'src/ecil_write.c': 'writer',
+      'src/cir_be.c': 'writer',
+      'src/cmd_line.c': 'shared-src',
+      'src/CMakeLists.txt': 'shared-src',
+      'src/Changes': None,
+      'util/eccp.sh': 'eccp',
+      'bases/docker/cir-env/gcc/edg_eccp_config': 'eccp',
+      'dev_tools/cir-mixed-tu-cases/s3-x/a.cpp': 'linkage',
+      'dev_tools/bin/edg-cir-gate-evidence': 'tooling',
+      'tests/expectations/edg_x86_64_cir/edg.log': 'tests',
+      'tests/tests/cir/config/c-side-file/test.mft.cpp': 'tests',
+      'cir_design_guidance.md': None,
+      'doc/source/code_style.rst': None,
+      'benchmarks/x': 'unmapped'}
+    for path, area in expected.items():
+      self.assertEqual(gate.area_of(path), area, path)
+
+  def test_required_areas_group_the_files(self):
+    needed = gate.required_areas(['src/a.c', 'src/b.c', 'README.md',
+                                  'util/eccp.sh'])
+    self.assertEqual(needed, {'shared-src': ['src/a.c', 'src/b.c'],
+                              'eccp': ['util/eccp.sh']})
+
+  def test_a_covering_set_has_no_problem(self):
+    paths = ['cir_src/LLVM_REVISION', 'cir_src/lib/cirgen/expr.cpp',
+             'dev_tools/bin/edg-cir-tools-test']
+    self.assertEqual(gate.uncovered_areas(paths, ['toolchain', 'tooling']), [])
+
+  def test_an_uncovered_area_is_a_problem(self):
+    # toolchain runs the corpora and the suite that an eccp change needs, but
+    # not the identity steps of a shared src/ change.
+    problems = gate.uncovered_areas(['src/cmd_line.c', 'util/eccp.sh'],
+                                    ['toolchain'])
+    self.assertEqual(len(problems), 1)
+    self.assertIn('area shared-src', problems[0])
+    self.assertIn('identity', problems[0])
+
+  def test_eccp_needs_the_corpora_and_the_suite(self):
+    # fe-options runs release-smoke only: too narrow for an eccp change.
+    self.assertTrue(gate.uncovered_areas(['util/eccp.sh'], ['fe-options']))
+    for steps in (('cir-suite', 'corpus', 'cpp-corpus'),):
+      self.assertTrue(set(steps) <= set(gate.AREA_STEPS['eccp']))
+    self.assertEqual(gate.uncovered_areas(['util/eccp.sh'], ['eccp']), [])
+
+  def test_toolchain_covers_the_library_but_not_the_writer(self):
+    self.assertEqual(gate.uncovered_areas(['cir_src/lib/x.cpp'],
+                                          ['toolchain']), [])
+    self.assertTrue(gate.uncovered_areas(['src/ecil_write.c'],
+                                         ['toolchain']))
+
+  def test_an_unmapped_file_is_a_problem(self):
+    problems = gate.uncovered_areas(['benchmarks/x'], ['toolchain'])
+    self.assertEqual(len(problems), 1)
+    self.assertIn('AREA_RULES', problems[0])
+
+  def test_changed_paths_from_a_listing(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      listing = Path(tmp) / 'files.txt'
+      listing.write_text('src/a.c\n\n  util/eccp.sh \n')
+      self.assertEqual(gate.changed_paths(Path(tmp), '', str(listing)),
+                       ['src/a.c', 'util/eccp.sh'])
+
+  def test_changed_paths_from_git(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      def git(*args):
+        subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t',
+                        *args], cwd = root, check = True,
+                       stdout = subprocess.DEVNULL)
+      git('init', '-q')
+      (root / 'a.txt').write_text('1')
+      git('add', 'a.txt')
+      git('commit', '-q', '-m', 'one')
+      (root / 'a.txt').write_text('2')
+      (root / 'new.txt').write_text('x')
+      self.assertEqual(gate.changed_paths(root, 'HEAD', ''),
+                       ['a.txt', 'new.txt'])
 
 
 if __name__ == '__main__':

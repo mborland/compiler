@@ -21,6 +21,50 @@ skipped when the command is repeated with --out of an earlier run (resume), and
 --only/--skip select steps. At the end a PASS/FAIL table is printed and written
 to `summary.md`.
 
+Lean gates: `--lean AREAS` (a comma separated list of the areas that the
+change set touches) runs only the steps that those areas can affect, prints
+the chosen set first and records every other step as SKIPPED with the reason
+in the table; `--steps-for AREAS` only prints the set and exits.  The mapping
+(AREA_STEPS; `build` is added to every area but `tooling`):
+
+  writer     the ECIL writer, the FE side of the stream: cir-suite (the
+             writer goldens), corpus, cpp-corpus, asm-diff, cpp-asm-diff,
+             modes, cpp-modes, poison
+  library    cir_src (the library): ctest (with lit), corpus, cpp-corpus,
+             asm-diff, cpp-asm-diff
+  fe-options CIR-gated front end options and macros: release-smoke
+  linkage    symbol names, linkage, comdats: symbols, mixed-tu
+  eccp       util/eccp.sh and the eccp configuration of the base (how the
+             tests compile): cir-suite, corpus, cpp-corpus
+  tests      the CIR tests and their recorded expectations: cir-suite,
+             corpus, cpp-corpus
+  tooling    dev_tools only: tools-test (the self-tests of the tools)
+  toolchain  a new LLVM/MLIR/ClangIR pin (the M5p gate): ctest, smoke,
+             cpp-smoke, cir-suite, corpus, cpp-corpus, opt-corpus, asm-diff,
+             cpp-asm-diff, mixed-tu, symbols, eh-probes, m4-stress,
+             cpp-stress, crash-sweep, perf, rss, stress (deep nesting under
+             256 KB: a new pin can bring recursion back) and release-smoke
+             (the only end-to-end run of release-only behavior, LLVM
+             assertions off); skipped for the reasons of TOOLCHAIN_SKIPS
+  shared-src a change in a src/ file that every back end compiles (not
+             CIR-gated): identity, isolation, day
+
+The areas are checked against the change set, so that a lean gate cannot
+leave out what the change touches: with --lean-base REF (the files of
+`git diff --name-only REF` and the untracked files of the tree) or
+--changed-files FILE (one path a line, "-" for the standard input; for a tree
+without git, like the box's), every file is mapped to an area by AREA_RULES
+(cir_src/LLVM_REVISION and the Docker image files: toolchain; other cir_src:
+library; src/ecil_* and src/cir_be*: writer; other src/: shared-src;
+util/eccp.sh and bases/docker/cir-env: eccp; dev_tools/cir-mixed-tu-cases:
+linkage; other dev_tools: tooling; tests: tests; documentation and Changes
+files: none), and --lean fails unless the steps of the declared areas
+include the steps of every area that the change set needs (toolchain covers
+library, for instance, but not shared-src).  A file that no rule maps fails
+too (add a rule).  --no-area-check skips the check (the report must say why).
+A step that no listed area selects is not run in a lean gate; say in the
+gate's report why the change set cannot affect it.
+
 Steps (names for --only/--skip):
 
   build      build cir_src (build/cir), cpfe-cir (build/gcc-cir) and the
@@ -78,6 +122,7 @@ Steps (names for --only/--skip):
   m4-stress  cir_src/scripts/box_m4_stress.sh under `ulimit -s 256` over the
              cases of M4_STRESS_CASES (the sizes of research/m4_stress.md):
              passes iff every run succeeds within its time and memory limit
+  tools-test the self-tests of the tools (dev_tools/bin/edg-cir-tools-test)
   cpp-smoke  (--with-cpp or --only) cir-cpp-smoke through --cpp-configs
              (--types rp): buckets, pass rate per --c++NN mode, failures by
              C++ feature; fails on a crash, and (--cpp-smoke-all-pass) on any
@@ -148,7 +193,7 @@ Steps (names for --only/--skip):
              have no CIR expectations) are not gated
   perf       edg-cir-perf (instruction counts, CPU time and RSS of a big
              generated file and of the whole corpus) and, with --perf-baseline
-             (the JSON of an earlier run, default the M4 gate's; a step
+             (the JSON of an earlier run, default the M5p gate's; a step
              without one fails unless --perf-measure-only), the before/after
              table;
              --perf-max-regression PERCENT (default
@@ -198,7 +243,7 @@ STEPS = ('build', 'identity', 'isolation', 'smoke', 'cir-suite', 'corpus',
          'cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
          'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
          'cpp-asm-diff', 'crash-sweep', 'abi-diff', 'symbols', 'mixed-tu',
-         'eh-probes', 'm4-stress', 'opt-corpus')
+         'eh-probes', 'm4-stress', 'opt-corpus', 'tools-test')
 # The steps of gate M4 (the ABI and EH harnesses); they run only with
 # --with-m4 or --only.
 M4_STEPS = ('abi-diff', 'symbols', 'mixed-tu', 'eh-probes', 'm4-stress',
@@ -209,6 +254,63 @@ CPP_STEPS = ('cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
              'cpp-asm-diff')
 # Steps that take long and run only with --only (none at present).
 LONG_STEPS: Tuple[str, ...] = ()
+# The steps of a lean gate (--lean, --steps-for) by the area of the change.
+AREA_STEPS = {
+  'writer': ('cir-suite', 'corpus', 'cpp-corpus', 'asm-diff',
+             'cpp-asm-diff', 'modes', 'cpp-modes', 'poison'),
+  'library': ('ctest', 'corpus', 'cpp-corpus', 'asm-diff', 'cpp-asm-diff'),
+  'fe-options': ('release-smoke',),
+  'linkage': ('symbols', 'mixed-tu'),
+  'eccp': ('cir-suite', 'corpus', 'cpp-corpus'),
+  'tests': ('cir-suite', 'corpus', 'cpp-corpus'),
+  'tooling': ('tools-test',),
+  'toolchain': ('ctest', 'smoke', 'cpp-smoke', 'cir-suite', 'corpus',
+                'cpp-corpus', 'opt-corpus', 'asm-diff', 'cpp-asm-diff',
+                'mixed-tu', 'symbols', 'eh-probes', 'm4-stress',
+                'cpp-stress', 'crash-sweep', 'perf', 'rss', 'stress',
+                'release-smoke'),
+  'shared-src': ('identity', 'isolation', 'day'),
+}
+# Why the steps that a new toolchain pin does not need are skipped (used
+# when `toolchain` is the only area of a lean gate).
+TOOLCHAIN_SKIPS = {
+  'identity': 'no front end change', 'isolation': 'no front end change',
+  'day': 'no front end change', 'poison': 'no front end or writer change',
+  'writer-stress': 'no writer change',
+  'cpp-writer-stress': 'no writer change',
+  'modes': "covered by opt-corpus's compare-modes over both smoke lists at "
+           '-O0 and -O2',
+  'cpp-modes': "covered by opt-corpus's compare-modes over both smoke lists "
+               'at -O0 and -O2',
+  'abi-diff': 'lib/abi unchanged',
+  'cpp-stress-asan': "covered by ctest's ASan preset",
+  'tools-test': 'no tooling change',
+}
+# The area of a changed file: the first rule whose prefix the path starts
+# with (or, for a name starting with '*', whose suffix it ends with) decides;
+# None means that the file needs no gate step (documentation).  A path that
+# no rule matches is an error of the area check.
+AREA_RULES: Tuple[Tuple[str, Optional[str]], ...] = (
+  ('cir_src/LLVM_REVISION', 'toolchain'),
+  ('dev_tools/docker/llvm-cir/', 'toolchain'),
+  ('dev_tools/docker/cir-env/', 'toolchain'),
+  ('dev_tools/bin/edg-build-llvm-cir', 'toolchain'),
+  ('cir_src/doc/', None),
+  ('cir_src/', 'library'),
+  ('src/Changes', None),
+  ('src/ecil_', 'writer'),
+  ('src/cir_be', 'writer'),
+  ('src/', 'shared-src'),
+  ('util/eccp.sh', 'eccp'),
+  ('bases/docker/cir-env/', 'eccp'),
+  ('dev_tools/cir-mixed-tu-cases/', 'linkage'),
+  ('dev_tools/', 'tooling'),
+  ('tests/', 'tests'),
+  ('doc/', None),
+  ('dev_annex/', None),
+  ('*.md', None),
+  ('*Changes', None),
+)
 # The synthetic C++ stress streams (cir_src/scripts/ecil-stress-gen.py) of
 # the cpp-stress steps: normal sizes, and the smaller ASan sizes.
 CPP_STRESS_CASES = ('cxx_locals:2000 cxx_temps:5000 cxx_meminit:2000 '
@@ -490,6 +592,88 @@ def step_isolation(ctx: Context) -> Tuple[bool, str]:
   passes = len(re.findall(r'^PASS:', text, re.M))
   fails = len(re.findall(r'^FAIL:', text, re.M))
   return code == 0, f"{passes} checks passed, {fails} failed"
+
+
+def step_tools_test(ctx: Context) -> Tuple[bool, str]:
+  code = in_cir_env(ctx, 'tools-test',
+                    'python3 dev_tools/bin/edg-cir-tools-test')
+  text = (ctx.out / 'tools-test' / 'log.txt').read_text()
+  match = re.search(r'^Ran (\d+) tests?', text, re.M)
+  return (code == 0 and bool(match),
+          f"{match.group(1) if match else 'no'} self-tests ran")
+
+
+def lean_steps(areas: List[str]) -> Tuple[List[str], Dict[str, str]]:
+  '''The steps of a lean gate for the areas of a change (the mapping of
+  AREA_STEPS, in the order of STEPS; `build` for every area but tooling) and
+  the reason of every step that is left out.'''
+  chosen = set()
+  for area in areas:
+    chosen.update(AREA_STEPS[area])
+  if [a for a in areas if a != 'tooling']:
+    chosen.add('build')
+  steps = [s for s in STEPS if s in chosen]
+  generic = f"not reached by the area(s) {','.join(areas)}"
+  reasons = {s: (TOOLCHAIN_SKIPS.get(s, generic) if areas == ['toolchain']
+                 else generic) for s in STEPS if s not in chosen}
+  return steps, reasons
+
+
+def area_of(path: str) -> Optional[str]:
+  '''The area of a changed file by AREA_RULES: None for a file that needs no
+  step (documentation), 'unmapped' for a path that no rule matches.'''
+  for pattern, area in AREA_RULES:
+    if (path.endswith(pattern[1:]) if pattern.startswith('*')
+        else path.startswith(pattern)):
+      return area
+  return 'unmapped'
+
+
+def required_areas(paths: List[str]) -> Dict[str, List[str]]:
+  '''The areas that a change set needs (area -> its files), by area_of.'''
+  needed: Dict[str, List[str]] = {}
+  for path in paths:
+    area = area_of(path)
+    if area:
+      needed.setdefault(area, []).append(path)
+  return needed
+
+
+def uncovered_areas(paths: List[str], areas: List[str]) -> List[str]:
+  '''The problems of the declared areas against a change set (empty if it
+  is covered): a file that no rule maps, and every needed area whose steps
+  are not among the steps that the declared areas chose.'''
+  chosen = set(lean_steps(areas)[0])
+  problems: List[str] = []
+  for area, files in sorted(required_areas(paths).items()):
+    shown = ', '.join(files[:3]) + (' ...' if len(files) > 3 else '')
+    if area == 'unmapped':
+      problems.append(f"no area for {shown} (add a rule to AREA_RULES)")
+      continue
+    missing = [s for s in lean_steps([area])[0] if s not in chosen]
+    if missing:
+      problems.append(f"the change set needs area {area} ({shown}), whose "
+                      f"steps {', '.join(missing)} the declared areas "
+                      f"{','.join(areas)} do not run")
+  return problems
+
+
+def changed_paths(tree: Path, base: str, listing: str) -> List[str]:
+  '''The changed files for the area check: the lines of the file `listing`
+  ("-": the standard input), else `git diff --name-only <base>` and the
+  untracked files of the tree.'''
+  if listing:
+    text = sys.stdin.read() if listing == '-' else Path(listing).read_text()
+    return [line.strip() for line in text.splitlines() if line.strip()]
+  paths: List[str] = []
+  for command in (['git', 'diff', '--name-only', base],
+                  ['git', 'ls-files', '--others', '--exclude-standard']):
+    proc = subprocess.run(command, cwd = tree, text = True,
+                          stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+    if proc.returncode != 0:
+      raise RuntimeError(f"{' '.join(command)}: {proc.stderr.strip()}")
+    paths += proc.stdout.split('\n')
+  return sorted(set(p for p in paths if p))
 
 
 def _load_tool(name: str):
@@ -917,42 +1101,54 @@ RSS_WORKLOADS = ('c', 'cxx', 'tmpl')
 RSS_BUILDS = (('asan', 'build/gcc-cir'), ('release', 'build/gcc-release-cir'))
 RSS_ROWS = ('inproc', 'keep', '2p-fe', '2p-edg-cir')
 # The peak RSS (MB) that a row may not exceed, per (workload, build, row):
-# 1.25 times the value measured on the box at gate M4.1 (2026-10-19, tree
-# m41-int, one run each; rounded up to 10 MB), for the
+# 1.25 times the value measured on the box at gate M5p (2026-10-19, tree
+# m5p-int, fingerprint 9e1c852a, pin 2d6f180e; rounded up to 10 MB), for the
 # default sizes (--rss-functions 6000 C functions and C++ functions,
-# --rss-template-units 300).  A change that makes memory grow by more than a
-# quarter must raise a ceiling deliberately (and say why).
+# --rss-template-units 300).  The value is the minimum of 3 runs for the ASan
+# in-process and keep rows and a single run for the others (m5p-base-rss.txt
+# in ~/edg-cir-config has them).  The ceilings are derived from these very
+# measurements, so the gate that measured them needs no re-run to pass; the
+# M4.1 ceilings were derived from a loaded run (the template workload's
+# in-process ASan row had 755 MB there against 1017 MB idle).  A change that
+# makes memory grow by more than a quarter must raise a ceiling deliberately
+# (and say why).  The peak of an ASan row with the quarantine off depends on
+# timing and fragmentation (755 to 1017 MB on one M4.1 build, 793 to 970 MB on
+# the M4 build, 988 to 989 MB in three M5p runs), so the ASan in-process rows
+# are measured ASAN_REPEATS times and judged on the minimum; the release rows
+# are strict.
 RSS_CEILINGS_MB: Dict[Tuple[str, str, str], int] = {
-  ('c', 'asan', 'inproc'): 850,
-  ('c', 'asan', 'keep'): 1020,
+  ('c', 'asan', 'inproc'): 860,
+  ('c', 'asan', 'keep'): 1010,
   ('c', 'asan', '2p-fe'): 150,
   ('c', 'asan', '2p-edg-cir'): 520,
-  ('cxx', 'asan', 'inproc'): 350,
+  ('cxx', 'asan', 'inproc'): 380,
   ('cxx', 'asan', 'keep'): 400,
   ('cxx', 'asan', '2p-fe'): 140,
   ('cxx', 'asan', '2p-edg-cir'): 200,
-  ('tmpl', 'asan', 'inproc'): 950,
-  ('tmpl', 'asan', 'keep'): 1320,
+  ('tmpl', 'asan', 'inproc'): 1240,
+  ('tmpl', 'asan', 'keep'): 1290,
   ('tmpl', 'asan', '2p-fe'): 630,
-  ('tmpl', 'asan', '2p-edg-cir'): 460,
+  ('tmpl', 'asan', '2p-edg-cir'): 450,
   ('c', 'release', 'inproc'): 560,
   ('c', 'release', 'keep'): 650,
-  ('c', 'release', '2p-fe'): 80,
+  ('c', 'release', '2p-fe'): 90,
   ('c', 'release', '2p-edg-cir'): 520,
   ('cxx', 'release', 'inproc'): 240,
-  ('cxx', 'release', 'keep'): 250,
+  ('cxx', 'release', 'keep'): 260,
   ('cxx', 'release', '2p-fe'): 80,
   ('cxx', 'release', '2p-edg-cir'): 200,
   ('tmpl', 'release', 'inproc'): 860,
   ('tmpl', 'release', 'keep'): 890,
-  ('tmpl', 'release', '2p-fe'): 440,
-  ('tmpl', 'release', '2p-edg-cir'): 460
+  ('tmpl', 'release', '2p-fe'): 450,
+  ('tmpl', 'release', '2p-edg-cir'): 450
 }
 
 
 def parse_rss(text: str) -> Dict[Tuple[str, str, str], Tuple[int, float]]:
   '''(workload, build, row) -> (exit status, peak MB) of the output of the
-  rss step: `== RSS <workload> <build>` marks a block of edg-cir-rss rows.'''
+  rss step: `== RSS <workload> <build>` marks a block of edg-cir-rss rows.  A
+  row that was measured several times (the ASan in-process rows are, see
+  step_rss) is the minimum of its peaks, and the first failing exit status.'''
   rows: Dict[Tuple[str, str, str], Tuple[int, float]] = {}
   block: Optional[Tuple[str, str]] = None
   for line in text.splitlines():
@@ -967,15 +1163,21 @@ def parse_rss(text: str) -> Dict[Tuple[str, str, str], Tuple[int, float]]:
         megabytes = float(match.group(3))
       except ValueError:
         megabytes = float('inf')
-      rows[(block[0], block[1], match.group(1))] = (int(match.group(4)),
-                                                    megabytes)
+      key = (block[0], block[1], match.group(1))
+      status = int(match.group(4))
+      if key in rows:
+        old_status, old_megabytes = rows[key]
+        rows[key] = (old_status or status, min(old_megabytes, megabytes))
+      else:
+        rows[key] = (status, megabytes)
   return rows
 
 
 def judge_rss(text: str, ceilings: Dict[Tuple[str, str, str], int]
               ) -> Tuple[bool, str]:
   '''The rule of the rss step: a row for every key of `ceilings`, each with
-  exit status 0 and a peak RSS within its ceiling.'''
+  exit status 0 and a peak RSS within its ceiling (for a row measured more
+  than once, its minimum).'''
   rows = parse_rss(text)
   problems: List[str] = []
   worst = 0.0
@@ -1001,6 +1203,7 @@ def judge_rss(text: str, ceilings: Dict[Tuple[str, str, str], int]
   return not problems, detail
 
 
+ASAN_REPEATS = 3
 RSS_DEFAULT_FUNCTIONS = 6000
 RSS_DEFAULT_TEMPLATE_UNITS = 300
 
@@ -1036,6 +1239,12 @@ def step_rss(ctx: Context) -> Tuple[bool, str]:
       steps.append(f"echo '== RSS {workload} {build_name}'")
       steps.append(f"{env}{rss} --fe-build {build} --only {rows} "
                    f"{flag}{path}")
+      if build_name == 'asan':
+        # The in-process rows again (see ASAN_REPEATS): the minimum counts.
+        for _ in range(ASAN_REPEATS - 1):
+          steps.append(f"echo '== RSS {workload} {build_name}'")
+          steps.append(f"{env}{rss} --fe-build {build} --only "
+                       f"inproc,keep {flag}{path}")
   code = in_cir_env(ctx, 'rss', ' && '.join(steps))
   text = (ctx.out / 'rss' / 'log.txt').read_text()
   ok, detail = judge_rss(text, RSS_CEILINGS_MB)
@@ -2532,6 +2741,7 @@ STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'rss': step_rss,
   'day': step_day, 'ctest': step_ctest, 'asm-diff': step_asm_diff,
   'cpp-asm-diff': step_cpp_asm_diff,
+  'tools-test': step_tools_test,
   'crash-sweep': step_crash_sweep, 'abi-diff': step_abi_diff,
   'symbols': step_symbols, 'mixed-tu': step_mixed_tu,
   'eh-probes': step_eh_probes, 'm4-stress': step_m4_stress,
@@ -2550,6 +2760,24 @@ def main() -> None:
                       help = 'evidence directory (reuse one to resume)')
   parser.add_argument('--only', default = '', help = 'comma separated steps')
   parser.add_argument('--skip', default = '', help = 'comma separated steps')
+  parser.add_argument('--lean', default = '', metavar = 'AREAS',
+                      help = 'lean gate: run the steps that these changed '
+                             'areas can affect (' + ','.join(AREA_STEPS) +
+                             '; see the docstring), the others SKIPPED '
+                             'with a reason')
+  parser.add_argument('--lean-base', default = '', metavar = 'REF',
+                      help = 'the area check of --lean: the changed files '
+                             'are those of `git diff --name-only REF` and '
+                             'the untracked ones')
+  parser.add_argument('--changed-files', default = '', metavar = 'FILE',
+                      help = 'the area check of --lean: the changed files, '
+                             'one path a line ("-": standard input)')
+  parser.add_argument('--no-area-check', action = 'store_true',
+                      help = '--lean without comparing the areas with the '
+                             'change set')
+  parser.add_argument('--steps-for', default = '', metavar = 'AREAS',
+                      help = 'print the steps of --lean for these areas '
+                             'and exit')
   parser.add_argument('--force', action = 'store_true',
                       help = 're-run steps that already PASSed')
   parser.add_argument('--identity-baseline', default = '',
@@ -2584,9 +2812,9 @@ def main() -> None:
                       help = 'asm-diff passes if files differ only in the '
                              'order of their lines')
   parser.add_argument('--perf-baseline',
-                      default = '~/edg-cir-config/m4-base-perf.json',
+                      default = '~/edg-cir-config/m5p-base-perf.json',
                       help = 'perf.json of the baseline commit (step perf; '
-                             'default: the M4 gate\'s)')
+                             'default: the M5p gate\'s)')
   parser.add_argument('--perf-levels', default = '0',
                       help = 'optimization levels of the big files of the '
                              'perf step (0,2 adds the -O2 rows big_O2 and '
@@ -2669,7 +2897,7 @@ def main() -> None:
   parser.add_argument('--smoke-filter',
                       default = '@tests/.edgy/filters/cir-c-smoke.txt')
   parser.add_argument('--opt-baseline-status',
-                      default = '~/edg-cir-config/m4-base-status',
+                      default = '~/edg-cir-config/m5p-base-status',
                       help = 'directory with the -O0 statuses of both '
                              'corpora (c_edg_x86_64_cir.json, '
                              'cpp_edg_x86_64_cir.json) for the opt-corpus '
@@ -2695,6 +2923,40 @@ def main() -> None:
                              'every one)')
   args = parser.parse_args()
 
+  skip_reasons: Dict[str, str] = {}
+  lean_areas = [a for a in (args.lean or args.steps_for).split(',') if a]
+  bad_areas = [a for a in lean_areas if a not in AREA_STEPS]
+  if bad_areas or (args.lean and args.steps_for):
+    parser.error(f"unknown area(s): {', '.join(bad_areas) or 'both options'}"
+                 f"; the areas are {', '.join(AREA_STEPS)}")
+  if lean_areas:
+    if args.only:
+      parser.error('--lean and --only exclude each other (use --skip)')
+    check = args.lean_base or args.changed_files
+    if args.lean and not check and not args.no_area_check:
+      parser.error('--lean needs the change set to check the areas against: '
+                   '--lean-base REF or --changed-files FILE (or '
+                   '--no-area-check, and say why in the report)')
+    if check:
+      try:
+        paths = changed_paths(Path(args.tree).resolve(), args.lean_base,
+                              args.changed_files)
+      except (OSError, RuntimeError) as error:
+        parser.error(f"cannot list the changed files: {error}")
+      problems = uncovered_areas(paths, lean_areas)
+      print(f"change set: {len(paths)} file(s), areas "
+            f"{','.join(sorted(required_areas(paths))) or 'none'}")
+      if problems:
+        parser.error('; '.join(problems))
+    lean_set, skip_reasons = lean_steps(lean_areas)
+    print(f"lean gate for {','.join(lean_areas)}: run "
+          f"{', '.join(lean_set)}")
+    for step, reason in skip_reasons.items():
+      print(f"  skipped {step}: {reason}")
+    if args.steps_for:
+      sys.exit(0)
+    args.only = ','.join(lean_set)
+
   global BUILD_JOBS
   BUILD_JOBS = args.jobs
   ctx = Context(args)
@@ -2711,7 +2973,8 @@ def main() -> None:
   table: List[Tuple[str, str, str, float]] = []
   for step in STEPS:
     if step not in only or step in skip:
-      table.append((step, 'SKIPPED', 'not selected', 0.0))
+      table.append((step, 'SKIPPED',
+                    skip_reasons.get(step, 'not selected'), 0.0))
       continue
     result_file = ctx.out / step / 'result.json'
     if result_file.exists() and not args.force:

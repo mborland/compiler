@@ -15,7 +15,8 @@ key is available:
   edg-cir-checkpoint                # sync, clean build, the default steps
   edg-cir-checkpoint --quick        # build, smoke, cpp-smoke only
   edg-cir-checkpoint --steps build,ctest --detach
-  edg-cir-checkpoint --tree m41-int --prune 3 --quick
+  edg-cir-checkpoint --lean toolchain --lean-base HEAD --tree m5p-int
+  edg-cir-checkpoint --tree m5-int --prune 3 --quick
 
 It does, in this order:
 
@@ -23,11 +24,11 @@ It does, in this order:
      --prune N, deletes all but the newest N of the tests/runs/* and
      .tmp/checkpoint-* directories of the tree (--prune-only does just that;
      --prune-evidence adds .tmp/gate-{evidence,asm,cpp-asm,identity,perf}/*).
-     Never pruned: the trees m3-final and m4-final, a tree with a file KEEP,
-     an entry with a file KEEP, an entry younger than 6 hours or one that a
-     process uses.
+     Never pruned: the trees m3-final, m4-final, m41-int and m5p-int, a tree
+     with a file KEEP, an entry with a file KEEP, an entry younger than 6
+     hours or one that a process uses.
   1. rsync --checksum --no-times of the working tree to ~/edg-cir-config/<tree>
-     on the box (default tree m41-int; build/, tests/runs/, .tmp/ and .git/
+     on the box (default tree m5-int; build/, tests/runs/, .tmp/ and .git/
      are not touched).  --no-times gives changed files the time of the
      transfer: with `rsync -a` a changed source can keep a time older than
      the objects of an earlier build, and ninja then rebuilds nothing.
@@ -43,8 +44,8 @@ The default steps are:
   cpp-writer-stress crash-sweep ctest
 
 that is the C smoke and corpus (statuses against the recorded expectations),
-the C assembly against the M4 baseline (--asm-baseline, default
-~/edg-cir-config/m4-base-asm: every difference is listed with its class and
+the C assembly against the M5p baseline (--asm-baseline, default
+~/edg-cir-config/m5p-base-asm: every difference is listed with its class and
 cause; the frame description directives (.cfi_*) are ignored from S1 on,
 when every function gets unwind tables: --no-asm-normalize-cfi shows them;
 personality, lsda and escape directives stay visible), the ASan
@@ -56,9 +57,16 @@ have are gated, against the allowlist tests/.edgy/filters/
 cir-excused-crashes.txt), and the four cir_src presets from clean build
 directories.  About 25 minutes.  Day, stress, rss, perf, modes, cpp-corpus,
 cpp-modes and cpp-asm-diff (the C++ assembly against --cpp-asm-baseline,
-default ~/edg-cir-config/m4-base-cpp-asm, made with the corpus filter
+default ~/edg-cir-config/m5p-base-cpp-asm, made with the corpus filter
 that includes eh/ and rtti/) are left for the gates; name them
 with --steps (they exist in the gate tool).
+
+With --lean AREAS the steps come from edg-cir-gate-evidence --lean (its
+docstring has the area mapping), and the areas are first checked, before
+anything is synced, against the files that differ from --lean-base (default
+HEAD, plus the untracked files); a change set that the areas do not cover is
+refused.  The list of files goes to the evidence directory
+(changed-files.txt) and the gate checks it again.
 
 Every run records a tree fingerprint (a hash of src, cir_src, dev_tools/bin,
 tests/.edgy and cmake, without build directories) of this tree and of the box
@@ -86,7 +94,7 @@ from typing import List
 
 BOX = 'mborland@192.168.1.167'
 SOCKET = Path.home() / '.ssh' / 'cm-edgbox'
-DEFAULT_TREE = 'm41-int'
+DEFAULT_TREE = 'm5-int'
 LOW_DISK_GB = 40
 DEFAULT_STEPS = ('build,identity,smoke,corpus,asm-diff,writer-stress,'
                  'cpp-smoke,cpp-writer-stress,crash-sweep,ctest')
@@ -156,7 +164,7 @@ EVIDENCE_DIRS = ('.tmp/gate-evidence', '.tmp/gate-asm', '.tmp/gate-cpp-asm',
                  '.tmp/gate-identity', '.tmp/gate-perf')
 # Trees that are never pruned (the gate evidence is kept in them); any tree
 # or entry that holds a file named KEEP is not pruned either.
-PROTECTED_TREES = ('m3-final', 'm4-final')
+PROTECTED_TREES = ('m3-final', 'm4-final', 'm41-int', 'm5p-int')
 RECENT_MINUTES = 360
 
 
@@ -191,6 +199,19 @@ def headroom_gb(text: str) -> int:
   return int(digits) if digits else -1
 
 
+def load_gate_tool():
+  '''The module of edg-cir-gate-evidence (for its area tables and the area
+  check of --lean).'''
+  import importlib.machinery
+  import importlib.util
+  path = str(Path(__file__).resolve().with_name('edg-cir-gate-evidence'))
+  loader = importlib.machinery.SourceFileLoader('edg_cir_gate_evidence', path)
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
 def ssh(command: str, capture: bool = False) -> subprocess.CompletedProcess:
   return subprocess.run(
     ['ssh', *ssh_options(), BOX, command], text = True,
@@ -218,6 +239,16 @@ def main() -> None:
                       help = 'name of the tree under ~/edg-cir-config')
   parser.add_argument('--steps', default = DEFAULT_STEPS,
                       help = 'comma separated edg-cir-gate-evidence steps')
+  parser.add_argument('--lean', default = '', metavar = 'AREAS',
+                      help = 'a lean gate for these changed areas instead of '
+                             '--steps (edg-cir-gate-evidence --lean; see its '
+                             'docstring): the steps and their skip reasons '
+                             'come from there, and the areas are checked '
+                             'against the files that differ from --lean-base '
+                             'before anything is synced')
+  parser.add_argument('--lean-base', default = 'HEAD', metavar = 'REF',
+                      help = 'the commit that --lean compares the tree with '
+                             '(default HEAD)')
   parser.add_argument('--quick', action = 'store_true',
                       help = f"only {QUICK_STEPS}")
   parser.add_argument('--prune', type = int, nargs = '?', const = 3,
@@ -239,9 +270,9 @@ def main() -> None:
   parser.add_argument('--no-sync', action = 'store_true',
                       help = 'do not rsync (the tree is up to date)')
   parser.add_argument('--asm-baseline', default = '~/edg-cir-config/'
-                      'm4-base-asm')
+                      'm5p-base-asm')
   parser.add_argument('--cpp-asm-baseline', default = '~/edg-cir-config/'
-                      'm4-base-cpp-asm')
+                      'm5p-base-cpp-asm')
   parser.add_argument('--asm-normalize-cfi', action = 'store_true',
                       default = True,
                       help = 'asm-diff steps ignore .cfi_* directives '
@@ -252,7 +283,7 @@ def main() -> None:
   parser.add_argument('--identity-baseline',
                       default = '~/edg-cir-config/identity-m0c')
   parser.add_argument('--perf-baseline',
-                      default = '~/edg-cir-config/m4-base-perf.json')
+                      default = '~/edg-cir-config/m5p-base-perf.json')
   parser.add_argument('--smoke-all-pass', action = 'store_true',
                       help = 'cpp-smoke fails unless every test passes')
   parser.add_argument('--jobs', type = int, default = 12)
@@ -273,6 +304,26 @@ def main() -> None:
     sys.exit(2)
 
   steps = QUICK_STEPS if args.quick else args.steps
+  changed = ''
+  if args.lean:
+    gate_tool = load_gate_tool()
+    areas = [a for a in args.lean.split(',') if a]
+    unknown = [a for a in areas if a not in gate_tool.AREA_STEPS]
+    if unknown:
+      print(f"unknown area(s) {', '.join(unknown)}; the areas are "
+            f"{', '.join(gate_tool.AREA_STEPS)}", file = sys.stderr)
+      sys.exit(2)
+    paths = gate_tool.changed_paths(root, args.lean_base, '')
+    problems = gate_tool.uncovered_areas(paths, areas)
+    print(f"change set against {args.lean_base}: {len(paths)} file(s), areas "
+          f"{','.join(sorted(gate_tool.required_areas(paths))) or 'none'}",
+          flush = True)
+    if problems:
+      print('the declared areas do not cover the change set: '
+            + '; '.join(problems), file = sys.stderr)
+      sys.exit(2)
+    changed = '\n'.join(paths) + '\n'
+    steps = ','.join(gate_tool.lean_steps(areas)[0])
   tree = f"~/edg-cir-config/{args.tree}"
   stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
   out = f"{tree}/.tmp/checkpoint-{stamp}"
@@ -346,10 +397,19 @@ def main() -> None:
       f"{shlex.quote('synced: ' + ('no' if args.no_sync else 'yes'))} "
       f"> {out}/fingerprint.txt")
 
+  selection = ['--only', steps]
+  if args.lean:
+    # The gate picks the steps itself (and records why the others are
+    # skipped); it checks the areas again against the list of changed files.
+    subprocess.run(['ssh', *ssh_options(), BOX,
+                    f"cat > {out}/changed-files.txt"], input = changed,
+                   text = True)
+    selection = ['--lean', args.lean, '--changed-files',
+                 f"{out}/changed-files.txt"]
   gate = [
     'python3', 'dev_tools/bin/edg-cir-gate-evidence', '--tree', '$T',
     '--tree-fingerprint', fingerprint,
-    '--jobs', str(args.jobs), '--only', steps, '--out', out,
+    '--jobs', str(args.jobs), *selection, '--out', out,
     '--identity-baseline', args.identity_baseline,
     '--asm-baseline', args.asm_baseline,
     '--cpp-asm-baseline', args.cpp_asm_baseline,

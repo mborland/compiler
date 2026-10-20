@@ -340,6 +340,8 @@ struct a_frame {
   uint8_t          phase = 0;
   size_t           value_base = 0;
   mlir::Type       result_type;        /* ternary. */
+  mlir::Value      tern_slot;          /* ternary with an aggregate result: the
+                                          temporary both arms store into. */
   bool             has_cond = false;   /* for. */
   mlir::Type       switch_type;        /* switch condition type. */
   size_t           target_base = 0;    /* agg_init target stack height. */

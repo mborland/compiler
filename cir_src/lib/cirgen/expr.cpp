@@ -971,11 +971,23 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
       }
       result_type = t->cir;
     }
-    mlir::Operation *op = compat::open_ternary(builder_, loc(), cond,
-                                               result_type);
+    /* An aggregate result does not leave the arms as a cir.yield operand:
+       the CIR-to-CIR call conversion lowering (the pin after 036efe53)
+       accepts a record value only in a store, a call, a return or a member
+       read.  Both arms store into a temporary and the value is loaded after
+       the ternary, as CIRGen's aggregate conditional writes into its
+       destination slot. */
+    mlir::Value slot;
+
+    if (result_type && is_aggregate_type(result_type))
+      slot = alloca_here(result_type, "tern.tmp",
+                         static_cast<uint32_t>(type_align(result_type)));
+    mlir::Operation *op = compat::open_ternary(
+        builder_, loc(), cond, slot ? mlir::Type() : result_type);
     builder_.createBlock(&op->getRegion(0));
     open_frame(a_frame_kind::ternary, op);
     frames_.back().result_type = result_type;
+    frames_.back().tern_slot = slot;
     break;
   }
   case eop_tern_else: {
@@ -992,7 +1004,13 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
         ok = false;
         break;
       }
-      builder_.createYield(loc(), mlir::ValueRange{v});
+      if (f->tern_slot) {
+        builder_.createStore(loc(), v, f->tern_slot, false, false,
+                             alignment_attr(type_align(v.getType())));
+        builder_.createYield(loc());
+      } else {
+        builder_.createYield(loc(), mlir::ValueRange{v});
+      }
     } else {
       builder_.createYield(loc());
     }
@@ -1012,6 +1030,7 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
     }
     mlir::Operation *op = f->op;
     bool has_result = static_cast<bool>(f->result_type);
+    mlir::Value slot = f->tern_slot;
     bool terminated = arm_terminated(f->value_base);
     if (terminated) {
       /* A throwing arm contributes no value. */
@@ -1021,7 +1040,13 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
         ok = false;
         break;
       }
-      builder_.createYield(loc(), mlir::ValueRange{v});
+      if (slot) {
+        builder_.createStore(loc(), v, slot, false, false,
+                             alignment_attr(type_align(v.getType())));
+        builder_.createYield(loc());
+      } else {
+        builder_.createYield(loc(), mlir::ValueRange{v});
+      }
     } else {
       builder_.createYield(loc());
     }
@@ -1030,8 +1055,15 @@ TERN_*, LAND_* and LOR_*: all are cir.ternary built with OperationState.
       ok = false;
       break;
     }
-    if (has_result)
+    if (slot) {
+      mlir::Type type = mlir::cast<cir::PointerType>(slot.getType())
+                            .getPointee();
+
+      push_prvalue(builder_.createLoad(
+          loc(), slot, false, static_cast<uint32_t>(type_align(type))));
+    } else if (has_result) {
       push_prvalue(op->getResult(0));
+    }
     break;
   }
   case eop_land_begin:

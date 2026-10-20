@@ -9,7 +9,7 @@
 
 Run it on the Mac, from the repository root, with the SSH master socket to the
 box open (without the socket, a plain batch-mode ssh is used).  The tree on
-the box (default ~/edg-cir-config/m41-int) must be built and synced
+the box (default ~/edg-cir-config/m5-int) must be built and synced
 (edg-cir-checkpoint --steps build does that).  For the selected tests and
 configurations it
 
@@ -148,7 +148,7 @@ def main() -> None:
     formatter_class = argparse.RawDescriptionHelpFormatter,
     epilog = __doc__.split('\n', 2)[2]
   )
-  parser.add_argument('--tree', default = 'm41-int')
+  parser.add_argument('--tree', default = 'm5-int')
   parser.add_argument('--filter', required = True,
                       help = 'the edgy filter ("@file" or prefixes)')
   parser.add_argument('--types', default = 'rp,lp')

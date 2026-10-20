@@ -516,9 +516,13 @@ lowering_lang_options(mlir::MLIRContext *ctx, bool exceptions,
                       bool threadsafe_statics, int32_t abi_compat)
 /* Build #cir.lowering_lang_options (C/C++, no offloading). */
 {
+  /* The arguments are named: a reordered or extended parameter list (the
+     pin of 2d6f180e added `hlsl`) must not shift a value silently. */
   return cir::LoweringLangOptionsAttr::get(
-      ctx, exceptions, threadsafe_statics, false, false, false, false, false,
-      false, abi_compat);
+      ctx, /*exceptions=*/exceptions, /*threadsafe_statics=*/threadsafe_statics,
+      /*cuda=*/false, /*cuda_is_device=*/false, /*hip=*/false,
+      /*hlsl=*/false, /*gpu_rdc=*/false, /*openmp=*/false,
+      /*openmp_is_target_device=*/false, /*clang_abi_compat=*/abi_compat);
 }
 
 inline cir::RecordLayoutAttr record_layout(mlir::MLIRContext *ctx,

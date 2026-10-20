@@ -118,6 +118,25 @@ checks compiled) it passes.
   baseline is caused by that (the four cases that the predefine changes are
   the tests' own `#ifdef __OPTIMIZE__` checks, section 3); the approximation
   is documented in the eccp comment.
+- **C99 and `gnu_inline` inline-only definitions are never inlined** (for the
+  S2 list). The library makes a function that the front end marks
+  `ECIL_DECL_FUNC_INLINE_ONLY` an external declaration, without its body
+  (`globals.cpp`, the loop after the incomplete-record handling, about
+  lines 1902-1915): its definition is supposed to live in another translation
+  unit, and with no body LLVM has nothing to inline at any level. clang emits
+  such a function `available_externally`, which keeps the body for the
+  optimizer and drops it from the object. A test that calls a plain `inline`
+  function of its own and has no external definition (the GNU C tests
+  that were written for gcc -O, which inlines it) therefore compiles but does
+  not link: at -O0 the same is true of clang itself, so the gap shows only for
+  the tests whose options carry a real `-O`. These are the four C tests
+  that were re-recorded in M4.1 and had no cause in the first attribution:
+  `gnu/c/20031102-1` (`__inline__ char InlineFunc`), `gnu/c/loop-2`
+  (`__inline__ int tag`), `gnu/c/pr48837` (`inline ... bar`) and
+  `gnu/c/tree-ssa/pr22591` (`inline void`); each is `-O` in its options and
+  `FAIL(COMPILE)` in `edg_x86_64_cir`. The fix is `available_externally` for
+  these functions (and for the glibc `gnu_inline` extern-inline bodies, which
+  the same path reaches), after which -O1 and above inline them as clang does.
 - `-Og` is 1, `-Ofast` is 3 without fast-math flags (the CIR dialect can carry
   them since the candidate pin; nothing sets them).
 - The hazards of the plan (the static invoker's null `this`, `noundef` on a

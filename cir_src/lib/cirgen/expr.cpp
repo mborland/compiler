@@ -661,6 +661,17 @@ rejected by it or, worse, copied silently (ECIL spec 11.6).
   return ok;
 }  /* a_emitter::check_class_arguments */
 
+static bool has_attribute(const llvm::SmallVectorImpl<mlir::NamedAttribute>
+                              &attrs, mlir::StringAttr name)
+/* Whether the attribute list names the attribute. */
+{
+  bool found = false;
+
+  for (const mlir::NamedAttribute &attr : attrs)
+    found = found || attr.getName() == name;
+  return found;
+}  /* has_attribute */
+
 bool a_emitter::call_record(const ecil::a_record &r, bool indirect)
 /*
 CALL / CALL_INDIRECT with the call-site type rule of spec 8.8: a direct
@@ -752,6 +763,13 @@ and an indirect call with all arguments as variadic extras.
   if (ok) {
     if (is_nothrow_call(flags, nullptr))
       attrs.push_back(nothrow);
+    /* The call-site noreturn of the CALL flag (the callee's type or the
+       callee cannot return), as CIRGen takes it from the call's function
+       info.  A direct call also takes it from the callee's declaration
+       below; a virtual call does not (the attribute is not inherited by
+       overriders). */
+    if (noreturn)
+      attrs.push_back(mlir::NamedAttribute(noreturn_name_, unit_attr_));
     cir::FuncType wanted = mlir::cast<cir::FuncType>(call_type->cir);
     if (with_vtt)
       wanted = with_vtt_parameter(wanted);
@@ -783,8 +801,11 @@ and an indirect call with all arguments as variadic extras.
       uint32_t slot = 0;
 
       e = entity_for(gid, true);
-      if (e != nullptr && attrs.empty() && is_nothrow_call(0, e))
+      if (e != nullptr && is_nothrow_call(0, e) &&
+          !has_attribute(attrs, nothrow_name_))
         attrs.push_back(nothrow);
+      if (e != nullptr)
+        add_temperature_attributes(*e, attrs);
       if (e == nullptr) {
         ok = false;
       } else if (!ids_.vslot_of(static_cast<uint32_t>(gid), slot)) {
@@ -808,8 +829,21 @@ and an indirect call with all arguments as variadic extras.
       } else {
         cir::FuncOp fn = mlir::cast<cir::FuncOp>(e->op);
         e->referenced = true;
-        if (attrs.empty() && is_nothrow_call(0, e))
+        if (is_nothrow_call(0, e) &&
+            !has_attribute(attrs, nothrow_name_))
           attrs.push_back(nothrow);
+        if (e->memory != 0 && !has_attribute(attrs, memory_effects_name_))
+          add_memory_attributes(*e, attrs);
+        add_temperature_attributes(*e, attrs);
+        if ((e->flags & ECIL_DECL_FUNC_NORETURN) &&
+            !has_attribute(attrs, noreturn_name_))
+          attrs.push_back(mlir::NamedAttribute(noreturn_name_, unit_attr_));
+        /* The allocation or deallocation call of a new- or delete-expression
+           to a replaceable global operator: clang marks it `builtin`
+           (allocation elision). */
+        if ((flags & ECIL_CALL_ALLOC_EXPR) != 0 &&
+            replaceable_operator(*e, nullptr))
+          attrs.push_back(mlir::NamedAttribute(builtin_name_, unit_attr_));
         if (args_match(fn.getFunctionType())) {
           op = builder_.createCallOp(loc(), fn, args, attrs);
           e->calls.push_back(op);
@@ -847,6 +881,8 @@ and an indirect call with all arguments as variadic extras.
     }
   }
   if (ok) {
+    if (op)
+      call_signature_attributes(op, *call_type, e, with_vtt);
     if (op.getNumResults() == 1)
       push_prvalue(op.getResult());
     /* After a noreturn call control does not continue: cir.unreachable.
@@ -1677,6 +1713,8 @@ when the flags say so.
       }
       if (is_nothrow_call(0, fn))
         del_attrs.push_back(nothrow);
+      if (replaceable_operator(*fn, nullptr))
+        del_attrs.push_back(mlir::NamedAttribute(builtin_name_, unit_attr_));
       if (has_dtor && is_nothrow_call(0, dtor))
         dtor_attrs.push_back(nothrow);
       if (type.getNumInputs() != want) {

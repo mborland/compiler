@@ -1,0 +1,48 @@
+; S2: the definitions marked `used` (supp key 11) are listed in
+; llvm.compiler.used (an appending array of their addresses in the section
+; llvm.metadata), which keeps them against GlobalDCE: an internal function
+; and an internal variable that nothing references stay in the output at -O0
+; and -O2, and an unused one without the attribute does not.  A declaration
+; that is `used` is not listed.
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=llvm %t.ecil | %FileCheck %s --check-prefix=LLVM
+; RUN: %edg-cir -O2 --emit=obj -o %t.o %t.ecil
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS --implicit-check-not=plain_unused
+
+; LLVM: @llvm.compiler.used = appending global [2 x ptr] [ptr @used_fn, ptr @used_var], section "llvm.metadata"
+; LLVM-NOT: @plain_unused
+; SYMS-DAG: used_fn
+; SYMS-DAG: used_var
+; SYMS-DAG: T main
+
+frame DECLS supp
+  STR 100 "used_fn"
+  STR 101 "plain_unused"
+  STR 102 "main"
+  STR 103 "used_var"
+  STR 104 "decl_used"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 21 1 1 100 supp{11: true}
+  DECL_FUNC 41 21 1 1 101
+  DECL_FUNC 42 21 0 9 102
+  DECL_VAR 300 1 1 1 4 103 supp{11: true}
+  DECL_FUNC 43 21 0 0 104 supp{11: true}
+frame REGION
+  FUNC_BEGIN 40 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS
+  C_INT 1 7
+  VAR_INIT 300
+frame END
+  END auto 0

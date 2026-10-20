@@ -231,9 +231,15 @@ public:
     { return arena_.store(text.data(), text.size()); }
 
   /* G-ids. */
+  std::vector<uint32_t> *ref_sink = nullptr;
+  /* When set, every G-id looked up through find_gid is appended to it: the
+     consumer that defers a function body (lazy emission) learns the G-ids the
+     validator read in it, which are the references of the body. */
   a_gid_entry *find_gid(uint64_t g)
   /* The introduced entry for g, or nullptr. */
     {
+      if (ref_sink != nullptr && g != 0 && g < 0xFFFFFFFFull)
+        ref_sink->push_back(static_cast<uint32_t>(g));
       return g != 0 && g < gids_.size() && gids_[g].kind != gk_none
                  ? &gids_[g] : nullptr;
     }

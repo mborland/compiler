@@ -12,14 +12,16 @@ object.  A thin client of the C API (it never sees LLVM).
 
   edg-cir [-o out] [--emit=cir|cir-lowered|llvm|bc|asm|obj] [-O0..-O3]
           [--verify-each] [--keep-going] [--no-llvm-passes] [--eager-bodies]
-          [--chunk-functions=N] [--chunk-threshold=N] [--triple=T] [--stats]
-          [--trace] [--version] file.ecil|-
+          [--lazy-symbols] [--llvm-arg=ARG] [--chunk-functions=N]
+          [--chunk-threshold=N] [--triple=T] [--stats] [--trace]
+          [--version] file.ecil|-
 */
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "edg_cir/edg_cir.h"
 
@@ -48,7 +50,8 @@ Print the usage and return the usage exit code.
   std::fprintf(stderr,
       "usage: edg-cir [-o out] [--emit=cir|cir-lowered|llvm|bc|asm|obj] "
       "[-O0..-O3] [--verify-each] [--keep-going] [--no-llvm-passes] "
-      "[--eager-bodies] [--chunk-functions=N] [--chunk-threshold=N] "
+      "[--eager-bodies] [--lazy-symbols] [--llvm-arg=ARG] "
+      "[--chunk-functions=N] [--chunk-threshold=N] "
       "[--triple=T] [--stats] [--trace] [--version] file.ecil|-\n");
   return 64;
 }  /* usage */
@@ -65,6 +68,7 @@ the API status code (1..9), or 64 for a usage error.
   const char *input = nullptr;
   const char *output = nullptr;
   std::string triple;
+  std::vector<const char *> llvm_args;
   an_edg_cir_status status;
   bool bad = false;
   bool show_version = false;
@@ -111,6 +115,11 @@ the API status code (1..9), or 64 for a usage error.
     } else if (std::strncmp(arg, "--chunk-threshold=", 18) == 0) {
       options.chunk_threshold =
           static_cast<uint32_t>(std::strtoul(arg + 18, nullptr, 10));
+    } else if (std::strcmp(arg, "--lazy-symbols") == 0) {
+      /* With --stats: a note for each deferred body (lazy-identity). */
+      setenv("EDG_CIR_LAZY_SYMBOLS", "1", 1);
+    } else if (std::strncmp(arg, "--llvm-arg=", 11) == 0) {
+      llvm_args.push_back(arg + 11);
     } else if (std::strcmp(arg, "--eager-bodies") == 0) {
       options.flags |= EDG_CIR_FLAG_EAGER_BODIES;
     } else if (std::strcmp(arg, "--disable-cir-passes") == 0) {
@@ -138,6 +147,10 @@ the API status code (1..9), or 64 for a usage error.
     result = 64;
   } else {
     options.output_path = output != nullptr ? output : "-";
+    if (!llvm_args.empty()) {
+      llvm_args.push_back(nullptr);
+      options.llvm_args = llvm_args.data();
+    }
     status = edg_cir_process_file(&options, input);
     if (status != EDG_CIR_OK)
       std::fprintf(stderr, "edg-cir: %s\n", edg_cir_status_string(status));

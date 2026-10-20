@@ -10,6 +10,13 @@ config.test_source_root = os.path.join(config.edg_cir_source_dir, "test")
 config.excludes = ["format", "writer", "driver", "Inputs"]
 config.test_exec_root = os.path.join(config.edg_cir_binary_dir, "test", "lit")
 
+# The test hooks (EDG_CIR_TEST_HOOKS) are compiled into the library only in
+# the presets that ask for them; the tests that drive one say
+# `REQUIRES: test-hooks`, so that a build without them skips them instead of
+# failing or passing vacuously.
+if config.edg_cir_test_hooks.upper() in ("ON", "1", "TRUE", "YES"):
+    config.available_features.add("test-hooks")
+
 bin_dir = os.path.join(config.edg_cir_binary_dir, "bin")
 tool_dir = os.path.join(config.edg_cir_binary_dir, "tools")
 llvm_bin = os.path.join(config.edg_llvm_cir_prefix, "bin")

@@ -1,0 +1,84 @@
+; Chunked lowering (S3).  main (external), inc and get (external), helper
+; (internal, so it is made external while the chunks are lowered and restored
+; after the merge) and a global variable that the bodies of several chunks
+; use.  The threshold counts function bodies: 4 here.  --stats says how many
+; chunks the module was lowered in (the globals chunk included; 0 for one
+; module) and their size; the output is the same whether it is chunked or
+; not, and the program runs (it returns 0).
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --stats --emit=llvm %t.ecil 2>&1 >%t.whole.ll | %FileCheck %s --check-prefix=DEFAULT
+; RUN: %edg-cir --stats --chunk-threshold=4294967295 --emit=llvm %t.ecil 2>&1 >/dev/null | %FileCheck %s --check-prefix=DEFAULT
+; RUN: %edg-cir --stats --chunk-threshold=5 --emit=llvm %t.ecil 2>&1 >/dev/null | %FileCheck %s --check-prefix=DEFAULT
+; RUN: %edg-cir --stats --chunk-threshold=4 --emit=llvm -o %t.4.ll %t.ecil 2>&1 | %FileCheck %s --check-prefix=TWO
+; RUN: %edg-cir --stats --chunk-threshold=1 --chunk-functions=1 --emit=llvm -o %t.1.ll %t.ecil 2>&1 | %FileCheck %s --check-prefix=FIVE
+; RUN: %edg-cir --stats --chunk-threshold=1 --chunk-functions=3 --emit=llvm -o %t.3.ll %t.ecil 2>&1 | %FileCheck %s --check-prefix=THREE
+; The verifier after every pass (the declarations of a chunk are private).
+; RUN: %edg-cir --verify-each --chunk-threshold=1 --chunk-functions=1 --emit=llvm -o %t.v.ll %t.ecil
+; RUN: diff %t.whole.ll %t.v.ll
+; RUN: %edg-cir -O2 --verify-each --chunk-threshold=1 --chunk-functions=1 --emit=obj -o %t.v.o %t.ecil
+; RUN: diff %t.whole.ll %t.4.ll
+; RUN: diff %t.whole.ll %t.1.ll
+; RUN: diff %t.whole.ll %t.3.ll
+; RUN: %edg-cir --chunk-threshold=1 --chunk-functions=1 --emit=obj -o %t.o %t.ecil
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: %edg-cir -O2 --chunk-threshold=1 --chunk-functions=1 --emit=obj -o %t.o2 %t.ecil
+; RUN: gcc %t.o2 -o %t.exe2
+; RUN: %t.exe2
+
+; DEFAULT: stats: chunked lowering: 0 chunks of at most {{500|1|3}} functions
+; TWO: stats: chunked lowering: 2 chunks of at most 500 functions
+; FIVE: stats: chunked lowering: 5 chunks of at most 1 functions
+; THREE: stats: chunked lowering: 3 chunks of at most 3 functions
+
+frame DECLS
+  STR 100 "helper"
+  STR 101 "inc"
+  STR 102 "get"
+  STR 103 "main"
+  STR 104 "counter"
+  TY_FUNC 21 1 0 [1]
+  TY_FUNC 22 1 0 []
+  DECL_FUNC 40 21 1 1 100
+  DECL_FUNC 41 22 0 1 101
+  DECL_FUNC 42 22 0 1 102
+  DECL_FUNC 43 22 0 9 103
+  DECL_VAR 44 1 0 1 4 104
+frame REGION
+  FUNC_BEGIN 40 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CONST_INT 1 5
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  GREF 44
+  GREF 44
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  GREF 44
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  CALL 41 22 0 0
+  DROP
+  CALL 41 22 0 0
+  DROP
+  CALL 42 22 0 0
+  CALL 40 21 1 0
+  CONST_INT 1 7
+  SUB 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

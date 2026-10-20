@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 -w --c++03 --exceptions --pending_instantiations 200 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""

@@ -1,0 +1,43 @@
+; S2: call-site attributes.  A call whose CALL flags say NORETURN gets the
+; noreturn attribute, and so does a direct call of a function whose DECL_FUNC
+; is NORETURN even without the call flag (clang takes both); a call of a
+; NOTHROW callee (or with the CALL flag NOTHROW) is nothrow.  A call with
+; neither is neither.  After a noreturn call control does not continue.
+; RUN: cat %S/Inputs/header12_cxx_eh.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s --check-prefix=CIR
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=LLVM
+
+; CIR-LABEL: cir.func {{.*}}@main()
+; CIR: cir.call @flag_only() nothrow {noreturn}
+; CIR: cir.unreachable
+; CIR: cir.call @decl_noreturn() nothrow {noreturn}
+; CIR: cir.call @plain() :
+; LLVM-LABEL: define {{.*}}i32 @main()
+; LLVM: call void @flag_only() #[[A:[0-9]+]]
+; LLVM: call void @decl_noreturn() #[[A]]
+; LLVM: call void @plain()
+; LLVM-NOT: #[[A]]
+; LLVM: attributes #[[A]] = {{{.*}}noreturn
+
+frame DECLS
+  STR 100 "flag_only"
+  STR 101 "decl_noreturn"
+  STR 102 "plain"
+  STR 103 "main"
+  TY_FUNC 21 11 0 []
+  TY_FUNC 22 1 0 []
+  DECL_FUNC 40 21 0 0 100
+  DECL_FUNC 41 21 0 132 101
+  DECL_FUNC 42 21 0 0 102
+  DECL_FUNC 43 22 0 9 103
+frame REGION
+  FUNC_BEGIN 43 0
+  CALL 40 21 0 10
+  CALL 41 21 0 0
+  CALL 42 21 0 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

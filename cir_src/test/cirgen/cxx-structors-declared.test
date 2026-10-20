@@ -9,8 +9,8 @@
 ; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
 ; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
 
-; CHECK-DAG: cir.func private @_ZN1EC1Ei(!cir.ptr<!rec_E>, !s32i)
-; CHECK-DAG: cir.func private @_ZN1EC2Ei(!cir.ptr<!rec_E>, !s32i)
+; CHECK-DAG: cir.func private @_ZN1EC1Ei(!cir.ptr<!rec_E>{{.*}}, !s32i{{.*}})
+; CHECK-DAG: cir.func private @_ZN1EC2Ei(!cir.ptr<!rec_E>{{.*}}, !s32i{{.*}})
 ; CHECK: cir.call @_ZN1EC1Ei({{.*}}) nothrow
 
 ; SYMS-DAG: U _ZN1EC1Ei

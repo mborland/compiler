@@ -55,6 +55,16 @@ cir_src (build/cir) and the release front end:
   edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-perf \\
       --json perf-after.json --baseline perf.json
 
+The targets of a slice (m5_design.md section 9) are checked with --targets
+NAME (S1: `s1`) against --baseline: the library instructions (cir_ir) of
+every pinned real-world unit (PINNED_UNITS, measured with --only realworld
+--units pinned --levels 0,2 --boost-include DIR) at most 70% of the baseline's
+and those of the generated 6000-function C++ unit (--only cxx, edg-cir alone)
+at most 90% at -O0 (at -O2 it is reported, not gated); a pinned unit that
+stops compiling, or was not measured, fails.
+The exit status is 1 if a target is missed.  The baseline needs the same
+sections (the real-world one included).
+
 With --baseline the before/after table is printed too (`--table-only` prints
 it for two existing JSON files without measuring: --baseline and --json).
 Instruction counts of the same commit repeat exactly, so a difference of the
@@ -536,6 +546,13 @@ def summarize_corpus(per_case: Dict[str, dict]) -> dict:
 
 
 REALWORLD_FLAGS = ['--c++17', '-w']
+# The pinned real-world units: the ones that compile under CIR at -O0 and -O2
+# (m5_design.md section 9).  Every one must be measured, and a unit that
+# stops compiling fails the targets; a unit that starts compiling joins the
+# list at the next baseline.
+PINNED_UNITS = ('libstdcxx/chrono', 'libstdcxx/functional',
+                'libstdcxx/iostream', 'boost/mp11', 'boost/circular_buffer',
+                'boost/lexical_cast')
 
 
 class Compilers:
@@ -561,14 +578,22 @@ class Compilers:
             self.resource, *flags, str(source), '-o', '/dev/null']
 
 
-def realworld_units(directory: Path) -> List[Path]:
-  return sorted(directory.glob('libstdcxx/*.cpp')) + \
+def realworld_units(directory: Path, only: Optional[List[str]] = None
+                    ) -> List[Path]:
+  '''The units of the directory (libstdcxx/*.cpp, boost/*.cpp), or the named
+  ones (`libstdcxx/chrono`; `pinned` is PINNED_UNITS).'''
+  units = sorted(directory.glob('libstdcxx/*.cpp')) + \
     sorted(directory.glob('boost/*.cpp'))
+  if only:
+    names = [n for item in only for n in
+             (PINNED_UNITS if item == 'pinned' else (item,))]
+    units = [u for u in units if f"{u.parent.name}/{u.stem}" in names]
+  return units
 
 
 def measure_unit(tools: Tools, compilers: Compilers, source: Path,
-                 boost: str, level: int, repeat: int, count_clang: bool
-                 ) -> Dict[str, object]:
+                 boost: str, level: int, repeat: int, count_clang: bool,
+                 with_clang: bool = True) -> Dict[str, object]:
   '''One unit at one level: ours (front end + edg-cir), clang, clang
   -fclangir: instructions and the minimum wall time.'''
   result: Dict[str, object] = {}
@@ -608,7 +633,8 @@ def measure_unit(tools: Tools, compilers: Compilers, source: Path,
                        read_times(work / 'cir.time')[0])
         result.update({'fe_ir': fe_ir, 'cir_ir': ir, 'ir': fe_ir + ir,
                        'wall_s': round(min(walls), 3)})
-    for name, clangir in (('clang', False), ('clangir', True)):
+    for name, clangir in ((('clang', False), ('clangir', True))
+                          if with_clang else ()):
       command = compilers.command(source, include, level, clangir)
       if count_clang:
         # (valgrind makes a compiler about 50 times slower: opt-in)
@@ -652,14 +678,15 @@ def measure_realworld(tools: Tools, root: Path, args: argparse.Namespace,
   try:
     compilers = Compilers(tools, work)
     results: Dict[str, dict] = {}
-    for source in realworld_units(root / args.realworld_dir):
+    only = [u for u in args.units.split(',') if u]
+    for source in realworld_units(root / args.realworld_dir, only):
       name = f"{source.parent.name}/{source.stem}"
       results[name] = {}
       for level in levels:
         print(f"realworld: {name} -O{level}", flush = True)
         results[name][f"O{level}"] = measure_unit(
           tools, compilers, source, args.boost_include, level, args.repeat,
-          args.clang_instructions)
+          args.clang_instructions, not args.no_clang)
         if args.json:
           # partial result: a long run is not lost if it is interrupted
           Path(args.json + '.partial').write_text(json.dumps(
@@ -667,6 +694,82 @@ def measure_realworld(tools: Tools, root: Path, args: argparse.Namespace,
     return results
   finally:
     shutil.rmtree(work, ignore_errors = True)
+
+
+# The instruction targets of the slices of gate M5 (m5_design.md section 9),
+# as the largest ratio after / before: S1 (lazy emission) wants the library
+# instructions (cir_ir) of every pinned real-world unit at most 70% of the
+# baseline's, and those of the generated 6000-function C++ unit (edg-cir on
+# its stream, few dead bodies) at most 90% at -O0 (reported at -O2).
+TARGETS: Dict[str, Dict[str, float]] = {
+  's1': {'realworld_cir_ir': 0.70, 'big_cxx_cir_ir': 0.90}
+}
+
+
+def check_targets(before: dict, after: dict, name: str
+                  ) -> Tuple[bool, List[str]]:
+  '''(passes, report lines) of the targets `name` between two measurements.
+  Every pinned unit that the baseline measured must be measured again and
+  compile (a unit that stops compiling fails); a unit that the baseline could
+  not compile is skipped (it joins at the next baseline).  A section or row
+  that is missing fails: the target is not met by not measuring.'''
+  limits = TARGETS[name]
+  lines: List[str] = []
+  passes = True
+  old_units = before.get('realworld', {})
+  new_units = after.get('realworld', {})
+  limit = limits['realworld_cir_ir']
+  measured = 0
+  for unit in PINNED_UNITS:
+    for level_name, old in sorted(old_units.get(unit, {}).items()):
+      if 'error' in old or not old.get('cir_ir'):
+        lines.append(f"{unit} {level_name}: the baseline has no library "
+                     f"count (not compiled): skipped")
+        continue
+      new = new_units.get(unit, {}).get(level_name)
+      if new is None:
+        passes = False
+        lines.append(f"FAIL {unit} {level_name}: not measured")
+      elif 'error' in new or not new.get('cir_ir'):
+        passes = False
+        lines.append(f"FAIL {unit} {level_name}: stopped compiling "
+                     f"({new.get('error', 'no library count')})")
+      else:
+        ratio = new['cir_ir'] / old['cir_ir']
+        measured += 1
+        ok = ratio <= limit
+        passes = passes and ok
+        lines.append(f"{'ok  ' if ok else 'FAIL'} {unit} {level_name}: "
+                     f"library instructions {100 * ratio:.1f}% of the "
+                     f"baseline (limit {100 * limit:.0f}%)")
+  if not measured:
+    passes = False
+    lines.append('FAIL no pinned unit could be compared (the baseline needs '
+                 'a realworld section: --only realworld --units pinned)')
+  limit = limits['big_cxx_cir_ir']
+  # The generated C++ unit is gated at -O0 only; at -O2 it is reported.
+  for section, gated in (('big_cxx', True), ('big_cxx_O2', False)):
+    old = before.get(section, {}).get('2p-edg-cir', {}).get('ir')
+    if not old:
+      if gated:
+        passes = False
+        lines.append('FAIL no generated C++ unit (big_cxx) in the baseline')
+      continue
+    new = after.get(section, {}).get('2p-edg-cir', {}).get('ir')
+    if not new:
+      if gated:
+        passes = False
+        lines.append(f"FAIL {section}: not measured")
+      continue
+    ratio = new / old
+    ok = ratio <= limit
+    if gated:
+      passes = passes and ok
+    lines.append(f"{('ok  ' if ok else 'FAIL') if gated else 'info'} "
+                 f"generated C++ unit ({section}): library instructions "
+                 f"{100 * ratio:.1f}% of the baseline (limit "
+                 f"{100 * limit:.0f}%{'' if gated else ', reported only'})")
+  return passes, lines
 
 
 def delta(before: float, after: float) -> str:
@@ -854,6 +957,18 @@ def main() -> None:
   parser.add_argument('--realworld-dir', default = 'dev_tools/cir-realworld',
                       help = 'directory of the real-world units '
                              '(libstdcxx/*.cpp, boost/*.cpp)')
+  parser.add_argument('--units', default = '',
+                      help = 'measure only these real-world units (comma '
+                             'separated, like libstdcxx/chrono; `pinned` is '
+                             'the pinned list, PINNED_UNITS)')
+  parser.add_argument('--no-clang', action = 'store_true',
+                      help = 'do not time clang and clang -fclangir on the '
+                             'real-world units (the slice targets need '
+                             'only ours)')
+  parser.add_argument('--targets', default = '', choices = ['', *TARGETS],
+                      help = 'check the targets of a slice against '
+                             '--baseline after the table (exit status 1 if '
+                             'one is missed)')
   parser.add_argument('--boost-include', default = '',
                       help = 'a directory with the Boost headers (merged '
                              'into one tree): the Boost units are measured '
@@ -901,11 +1016,21 @@ def main() -> None:
   if args.table_only:
     if not args.json:
       parser.error('--table-only needs --json')
-    print(format_table(json.loads(Path(args.json).read_text()), base))
+    new_data = json.loads(Path(args.json).read_text())
+    print(format_table(new_data, base))
+    if args.targets:
+      if not base:
+        parser.error('--targets needs --baseline')
+      ok, report = check_targets(base, new_data, args.targets)
+      print('\n'.join(['', f"targets {args.targets}:", *report]))
+      sys.exit(0 if ok else 1)
     return
 
   root = Path(args.root).resolve()
   sys.path.insert(0, str(root / 'dev_tools/pylibs'))
+  if args.boost_include:
+    # the front end runs in a scratch directory: the path must be absolute
+    args.boost_include = str((root / args.boost_include).resolve())
   only = [s for s in args.only.split(',') if s]
   levels = [int(x) for x in args.levels.split(',')]
   work = Path(tempfile.mkdtemp(prefix = 'edg-cir-perf.'))
@@ -960,6 +1085,13 @@ def main() -> None:
                                           sort_keys = True) + '\n')
     print(f"wrote {args.json}")
   print(format_table(result, base))
+  if args.targets:
+    if not base:
+      parser.error('--targets needs --baseline')
+    ok, report = check_targets(base, result, args.targets)
+    print('\n'.join(['', f"targets {args.targets}:", *report]))
+    sys.exit(0 if ok else 1)
 
 
-main()
+if __name__ == '__main__':
+  main()

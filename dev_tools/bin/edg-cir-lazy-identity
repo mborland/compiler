@@ -1,0 +1,635 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Lazy against eager body emission of edg-cir (gate step lazy-identity).
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-cir (cpfe-cir) and build/cir (edg-cir):
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-lazy-identity
+
+It makes the ECIL streams of the sets below, compiles each one twice with
+`edg-cir -O0 --emit=asm --stats --lazy-symbols` (lazy emission, the default)
+and with `--eager-bodies` (every body emitted on arrival), and checks, per
+stream:
+
+  0. (a stream on which both runs fail before the finish, where the counters
+     are printed, is checked for exit status and diagnostics only and
+     counted as failed in both runs; a run that succeeds without the
+     counters is a setup problem)
+  1. the exit status and the diagnostics are equal (the stats notes are not
+     diagnostics).  The one difference that m5_design.md section 10 states is
+     a finding, never silently accepted: a deferred body that is never
+     replayed is checked by the reader only, so the eager run, the only one
+     that checks every body in the emitter, may report emitter-only
+     diagnostics (and fail) that the lazy run lacks.  That is `eager-only`:
+     the lazy diagnostics must be a part of the eager ones, every such case
+     is reported with the diagnostics that only the eager run has (and listed
+     with them in eager-only.txt), and the step fails unless the case is in
+     the triage list (--triage, tests/.edgy/filters/cir-lazy-triage.txt: one
+     line `<set>/<stream> | <reason>`, the reason a real one of at least 8
+     characters, no duplicate, no stale line for a set that was run).  A
+     pinned translation unit is never triaged;
+  2. the assembly is the same symbol by symbol: the same function symbols,
+     the same body for each (local label numbers renumbered per function),
+     the same remaining lines (data, directives; compared as a multiset, so
+     the position of a library-made line such as `.hidden __dso_handle`
+     does not matter).  Streams whose whole assembly is not byte-identical
+     are counted;
+  3. the oracle: every function that survives in the eager assembly (what
+     GlobalDCE and the library kept) must have been replayed by the lazy run
+     or never deferred, so no function that lazy emission dropped may be
+     defined in the eager assembly (and the other way round: the lazy
+     assembly defines no dropped function).  The overshoot, the replayed
+     deferred functions that eager did not keep, is reported;
+  4. non-vacuity, on every pinned translation unit: the lazy run reports
+     deferred, replayed and dropped bodies, each above 0, with deferred equal
+     to replayed plus dropped, and the eager run reports no deferred body.
+
+Sets (--sets): `pinned` (the pinned real-world translation units of
+edg-cir-perf, PINNED_UNITS, compiled at -O0 with --boost-include for Boost),
+`cpp` (the C++ corpus filter), `c` (the C corpus filter).  The corpus streams
+are made by cir_src/scripts/box_collect_streams.py.
+
+The interface with the library (cir-lib), read from the notes that
+`--stats --lazy-symbols` prints on standard error:
+
+  stats: lazy bodies: <D> deferred, <R> replayed, <X> dropped
+  stats: lazy replayed <symbol>        one line per replayed deferred body
+  stats: lazy dropped <symbol>         one line per dropped deferred body
+
+<symbol> is the symbol of the function in the assembly (after any renames).
+In eager mode the first line reports 0 deferred, 0 replayed, 0 dropped.
+LAZY_COUNTS_RE and LAZY_SYMBOL_RE below are the one place that knows the
+spelling.  A library without these options or lines is a setup problem
+(exit status 2).
+
+Exit status: 0 if every check holds, 1 if one fails, 2 for a setup problem.
+The last line is `RESULT: PASS` or `RESULT: FAIL`.
+'''
+
+import argparse
+import collections
+import concurrent.futures
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+BIN = Path(__file__).resolve().parent
+
+LAZY_COUNTS_RE = re.compile(
+  r'stats: lazy bodies: (\d+) deferred, (\d+) replayed, (\d+) dropped')
+LAZY_SYMBOL_RE = re.compile(r'stats: lazy (replayed|dropped) (\S+)\s*$')
+STATS_RE = re.compile(r'stats: ')
+LIBRARY_FLAGS = ['--stats', '--lazy-symbols']
+TYPE_RE = re.compile(r'^\t\.type\t([^,\s]+),@function')
+END_MARKER = '# -- End function'
+LABEL_RE = re.compile(
+  r'\.L(BB|tmp|func_begin|func_end|cfi|CPI|set|exception|eh_func_end)'
+  r'(\d+)(_\d+)?')
+SETS = ('pinned', 'cpp', 'c')
+
+
+def load_tool(name: str):
+  '''Import dev_tools/bin/<name> (a file without .py) as a module.'''
+  loader = importlib.machinery.SourceFileLoader(
+    name.replace('-', '_'), str(BIN / name))
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+def load_exports(env_file: Path) -> Dict[str, str]:
+  '''Parse the `export NAME="value"` lines of a CMake environment.sh.'''
+  exports = {}
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      match = re.match(r'export (\w+)="?([^"]*)"?$', line)
+      if match:
+        exports[match.group(1)] = match.group(2)
+  return exports
+
+
+# ----------------------------------------------------------------------------
+# The assembly, symbol by symbol.
+
+def renumber_labels(lines: List[str]) -> List[str]:
+  '''The lines with the local labels (.LBB, .Ltmp, ...) numbered by their
+  first appearance, per kind: the numbers count in the whole module, so they
+  differ when the functions before this one differ, which is no difference
+  of this function.'''
+  seen: Dict[Tuple[str, str], int] = {}
+
+  def replace(match: 're.Match[str]') -> str:
+    key = (match.group(1), match.group(2))
+    index = seen.setdefault(key, len(seen))
+    return f".L{match.group(1)}{index}{match.group(3) or ''}"
+
+  return [LABEL_RE.sub(replace, line) for line in lines]
+
+
+def split_asm(text: str) -> Tuple[Dict[str, List[str]], List[str]]:
+  '''(function symbol -> its lines from `.type` to the end marker, the other
+  lines without blanks and comment-only lines).'''
+  functions: Dict[str, List[str]] = {}
+  rest: List[str] = []
+  name: Optional[str] = None
+  body: List[str] = []
+  for line in text.splitlines():
+    match = TYPE_RE.match(line)
+    if match:
+      if name is not None:
+        functions[name] = body
+      name, body = match.group(1), []
+    if name is not None:
+      body.append(line.rstrip())
+      if END_MARKER in line:
+        functions[name] = body
+        name, body = None, []
+    elif line.strip() and not line.lstrip().startswith('#'):
+      rest.append(line.rstrip())
+  if name is not None:
+    functions[name] = body
+  return functions, rest
+
+
+def compare_asm(lazy: str, eager: str) -> Tuple[List[str], bool]:
+  '''(the problems, whether the two are byte-identical) of two assemblies,
+  symbol by symbol.  A numbering-only difference of the remaining lines
+  (module-wide label numbers) is not a problem.'''
+  if lazy == eager:
+    return [], True
+  problems: List[str] = []
+  lazy_functions, lazy_rest = split_asm(lazy)
+  eager_functions, eager_rest = split_asm(eager)
+  only_lazy = sorted(set(lazy_functions) - set(eager_functions))
+  only_eager = sorted(set(eager_functions) - set(lazy_functions))
+  if only_lazy:
+    problems.append(f"functions only in lazy: {', '.join(only_lazy[:4])}"
+                    f"{' ...' if len(only_lazy) > 4 else ''}")
+  if only_eager:
+    problems.append(f"functions only in eager: {', '.join(only_eager[:4])}"
+                    f"{' ...' if len(only_eager) > 4 else ''}")
+  different = [n for n in sorted(set(lazy_functions) & set(eager_functions))
+               if renumber_labels(lazy_functions[n]) !=
+               renumber_labels(eager_functions[n])]
+  if different:
+    problems.append(f"different bodies: {', '.join(different[:4])}"
+                    f"{' ...' if len(different) > 4 else ''}")
+  if sorted(lazy_rest) != sorted(eager_rest):
+    def strip(lines: List[str]) -> List[str]:
+      return sorted(LABEL_RE.sub(r'.L\1N', line) for line in lines)
+    if strip(lazy_rest) != strip(eager_rest):
+      extra = sorted(set(lazy_rest) ^ set(eager_rest))
+      problems.append(f"the remaining lines differ: {extra[0].strip()!r}"
+                      f"{f' (+{len(extra) - 1})' if len(extra) > 1 else ''}")
+  return problems, False
+
+
+# ----------------------------------------------------------------------------
+# One run of edg-cir and what it says.
+
+class Run:
+  '''The outcome of one edg-cir compile: exit status, assembly, diagnostics
+  (standard error without the stats notes) and the lazy counters.'''
+
+  def __init__(self, status: int, asm: str, error: str) -> None:
+    self.status = status
+    self.asm = asm
+    self.diagnostics: List[str] = []
+    self.counts: Optional[Tuple[int, int, int]] = None
+    self.replayed: List[str] = []
+    self.dropped: List[str] = []
+    for line in error.splitlines():
+      counts = LAZY_COUNTS_RE.search(line)
+      symbol = LAZY_SYMBOL_RE.search(line)
+      if counts:
+        self.counts = tuple(int(g) for g in counts.groups())  # type: ignore
+      elif symbol:
+        (self.replayed if symbol.group(1) == 'replayed'
+         else self.dropped).append(symbol.group(2))
+      elif not STATS_RE.search(line) and line.strip():
+        self.diagnostics.append(line.strip())
+
+  def defined_functions(self) -> List[str]:
+    return sorted(split_asm(self.asm)[0])
+
+
+def run_edg_cir(tool: str, stream: Path, level: int, eager: bool,
+                timeout: int) -> Run:
+  command = [tool, f"-O{level}", '--emit=asm', *LIBRARY_FLAGS, '-o', '-']
+  if eager:
+    command.append('--eager-bodies')
+  command.append(str(stream))
+  try:
+    proc = subprocess.run(command, stdout = subprocess.PIPE,
+                          stderr = subprocess.PIPE, text = True,
+                          errors = 'replace', timeout = timeout)
+  except subprocess.TimeoutExpired:
+    return Run(124, '', 'timeout')
+  return Run(proc.returncode, proc.stdout, proc.stderr)
+
+
+def is_sub_multiset(small: List[str], big: List[str]) -> bool:
+  need = collections.Counter(small)
+  have = collections.Counter(big)
+  return all(have[k] >= n for k, n in need.items())
+
+
+class Verdict:
+  '''What the checks say about one stream.'''
+
+  def __init__(self, name: str) -> None:
+    self.name = name
+    self.problems: List[str] = []
+    self.kind = 'identical'      # identical | eager-only | different | setup
+    self.eager_extra: List[str] = []   # diagnostics of the eager run only
+    self.early = False           # both runs failed before the counters
+    self.byte_identical = False
+    self.counts: Optional[Tuple[int, int, int]] = None
+    self.overshoot = 0
+    self.survivors_deferred = 0
+
+
+def judge_pair(name: str, lazy: Run, eager: Run, pinned: bool) -> Verdict:
+  '''The checks 1 to 4 of the docstring on one pair of runs.'''
+  verdict = Verdict(name)
+  verdict.counts = lazy.counts
+  if lazy.status == 64 or eager.status == 64:
+    verdict.kind = 'setup'
+    verdict.problems.append('edg-cir does not know --lazy-symbols or '
+                            '--eager-bodies (exit status 64)')
+    return verdict
+  if lazy.counts is None:
+    if lazy.status == 0 or eager.status == 0:
+      verdict.kind = 'setup'
+      verdict.problems.append('the lazy run printed no "stats: lazy bodies" '
+                              'line (a library without the S1 counters)')
+    else:
+      # Both runs failed before the finish (an error in the stream, or a
+      # front end that aborted it), which is where the counters are
+      # printed: only the exit status and the diagnostics can differ.
+      verdict.early = True
+      if lazy.status != eager.status or \
+         lazy.diagnostics != eager.diagnostics:
+        verdict.kind = 'different'
+        verdict.problems.append(
+          f"both runs failed before the finish, but exit status "
+          f"{lazy.status} (lazy) against {eager.status} (eager) or "
+          f"different diagnostics: lazy {lazy.diagnostics[:2]}, eager "
+          f"{eager.diagnostics[:2]}")
+    return verdict
+  if eager.counts is not None and eager.counts != (0, 0, 0):
+    verdict.problems.append(f"the eager run reports lazy bodies "
+                            f"{eager.counts} (0, 0, 0 expected)")
+  # 1. exit status and diagnostics
+  comparable = True
+  if lazy.status != eager.status or lazy.diagnostics != eager.diagnostics:
+    if (is_sub_multiset(lazy.diagnostics, eager.diagnostics) and
+        lazy.status <= eager.status):
+      verdict.kind = 'eager-only'
+      verdict.eager_extra = list((collections.Counter(eager.diagnostics) -
+                                  collections.Counter(lazy.diagnostics)
+                                  ).elements())
+      comparable = lazy.status == 0 and eager.status == 0
+      if pinned:
+        verdict.problems.append('the eager run has diagnostics that the '
+                                'lazy run lacks (not accepted on a pinned '
+                                'translation unit)')
+    else:
+      verdict.kind = 'different'
+      verdict.problems.append(
+        f"exit status {lazy.status} (lazy) against {eager.status} (eager) "
+        f"or different diagnostics: lazy {lazy.diagnostics[:2]}, eager "
+        f"{eager.diagnostics[:2]}")
+      comparable = False
+  # 2. the assembly
+  if comparable and lazy.asm and eager.asm:
+    problems, verdict.byte_identical = compare_asm(lazy.asm, eager.asm)
+    if problems:
+      verdict.kind = 'different'
+      verdict.problems += problems
+  # 3. the oracle
+  eager_defined = set(eager.defined_functions())
+  dropped = set(lazy.dropped)
+  kept_but_dropped = sorted(eager_defined & dropped)
+  if kept_but_dropped:
+    verdict.kind = 'different'
+    verdict.problems.append(
+      f"oracle: dropped by lazy emission but defined in the eager assembly: "
+      f"{', '.join(kept_but_dropped[:4])}"
+      f"{' ...' if len(kept_but_dropped) > 4 else ''}")
+  lazy_defined = set(lazy.defined_functions())
+  emitted_dropped = sorted(lazy_defined & dropped)
+  if emitted_dropped:
+    verdict.kind = 'different'
+    verdict.problems.append(
+      f"oracle: dropped by lazy emission but defined in the lazy assembly: "
+      f"{', '.join(emitted_dropped[:4])}")
+  replayed = set(lazy.replayed)
+  verdict.survivors_deferred = len(eager_defined & replayed)
+  verdict.overshoot = len(replayed - eager_defined)
+  # 4. coherence and non-vacuity
+  deferred, replayed_count, dropped_count = lazy.counts
+  if deferred != replayed_count + dropped_count:
+    verdict.problems.append(
+      f"the counters are not coherent: {deferred} deferred but "
+      f"{replayed_count} replayed + {dropped_count} dropped")
+  if lazy.replayed and len(lazy.replayed) != replayed_count or \
+     lazy.dropped and len(lazy.dropped) != dropped_count:
+    verdict.problems.append(
+      f"the symbol lines ({len(lazy.replayed)} replayed, "
+      f"{len(lazy.dropped)} dropped) do not match the counters")
+  if pinned:
+    for label, value in (('deferred', deferred),
+                         ('replayed', replayed_count),
+                         ('dropped', dropped_count)):
+      if value <= 0:
+        verdict.problems.append(f"vacuous: {value} {label} bodies on a "
+                                f"pinned translation unit")
+  if verdict.problems and verdict.kind == 'identical':
+    verdict.kind = 'different'
+  return verdict
+
+
+# ----------------------------------------------------------------------------
+# The streams.
+
+def make_pinned_streams(root: Path, out: Path, boost: str,
+                        exports: Dict[str, str], level: int) -> List[str]:
+  '''Compile the pinned units to streams (like edg-cir-perf does); the names
+  of the units that gave none.'''
+  perf = load_tool('edg-cir-perf')
+  env = dict(os.environ)
+  env.update(exports)
+  env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+  env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+  env['EDG_USE_SYSTEM_HEADERS'] = '1'
+  env['KEEP_FE'] = exports['CPFE_CIR']
+  env['CPFE'] = str(root / 'cir_src/scripts/keep-stream-fe.sh')
+  if level:
+    env['EDG_CPFE_DEFAULT_OPTIONS'] = f"--cir_opt_level={level}"
+  failed: List[str] = []
+  for unit in perf.PINNED_UNITS:
+    source = root / 'dev_tools/cir-realworld' / f"{unit}.cpp"
+    stem = unit.replace('/', '__')
+    work = Path(tempfile.mkdtemp(prefix = 'edg-cir-lazy.'))
+    try:
+      shutil.copy2(source, work / source.name)
+      include = [f"-I{boost}"] if boost and 'boost' in unit else []
+      env['KEEP_STREAM'] = str(out / stem)
+      subprocess.run([str(root / 'util/eccp.sh'), '-S', *perf.REALWORLD_FLAGS,
+                      *include, source.name], cwd = work, env = env,
+                     stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL,
+                     timeout = 900)
+    except (OSError, subprocess.TimeoutExpired):
+      pass
+    finally:
+      shutil.rmtree(work, ignore_errors = True)
+    if not (out / f"{stem}.ecil").exists():
+      failed.append(unit)
+  return failed
+
+
+def make_corpus_streams(root: Path, out: Path, filter_spec: str, cxx: bool,
+                        types: str, jobs: int) -> bool:
+  script = root / 'cir_src/scripts/box_collect_streams.py'
+  command = [sys.executable, str(script), str(out), filter_spec, '--types',
+             types, '-j', str(jobs)]
+  if cxx:
+    command.append('--cxx')
+  return subprocess.run(command, cwd = root, stdout = subprocess.DEVNULL
+                        ).returncode == 0
+
+
+# ----------------------------------------------------------------------------
+
+def check_set(name: str, directory: Path, tool: str, level: int, jobs: int,
+              timeout: int, pinned: bool) -> List[Verdict]:
+  streams = sorted(directory.glob('*.ecil'))
+
+  def one(stream: Path) -> Verdict:
+    lazy = run_edg_cir(tool, stream, level, False, timeout)
+    eager = run_edg_cir(tool, stream, level, True, timeout)
+    return judge_pair(f"{name}/{stream.stem}", lazy, eager, pinned)
+
+  with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
+    return list(pool.map(one, streams))
+
+
+BAD_REASONS = {'', 'none', 'todo', '-', '?', 'tbd'}
+
+
+def read_triage(path: str) -> Tuple[Dict[str, str], List[str]]:
+  '''(stream name -> reason, problems) of a triage file: `<set>/<stream> |
+  <reason>` per line (# comments), the reason of at least 8 characters and
+  not a placeholder, no duplicate.'''
+  entries: Dict[str, str] = {}
+  problems: List[str] = []
+  if not path:
+    return entries, problems
+  for number, raw in enumerate(Path(path).read_text().splitlines(), 1):
+    line = raw.strip()
+    if not line or line.startswith('#'):
+      continue
+    name, bar, reason = [p.strip() for p in line.partition('|')]
+    where = f"{path}:{number}"
+    if not bar or not name:
+      problems.append(f"{where}: not `<set>/<stream> | <reason>`")
+    elif reason.lower() in BAD_REASONS or len(reason) < 8:
+      problems.append(f"{where}: no real reason ({reason!r})")
+    elif name in entries:
+      problems.append(f"{where}: listed twice ({name})")
+    else:
+      entries[name] = reason
+  return entries, problems
+
+
+def summarize(sets: Dict[str, List[Verdict]],
+              triage: Optional[Dict[str, str]] = None
+              ) -> Tuple[bool, List[str]]:
+  '''(passes, the report lines).  An eager-only case is a finding: it is
+  reported with its diagnostics and fails unless it is in `triage`.'''
+  triage = triage or {}
+  lines: List[str] = []
+  passes = True
+  seen: set = set()
+  for name, verdicts in sets.items():
+    kinds = collections.Counter(v.kind for v in verdicts)
+    totals = [0, 0, 0]
+    for v in verdicts:
+      if v.counts:
+        totals = [a + b for a, b in zip(totals, v.counts)]
+    survivors = sum(v.survivors_deferred for v in verdicts)
+    overshoot = sum(v.overshoot for v in verdicts)
+    lines.append(
+      f"{name}: {len(verdicts)} streams: {kinds['identical']} identical "
+      f"({sum(v.byte_identical for v in verdicts)} byte-identical), "
+      f"{kinds['eager-only']} eager-only diagnostics, "
+      f"{kinds['different']} different, {kinds['setup']} setup problems, "
+      f"{sum(v.early for v in verdicts)} failed in both runs before the "
+      f"finish; "
+      f"deferred {totals[0]}, replayed {totals[1]}, dropped {totals[2]}; "
+      f"oracle: {survivors} replayed bodies survive in eager, overshoot "
+      f"{overshoot}")
+    for v in verdicts:
+      if v.kind == 'eager-only':
+        seen.add(v.name)
+        shown = ' / '.join(v.eager_extra[:2]) or 'eager-only diagnostics'
+        if v.name in triage and not v.problems:
+          lines.append(f"  triaged {v.name}: {triage[v.name]} (eager only: "
+                       f"{shown})")
+          continue
+        passes = False
+        lines.append(f"  FAIL finding {v.name}: only the eager run "
+                     f"diagnoses: {shown}"
+                     f"{'; ' + '; '.join(v.problems) if v.problems else ''}")
+      elif v.kind in ('different', 'setup') or v.problems:
+        passes = False
+        lines.append(f"  FAIL {v.name}: {'; '.join(v.problems)}")
+    if not verdicts:
+      passes = False
+      lines.append(f"  FAIL {name}: no stream was made")
+    elif all(v.early or v.counts is None for v in verdicts):
+      passes = False
+      lines.append(f"  FAIL {name}: no run reached the finish (no counters "
+                   f"were printed)")
+  for entry in sorted(triage):
+    if entry.split('/')[0] in sets and entry not in seen:
+      passes = False
+      lines.append(f"  FAIL stale triage line {entry}: the case has no "
+                   f"eager-only diagnostics any more")
+  return passes, lines
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2])
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--sets', default = ','.join(SETS),
+                      help = f"comma separated: {', '.join(SETS)}")
+  parser.add_argument('--cpp-filter',
+                      default = '@tests/.edgy/filters/cir-cpp-corpus.txt')
+  parser.add_argument('--c-filter',
+                      default = '@tests/.edgy/filters/cir-c-corpus.txt')
+  parser.add_argument('--types', default = 'rp,lp')
+  parser.add_argument('--boost-include', default = '',
+                      help = 'the Boost headers (inside the workspace) for '
+                             'the Boost units of the pinned set')
+  parser.add_argument('--edg-cir', default = '',
+                      help = 'the edg-cir tool (default: EDG_CIR_TOOL of '
+                             'build/gcc-cir/environment.sh)')
+  parser.add_argument('--opt', type = int, default = 0, choices = range(4),
+                      help = 'optimization level (default 0)')
+  parser.add_argument('-j', dest = 'jobs', type = int,
+                      default = os.cpu_count() or 1)
+  parser.add_argument('--timeout', type = int, default = 300,
+                      help = 'limit of one edg-cir run (seconds)')
+  parser.add_argument('--keep', default = '',
+                      help = 'make the streams here and keep them')
+  parser.add_argument('--streams', action = 'append', default = [],
+                      metavar = 'SET=DIR',
+                      help = 'use the .ecil files of DIR for the set instead '
+                             'of making them (pinned sets still need every '
+                             'pinned unit)')
+  parser.add_argument('--json', default = '',
+                      help = 'write the verdicts here')
+  parser.add_argument('--eager-only-file', default = '',
+                      help = 'list the eager-only streams (with the '
+                             'diagnostics of the eager run only) here')
+  parser.add_argument('--triage', default = '',
+                      help = 'the triage list of the eager-only cases (one '
+                             '`<set>/<stream> | <reason>` per line)')
+  args = parser.parse_args()
+
+  root = Path(args.root).resolve()
+  exports = load_exports(root / 'build/gcc-cir/environment.sh')
+  tool = args.edg_cir or exports.get('EDG_CIR_TOOL', '')
+  if not tool or not Path(tool).exists():
+    print('edg-cir-lazy-identity: no edg-cir (build build/cir; run from the '
+          'repository root)', file = sys.stderr)
+    sys.exit(2)
+  if args.boost_include:
+    # the front end runs in a scratch directory: the path must be absolute
+    args.boost_include = str((root / args.boost_include).resolve())
+  wanted = [s for s in args.sets.split(',') if s]
+  unknown = [s for s in wanted if s not in SETS]
+  if unknown:
+    print(f"edg-cir-lazy-identity: unknown set(s) {', '.join(unknown)}",
+          file = sys.stderr)
+    sys.exit(2)
+  triage, triage_problems = read_triage(args.triage)
+  if triage_problems:
+    print('edg-cir-lazy-identity: the triage file is not valid:\n  ' +
+          '\n  '.join(triage_problems), file = sys.stderr)
+    sys.exit(2)
+  given = dict(item.split('=', 1) for item in args.streams)
+  base = Path(args.keep) if args.keep else Path(
+    tempfile.mkdtemp(prefix = 'edg-cir-lazy-streams.'))
+  results: Dict[str, List[Verdict]] = {}
+  missing: List[str] = []
+  try:
+    for name in wanted:
+      directory = Path(given[name]) if name in given else base / name
+      if name not in given:
+        directory.mkdir(parents = True, exist_ok = True)
+        print(f"making the {name} streams ...", flush = True)
+        if name == 'pinned':
+          missing = make_pinned_streams(root, directory, args.boost_include,
+                                        exports, args.opt)
+        elif not make_corpus_streams(
+            root, directory,
+            args.cpp_filter if name == 'cpp' else args.c_filter,
+            name == 'cpp', args.types, args.jobs):
+          print(f"edg-cir-lazy-identity: the {name} streams failed",
+                file = sys.stderr)
+          sys.exit(2)
+      print(f"checking the {name} set ...", flush = True)
+      results[name] = check_set(name, directory, tool, args.opt, args.jobs,
+                                args.timeout, name == 'pinned')
+    passes, lines = summarize(results, triage)
+    for unit in missing:
+      passes = False
+      lines.append(f"  FAIL pinned/{unit}: the front end made no stream (a "
+                   f"pinned unit that does not compile fails the step)")
+    if any(v.kind == 'setup' for vs in results.values() for v in vs):
+      print('\n'.join(lines))
+      print('RESULT: FAIL (setup problem)')
+      sys.exit(2)
+    print('\n'.join(lines))
+    if args.eager_only_file:
+      Path(args.eager_only_file).write_text(''.join(
+        f"{v.name} | {' / '.join(v.eager_extra[:3])}\n"
+        for vs in results.values() for v in vs if v.kind == 'eager-only'))
+    if args.json:
+      Path(args.json).write_text(json.dumps(
+        {n: [{'name': v.name, 'kind': v.kind, 'problems': v.problems,
+              'counts': v.counts, 'overshoot': v.overshoot,
+              'eager_extra': v.eager_extra,
+              'byte_identical': v.byte_identical} for v in vs]
+         for n, vs in results.items()}, indent = 1) + '\n')
+    print(f"RESULT: {'PASS' if passes else 'FAIL'}")
+    sys.exit(0 if passes else 1)
+  finally:
+    if not args.keep:
+      shutil.rmtree(base, ignore_errors = True)
+
+
+if __name__ == '__main__':
+  main()

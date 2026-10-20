@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -14,11 +14,11 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   STR 5 "A"
   TY_RECORD_DECL 4 0 5
   TY_PTR 5 4
-  TY_FUNC 6 1 0 [5]
+  TY_FUNC 6 1 0 [5] supp{15: 2}
   STR 6 "x"
   TY_RECORD_BODY 4 4 4 4 4 1
   REC_FIELD 1 0 nil nil 6 0
@@ -165,11 +165,11 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 18 "NC"
   TY_RECORD_DECL 21 0 18
   TY_PTR 22 21
-  TY_FUNC 23 1 0 [22]
+  TY_FUNC 23 1 0 [22] supp{15: 2}
   STR 19 "y"
   TY_RECORD_BODY 21 8 8 4 4 2
   REC_FIELD 1 0 nil nil 6 0

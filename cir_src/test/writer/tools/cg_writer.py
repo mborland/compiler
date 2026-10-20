@@ -67,6 +67,10 @@ for path in args:
                     n = int(p[1])
                     if skip:
                         skip = False
+                        # (A call line gives the callee's file only when it
+                        # differs from the caller's.)
+                        if not callee_file:
+                            callee_file = cur_file
                         all_by_callee[callee] = all_by_callee.get(callee, 0) + n
                         if is_writer(cur_file):
                             kp = (short(cur_fn), callee)
@@ -76,6 +80,7 @@ for path in args:
                             entry_by_fn[callee] = entry_by_fn.get(callee, 0) + n
                         elif is_writer(cur_file) and not is_writer(callee_file):
                             out_by_callee[callee] = out_by_callee.get(callee, 0) + n
+                        callee_file = ''
                     else:
                         tot_self_by_file[cur_file] = tot_self_by_file.get(cur_file, 0) + n
                         if is_writer(cur_file):

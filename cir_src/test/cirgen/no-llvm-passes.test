@@ -1,13 +1,16 @@
 ; API 2: EDG_CIR_FLAG_NO_LLVM_PASSES (edg-cir --no-llvm-passes) skips the LLVM
-; IR pipeline: GlobalDCE at -O0 (a dead internal function stays) and the
+; IR pipeline: GlobalDCE at -O0 (a dead internal function stays, with eager
+; emission: lazy emission never emits it) and the
 ; default pipeline at -O2 (a small function is not inlined).  The code
 ; generation level is unchanged: the object still links and runs.  The flag
-; is a no-op for the CIR output kinds.  --eager-bodies (EAGER_BODIES) and the
-; chunk options are accepted and change nothing yet.
+; is a no-op for the CIR output kinds.  --eager-bodies (EAGER_BODIES) keeps
+; the dead function; the chunk options (explicit, so that the test does not
+; depend on the default threshold) give the same output as the whole module.
 ; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
 ; RUN: %ecil-asm %t.txt -o %t.ecil
 ; RUN: %edg-cir --emit=llvm %t.ecil | %FileCheck %s --check-prefix=DCE
-; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=KEEP
+; RUN: %edg-cir --eager-bodies --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=KEEP
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=LAZY --implicit-check-not=@dead
 ; RUN: %edg-cir -O2 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=INLINED
 ; RUN: %edg-cir -O2 --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=KEEP2
 ; RUN: %edg-cir --eager-bodies --chunk-functions=2 --chunk-threshold=1 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=DCE
@@ -22,6 +25,7 @@
 ; DCE: define {{.*}} @main()
 ; KEEP: define internal {{.*}} @dead()
 ; KEEP: define {{.*}} @main()
+; LAZY: define {{.*}} @main()
 ; INLINED-NOT: call {{.*}} @small()
 ; KEEP2: define {{.*}} @main()
 ; KEEP2: call {{.*}} @small()

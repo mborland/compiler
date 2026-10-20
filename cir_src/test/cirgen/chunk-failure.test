@@ -1,0 +1,16 @@
+; A chunk that fails to lower is diagnosed (there is no fallback to the whole
+; module in the same process: the CIR of a lowered chunk is gone).  The test
+; hook EDG_CIR_TEST_CHUNK_FAIL=N makes chunk N (1 is the globals chunk) fail;
+; the stream is the one of chunk-lowering.test (4 bodies: 5 chunks of 1).
+; REQUIRES: test-hooks
+; RUN: cat %S/Inputs/header.txt %S/chunk-lowering.test > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: rm -f %t.o
+; RUN: %not env EDG_CIR_TEST_CHUNK_FAIL=3 %edg-cir --chunk-threshold=1 --chunk-functions=1 --emit=obj -o %t.o %t.ecil 2>&1 | %FileCheck %s --check-prefix=THREE
+; RUN: %not env EDG_CIR_TEST_CHUNK_FAIL=1 %edg-cir --chunk-threshold=1 --chunk-functions=1 --emit=obj -o %t.o %t.ecil 2>&1 | %FileCheck %s --check-prefix=ONE
+; RUN: %not test -e %t.o
+; The hook does nothing when the module is not chunked.
+; RUN: env EDG_CIR_TEST_CHUNK_FAIL=3 %edg-cir --emit=obj -o %t.o %t.ecil
+
+; THREE: lowering chunk 3 of 5 to LLVM IR failed
+; ONE: lowering chunk 1 of 5 to LLVM IR failed

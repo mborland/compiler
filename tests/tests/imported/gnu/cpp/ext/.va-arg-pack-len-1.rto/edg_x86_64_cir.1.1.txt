@@ -3,6 +3,11 @@ eccp -DTEST_NUMBER=1 --gnu_version=999999 -tused -e 200 --no_wrap --no_wrap_diag
   }
   ^
 
-Error: CIR back end: the definition of '_Z6myopenPKciz' was dropped: it uses a construct the CIR back end cannot express: the builtin function __builtin_va_arg_pack_len (and it is referenced)
-
-1 error detected in the compilation of "Test_name.c".
+/usr/sbin/ld: Test_name.o: in function `main':
+Test_name.c:(.text+0xXX): undefined reference to `_Z6myopenPKciz'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `_Z6myopenPKciz'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `_Z6myopenPKciz'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `_Z6myopenPKciz'
+/usr/sbin/ld: Test_name.c:(.text+0xXX): undefined reference to `_Z6myopenPKciz'
+/usr/sbin/ld: Test_name.o:Test_name.c:(.text+0xXX): more undefined references to `_Z6myopenPKciz' follow
+collect2: error: ld returned 1 exit status

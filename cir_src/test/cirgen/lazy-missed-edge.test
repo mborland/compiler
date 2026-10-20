@@ -1,0 +1,39 @@
+; A missed edge of the reachability must not be silent.  main (external, eager)
+; calls chain_a (internal, deferred), which calls chain_b (internal,
+; deferred).  The test hook EDG_CIR_TEST_LAZY_MISS=chain_b drops the edge from
+; chain_a's body to chain_b, so chain_b's body is dropped while the replayed
+; chain_a names it: an undefined reference.  The library reports an internal
+; error instead.  Without the hook the program compiles and runs.
+; REQUIRES: test-hooks
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: %not env EDG_CIR_TEST_LAZY_MISS=chain_b %edg-cir --emit=obj -o %t.bad.o %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: lazy emission missed an edge to 'chain_b'
+
+frame DECLS
+  STR 100 "chain_a"
+  STR 101 "chain_b"
+  STR 102 "main"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 21 1 1 100
+  DECL_FUNC 41 21 1 1 101
+  DECL_FUNC 42 21 0 9 102
+frame REGION
+  FUNC_BEGIN 41 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 40 0
+  CALL 41 21 0 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  CALL 40 21 0 0
+  CONST_INT 1 1
+  SUB 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

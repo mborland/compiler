@@ -2127,6 +2127,15 @@ typedef struct a_decl_modifiers_block {
   a_bit_field	marked_as_gnu_extension:1;
 			/* TRUE if the declaration was preceded by the GNU
 			   keyword __extension__. */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  a_bit_field	cir_inline_keyword:1;
+			/* TRUE if the "inline" specifier was written in the
+			   declaration.  The CIR back end records it (the
+			   routine's is_inline is also set by a definition in
+			   its class, constexpr and implicit members) to give
+			   exactly the functions that clang does an inline
+			   hint.  Not copied into the IL. */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if MICROSOFT_EXTENSIONS_ALLOWED
   a_bit_field	is_deprecated:1;
 			/* TRUE if the declaration was marked with

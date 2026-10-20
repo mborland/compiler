@@ -3,7 +3,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
   }
   ^
 
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -22,7 +22,7 @@ frame REGION supp
   STR 5 "type_info"
   TY_RECORD_DECL 4 2 5
   TY_PTR 5 4
-  TY_FUNC 6 5 0 [1]
+  TY_FUNC 6 5 0 [1] supp{15: 1}
   TY_VPTR 7
   TY_RECORD_BODY 4 8 8 8 12 1
   REC_FIELD 7 0 nil nil nil 1
@@ -49,7 +49,7 @@ frame REGION supp
   CLASS_INFO 12 12 8 nil 2
   CLASS_BASES 12 []
   TY_PTR 13 12
-  TY_FUNC 14 9 0 [13]
+  TY_FUNC 14 9 0 [13] supp{15: 2}
   STR 13 "_ZN3CmpD1Ev"
   DECL_FUNC 15 14 0 128 13
   STR 14 "_ZN3CmpD2Ev"
@@ -69,8 +69,8 @@ frame REGION supp
   DECL_ABI_DATA 22 2 1 0 0 17
   TYPEINFO_DEF 22 0 0 nil nil
   DECL_FUNC 8 6 0 32 7 supp{13: "inline assembly"}
-frame REGION
-  TY_FUNC 23 5 0 []
+frame REGION supp
+  TY_FUNC 23 5 0 [] supp{15: 1}
   STR 18 "_Z4keptv"
   DECL_FUNC 24 23 0 0 18
   DECL_FUNC 24 23 0 1 18

@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -14,7 +14,7 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_FUNC 4 1 0 []
   STR 5 "main"
   DECL_FUNC 5 4 0 8 5
@@ -44,23 +44,23 @@ frame REGION
   TY_PTR 12 11
   TY_FUNC 13 1 1 [12]
   STR 15 "printf"
-  DECL_FUNC 14 13 0 0 15
+  DECL_FUNC 14 13 0 256 15
   TY_ARRAY 15 11 10 0
   STR 16 ".str"
   DECL_VAR 16 15 2 11 0 16
   C_STRING 15 "%d %d %d\x0a\x00"
   VAR_INIT 16
   TY_PTR 17 7
-  TY_FUNC 18 1 0 [17]
+  TY_FUNC 18 1 0 [17] supp{15: 2}
   STR 17 "_ZZ4mainENKUlvE_clEv"
-  DECL_FUNC 19 18 1 2 17
+  DECL_FUNC 19 18 1 514 17
   TY_PTR 20 10
-  TY_FUNC 21 1 0 [20]
+  TY_FUNC 21 1 0 [20] supp{15: 2}
   STR 18 "_ZZ4mainENKUlvE0_clEv"
-  DECL_FUNC 22 21 1 2 18
-  DECL_FUNC 22 21 1 3 18
+  DECL_FUNC 22 21 1 514 18
+  DECL_FUNC 22 21 1 515 18
   STR 19 "this"
-  DECL_FUNC 19 18 1 3 17
+  DECL_FUNC 19 18 1 515 17
   FUNC_BEGIN 5 0
   BLOCK_BEGIN
   LOCAL 1 1 6 0 0

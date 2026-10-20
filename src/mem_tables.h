@@ -186,6 +186,14 @@ typedef struct an_il_entry_prefix {
 			   is declared but never referenced inside a "needed"
 			   function). */
 #endif /* MAINTAIN_NEEDED_FLAGS */
+#if ECIL_ID_IN_PREFIX
+  a_bit_field	ecil_inline_specifier:1;
+			/* TRUE for a routine whose declaration has the inline
+			   specifier (the ECIL writer's INLINE_HINT; set by
+			   the front end through ecil_note_inline_specifier).
+			   It is here, not in a table of routine addresses,
+			   because it goes with the routine's memory region. */
+#endif /* ECIL_ID_IN_PREFIX */
 #if IL_SHOULD_BE_WRITTEN_TO_FILE
 #if ALTERNATE_IL_FILE_FORMAT
   a_bit_field	entry_written:1;
@@ -200,8 +208,13 @@ typedef struct an_il_entry_prefix {
   /* The size of the entry_number field is decreased by the bit fields
      defined above (to keep the structure compact). */
 /*lint -emacro(506,NUM_OF_BIT_FIELDS_IN_PREFIX)*/
+#if ECIL_ID_IN_PREFIX
+#define NUM_OF_BIT_FIELDS_IN_PREFIX                                    \
+         (6 + ((MAINTAIN_NEEDED_FLAGS != 0)?1:0))
+#else /* !ECIL_ID_IN_PREFIX */
 #define NUM_OF_BIT_FIELDS_IN_PREFIX                                    \
          (5 + ((MAINTAIN_NEEDED_FLAGS != 0)?1:0))
+#endif /* ECIL_ID_IN_PREFIX */
 #define BITS_IN_ENTRY_NUMBER                                           \
   (sizeof(an_il_entry_number)*CHAR_BIT - NUM_OF_BIT_FIELDS_IN_PREFIX)
   an_il_entry_number
@@ -305,7 +318,8 @@ prefix only if it exists.  Every IL allocation goes through
 clear_il_entry_prefix, so a recycled block never keeps a stale id.
 */
 #if ECIL_ID_IN_PREFIX
-#define clear_ecil_id(epp) epp->ecil_id = 0;
+#define clear_ecil_id(epp)                                            \
+  { epp->ecil_id = 0; epp->ecil_inline_specifier = 0; }
 #else /* !ECIL_ID_IN_PREFIX */
 #define clear_ecil_id(epp) /* Nothing */
 #endif /* ECIL_ID_IN_PREFIX */

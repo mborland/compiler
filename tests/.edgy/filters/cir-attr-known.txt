@@ -1,0 +1,74 @@
+# Known differences between the LLVM IR attributes of the CIR back end and
+# clang -fclangir (the step attr-diff, dev_tools/bin/edg-cir-attr-diff).
+#
+# One entry per line:
+#
+#   <category> | <level or *> | <detail> | <reason>
+#
+# where the category is fn, ret, paramN, call or md, the level is the -O level
+# or `*`, and the detail is what the report prints after the category
+# (`only-ours:noundef`, `only-clangir:nonnull`, `only-clangir:foo:arg0:noundef`
+# for a call).  Rules (the tool refuses a file that breaks them):
+#
+#   - a comment line directly above every entry says what the difference is;
+#   - the last field says why it is accepted (at least 8 characters, not
+#     none, todo, - or ?): a difference that we mean to fix is not an entry;
+#   - no entry twice, and none that explains nothing in a gate run (the step
+#     fails on a stale entry).
+#
+# Every new entry is reviewed (m5_design.md section 9, slice S2).  The file is
+# empty at M5a: the gaps of m5_library.md section 8 are to be closed, not
+# listed.
+
+# clang and clangir treat the one-argument std::forward, std::move,
+# std::addressof and std::__addressof as builtins and emit the argument's
+# address instead of a call (CIRGenBuiltin.cpp at the pin: the move, forward,
+# forward_like and as_const group, and the addressof group), so only ours has
+# the call and its attributes.  Reviewed by cir-review against clangir's source.
+call | * | only-ours:_ZSt7forward* | clangir emits the argument's address for std::forward (a builtin) instead of a call; ours keeps the call and its attributes
+
+# The same for the one-argument std::move.  The glob keeps the three-argument
+# algorithm std::move(first, last, out), which clangir calls too, out of it:
+# the result type of the builtin form is remove_reference<T>::type&&.
+call | * | only-ours:_ZSt4move*ONSt16remove_reference* | clangir emits the argument's address for the one-argument std::move (a builtin) instead of a call; ours keeps the call and its attributes
+
+# The same for std::addressof.
+call | * | only-ours:_ZSt9addressof* | clangir emits the argument's address for std::addressof (a builtin) instead of a call; ours keeps the call and its attributes
+
+# The same for std::__addressof.
+call | * | only-ours:_ZSt11__addressof* | clangir emits the argument's address for std::__addressof (a builtin) instead of a call; ours keeps the call and its attributes
+
+# The reserved placement operator new, _ZnwmPv (and _ZnamPv for new[], which
+# the run does not show): a new-expression never calls it, the placement
+# argument is the allocation (CIRGenExprCXX.cpp at the pin), so only ours has
+# the call and its attributes.  The ordinary operator new (_Znwm, _Znam) is
+# not covered.
+call | * | only-ours:_ZnwmPv* | a new-expression never calls the reserved placement operator new; the placement argument is the allocation; ours keeps the call and its attributes
+
+# Structor variants (decided with cir-writer's classification of the S2
+# differences; to be reviewed by cir-review): for a class without virtual
+# bases we call the complete-object structor (C1 constructor, D1 destructor)
+# where clangir calls the base variant (C2, D2).  Our C1/D1 is defined through
+# C2/D2 (an alias or a substitution), so the code is identical; it is classic
+# clang's form.  The matcher pairs a callee that only ours has with the callee
+# that only clangir has when the second is the first with one C1E or D1E of
+# its mangling turned into C2E or D2E (the same class and parameters) and the
+# two have the same number of parameters on their declare or define lines (a
+# base variant that takes a VTT, a class with virtual bases, never pairs),
+# within one function.  It explains the attributes both calls have, never
+# another structor difference.
+pair | * | structor-variants | we call the complete-object structor C1/D1 where clangir calls the base variant C2/D2 of the same class with the same parameters (no VTT: no virtual bases); our C1/D1 is defined through C2/D2, so the code is identical (classic clang's form)
+
+# Library builtins as calls (same status): memcpy, memmove and memset and their
+# __builtin_ forms are sent as a call of the library function where clang
+# emits the llvm.memcpy, llvm.memmove or llvm.memset intrinsic.  The semantics
+# are the same, and LLVM recognizes the library calls by name.  The matcher
+# pairs only memcpy, memmove and memset (ours) with the llvm.<name>.*
+# intrinsic of the same name (clangir) in one function; llvm.memcpy.inline.*
+# is matched on purpose.  It explains only the intrinsic's fixed attributes
+# that only clangir has (fn nocallback, nofree, nosync, nounwind, willreturn,
+# memory(argmem: ...); arguments noalias, nocapture or captures(none),
+# writeonly, readonly, immarg, align N) and the argument noundef and nounwind
+# that only ours has: an align, dereferenceable, nonnull, noalias or memory
+# of ours stays a difference.
+pair | * | builtin-mem-calls | memcpy/memmove/memset and their __builtin_ forms are sent as a call of the library function where clang emits the llvm.mem* intrinsic; the semantics are the same and LLVM recognizes the library calls by name (only the intrinsic's fixed attributes and our argument noundef and nounwind are explained)

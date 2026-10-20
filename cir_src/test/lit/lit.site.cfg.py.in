@@ -3,4 +3,5 @@
 config.edg_cir_binary_dir = "@CMAKE_BINARY_DIR@"
 config.edg_llvm_cir_prefix = "@EDG_LLVM_CIR_PREFIX@"
 config.edg_cir_source_dir = "@CMAKE_SOURCE_DIR@"
+config.edg_cir_test_hooks = "@EDG_CIR_TEST_HOOKS@"
 lit_config.load_config(config, "@CMAKE_SOURCE_DIR@/test/lit.cfg.py")

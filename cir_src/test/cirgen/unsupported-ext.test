@@ -14,7 +14,7 @@
 ; DEFAULT: error [1003]: the definition of 'ext_var' was dropped
 ; KEEP: warning [{{[0-9]+}}]: 'ext_fn' is only declared
 ; KEEP: warning [{{[0-9]+}}]: 'ext_var' is only declared
-; CIR: cir.func private @ext_fn(!s32i) -> !s32i
+; CIR: cir.func private @ext_fn(!s32i{{.*}}) -> !s32i
 ; CIR: cir.global {{.*}}@ext_var : !s32i
 
 frame DECLS

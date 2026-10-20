@@ -5,18 +5,24 @@
 ; later F_GLOBALS), and the finish-time names all apply.
 ; RUN: cat %S/Inputs/header08_cxx.txt %s > %t.txt
 ; RUN: %ecil-asm %t.txt -o %t.ecil
-; RUN: %edg-cir --emit=cir %t.ecil > %t.cir
+; RUN: %edg-cir --eager-bodies --emit=cir %t.ecil > %t.cir
 ; RUN: %FileCheck %s < %t.cir
+; RUN: %edg-cir --emit=cir %t.ecil > %t.lazy.cir
+; RUN: %FileCheck %s --check-prefix=LAZY --implicit-check-not=_Z6unusedv < %t.lazy.cir
 ; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
 ; RUN: nm %t.o | %FileCheck %s --check-prefix=SYMS
 ; RUN: gcc %t.o -o %t.exe
 ; RUN: %t.exe
 
-; CHECK-DAG: cir.func private @_ZN1SC1Ei(!cir.ptr<!rec_S>, !s32i) alias(@_ZN1SC2Ei)
+; CHECK-DAG: cir.func private @_ZN1SC1Ei(!cir.ptr<!rec_S>{{.*}}, !s32i{{.*}}) alias(@_ZN1SC2Ei)
 ; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_Z3inlv
 ; CHECK-DAG: cir.func comdat linkonce_odr dso_local @_Z6unusedv
 ; CHECK-DAG: cir.func {{.*}}@_ZN1SC2Ei
 ; CHECK-DAG: cir.global external dso_local @gv = #cir.int<0> : !s32i ctor
+; LAZY-DAG: cir.func private @_ZN1SC1Ei(!cir.ptr<!rec_S>{{.*}}, !s32i{{.*}}) alias(@_ZN1SC2Ei)
+; LAZY-DAG: cir.func comdat linkonce_odr dso_local @_Z3inlv
+; LAZY-DAG: cir.func {{.*}}@_ZN1SC2Ei
+; LAZY-DAG: cir.global external dso_local @gv = #cir.int<0> : !s32i ctor
 
 ; SYMS-NOT: _Z6unusedv
 ; SYMS-DAG: {{[Ww]}} _Z3inlv

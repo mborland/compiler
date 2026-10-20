@@ -1,0 +1,79 @@
+; Lazy emission and the GNU `used` attribute (ECIL 1.3 supp key 11).  A used
+; internal function nothing calls is not deferred (so it is emitted); a
+; used internal variable is a root, so the function its initializer names is
+; reachable and replayed; an internal function that is not used and nothing
+; names is dropped.  Sticky: a re-issue of the declaration without the key
+; keeps it.
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --stats --lazy-symbols --emit=cir -o %t.lazy.cir %t.ecil 2> %t.err
+; RUN: %FileCheck %s --check-prefix=STATS < %t.err
+; RUN: %FileCheck %s --check-prefix=LAZY --implicit-check-not=plain_dead < %t.lazy.cir
+; RUN: %edg-cir --emit=asm -o %t.lazy.s %t.ecil
+; RUN: %edg-cir --eager-bodies --emit=asm -o %t.eager.s %t.ecil
+; RUN: cmp %t.lazy.s %t.eager.s
+
+; The deferred ones are via_var (reachable through the used variable) and
+; plain_dead; sticky_used was re-issued without the key and stays used, so it
+; is not deferred.
+; late_used becomes `used` on a declaration that follows its body, so it is a
+; root although it was deferred.
+; STATS: stats: lazy bodies: 3 deferred, 2 replayed, 1 dropped
+; STATS-DAG: stats: lazy replayed via_var
+; STATS-DAG: stats: lazy replayed late_used
+; STATS-DAG: stats: lazy dropped plain_dead
+; LAZY-DAG: cir.func {{.*}}@used_fn
+; LAZY-DAG: cir.func {{.*}}@sticky_used
+; LAZY-DAG: cir.func {{.*}}@via_var
+; LAZY-DAG: cir.func {{.*}}@late_used
+; LAZY-DAG: cir.global {{.*}}@used_var
+
+frame DECLS supp
+  STR 100 "used_fn"
+  STR 101 "plain_dead"
+  STR 102 "via_var"
+  STR 103 "sticky_used"
+  STR 104 "main"
+  STR 105 "used_var"
+  STR 106 "late_used"
+  TY_FUNC 21 1 0 []
+  TY_PTR 22 21
+  DECL_FUNC 40 21 1 1 100 supp{11: true}
+  DECL_FUNC 41 21 1 1 101
+  DECL_FUNC 42 21 1 1 102
+  DECL_FUNC 43 21 1 1 103 supp{11: true}
+  DECL_FUNC 43 21 1 1 103
+  DECL_FUNC 44 21 0 9 104
+  DECL_FUNC 45 21 1 1 106
+  DECL_VAR 300 22 1 1 8 105 supp{11: true}
+frame REGION
+  FUNC_BEGIN 40 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  CONST_INT 1 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  CONST_INT 1 2
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  CONST_INT 1 3
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 44 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 45 0
+  CONST_INT 1 5
+  RETURN_STMT true
+  FUNC_END 0
+frame GLOBALS supp
+  DECL_FUNC 45 21 1 1 106 supp{11: true}
+  C_ADDR 22 42 0
+  VAR_INIT 300
+frame END
+  END auto 0

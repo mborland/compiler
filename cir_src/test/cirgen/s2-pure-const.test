@@ -1,0 +1,64 @@
+; S2: supp keys `pure` (4) and `const` (5) on a DECL_FUNC.  As CIRGen takes it
+; from the GNU attributes (ConstructAttributeList) a `pure` function has
+; memory(read), a `const` one memory(none), and both are nounwind and
+; willreturn, on the declaration and on every direct call (one attribute
+; group for both).  The ctype
+; functions of GCC's builtin table are pure for the front end; with these
+; attributes -O2 folds `isalnum(i) != isalnum(i)` (builtin-ctype-1).  The
+; attributes are sticky and absent on a function without the keys.
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s
+; RUN: %edg-cir -O2 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=O2
+
+; CHECK: declare noundef i32 @pure_fn(i32 noundef) #[[CP:[0-9]+]]
+; CHECK: declare noundef i32 @const_fn(i32 noundef) #[[CC:[0-9]+]]
+; CHECK: declare noundef i32 @plain_fn(i32 noundef){{$}}
+; CHECK: define {{.*}}@main
+; CHECK: call noundef i32 @pure_fn(i32 noundef 1) #[[CP]]
+; CHECK: call noundef i32 @const_fn(i32 noundef 1) #[[CC]]
+; CHECK: call noundef i32 @plain_fn(i32 noundef 1) #[[PL:[0-9]+]]
+; CHECK-DAG: attributes #[[CP]] = { nounwind willreturn memory(read) }
+; CHECK-DAG: attributes #[[CC]] = { nounwind willreturn memory(none) }
+; CHECK-DAG: attributes #[[PL]] = { nounwind }
+
+; At -O2 the unused calls of the pure and const functions are removed, those
+; of the plain one are not.
+; O2: define {{.*}}@main
+; O2-NOT: @pure_fn
+; O2-NOT: @const_fn
+; O2-COUNT-2: call {{.*}}@plain_fn
+
+frame DECLS supp
+  STR 100 "pure_fn"
+  STR 101 "const_fn"
+  STR 102 "plain_fn"
+  STR 103 "main"
+  TY_FUNC 21 1 0 [1]
+  TY_FUNC 22 1 0 []
+  DECL_FUNC 40 21 0 0 100 supp{4: true}
+  DECL_FUNC 41 21 0 0 101 supp{5: true}
+  DECL_FUNC 42 21 0 0 102
+  DECL_FUNC 43 22 0 9 103
+frame REGION
+  FUNC_BEGIN 43 0
+  CONST_INT 1 1
+  CALL 40 21 1 0
+  DROP
+  CONST_INT 1 1
+  CALL 41 21 1 0
+  DROP
+  CONST_INT 1 1
+  CALL 42 21 1 0
+  DROP
+  CONST_INT 1 1
+  CALL 40 21 1 0
+  DROP
+  CONST_INT 1 1
+  CALL 42 21 1 0
+  DROP
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

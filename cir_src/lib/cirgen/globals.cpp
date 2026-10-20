@@ -22,6 +22,7 @@ metadata, inline-only bodies, unsupported entities).
 #include "mlir/IR/AttrTypeSubElements.h"
 
 #include "emitter.h"
+#include "symbol_uses.h"
 
 namespace edg_cir {
 
@@ -89,6 +90,26 @@ validator has checked the keys it knows.
   }
   return result;
 }  /* a_emitter::has_supp_flag */
+
+uint64_t a_emitter::supp_uint(const ecil::a_record &r, uint64_t key) const
+/*
+The unsigned value of a supp key of the record, 0 when it is absent.  The
+validator has checked the keys it knows.
+*/
+{
+  uint64_t result = 0;
+
+  if (r.supp != nullptr) {
+    std::vector<std::pair<uint64_t, ecil::an_operand>> pairs;
+
+    ecil::supp_pairs(r, pairs);
+    for (const auto &pair : pairs) {
+      if (pair.first == key && pair.second.kind == ecil::an_operand_kind::uint)
+        result = pair.second.u;
+    }
+  }
+  return result;
+}  /* a_emitter::supp_uint */
 
 std::string_view a_emitter::keep_string(std::string_view text)
 /*
@@ -159,6 +180,88 @@ Find the entity for gid, which must be of the given kind.
   return result;
 }  /* a_emitter::entity_for */
 
+bool a_emitter::inline_hint(const a_entity &e) const
+/*
+Whether clang gives the function `inlinehint`: with the feature bit
+INLINE_HINTS the writer sends it exactly (the inline keyword, or a lambda's
+call operator) as DECL_FUNC INLINE_HINT; without it (a writer before 1.3
+final) INLINE, which also covers in-class definitions, constexpr and implicit
+members, is the approximation.  Only when inlining is on (-O1 and up): at -O0
+clang marks the functions noinline instead.
+*/
+{
+  bool exact = (session_.reader->preamble().features &
+                ECIL_FEATURE_INLINE_HINTS) != 0;
+
+  return (e.flags & (exact ? ECIL_DECL_FUNC_INLINE_HINT
+                           : ECIL_DECL_FUNC_INLINE)) != 0;
+}  /* a_emitter::inline_hint */
+
+unsigned a_emitter::supp_memory(const ecil::a_record &r) const
+/*
+The memory behavior the stream gives a function: 2 for supp const, 1 for supp
+pure, else 0.
+*/
+{
+  unsigned result = 0;
+
+  if (has_supp_flag(r, esk_const))
+    result = 2;
+  else if (has_supp_flag(r, esk_pure))
+    result = 1;
+  return result;
+}  /* a_emitter::supp_memory */
+
+void a_emitter::add_memory_attributes(const a_entity &e,
+                                      llvm::SmallVectorImpl<
+                                          mlir::NamedAttribute> &attrs)
+/*
+The call-site attributes of a pure or const callee, as CIRGen's
+ConstructAttributeList gives them from the GNU attributes: memory effects
+(none for const, read-only for pure), nounwind and willreturn.  The
+attribute is `nounwind` (the LLVM attribute), not `nothrow` (the call cannot
+throw): a pure function called in a try body is still an invoke, as in
+clangir, so a handler catches what it throws (torture/pr100382).
+*/
+{
+  if (e.memory != 0) {
+    cir::MemoryEffectsAttr effects = e.memory == 2
+        ? cir::MemoryEffectsAttr::none(ctx_)
+        : cir::MemoryEffectsAttr::readOnly(ctx_);
+
+    attrs.push_back(mlir::NamedAttribute(memory_effects_name_, effects));
+    attrs.push_back(mlir::NamedAttribute(nounwind_name_, unit_attr_));
+    attrs.push_back(mlir::NamedAttribute(willreturn_name_, unit_attr_));
+  }
+}  /* a_emitter::add_memory_attributes */
+
+void a_emitter::add_temperature_attributes(
+    const a_entity &e, llvm::SmallVectorImpl<mlir::NamedAttribute> &attrs)
+/*
+The call-site `cold` and `hot` of a callee that has them (CIRGen's
+ConstructAttributeList takes both from the callee's declaration).
+*/
+{
+  if (e.cold && !e.hot)
+    attrs.push_back(mlir::NamedAttribute(
+        mlir::StringAttr::get(ctx_, "cold"), unit_attr_));
+  if (e.hot && !e.cold)
+    attrs.push_back(mlir::NamedAttribute(
+        mlir::StringAttr::get(ctx_, "hot"), unit_attr_));
+}  /* a_emitter::add_temperature_attributes */
+
+void a_emitter::set_memory_attributes(const a_entity &e, mlir::Operation *op)
+/*
+The function-level form of add_memory_attributes.
+*/
+{
+  llvm::SmallVector<mlir::NamedAttribute, 4> attrs;
+
+  add_memory_attributes(e, attrs);
+  for (mlir::NamedAttribute &attr : attrs)
+    op->setAttr(attr.getName(), attr.getValue());
+}  /* a_emitter::set_memory_attributes */
+
 void a_emitter::apply_function_attributes(a_entity &e, cir::FuncOp fn)
 /*
 Set the function's attributes from the latest DECL_FUNC.
@@ -174,10 +277,27 @@ Set the function's attributes from the latest DECL_FUNC.
     fn->setAttr(noreturn_name_, unit_attr_);
   else
     fn->removeAttr(noreturn_name_);
-  if (e.no_inline)
+  /* The front end's non-throwing predicate (noexcept, throw(), implicit
+     noexcept of destructors, nothrow library functions), on declarations and
+     definitions alike, as CIRGen takes it from the function's prototype:
+     LLVM nounwind.  (A definition without exceptions gets it in func_begin.)
+   */
+  if (e.flags & ECIL_DECL_FUNC_NOTHROW)
+    fn->setAttr(nothrow_name_, unit_attr_);
+  set_memory_attributes(e, fn);
+  /* GNU always_inline and noinline, as CIRGen: neither overrides the other,
+     and a function with both gets neither. */
+  if (e.always_inline && !e.no_inline)
+    fn.setInlineKind(cir::InlineKind::AlwaysInline);
+  else if (e.no_inline && !e.always_inline)
     fn.setInlineKind(cir::InlineKind::NoInline);
-  else if (e.flags & ECIL_DECL_FUNC_INLINE)
+  else if (!e.always_inline && session_.opt_level >= 1 && inline_hint(e))
     fn.setInlineKind(cir::InlineKind::InlineHint);
+  /* (Both cold and hot: neither; LLVM's verifier rejects the pair.) */
+  if (e.cold && !e.hot)
+    fn->setAttr(mlir::StringAttr::get(ctx_, "cold"), unit_attr_);
+  if (e.hot && !e.cold)
+    fn->setAttr(mlir::StringAttr::get(ctx_, "hot"), unit_attr_);
   mlir::SymbolTable::setSymbolVisibility(
       fn, compat::symbol_visibility(kind, !e.has_body));
 }  /* a_emitter::apply_function_attributes */
@@ -369,7 +489,7 @@ variant becomes an alias of it, or is redirected to it (ECIL spec 11.4).
     structors_.push_back(pair);
     if (has_vbases) {
       /* The base variant takes the VTT after `this` (12.3). */
-      if (b->has_body) {
+      if (b->body_arrived) {
         ok = internal("STRUCTOR has_vbases after the body of its base "
                       "variant");
       } else {
@@ -424,6 +544,11 @@ renames the entity (spec 7); the new name is applied at finish.
       e.had_linkonce = true;
     e.flags = static_cast<uint32_t>(flags);
     e.no_inline = has_supp_flag(r, esk_noinline);
+    e.used = has_supp_flag(r, esk_used);
+    e.always_inline = has_supp_flag(r, esk_always_inline);
+    e.cold = has_supp_flag(r, esk_cold);
+    e.hot = has_supp_flag(r, esk_hot);
+    e.memory = std::max<unsigned>(e.memory, supp_memory(r));
     if (std::string_view why = unsupported_reason(r); !why.empty())
       e.reason = why;
     e.named = r.ops[4].kind != ecil::an_operand_kind::nil;
@@ -442,7 +567,7 @@ renames the entity (spec 7); the new name is applied at finish.
     cir::FuncOp fn;
     if (!e.is_function) {
       ok = internal("DECL_FUNC re-issues a variable's id");
-    } else if (e.type != tgid && e.has_body) {
+    } else if (e.type != tgid && e.body_arrived) {
       std::string was, now;
       llvm::raw_string_ostream ws(was), ns(now);
       ws << type_at(e.type)->cir;
@@ -458,6 +583,15 @@ renames the entity (spec 7); the new name is applied at finish.
       e.flags = static_cast<uint32_t>(flags);
       if (has_supp_flag(r, esk_noinline))
         e.no_inline = true;     /* Sticky: GNU attributes accumulate. */
+      if (has_supp_flag(r, esk_used))
+        e.used = true;
+      if (has_supp_flag(r, esk_always_inline))
+        e.always_inline = true;
+      if (has_supp_flag(r, esk_cold))
+        e.cold = true;
+      if (has_supp_flag(r, esk_hot))
+        e.hot = true;
+      e.memory = std::max<unsigned>(e.memory, supp_memory(r));
       if (std::string_view why = unsupported_reason(r); !why.empty())
         e.reason = why;
       if (r.ops[4].kind != ecil::an_operand_kind::nil &&
@@ -529,6 +663,7 @@ Create or update a variable entity (a cir.global).
     if (linkage == elk_linkonce_odr)
       e.had_linkonce = true;
     e.flags = static_cast<uint32_t>(flags);
+    e.used = has_supp_flag(r, esk_used);
     if (std::string_view why = unsupported_reason(r); !why.empty())
       e.reason = why;
     e.align = static_cast<uint32_t>(align);
@@ -572,6 +707,8 @@ Create or update a variable entity (a cir.global).
       if (linkage == elk_linkonce_odr)
         e.had_linkonce = true;
       e.flags = static_cast<uint32_t>(flags);
+      if (has_supp_flag(r, esk_used))
+        e.used = true;
       if (std::string_view why = unsupported_reason(r); !why.empty())
         e.reason = why;
       if (align != 0) {
@@ -1614,6 +1751,26 @@ variant.
   redirected_.clear();
 }  /* a_emitter::finish_structors */
 
+bool a_emitter::calls_own_symbol(cir::FuncOp fn) const
+/*
+Whether the body of the function names the function's own symbol (final
+names are in place, so an asm label that names it counts): a direct call, and
+also every other use, such as the address and indirect call that a call whose
+arguments do not match the function's type becomes (clang's
+getReferencedDeclOfCallee sees through those, and through `(*f)(x)`).
+*/
+{
+  bool found = false;
+  mlir::StringAttr name = fn.getSymNameAttr();
+
+  for_each_symbol_use(fn.getOperation(), [&](mlir::Operation *,
+                                             mlir::StringAttr symbol) {
+    if (symbol == name)
+      found = true;
+  });
+  return found;
+}  /* a_emitter::calls_own_symbol */
+
 void a_emitter::apply_comdats()
 /*
 Put every defined entity with the COMDAT flag in a comdat group of its own
@@ -1631,6 +1788,12 @@ variant digit replaced.  Names are the final ones.
     std::string name;
 
     if (e.op == nullptr || !defined || (e.flags & comdat_flag) == 0)
+      continue;
+    /* An available_externally definition belongs to no group (LLVM: a
+       declaration may not be in a comdat). */
+    if (e.is_function &&
+        mlir::cast<cir::FuncOp>(e.op).getLinkage() ==
+            cir::GlobalLinkageKind::AvailableExternallyLinkage)
       continue;
     for (const a_structor_pair &pair : structors_) {
       if (pair.base == &e && pair.complete->is_alias &&
@@ -1679,21 +1842,13 @@ the name is mangled, else _ZGV<length><name>.
   }
 }  /* a_emitter::apply_dynamic_init */
 
-void a_emitter::apply_nobuiltin()
+bool is_replaceable_operator_name(std::string_view name, bool *is_new)
 /*
-The replaceable global allocation and deallocation functions are `nobuiltin`
-(declarations and definitions alike, by final symbol).  LLVM recognizes them
-by name (TargetLibraryInfo.td): without the attribute a call to the
-translation unit's own operator new is a removable allocation that the
-optimizer folds, pairs with a delete, or sizes by a cookie of its own, and
-a program that replaces the functions miscompiles at -O1 and above.  This is
-the half of clang's rule that holds for every call; the other half, a
-`builtin` call-site attribute on the calls of a new-expression (which allows
-allocation elision), needs a stream fact.  A direct call takes the attribute
-of its callee in LLVM (CallBase::isNoBuiltin looks at the called function), so
-the declaration is enough.  The names are exactly the operator new/delete
-entries of LLVM's TargetLibraryInfo (the 32-bit `j` spellings, the
-`__hot_cold_t` ones and the __size_returning_new family included).
+Whether the (final) symbol is one of the replaceable global allocation and
+deallocation functions that LLVM's TargetLibraryInfo knows by name (the 32-bit
+`j` spellings, the `__hot_cold_t` ones and the __size_returning_new family
+included).  *is_new tells an allocation function (`new`, not
+`__size_returning_new`) from a deallocation function.
 */
 {
   static const char *const names[] = {
@@ -1718,33 +1873,67 @@ entries of LLVM's TargetLibraryInfo (the 32-bit `j` spellings, the
     "__size_returning_new", "__size_returning_new_hot_cold",
     "__size_returning_new_aligned", "__size_returning_new_aligned_hot_cold"
   };
-  std::unordered_set<std::string_view> set(std::begin(names),
-                                           std::end(names));
+  static const std::unordered_set<std::string_view> set(std::begin(names),
+                                                        std::end(names));
+  bool found = set.count(name) != 0;
+
+  if (is_new != nullptr)
+    *is_new = found && name.substr(0, 3) == "_Zn";
+  return found;
+}  /* is_replaceable_operator_name */
+
+void a_emitter::apply_nobuiltin()
+/*
+The replaceable global allocation and deallocation functions are `nobuiltin`
+(declarations and definitions alike, by final symbol).  LLVM recognizes them
+by name (TargetLibraryInfo.td): without the attribute a call to the
+translation unit's own operator new is a removable allocation that the
+optimizer folds, pairs with a delete, or sizes by a cookie of its own, and
+a program that replaces the functions miscompiles at -O1 and above.  This is
+the half of clang's rule that holds for every call; the other half is the
+`builtin` call-site attribute of the calls of a new- or delete-expression
+(call_record, delete_record), which allows allocation elision.  A direct call
+takes the attribute of its callee in LLVM (CallBase::isNoBuiltin looks at the
+called function), so the declaration is enough.  As CIRGen (and clang) the
+allocation functions also carry allocsize(0) and their results noalias (and
+nonnull when they cannot return null), see apply_signature_attributes.
+*/
+{
   mlir::StringAttr name = mlir::StringAttr::get(
       ctx_, cir::CIRDialect::getNoBuiltinAttrName());
 
   for (a_entity *entity : entity_order_) {
+    bool is_new = false;
+
     if (entity->is_function && entity->op != nullptr &&
-        set.count(std::string_view(
-            mlir::cast<mlir::SymbolOpInterface>(entity->op).getName())) != 0)
+        is_replaceable_operator_name(
+            std::string_view(
+                mlir::cast<mlir::SymbolOpInterface>(entity->op).getName()),
+            &is_new)) {
       entity->op->setAttr(name, unit_attr_);
+      if (is_new)
+        entity->op->setAttr(allocsize_name_,
+                            builder_.getDenseI32ArrayAttr({0}));
+    }
   }
 }  /* a_emitter::apply_nobuiltin */
 
 bool a_emitter::is_discardable(const a_entity &e) const
 /*
 Whether every translation unit that needs the entity defines it itself:
-internal linkage, or vague (linkonce_odr) linkage.  The writer re-issues the
-declaration of a dropped inline function with external linkage, so for an
-entity that carries UNSUPPORTED the linkage it once had counts too (one that
-later got a supported definition is judged by its current linkage).
+internal linkage, vague (linkonce_odr) linkage, or a C99 inline-only
+function.  The writer re-issues the declaration of a dropped inline function
+with external linkage, so for an entity that carries UNSUPPORTED the linkage
+it once had counts too (one that later got a supported definition is judged
+by its current linkage).
 */
 {
   bool dropped = e.is_function ? (e.flags & ECIL_DECL_FUNC_UNSUPPORTED) != 0
                                : (e.flags & ECIL_DECL_VAR_UNSUPPORTED) != 0;
 
   return e.linkage == elk_internal || e.linkage == elk_private ||
-         e.linkage == elk_linkonce_odr || (e.had_linkonce && dropped);
+         e.linkage == elk_linkonce_odr || (e.had_linkonce && dropped) ||
+         (e.is_function && (e.flags & ECIL_DECL_FUNC_INLINE_ONLY) != 0);
 }  /* a_emitter::is_discardable */
 
 bool a_emitter::is_dropped_definition(const a_entity &e) const
@@ -1762,14 +1951,19 @@ later definition replaced).
 
 void a_emitter::entity_liveness(
     std::unordered_set<const a_entity *> &live,
-    std::unordered_map<const a_entity *, std::vector<a_entity *>> &uses)
+    std::unordered_map<const a_entity *, std::vector<a_entity *>> &uses,
+    const std::unordered_map<const a_entity *, std::vector<a_entity *>>
+        *extra,
+    const std::vector<a_entity *> *extra_roots)
 /*
 Which entities can be needed.  The roots are the definitions that cannot be
 discarded (external, weak, ... linkage), definitions with dynamic
-initialization, and uses from ops that belong to no entity; a use is any
-symbol reference (a call, an address, a global_view in an initializer, a
-register_exit_dtor, a delete function) or an alias.  A STRUCTOR pair lives or
-dies together: a use of C1 is a use of C2.  Runs at finish, on the worker.
+initialization, `used` definitions, and uses from ops that belong to no
+entity; a use is any symbol reference (a call, an address, a global_view in an
+initializer, a register_exit_dtor, a delete function) or an alias.  A
+STRUCTOR pair lives or dies together: a use of C1 is a use of C2.  extra
+and extra_roots add the edges and roots that the module does not show (the
+bodies lazy emission has not emitted yet).  Runs at finish, on the worker.
 */
 {
   std::unordered_map<mlir::Operation *, a_entity *> by_op;
@@ -1788,27 +1982,34 @@ dies together: a use of C1 is a use of C2.  Runs at finish, on the worker.
         mlir::cast<mlir::SymbolOpInterface>(entity->op).getName())] =
         entity;
   }
-  auto uses_range = mlir::SymbolTable::getSymbolUses(&module_.getBodyRegion());
-  if (uses_range) {
-    for (const mlir::SymbolTable::SymbolUse &use : *uses_range) {
-      mlir::Operation *top = use.getUser();
-      auto target = by_name.find(std::string_view(
-          use.getSymbolRef().getRootReference().getValue()));
+  for (mlir::Operation &top : *module_.getBody()) {
+    auto from = by_op.find(&top);
 
-      while (top != nullptr && top->getParentOp() != module_.getOperation())
-        top = top->getParentOp();
+    for_each_symbol_use(&top, [&](mlir::Operation *,
+                                  mlir::StringAttr symbol) {
+      auto target = by_name.find(std::string_view(symbol.getValue()));
+
       if (target == by_name.end())
-        continue;
-      auto from = by_op.find(top);
+        return;
       if (from == by_op.end())
         mark(target->second);
       else
         uses[from->second].push_back(target->second);
-    }
+    });
   }
   for (const a_structor_pair &pair : structors_) {
     uses[pair.complete].push_back(pair.base);
     uses[pair.base].push_back(pair.complete);
+  }
+  if (extra != nullptr) {
+    for (const auto &item : *extra) {
+      for (a_entity *target : item.second)
+        uses[item.first].push_back(target);
+    }
+  }
+  if (extra_roots != nullptr) {
+    for (a_entity *entity : *extra_roots)
+      mark(entity);
   }
   for (a_entity *entity : entity_order_) {
     a_entity &e = *entity;
@@ -1817,7 +2018,7 @@ dies together: a use of C1 is a use of C2.  Runs at finish, on the worker.
         ? e.has_body || e.is_alias
         : e.has_init || (e.flags & ECIL_DECL_VAR_DEFINITION) != 0;
 
-    if (e.op != nullptr && defined && (!discardable || e.dyn_init))
+    if (e.op != nullptr && defined && (!discardable || e.dyn_init || e.used))
       mark(&e);
   }
   while (!work.empty()) {
@@ -1828,15 +2029,59 @@ dies together: a use of C1 is a use of C2.  Runs at finish, on the worker.
   }
 }  /* a_emitter::entity_liveness */
 
+void a_emitter::emit_llvm_used()
+/*
+The definitions marked `used` (GNU used, supp key 11) go into
+llvm.compiler.used (llvm.used where the object format is not ELF), as CIRGen
+does: an appending array of their addresses in the section llvm.metadata,
+which keeps them against GlobalDCE and the linker's garbage collection.
+Declarations are not listed.  Run at the end of finish_entities.
+*/
+{
+  llvm::SmallVector<mlir::Attribute> elements;
+  mlir::Type void_pointer = compat::pointer_to(compat::void_type(ctx_));
+
+  for (a_entity *entity : entity_order_) {
+    a_entity &e = *entity;
+    bool defined = e.is_function
+        ? e.has_body && !e.is_alias
+        : e.has_init || (e.flags & ECIL_DECL_VAR_DEFINITION) != 0;
+
+    if (e.used && e.op != nullptr && defined)
+      elements.push_back(compat::global_view(
+          void_pointer,
+          mlir::cast<mlir::SymbolOpInterface>(e.op).getNameAttr(),
+          mlir::ArrayAttr(), false));
+  }
+  if (!elements.empty()) {
+    mlir::Type array_type = compat::array_of(void_pointer, elements.size());
+    cir::GlobalOp list = compat::create_global(
+        builder_, module_, loc(),
+        session_.module->triple.isOSBinFormatELF() ? "llvm.compiler.used"
+                                                   : "llvm.used",
+        array_type, false, cir::GlobalLinkageKind::AppendingLinkage);
+
+    list.setInitialValueAttr(cir::ConstArrayAttr::get(
+        mlir::cast<cir::ArrayType>(array_type),
+        builder_.getArrayAttr(elements)));
+    list.setSectionAttr(builder_.getStringAttr("llvm.metadata"));
+  }
+}  /* a_emitter::emit_llvm_used */
+
 bool a_emitter::finish()
 /*
 Runs on the worker thread: the class facts' products (vtables, typeinfo,
 thunks, D0), then the policy of the entities.
 */
 {
-  /* The class facts first: the vtables, typeinfo, thunks and D0 they produce
-     are entities like any other and take part in the naming that follows. */
-  bool ok = finish_classes();
+  /* The deferred bodies the program reaches are replayed first (lazy
+     emission): the class facts below read what is defined. */
+  bool ok = deferred_.empty() || lazy_finish();
+
+  /* The class facts: the vtables, typeinfo, thunks and D0 they produce are
+     entities like any other and take part in the naming that follows. */
+  if (ok)
+    ok = finish_classes();
 
   if (ok)
     ok = finish_entities();
@@ -1853,6 +2098,7 @@ entity policy (spec 8.11).
   bool keep_going = (session_.flags & EDG_CIR_FLAG_KEEP_GOING) != 0;
   std::vector<std::string> errors;
   std::vector<mlir::NamedAttribute> layouts;
+  bool lazy_failed = false;
 
   /* Final names, and their one-pass substitution. */
   assign_final_names();
@@ -1899,11 +2145,33 @@ entity policy (spec 8.11).
                        "' has a record type without a body and is used");
     }
   }
-  /* C99 inline-only functions keep no body: they are external declarations
-     (their definition lives in another translation unit). */
+  /* C99 inline-only functions (their definition lives in another
+     translation unit): with inlining on (-O1 and up) the body stays as an
+     available_externally definition, as clang makes it, so that the
+     inliner can use it; at -O0 they keep no body and are external
+     declarations.  So do a `noinline` function and a trivially recursive
+     one at any level (clang's isTriviallyRecursive, PR9614): glibc's
+     inline-only memchr, strchr, ... call __builtin_memchr, which is their
+     own symbol, and an available_externally body that calls itself becomes
+     a loop (TailCallElim) that is undefined behavior once the function is
+     pure and willreturn. */
   for (a_entity *entity : entity_order_) {
     a_entity &e = *entity;
-    if (e.is_function && e.has_body &&
+    bool keep_body = e.is_function && e.has_body && e.op != nullptr &&
+        (e.flags & ECIL_DECL_FUNC_INLINE_ONLY) && session_.opt_level >= 1 &&
+        !e.no_inline && !calls_own_symbol(mlir::cast<cir::FuncOp>(e.op));
+
+    if (keep_body) {
+      cir::FuncOp fn = mlir::cast<cir::FuncOp>(e.op);
+
+      fn.setLinkageAttr(
+          linkage_attr(cir::GlobalLinkageKind::AvailableExternallyLinkage));
+      mlir::SymbolTable::setSymbolVisibility(
+          fn, mlir::SymbolTable::Visibility::Public);
+      /* The definition is in another translation unit (a shared object
+         under PIC): not local. */
+      compat::set_dso_local(fn.getOperation(), false);
+    } else if (e.is_function && e.has_body && e.op != nullptr &&
         (e.flags & ECIL_DECL_FUNC_INLINE_ONLY)) {
       cir::FuncOp fn = mlir::cast<cir::FuncOp>(e.op);
       /* Uses may outlive their definitions across blocks: drop them first. */
@@ -1913,6 +2181,8 @@ entity policy (spec 8.11).
           linkage_attr(cir::GlobalLinkageKind::ExternalLinkage));
       mlir::SymbolTable::setSymbolVisibility(
           fn, mlir::SymbolTable::Visibility::Private);
+      /* A declaration of another translation unit's function: not local. */
+      compat::set_dso_local(fn.getOperation(), false);
       e.has_body = false;
     }
   }
@@ -1965,7 +2235,16 @@ entity policy (spec 8.11).
            initializer may have had effects (a constructor) whether or not
            anything names it. */
         erase_set.insert(&e);
-        dropped_list.push_back(&e);
+        /* An inline-only function loses nothing (its definition lives in
+           another translation unit), so no warning: glibc's fortify headers
+           would warn at every <stdio.h>. */
+        if (!e.is_function || (e.flags & ECIL_DECL_FUNC_INLINE_ONLY) == 0)
+          dropped_list.push_back(&e);
+      } else if (e.is_function &&
+                 (e.flags & ECIL_DECL_FUNC_INLINE_ONLY) != 0) {
+        /* A C99 or gnu_inline inline-only function whose body was dropped:
+           its definition lives in another translation unit, so a reference
+           is to a plain declaration (no error, no warning). */
       } else if (!keep_going) {
         errors.push_back("the definition of '" + std::string(e.symbol) +
                          "' was dropped: it uses a construct the CIR back "
@@ -2025,7 +2304,11 @@ entity policy (spec 8.11).
       }
     }
   }
+  if (!lazy_erase_dropped())
+    lazy_failed = true;
+  apply_signature_attributes();
   apply_comdats();
+  emit_llvm_used();
   /* Record ABI metadata, one entry per complete record as CIRGen does:
      CallConvLowering looks every by-value record up here, and the alignment
      is the front end's (the DataLayout cannot see aligned(N)). */
@@ -2039,8 +2322,8 @@ entity policy (spec 8.11).
   if (!layouts.empty())
     module_->setAttr(compat::record_layouts_attr_name(),
                      mlir::DictionaryAttr::get(ctx_, layouts));
-  ok = errors.empty();
-  if (!ok) {
+  ok = errors.empty() && !lazy_failed;
+  if (!errors.empty()) {
     /* fail() reports the first message and sets the status. */
     session_.fail(EDG_CIR_ERROR_UNSUPPORTED, edc_unsupported,
                   errors.front());

@@ -40,6 +40,9 @@ decls.c -- Scanning of declarations.
 #if MICROSOFT_EXTENSIONS_ALLOWED
 #include "ms_attrib.h"
 #endif /* MICROSOFT_EXTENSIONS_ALLOWED */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+#include "ecil_write.h"
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 
 /*
 Macro to test whether the current token is a Microsoft storage class
@@ -5352,6 +5355,12 @@ any diagnostics.
 {
   a_decl_modifier_set  flags = new_modifiers->flags;
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+  /* The inline specifier was written: the CIR back end remembers it for the
+     routine (its is_inline also covers an in-class definition, constexpr and
+     the implicit members). */
+  if (new_modifiers->cir_inline_keyword) ecil_note_inline_specifier(routine);
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
 #if MICROSOFT_EXTENSIONS_ALLOWED
   /* Handle dllexport and dllimport separately. */
   update_dll_info_for_routine(routine, flags, is_inline, is_redecl,

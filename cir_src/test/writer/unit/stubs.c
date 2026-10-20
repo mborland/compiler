@@ -134,3 +134,10 @@ a_boolean is_non_throwing_routine(a_routine_ptr r) { (void)r; abort(); }
 a_boolean seq_is_in_system_header(a_seq_number s) { (void)s; abort(); }
 /* Pointer-to-member builtins (not used by the C cases). */
 a_targ_size_t common_initial_sequence_limit(a_type_ptr a, a_type_ptr b) { (void)a; (void)b; abort(); }
+/* The signature classes of a library function (pure and const keys). */
+a_boolean is_pointer_type(a_type_ptr t) { (void)t; abort(); }
+a_boolean is_real_floating_type(a_type_ptr t) { (void)t; abort(); }
+a_boolean is_integral_or_enum_type(a_type_ptr t) { (void)t; abort(); }
+/* GNU attributes (the cold and hot keys). */
+an_attribute_ptr find_attribute(an_attribute_kind kind, an_attribute_ptr list) {
+  (void)kind; (void)list; return NULL; }

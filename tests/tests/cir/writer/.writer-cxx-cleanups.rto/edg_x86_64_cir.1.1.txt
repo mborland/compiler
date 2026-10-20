@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -14,11 +14,11 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   STR 5 "T"
   TY_RECORD_DECL 4 0 5
   TY_PTR 5 4
-  TY_FUNC 6 1 0 [5]
+  TY_FUNC 6 1 0 [5] supp{15: 2}
   STR 6 "t"
   TY_RECORD_BODY 4 4 4 4 12 1
   REC_FIELD 1 0 nil nil 6 0
@@ -37,13 +37,13 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
-  TY_FUNC 8 4 0 [5]
+frame REGION supp
+  TY_FUNC 8 4 0 [5] supp{15: 2}
   STR 9 "_ZNK1T3incEv"
   DECL_FUNC 9 8 0 2 9
   DECL_FUNC 9 8 3 67 9
   TY_VOID 10
-  TY_FUNC 11 10 0 [5, 1]
+  TY_FUNC 11 10 0 [5, 1] supp{15: 2}
   STR 10 "_ZN1TC1Ei"
   DECL_FUNC 12 11 0 0 10
   STR 11 "_ZN1TC2Ei"
@@ -65,14 +65,14 @@ frame REGION
   RETURN_FROM_SLOT
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   TY_FUNC 14 1 0 [1]
   STR 12 "_Z6localsi"
   DECL_FUNC 15 14 0 0 12
   DECL_FUNC 15 14 0 1 12
   STR 13 "c"
   STR 14 "a"
-  TY_FUNC 16 10 0 [5]
+  TY_FUNC 16 10 0 [5] supp{15: 2}
   STR 15 "_ZN1TD1Ev"
   DECL_FUNC 17 16 0 128 15
   STR 16 "_ZN1TD2Ev"
@@ -184,16 +184,11 @@ frame REGION
   CONTINUE_STMT
   BLOCK_END
   IF_END
-  LOCAL 5 1 nil 0 0
-  LREF 5
-  LREF 4
-  FIELD 4 0
-  LOAD 0
-  STORE 2 0
   LREF 2
   DUP
   LOAD 0
-  LREF 5
+  LREF 4
+  FIELD 4 0
   LOAD 0
   ADD 1
   STORE 0 0
@@ -302,7 +297,7 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 25 "_Z4argsv"
   DECL_FUNC 27 21 0 0 25
   DECL_FUNC 27 21 0 1 25
@@ -310,7 +305,7 @@ frame REGION
   TY_FUNC 28 1 0 [4]
   STR 27 "_Z8by_value1T"
   DECL_FUNC 29 28 0 0 27
-  TY_FUNC 30 10 0 [5, 5]
+  TY_FUNC 30 10 0 [5, 5] supp{15: 6}
   STR 28 "_ZN1TC1ERKS_"
   DECL_FUNC 31 30 0 0 28
   STR 29 "_ZN1TC2ERKS_"
@@ -409,16 +404,11 @@ frame REGION
   ADDR
   CALL 17 16 1 0
   CLEANUP_BODY
-  LOCAL 3 1 nil 0 0
-  LREF 3
-  CONST_INT 1 1
-  STORE 2 0
   LREF 2
   FIELD 4 0
   DUP
   LOAD 0
-  LREF 3
-  LOAD 0
+  CONST_INT 1 1
   ADD 1
   STORE 0 0
   RETURN_FROM_SLOT
@@ -458,8 +448,8 @@ frame REGION
   RETURN_FROM_SLOT
   BLOCK_END
   FUNC_END 0
-frame REGION
-  TY_FUNC 36 4 0 [19, 5, 5]
+frame REGION supp
+  TY_FUNC 36 4 0 [19, 5, 5] supp{15: 12}
   STR 34 "_Z4pickbRK1TS1_"
   DECL_FUNC 37 36 0 0 34
   DECL_FUNC 37 36 0 1 34

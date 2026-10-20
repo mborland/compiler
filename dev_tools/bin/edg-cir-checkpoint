@@ -16,6 +16,7 @@ key is available:
   edg-cir-checkpoint --quick        # build, smoke, cpp-smoke only
   edg-cir-checkpoint --steps build,ctest --detach
   edg-cir-checkpoint --lean toolchain --lean-base HEAD --tree m5p-int
+  edg-cir-checkpoint --milestone --tree m5-int --detach
   edg-cir-checkpoint --tree m5-int --prune 3 --quick
 
 It does, in this order:
@@ -200,6 +201,23 @@ def headroom_gb(text: str) -> int:
   return int(digits) if digits else -1
 
 
+MILESTONE_DAY_BASELINE = ('~/edg-cir-config/day-base/tests/runs/'
+                          '2026.10.12-13.13.25')
+MILESTONE_PERF_BASELINE = '~/edg-cir-config/m5a-base-perf.json'
+MILESTONE_OPTIONS = (
+  ('--perf-realworld', 'pinned'), ('--perf-levels', '0,2'),
+  ('--perf-targets', 's1'), ('--day-baseline-run', MILESTONE_DAY_BASELINE))
+
+
+def milestone_extra(extra: str) -> str:
+  '''The extra arguments of a milestone run: the pinned real-world units and
+  the S1 targets in the perf step, both levels, the baseline run of the day
+  step, each unless `extra` already has the option.'''
+  added = [f"{name} {value}" for name, value in MILESTONE_OPTIONS
+           if name not in extra.split()]
+  return ' '.join([*added, extra]).strip()
+
+
 def load_gate_tool():
   '''The module of edg-cir-gate-evidence (for its area tables and the area
   check of --lean).'''
@@ -261,6 +279,12 @@ def main() -> None:
   parser.add_argument('--allow-empty-change-set', action = 'store_true',
                       help = 'with --lean: no file differs from --lean-base '
                              '(refused otherwise: usually a wrong base)')
+  parser.add_argument('--milestone', action = 'store_true',
+                      help = 'the full milestone gate (edg-cir-gate-evidence '
+                             '--milestone: every step, lazy, attr, chunk, '
+                             'names, speed and crash-sweep included) against '
+                             'the M5p baselines and m5a-base-perf.json, with '
+                             'the perf and day options of milestone_extra')
   parser.add_argument('--quick', action = 'store_true',
                       help = f"only {QUICK_STEPS}")
   parser.add_argument('--prune', type = int, nargs = '?', const = 3,
@@ -316,6 +340,11 @@ def main() -> None:
     sys.exit(2)
 
   steps = QUICK_STEPS if args.quick else args.steps
+  if args.milestone:
+    if args.lean or args.quick:
+      print('--milestone excludes --lean and --quick', file = sys.stderr)
+      sys.exit(2)
+    steps = 'every step (--milestone)'
   changed = ''
   if args.lean:
     gate_tool = load_gate_tool()
@@ -415,6 +444,11 @@ def main() -> None:
       f"> {out}/fingerprint.txt")
 
   selection = ['--only', steps]
+  if args.milestone:
+    selection = ['--milestone']
+    if args.perf_baseline == parser.get_default('perf_baseline'):
+      args.perf_baseline = MILESTONE_PERF_BASELINE
+    args.extra = milestone_extra(args.extra)
   if args.lean:
     # The gate picks the steps itself (and records why the others are
     # skipped); it checks the areas again against the list of changed files.

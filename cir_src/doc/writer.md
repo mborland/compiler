@@ -1398,3 +1398,290 @@ ECIL 1.2, spec 12.4 (`FUNC_EH_SPEC`), 12.5 (`TRY_BEGIN`, `CATCH_BEGIN`,
     * Goldens: `writer-cxx-gnu-inline-shared-symbol`,
       `writer-cxx-asm-label-two-definitions-negative` and
       `writer-cxx-asm-label-inline-then-definition-negative`.
+  * **S2 items (session 4, patches 01 to 06).** Each is a small change to what
+    the writer sends; the counts are the C++ / C corpus streams (1958 / 2564
+    cases) that changed, and every other stream is byte-identical.
+    * **EMPTY_ASSIGN_RHS of a NONTRIVIAL_ABI class value** (0 / 0). The right
+      operand of an empty assignment (`ecil_code.c`, the `EMPTY_ASSIGN_RHS`
+      path) is not loaded when it is a class value of a class that is passed
+      indirectly, and `rhs_designates_object` looks through base/derived class
+      casts. It is what boost/multiprecision's `number` needed; golden
+      `writer-cxx-empty-assign-nontrivial-abi`.
+    * **`CALL` flag `ALLOC_EXPR` 0x40** (195 / 0) on the allocation call and the
+      free-on-throw deallocation call of a new-expression, on the call of a
+      delete-expression, and on `__builtin_operator_new` and
+      `__builtin_operator_delete` calls (found from the special kind of the
+      callee's name, because the direct routine is the plain operator).
+      Goldens `writer-cxx-alloc-expr-calls`, `writer-cxx-builtin-operator-new`.
+    * **The static invoker passes a local** (32 / 0) of the closure type to the
+      call operator in place of `CONST_NULL` (spec 11.9, as clang does with its
+      `unused.capture` object): `emit_invoker_body` declares it with
+      `emit_local` and takes its address. Golden
+      `writer-cxx-lambda-invoker-object`.
+    * **Supp key 15 `nonnull_ptrs` on `TY_FUNC`** (1197 / 0 together with the
+      invoker). Bit 0 is a reference result, bit i+1 is parameter i when it is
+      a reference or the object parameter (`this`), up to 63 parameters; it is
+      a function of the declared type only, so it is the same at every issue
+      of a function, and it is part of the type-interning key (5 words:
+      `finish_function_type`). C streams have no such masks. Golden
+      `writer-cxx-nonnull-ptrs`.
+    * **Supp key 11 `used`** (1 / 3) on `DECL_FUNC` and `DECL_VAR` for
+      `__attribute__((used))`. It is sticky like `noinline`: `decl_facts`
+      (`ECIL_FACT_NOINLINE`, `ECIL_FACT_USED`) is compared and OR-ed in
+      `emit_func_decl_if_changed`, and keys go out in order 11, 13, 14. A
+      `used` static or inline variable is emitted even when nothing refers to
+      it (`emit_scope_variables`). A used static data member of a class
+      template follows the instance: it is emitted when the class instance is
+      complete (also by explicit instantiation) and not when only a pointer to
+      it is named; g++ 15.3 does the same (golden
+      `writer-cxx-used-static-member-template`, checked against g++; clang
+      ignores `used` on that declaration with a warning and emits none of
+      them, and the extra linkonce definition is harmless). Golden
+      `writer-cxx-used-attribute`.
+    * **`DECL_FUNC` flag `EXTERN_C` 0x100** (1089 / 0): C++ and
+      `name_linkage == nlk_external` (a function declared `extern "C"`; the
+      library gives it no `noundef` result). Golden `writer-cxx-extern-c-flag`.
+    * **`DECL_FUNC` flag `INLINE_HINT` 0x200 and feature bit 4
+      `INLINE_HINTS`** (459 / 217; features 0x1a in C++, 0x12 in C). It is
+      clang's `inlinehint`: the function has the inline specifier on any of
+      its declarations (`inline`, `__inline`, `__forceinline`; not an in-class
+      definition, constexpr or an implicit member, which only have `INLINE`),
+      or is an instance of a template that has it, or is a lambda's call
+      operator, conversion function or static invoker. Checked function by
+      function against clangir on probes. Golden `writer-cxx-inline-hint`,
+      `writer-inline-hint` (C) and `writer-cxx-inline-hint-templates`.
+      * Exact means exact: the front end tells the writer where the specifier
+        is written. This is the one S2 item that needs front end hooks, all
+        CIR-gated: `decl_spec.c` sets the new `cir_inline_keyword` bit of
+        `a_decl_modifiers_block` at the `inline` keyword (cleared in
+        `symbol_tbl.c`, declared in `symbol_tbl.h`), and
+        `update_routine_decl_modifiers` (`decls.c`) calls
+        `ecil_note_inline_specifier`, which sets a bit in the routine's IL
+        entry prefix next to `ecil_id` (`mem_tables.h`; the prefix does not
+        grow). The bit dies with the routine's memory region, so a routine
+        allocated later at the same address cannot inherit it. Instances of
+        templates are not copied: `template_pattern_has_inline_specifier`
+        asks the template's routine when the hint is computed, which gives
+        clang's answer for a redeclaration that adds `inline` after the
+        instance was made and for a member defined out of class with it; an
+        explicit specialization is a declaration of its own. A friend
+        defined in its class has the hint with the specifier and not
+        without.
+      * The hook is compiled where `DECL_MODIFIERS_IN_USE` is (Linux, which
+        has `thread_local`). In a native macOS cpfe-cir build it is not, and
+        the writer then sends no `INLINE_HINT` and does not claim the feature
+        (`ECIL_INLINE_HINTS` in `ecil_write.h`); the goldens are recorded on
+        Linux.
+      * The hint only affects the inliner's cost. The one difference left from
+        clang is that clang emits no function for an unused inline explicit
+        specialization (`template<> inline int sa2<int>(int)` in the golden)
+        and the writer sends it (the library decides what to emit).
+  * **Supp keys 4 `pure` and 5 `const`** on `DECL_FUNC` (S2 item 8; the
+    consumer gives `memory(read)` / `memory(none)`, nounwind and willreturn,
+    const wins). `compute_func_state` sets `ECIL_FACT_PURE` and
+    `ECIL_FACT_CONST` in `decl_facts` (sticky, compared at every re-issue; the
+    keys go in the blob in increasing order 4, 5, 11, 13, 14). Two sources.
+    * The GNU attributes: `routine->is_pure` (pure) and the function type's
+      `is_const` (const; the front end keeps it on the routine type
+      supplement). A function with both sends both keys.
+    * The C library functions that Clang's table marks pure (`U`) or const
+      (`c`). The scrapes of `dev_tools/builtins` carry no such data (they record
+      `noreturn` only), so `generate-libc-builtins.py` takes it from the pinned
+      LLVM's `Builtins.inc` and writes `src/builtin_libc_attrs.h` (name, `U`
+      or `c`, and the classes of result and parameters: i integer, f
+      floating, p pointer). Only the unconditional letters count: `e` and `g`
+      (const when math-errno is off, or when FP exceptions are ignored) do not,
+      because Linux has math-errno on, so `sin` and its relatives stay ordinary
+      calls; none of the 57 names has a condition letter, and only names of
+      `builtin_libc_names` are taken. The set is 21 pure (`isalnum` ...
+      `isxdigit`, `tolower`, `toupper`, `nan`, `nanf`, `nanl`, `wcschr`,
+      `wcscmp`, `wcslen`, `wcsncmp`) and 36 const (`abs`, `labs`, `llabs`,
+      `cbrt`, `ceil`, `copysign`, `fabs`, `floor`, `fmax`, `fmin`,
+      `nearbyint`, `round`, `roundeven`, `trunc` and their `f` and `l`
+      forms). `library_function_facts` (`ecil_type.c`) applies it to a routine
+      that is not a member or static, has no asm label, has C language linkage
+      (C, or C++ `extern "C"`), has such a name (also as `__builtin_X`) and
+      whose result and parameters have the table's classes (a K&R
+      declaration only needs the result). A C++ function, a member or a static
+      function named `isalnum` gets nothing.
+    * Counts (C++ 1958 / C 2564 corpus streams that change, each step after
+      the previous): the GNU attributes 109 / 50 (most are glibc's own
+      `__attribute_pure__` / `__attribute_const__`: `strlen`, `strcmp`,
+      `__errno_location`), the library table 101 / 45. Goldens
+      `writer-pure-const` and `writer-cxx-pure-const`.
+    * Proof: `c/torture/builtin-ctype-1` compiles, links and runs at
+      `--cir_opt_level=2` with this writer and the library that honors the
+      keys, and fails to link (`link_failure_isalnum` ...) with the library
+      that does not. The test also uses `isascii` and `toascii`, which
+      Clang's table does not list; LLVM's library-function inference gives
+      them their attributes.
+  * **Two checks for the consumer's loop and `noundef` rules (S2 follow-up).**
+    * Loop conditions. The consumer treats a loop as trivially infinite only
+      when its condition is a literal constant in the stream; clang folds the
+      condition (`EvaluateAsInt`). The front end folds constants, constexpr calls
+      and variables, `sizeof`, template parameters and so on in every mode from
+      C++11 to C++20 (checked: `while (always())`, `while (k)`, `for (; always();)`,
+      `do {} while (k)`, `while (two() == 2)` all reach the stream as `CONST_INT`
+      and `TO_BOOL`; the streams of C++11, 14, 17 and 20 differ only in
+      `HDR_LANG`). It does not fold a comma expression with a constant right
+      operand and pure left operands (`(g, true)`) or `__builtin_expect(1, 1)`,
+      both of which clang folds (no `mustprogress` in clang's IR). `loop_condition`
+      (`ecil_code.c`) sends the constant for those (the comma's left operands
+      are dropped only when `expression_is_pure`, `eok_bool_cast` is looked
+      through). `g || true` is not folded by clang either and stays an expression.
+      0 corpus streams change. Golden `writer-cxx-loop-condition-fold`.
+    * `std::nullptr_t`. `emit_load_if_value` sent a `LOAD` of a nullptr_t, which
+      the consumer sees as a pointer that can be undefined (`noundef`), but
+      reading a nullptr_t, initialized or not, is defined ([conv.lval]) and clang
+      does not read it. The writer now drops the address and sends
+      `CONST_NULL` of the type (a volatile one is still read). 2 C++ and 2 C
+      corpus streams change (C23 `nullptr` included). Golden
+      `writer-cxx-nullptr-load`.
+  * **INLINE_ONLY on the issue that drops the definition (S2 follow-up).**
+    glibc's `_FORTIFY_SOURCE` wrappers of `open` (`__builtin_va_arg_pack_len`)
+    and of `printf`, `sprintf`, `snprintf` and `fprintf` (`__builtin_va_arg_pack`)
+    are gnu_inline functions that cannot be written. The `DECL_FUNC` that drops
+    one (the re-issue with `UNSUPPORTED`) had `defining` false, so
+    `compute_func_state` left out `INLINE_ONLY` and the consumer saw an external
+    dropped definition, an error even if nothing refers to it (`-O2
+    -D_FORTIFY_SOURCE=2` with `<stdio.h>`: "the definition of 'sprintf' was
+    dropped"; the flags were 546, INLINE_HINT|UNSUPPORTED|INLINE, not 562). The
+    flag is now set when the routine is inlining-only and the issue defines or
+    drops it (`defining || unsupported`). 7 C++ and 7 C corpus streams change
+    (inline-only functions that are dropped: va_arg_pack, alloca,
+    __builtin_apply, x86 intrinsics; only that flag changes). Goldens `writer-va-arg-pack-drop` and
+    `writer-cxx-va-arg-pack-drop`. With cir-lib's library, the `<stdio.h>`
+    program built at `--cir_opt_level=2` and `0` with `-D_FORTIFY_SOURCE=2`
+    compiles, links and runs.
+  * **Review follow-ups to purity and the loop fold (S2/S4).**
+    * `expression_is_pure` ignores nothing that is volatile: a node whose access
+      is volatile (`access_is_volatile`) is not pure, nor is the access of a
+      thread_local variable that is initialized dynamically or declared extern
+      (the access makes the initialization happen). Item 4 had made
+      `dev->CTRL |= dev->STATUS` (volatile members) read CTRL before STATUS in
+      C++17, where the right operand is read first (clang's
+      `EmitCompoundAssignLValue`); now both are spilled in the right order, as
+      `vctrl |= vstatus` always should have been. The loop fold no longer drops
+      the read of `(v, true)`: clang does not fold a volatile read. 5 C++
+      corpus streams change (`gnats20912-storage`, `sighandle`,
+      `builtin-operator-new-3`, `nrv8`, `pr85334`), 0 C. Goldens
+      `writer-cxx-volatile-order` and `writer-cxx-loop-condition-volatile`.
+    * `__builtin_expect(c, e)` is folded in a loop condition only when `e` is a
+      constant or pure (`while (__builtin_expect(1, f()))` still calls `f`). 0
+      corpus streams change.
+    * The TU-local memo (S4) does not remember a FALSE for a walk that met a
+      closure in a default argument or in an initializer
+      (`tu_provisional`): their parent is recorded after the closure is made,
+      and the answer can change from external to internal. Before this fix the
+      memo gave `S::g(X, int = []{...}())` (X in an unnamed namespace), `fal`
+      and `ft<closure of AL>` external where the names-final answer is internal.
+      0 corpus streams change; golden `writer-cxx-tu-local-closure`.
+  * **S2 round 2 (keys 16 to 18, inline hints, library noreturn).**
+    * **Supp keys 16 `always_inline`, 17 `cold`, 18 `hot`** on `DECL_FUNC`, from
+      the GNU attributes (`ECIL_FACT_ALWAYS_INLINE`, `ECIL_FACT_COLD`,
+      `ECIL_FACT_HOT` in `decl_facts`: sticky, compared at every re-issue; the
+      blob order is 4, 5, 11, 13, 14, 16, 17, 18). always_inline is the
+      routine's `always_inline` bit; cold and hot have no bit in the front
+      end (their `ak_cold` and `ak_hot` have no apply function), so the writer
+      looks for the attribute in the routine's attribute list
+      (`find_attribute`; both spellings, and a later declaration adds it).
+      always_inline without the inline specifier is dropped by the front end
+      (as gcc 4.7 and later do) and not sent. cold and hot exclude each other
+      (LLVM's verifier rejects both, the front end does not diagnose the pair):
+      only the one written first is sent, as gcc does, and the one sent first
+      stays across declarations (golden `writer-cxx-cold-hot-conflict`). 299
+      C++ / 25 C corpus streams change. Goldens `writer-always-inline-cold-hot` and
+      `writer-cxx-always-inline-cold-hot`.
+    * **`INLINE_HINT` of implicit special members and of always_inline and
+      noinline functions.** Clang declares the implicitly declared special
+      members (constructors, destructors, assignment operators) inline, so
+      they have `inlinehint` (and the base variants C2 and D2 with them), and a
+      function with the attribute always_inline or noinline has `alwaysinline`
+      or `noinline` and no `inlinehint`. `routine_has_inline_hint` follows
+      both (an explicitly defaulted member, `A() = default`, has none, as in
+      clang). The attr-diff categories "inlinehint only clangir" (probe 178,
+      pinned 37: 122 and 33 of them implicit structors and assignments, the rest
+      the complete variants C1 and D1 of the same members and library-made
+      thunks) and "only ours" (11: libstdc++'s always_inline templates) were
+      these. 705 C++ / 23 C corpus streams change.
+    * **noreturn of the library functions** `abort`, `exit`, `_Exit` and
+      `_exit`: Clang's table (`Builtins.inc`, letter r) marks them, and a
+      declaration that does not say it (a test's `extern void abort(void);`) now
+      gets `NORETURN`, under the rule of the pure and const keys (C language
+      linkage, library name and signature). The generator writes them to
+      `builtin_libc_attrs.h` with the attribute letter `r`. 301 C++ / 815 C
+      corpus streams change. Goldens `writer-noreturn-library` and
+      `writer-cxx-noreturn-library`.
+    * **NOTHROW of the library functions** that Clang's table marks nothrow
+      (the letter n), in C++ streams (a C stream has no exceptions): the
+      `NOTHROW` flag of `DECL_FUNC`, under the rule of pure and const (C
+      language linkage, library name and signature; a signature may end in
+      the ellipsis, and a `va_list` is not checked). The set is the 231 names
+      of the table that are in `builtin_libc_names` and have an unconditional
+      n: the 21 pure and 36 const names, `abort`, `memcpy`, `memmove`,
+      `memset`, `memchr`, `strlen`, the other `str*` and `wmem*` functions, the
+      `sprintf` family, and the math functions (also those that are const only
+      without math-errno: nothrow is unconditional). Not nothrow: `fprintf`,
+      `vprintf` and `vfprintf`, which are cancellation points (glibc declares
+      them without nothrow, and the forced unwinding of pthread_cancel runs
+      the cleanups of C++ frames); no function that takes a callback or can run
+      user code is in the list (`qsort`, `bsearch`, `atexit` and `signal` are
+      not marked n by Clang, or not library twins). A wrong NOTHROW silently
+      skips cleanups, so the exclusions are in the generator
+      (`NOTHROW_EXCLUSIONS`) and are reported by `--report`. 799 C++ / 0 C
+      corpus streams change. Golden `writer-cxx-nothrow-library`.
+
+## 11. Writer performance (M5 slice S4)
+
+Targets (m5_design.md section 9): the writer's share of release-FE Ir at least
+2 points lower on the 6000-function C TU and at least 4 points lower on the
+6000-function C++ TU. Measured with `cg_writer.py` on the release FE
+(RelWithDebInfo, library linked): C 18.57% to 16.42%, C++ 24.44% to 20.35%,
+templates and lambdas (300 units) 17.35% to 13.10%. Each step was checked with
+`stream_sweep.py --body-hash` on both corpora, with the debug and the release
+FE.
+
+* **TU-local memo** (`lower_name.c`, `cir_entity_is_tu_local`). Before the
+  names are final an answer of TRUE can change (a lambda whose parent is not
+  recorded yet is treated as unnamed; an unnamed class can get a name for
+  linkage purposes), but an answer of FALSE cannot: nothing the walk looks at
+  becomes local to the translation unit later. So FALSE is remembered at once,
+  for an entity of the file scope only: the entities of a function's memory
+  region are gone when it is freed and their addresses are reused. The
+  answers kept before `cir_tu_local_names_are_final` are kept after it. 0
+  streams changed.
+* **Inline record helpers** (`ecil_write.h`). `ecil_put_uint`,
+  `ecil_rec_begin`, `ecil_arg_uint`, `ecil_rec_end` and `ecil_rec0/1/2` are
+  inline; the general paths are `ecil_put_uint_slow`, `ecil_rec_begin_slow`
+  and `ecil_arg_uint_slow`. CHECKING is TRUE in every build (also release), so
+  the helpers keep the per-opcode operand count and introduction checks, now
+  from tables (`ecil_arity_table`, `ecil_intro_table`) that the inline code
+  reads. 0 streams changed.
+* **Purity** (`ecil_code.c`, `expression_is_pure`): `enk_field`, the field
+  operand of a member selection, is a leaf. C++17 evaluates the right operand
+  of an assignment first and spilled it into a temporary when the left side
+  was not pure, which every member selection made it. 199 of the 1958 C++
+  corpus streams change (0 of the C ones): the temporary is gone. 23 goldens
+  in each configuration are re-recorded (`writer-cxx-assign`, `-members`,
+  `-cleanups`, `-class-assign-*`, `-call-assign-order`, and others).
+* **The name check** (`ecil_resolve_late_names`). The names of the functions
+  that were named when sent are not mangled again, except for the check: in
+  CHECKING builds the writer mangles a function again and asserts that the name
+  did not change. That is the only repeat; a name is otherwise built once per
+  variant (C1, C2, D0..D2 and the late names count separately). The check
+  was 2% of the front end's instructions on the 6000-function C++ TU. It looks
+  at the first `ECIL_NAME_CHECK_ALL` (2000) eligible functions and at one in
+  `ECIL_NAME_CHECK_STRIDE` (16) of the others, a deterministic sample, so every
+  corpus case and golden is checked in full. `ECIL_CHECK_ALL_NAMES` in the
+  environment checks them all.
+* **Measured, no change.** `compute_func_state` has no repeated cost left
+  that can be cached safely: what remains is first-time mangling, function
+  type construction, the first TU-local walks and interning, each done once per
+  entity. The lambda and local-class region keep: m5_writer.md section 6.
+* **Tools.** `cg_writer.py` took the callee file of the previous call line when
+  a call line gives none, which inflated the writer's inclusive count once
+  inline header code existed (the base 19.03% is 18.57% with the fix). The unit
+  harness `cir_src/test/writer/unit/run_unit.sh` builds again (it builds the
+  writer for a non-CIR back end: `ECIL_INLINE_HINTS` is FALSE there and the
+  inline specifier bit does not exist) and its goldens are re-recorded for ECIL
+  1.3.

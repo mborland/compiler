@@ -1,17 +1,36 @@
-; A C99 inline definition without an external definition keeps no body.  The
-; body here has several top-level blocks (label/goto, code after a return),
-; whose values must be released before the blocks are erased.
+; A C99 inline definition without an external definition (INLINE_ONLY).  At
+; -O0 it keeps no body: it is an external declaration (its definition lives in
+; another translation unit); the body here has several top-level blocks
+; (label/goto, code after a return), whose values must be released before the
+; blocks are erased.  At -O1 and up the body stays as an available_externally
+; definition, for the inliner, as clang makes it.  Lazy emission defers it: an
+; inline-only function nothing calls is never emitted (g, below).
 ; RUN: cat %S/Inputs/header.txt %s > %t.txt
 ; RUN: %ecil-asm %t.txt -o %t.ecil
-; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s --check-prefix=O0 --implicit-check-not=cir.label --implicit-check-not=@g
+; RUN: %edg-cir -O2 --emit=cir %t.ecil | %FileCheck %s --check-prefix=O2 --implicit-check-not=@g
+; RUN: %edg-cir --eager-bodies --emit=cir %t.ecil | %FileCheck %s --check-prefix=O0 --implicit-check-not=cir.label
 ; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
-; CHECK: cir.func {{.*}}private {{.*}}@f(!s32i) -> !s32i
-; CHECK-NOT: cir.label
+; RUN: %edg-cir -O2 --emit=obj -o %t.o2 %t.ecil
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYM
+; RUN: %edg-cir -O2 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=INLINED
+; O0: cir.func {{.*}}private {{.*}}@f(!s32i{{.*}}) -> !s32i
+; O0-NOT: cir.label
+; O2: cir.func {{.*}}available_externally {{.*}}@f(%arg0: !s32i{{.*}}) -> !s32i
+; SYM: U f
+; SYM: T main
+; INLINED: define {{.*}}@main
+; INLINED-NOT: call {{.*}}@f
 
 frame DECLS
   STR 10 "f"
+  STR 11 "main"
+  STR 12 "g"
   TY_FUNC 20 1 0 [1]
+  TY_FUNC 21 1 0 []
   DECL_FUNC 30 20 0 19 10
+  DECL_FUNC 31 21 0 9 11
+  DECL_FUNC 32 20 0 19 12
 frame REGION
   FUNC_BEGIN 30 0
   PARAM 1 1 1 nil 0
@@ -27,6 +46,17 @@ frame REGION
   LABEL 5 nil
   LREF 1
   LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 32 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 31 0
+  CONST_INT 1 0
+  CALL 30 20 1 0
   RETURN_STMT true
   FUNC_END 0
 frame END

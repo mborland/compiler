@@ -1,0 +1,1 @@
+for f in build/streams/rw/*.ecil; do build/cir/bin/edg-cir -O0 --keep-going --stats --lazy-symbols --emit=asm -o /tmp/k.s $f 2>&1 | grep "lazy dead-named" | sed "s|^|$(basename $f): |" ; done | head -30

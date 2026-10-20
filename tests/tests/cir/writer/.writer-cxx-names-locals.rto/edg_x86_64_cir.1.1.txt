@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -39,11 +39,11 @@ frame REGION
   BLOCK_END
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 8 "A"
   TY_RECORD_DECL 8 0 8
   TY_PTR 9 8
-  TY_FUNC 10 1 0 [9, 1]
+  TY_FUNC 10 1 0 [9, 1] supp{15: 2}
   TY_RECORD_BODY 8 1 1 1 0 0
   STR 9 "_ZN1A1mEi"
   DECL_FUNC 11 10 0 2 9
@@ -89,11 +89,11 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 16 "B"
   TY_RECORD_DECL 19 0 16
   TY_PTR 20 19
-  TY_FUNC 21 1 0 [20]
+  TY_FUNC 21 1 0 [20] supp{15: 2}
   STR 17 "k"
   TY_RECORD_BODY 19 4 4 4 0 1
   REC_FIELD 1 0 nil nil 17 0
@@ -120,8 +120,8 @@ frame REGION
   FUNC_END 0
 frame REGION
   STR 20 "_Z3inlv"
-  DECL_FUNC 24 4 0 2 20
-  DECL_FUNC 24 4 3 67 20
+  DECL_FUNC 24 4 0 514 20
+  DECL_FUNC 24 4 3 579 20
   STR 21 "_ZZ3inlvE2is"
   DECL_VAR 25 1 3 145 0 21
   C_INT 1 9
@@ -145,8 +145,8 @@ frame REGION
   FUNC_END 0
 frame REGION
   STR 23 "cf"
-  DECL_FUNC 27 4 0 0 23
-  DECL_FUNC 27 4 0 1 23
+  DECL_FUNC 27 4 0 256 23
+  DECL_FUNC 27 4 0 257 23
   STR 24 "_ZZ2cfE3cfs"
   DECL_VAR 28 1 1 17 0 24
   C_INT 1 4
@@ -158,7 +158,7 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 25 "_Z2g1v"
   DECL_FUNC 29 4 0 0 25
   DECL_FUNC 29 4 0 1 25
@@ -169,7 +169,7 @@ frame REGION
   TY_RECORD_BODY 30 4 4 4 0 1
   REC_FIELD 1 0 nil nil 27 0
   STR 28 "l"
-  TY_FUNC 32 1 0 [31]
+  TY_FUNC 32 1 0 [31] supp{15: 2}
   STR 29 "_ZZ2g1vEN1L3getEv"
   DECL_FUNC 33 32 1 2 29
   DECL_FUNC 33 32 1 3 29

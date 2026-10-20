@@ -1108,6 +1108,13 @@ unsupported.
          call (spec 12.2). */
       ecil_note_unsupported("a value of a class with virtual functions "
                             "(copied other than by a constructor)");
+    } else if (gid != 0 && is_nullptr_type(t) && !access_is_volatile(node)) {
+      /* Reading a std::nullptr_t gives nullptr, also when the object has not
+         been initialized ([conv.lval]); clang does not read it either, so a
+         nullptr_t is never a value that can be undefined: drop the address and
+         send the null pointer. */
+      ecil_rec0(frame, eop_drop);
+      ecil_rec1(frame, eop_const_null, gid);
     } else if (t->kind != tk_array && t->kind != tk_routine) {
       ecil_rec_begin(frame, eop_load);
       ecil_arg_uint(frame, access_is_volatile(node) ?
@@ -1986,6 +1993,8 @@ levels is a chain of casts (emit_base_chain).
                                        that is not trivially copyable: its
                                        storage is passed (a LOAD). */
 #define CALL_VIRTUAL         0x04u  /* A call through the vtable. */
+#define CALL_ALLOC_EXPR      0x80u  /* __builtin_operator_new or _delete: the
+                                       CALL carries ECIL_CALL_ALLOC_EXPR. */
 #define CALL_REVERSE         0x40u  /* The second operand is evaluated first
                                        (C++17: an overloaded assignment) into
                                        a temporary, whose lid is in the bits
@@ -1995,10 +2004,10 @@ levels is a chain of casts (emit_base_chain).
 static a_boolean expression_is_pure(an_expr_node_ptr node)
 /*
 Return TRUE if evaluating the expression has no side effects: it only reads
-variables and memory, through conversions, member selections, indirections,
-subscripts and arithmetic.  Anything else (a call, an assignment, an
-increment, a temporary) is treated as having side effects.  The walk uses
-an explicit stack that is kept between the calls.
+variables and memory (not volatile), through conversions, member selections,
+indirections, subscripts and arithmetic.  Anything else (a call, an
+assignment, an increment, a temporary) is treated as having side effects.
+The walk uses an explicit stack that is kept between the calls.
 */
 {
   size_t            size = 0;
@@ -2012,9 +2021,25 @@ an explicit stack that is kept between the calls.
       an_expr_node_ptr  operand = NULL;
 
       node = NULL;
-      if (current->kind == (an_expr_node_kind)enk_variable ||
-          current->kind == (an_expr_node_kind)enk_constant) {
-        /* A leaf. */
+      if (access_is_volatile(current)) {
+        /* A volatile access is a side effect: the order of two of them, and
+           the existence of one, can be observed. */
+        pure = FALSE;
+      } else if (current->kind == (an_expr_node_kind)enk_variable &&
+                 is_effective_thread_local(node_variable(current)) &&
+                 (node_variable(current)->init_kind ==
+                                              (an_init_kind)initk_dynamic ||
+                  node_variable(current)->storage_class ==
+                                                (a_storage_class)sc_extern)) {
+        /* The access of a thread_local variable that is initialized
+           dynamically, or that may be (one declared extern), makes the
+           initialization happen: the access is not dropped. */
+        pure = FALSE;
+      } else if (current->kind == (an_expr_node_kind)enk_variable ||
+                 current->kind == (an_expr_node_kind)enk_constant ||
+                 current->kind == (an_expr_node_kind)enk_field) {
+        /* A leaf (the field of a member selection is the second operand of
+           the selection). */
       } else if (current->kind == (an_expr_node_kind)enk_operation) {
         an_expr_operator_kind  k = current->variant.operation.kind;
         unsigned int           opcode = 0;
@@ -2061,6 +2086,75 @@ an explicit stack that is kept between the calls.
   }  /* while */
   return pure;
 }  /* expression_is_pure */
+
+
+static an_expr_node_ptr loop_condition(an_expr_node_ptr cond)
+/*
+Return the expression to send as the condition of a loop.  Clang decides
+whether a loop must make progress by folding its condition (EvaluateAsInt): a
+condition that folds to a constant makes the loop trivially infinite or
+trivially finite, and the consumer recognizes that only when a constant reaches
+the stream.  The front end folds most of what clang does, but not a comma
+expression whose right operand is a constant and whose left operands have no
+side effects ((x, true)), nor __builtin_expect of a constant: for these the
+constant is sent.
+*/
+{
+  an_expr_node_ptr  node = cond;
+  an_expr_node_ptr  result = cond;
+  a_boolean         walking = node != NULL;
+
+  while (walking) {
+    an_expr_node_ptr  current = skip_parens(node);
+
+    walking = FALSE;
+    if (current->kind == (an_expr_node_kind)enk_operation) {
+      an_expr_node_ptr  operands = current->variant.operation.operands;
+
+      if (current->variant.operation.kind == eok_bool_cast &&
+          operands != NULL) {
+        /* The conversion of the condition to bool keeps what it says. */
+        node = operands;
+        walking = TRUE;
+      } else if (current->variant.operation.kind == eok_comma &&
+                 operands != NULL &&
+                 operands->next != NULL && operands->next->next == NULL &&
+                 expression_is_pure(operands)) {
+        node = operands->next;
+        walking = TRUE;
+      } else if (current->variant.operation.kind == eok_call &&
+                 operands != NULL && operands->next != NULL) {
+        /* Look through (*f), (&f) and parentheses to a named routine. */
+        an_expr_node_ptr  callee = operands;
+
+        while (callee->kind == (an_expr_node_kind)enk_operation &&
+               (callee->variant.operation.kind == eok_indirect ||
+                callee->variant.operation.kind == eok_address_of ||
+                callee->variant.operation.kind == eok_parens)) {
+          callee = skip_parens(callee->variant.operation.operands);
+        }  /* while */
+        if (callee->kind == (an_expr_node_kind)enk_routine &&
+            node_routine(callee) != NULL &&
+            node_routine(callee)->source_corresp.name != NULL &&
+            strcmp(node_routine(callee)->source_corresp.name,
+                   "__builtin_expect") == 0 &&
+            operands->next->next != NULL &&
+            (skip_parens(operands->next->next)->kind ==
+                                             (an_expr_node_kind)enk_constant ||
+             expression_is_pure(operands->next->next))) {
+          /* (The expected value is evaluated too: dropped only when it has
+             no side effects.) */
+          node = operands->next;
+          walking = TRUE;
+        }  /* if */
+      }  /* if */
+    } else if (current->kind == (an_expr_node_kind)enk_constant &&
+               node != cond) {
+      result = current;
+    }  /* if */
+  }  /* while */
+  return result;
+}  /* loop_condition */
 
 
 static a_boolean designation_reads_no_memory(an_expr_node_ptr node)
@@ -2239,6 +2333,16 @@ before the target is kept as that glvalue's address.
                    k == eok_dot_field || k == eok_points_to_field ||
                    k == eok_subscript || k == eok_ref_cast ||
                    k == eok_lvalue_cast || k == eok_lvalue_adjust;
+      if (k == eok_base_class_cast || k == eok_derived_class_cast) {
+        /* The conversion of a class glvalue or of a pointer to a base or
+           derived class (emit_class_cast): the object is below the load. */
+        an_expr_node_ptr  cast_op = rhs->variant.operation.operands;
+
+        designates = cast_op != NULL &&
+                     (is_glvalue_node(skip_parens(cast_op)) ||
+                      skip_typerefs(skip_parens(cast_op)->type)->kind ==
+                                                               tk_pointer);
+      }  /* if */
     }  /* if */
   }  /* if */
   return designates;
@@ -2734,7 +2838,7 @@ STATIC_INIT and registered for destruction at exit there.
     ecil_emit_decl_var(frame, gid, t, (unsigned int)elk_internal,
                        ECIL_DECL_VAR_DEFINITION,
                        (uint32_t)ecil_gid_info(t)->align,
-                       ecil_intern_cstring(frame, text));
+                       ecil_intern_cstring(frame, text), FALSE);
   }  /* if */
   return gid;
 }  /* new_static_temp */
@@ -3167,6 +3271,19 @@ as their first argument: its address (for x.f) is the object pointer.
         it->a = ecil_function_id(frame, it->devirt_routine != NULL ?
                                         it->devirt_routine : direct);
       }  /* if */
+      if (!C_mode() && c != NULL &&
+          c->kind == (an_expr_node_kind)enk_routine &&
+          c->variant.routine.name_reference != NULL &&
+          (special_kind_is(c->variant.routine.name_reference,
+                           sfk_builtin_operator_new) ||
+           special_kind_is(c->variant.routine.name_reference,
+                           sfk_builtin_operator_delete))) {
+        /* __builtin_operator_new and _delete are written as the name of a
+           builtin and name the global allocation function: the consumer
+           treats a call that comes from them as it does that of a
+           new-expression. */
+        it->c |= CALL_ALLOC_EXPR;
+      }  /* if */
       it->cursor = callee->next;
       if (ecil_unsupported_reason == NULL && it->b >= ECIL_SPECIAL_FP_FIRST &&
           it->b <= ECIL_SPECIAL_FP_LAST) {
@@ -3356,6 +3473,7 @@ as their first argument: its address (for x.f) is the object pointer.
       }  /* if */
       if (node->result_is_not_used) flags |= ECIL_CALL_RESULT_UNUSED;
       if ((it->c & CALL_VIRTUAL) != 0) flags |= ECIL_CALL_VIRTUAL;
+      if ((it->c & CALL_ALLOC_EXPR) != 0) flags |= ECIL_CALL_ALLOC_EXPR;
       if (ecil_unsupported_reason == NULL && t_call != 0) {
         it = &code_stack[idx];
         if (it->b >= ECIL_SPECIAL_FP_FIRST && it->b <= ECIL_SPECIAL_FP_LAST) {
@@ -4507,6 +4625,22 @@ revisit.
 
           it->phase = EMPTY_ASSIGN_RHS;
           it->cursor = rhs;
+          if (!is_glvalue_node(rhs) &&
+              is_immediate_class_type(skip_typerefs(rhs->type)) &&
+              ecil_class_is_nontrivial_abi(rhs->type) &&
+              rhs_designates_object(rhs)) {
+            /* A class value that has a destructor is never read and thrown
+               away (a record prvalue must be materialized and destroyed):
+               nothing is read, the object is only designated. */
+            if (suppress_load_node != NULL) {
+              ecil_note_unsupported("a class assignment nested in the right "
+                                    "operand of another");
+            } else {
+              suppress_load_node = rhs;
+              load_suppressed = FALSE;
+              it->b = 1u;
+            }  /* if */
+          }  /* if */
           push_expr(rhs, (is_glvalue_node(rhs) &&
                           is_immediate_class_type(skip_typerefs(rhs->type))) ?
                          CIF_GLV : CIF_UNUSED);
@@ -5039,6 +5173,14 @@ revisit.
         break;
       case eok_assign:
         if (it->phase == EMPTY_ASSIGN_RHS) {
+          if (it->b == 1u) {
+            /* The load of the right operand was suppressed (if it was not
+               asked for after all, the suppression ends here). */
+            if (suppress_load_node == (an_expr_node_ptr)it->cursor) {
+              suppress_load_node = NULL;
+            }  /* if */
+            load_suppressed = FALSE;
+          }  /* if */
           if (value_is_pushed((an_expr_node_ptr)it->cursor, TRUE)) {
             ecil_rec0(frame, eop_drop);
           }  /* if */
@@ -6365,7 +6507,7 @@ is duplicated for the constructor or the initializer (spec 11.8).
           ecil_rec1(frame, eop_lref, entry->arg_lids[k]);
           ecil_rec1(frame, eop_load, 0);
         }  /* for */
-        emit_call_record(frame, gid, routine, nargs);
+        emit_call_flags(frame, gid, routine, nargs, ECIL_CALL_ALLOC_EXPR);
         ecil_rec_begin(frame, eop_store);
         ecil_arg_uint(frame, ECIL_STORE_INIT);
         ecil_arg_uint(frame, (unsigned int)esr_none);
@@ -6388,13 +6530,13 @@ is duplicated for the constructor or the initializer (spec 11.8).
           ecil_rec1(frame, eop_lref, entry->arg_lids[k]);
           ecil_rec1(frame, eop_load, 0);
         }  /* for */
-        emit_call_record(frame, gdel, entry->del, ndel);
+        emit_call_flags(frame, gdel, entry->del, ndel, ECIL_CALL_ALLOC_EXPR);
         ecil_rec0(frame, eop_cleanup_body);
         ecil_rec1(frame, eop_lref, entry->ptr_lid);
         ecil_rec1(frame, eop_load, 0);
         (void)sizet;
       } else {
-        emit_call_record(frame, gid, routine, nargs);
+        emit_call_flags(frame, gid, routine, nargs, ECIL_CALL_ALLOC_EXPR);
         if ((it->c & NEW_NOTHROW) != 0) {
           uint32_t  nl = new_lid();
 
@@ -9551,7 +9693,7 @@ Visit a statement item.
             ecil_rec2(frame, eop_const_int, ecil_target_int_type(frame), 1);
             ecil_rec0(frame, eop_to_bool);
           } else {
-            push_expr(s->expr, CIF_COND);
+            push_expr(loop_condition(s->expr), CIF_COND);
           }  /* if */
           done = FALSE;
         } else if (it->phase == 1) {
@@ -9593,7 +9735,7 @@ Visit a statement item.
       } else if (it->phase == 1) {
         ecil_rec0(frame, eop_do_cond);
         it->phase = 2;
-        push_expr(s->expr, CIF_COND);
+        push_expr(loop_condition(s->expr), CIF_COND);
         done = FALSE;
       } else {
         ecil_rec0(frame, eop_do_end);
@@ -9653,7 +9795,9 @@ Visit a statement item.
           }  /* if */
           rec_bool(frame, eop_for_cond, s->expr != NULL && cond == NULL);
           it->phase = 2;
-          if (s->expr != NULL && cond == NULL) push_expr(s->expr, CIF_COND);
+          if (s->expr != NULL && cond == NULL) {
+            push_expr(loop_condition(s->expr), CIF_COND);
+          }  /* if */
           done = FALSE;
         } else if (it->phase == 2) {
           rec_bool(frame, eop_for_step, loop->increment != NULL);
@@ -10803,7 +10947,8 @@ the IL) whose G-id was just introduced.
 static void emit_invoker_body(an_ecil_frame *frame, a_routine_ptr ep)
 /*
 Synthesize the body of a lambda's static invoker: it calls the call operator
-with a null object pointer and forwards its parameters (spec 11.9).  A
+on a local object of the closure type (the call operator never reads it, and
+clang has one too) and forwards its parameters (spec 11.9).  A
 variadic lambda has no invoker that forwards its arguments.
 */
 {
@@ -10816,7 +10961,8 @@ variadic lambda has no invoker that forwards its arguments.
                   ptp;
   uint32_t        first_param = 0;
   uint32_t        n_params = 0;
-  uint32_t        closure_ptr;
+  uint32_t        closure_type;
+  uint32_t        object_lid;
   a_boolean       is_void;
   a_boolean       by_slot;
 
@@ -10835,8 +10981,7 @@ variadic lambda has no invoker that forwards its arguments.
   nrvo_variable = NULL;
   return_type = NULL;
   num_pending_cleanups = 0;
-  closure_ptr = ecil_ptr_type(frame, ecil_type_id(frame,
-                                                  parent_class_of(callop)));
+  closure_type = ecil_type_id(frame, parent_class_of(callop));
   if (rout_type_supp(ft)->has_ellipsis) {
     ecil_note_unsupported("the static invoker of a variadic lambda");
   }  /* if */
@@ -10864,7 +11009,12 @@ variadic lambda has no invoker that forwards its arguments.
     }  /* for */
     emit_func_eh_spec(frame, ep);
     if (by_slot) ecil_rec0(frame, eop_return_slot);
-    ecil_rec1(frame, eop_const_null, closure_ptr);
+    /* The object of the call is a local of the closure type, as in clang's
+       "unused.capture": the call operator's this is not null (spec 11.9). */
+    object_lid = new_lid();
+    emit_local(frame, object_lid, closure_type, 0, 0);
+    ecil_rec1(frame, eop_lref, object_lid);
+    ecil_rec0(frame, eop_addr);
     for (ptp = rout_type_supp(ft)->param_type_list, n_params = 0;
          ptp != NULL; ptp = ptp->next) {
       ecil_rec1(frame, eop_lref, first_param + n_params);

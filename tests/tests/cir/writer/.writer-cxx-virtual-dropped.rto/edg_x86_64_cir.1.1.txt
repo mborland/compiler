@@ -9,7 +9,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
 
 Warning: CIR back end: the virtual table of "Q" refers to a function whose definition was dropped; it is not defined here
 
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -29,7 +29,7 @@ frame REGION supp
   STR 5 "Q"
   TY_RECORD_DECL 5 0 5
   TY_PTR 6 5
-  TY_FUNC 7 4 0 [6]
+  TY_FUNC 7 4 0 [6] supp{15: 2}
   TY_VPTR 8
   TY_RECORD_BODY 5 8 8 8 4 1
   REC_FIELD 8 0 nil nil nil 1
@@ -58,7 +58,7 @@ frame REGION supp
   STR 10 "K"
   TY_RECORD_DECL 11 0 10
   TY_PTR 12 11
-  TY_FUNC 13 4 0 [12]
+  TY_FUNC 13 4 0 [12] supp{15: 2}
   TY_RECORD_BODY 11 8 8 8 4 1
   REC_FIELD 8 0 nil nil nil 1
   STR 11 "1K"
@@ -83,12 +83,12 @@ frame REGION
   FUNC_END 0
 frame REGION
   STR 14 "_ZN1QC1Ev"
-  DECL_FUNC 16 7 0 130 14
+  DECL_FUNC 16 7 0 642 14
   STR 15 "_ZN1QC2Ev"
-  DECL_FUNC 17 7 0 130 15
+  DECL_FUNC 17 7 0 642 15
   STRUCTOR 16 17 0
-  DECL_FUNC 16 7 3 195 14
-  DECL_FUNC 17 7 3 195 15
+  DECL_FUNC 16 7 3 707 14
+  DECL_FUNC 17 7 3 707 15
   FUNC_BEGIN 17 0
   PARAM 1 6 6 9 1
   FUNC_EH_SPEC 1 []
@@ -99,12 +99,12 @@ frame REGION
   FUNC_END 0
 frame REGION
   STR 16 "_ZN1KC1Ev"
-  DECL_FUNC 18 13 0 130 16
+  DECL_FUNC 18 13 0 642 16
   STR 17 "_ZN1KC2Ev"
-  DECL_FUNC 19 13 0 130 17
+  DECL_FUNC 19 13 0 642 17
   STRUCTOR 18 19 0
-  DECL_FUNC 18 13 3 195 16
-  DECL_FUNC 19 13 3 195 17
+  DECL_FUNC 18 13 3 707 16
+  DECL_FUNC 19 13 3 707 17
   FUNC_BEGIN 19 0
   PARAM 1 12 12 9 1
   FUNC_EH_SPEC 1 []

@@ -7,7 +7,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
   }
   ^
 
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -22,7 +22,7 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_FUNC 4 1 0 []
   STR 5 "_Z3ok1v"
   DECL_FUNC 5 4 0 0 5
@@ -30,7 +30,7 @@ frame REGION
   STR 6 "D"
   TY_RECORD_DECL 6 0 6
   TY_PTR 7 6
-  TY_FUNC 8 1 0 [7, 1]
+  TY_FUNC 8 1 0 [7, 1] supp{15: 2}
   TY_METHOD 9 8 6
   STR 7 "B1"
   TY_RECORD_DECL 10 0 7
@@ -49,7 +49,7 @@ frame REGION
   REC_FIELD 1 8 nil nil 11 0
   STR 12 "m"
   TY_PTR 12 11
-  TY_FUNC 13 1 0 [12, 1]
+  TY_FUNC 13 1 0 [12, 1] supp{15: 2}
   STR 13 "_ZN2B21gEi"
   DECL_FUNC 14 13 0 0 13
   TY_BOOL 15 1 1
@@ -86,12 +86,12 @@ frame REGION supp
   REC_FIELD 1 16 nil nil 18 0
   STR 19 "s"
   DECL_FUNC 18 4 0 32 16 supp{13: "a constant pointer to a member function with a this adjustment in a function body"}
-frame REGION
+frame REGION supp
   STR 20 "_Z3ok2v"
   DECL_FUNC 20 4 0 0 20
   DECL_FUNC 20 4 0 1 20
   TY_PTR 21 10
-  TY_FUNC 22 1 0 [21, 1]
+  TY_FUNC 22 1 0 [21, 1] supp{15: 2}
   STR 21 "_ZN2B11fEi"
   DECL_FUNC 23 22 0 0 21
   FUNC_BEGIN 20 0

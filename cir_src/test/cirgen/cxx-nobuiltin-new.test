@@ -12,9 +12,10 @@
 ; RUN: %t.exe
 
 ; CHECK: define {{.*}} @_Znwm({{.*}}) #[[NB:[0-9]+]]
-; CHECK: define {{.*}} @_ZdlPv({{.*}}) #[[NB]]
+; CHECK: define {{.*}} @_ZdlPv({{.*}}) #[[ND:[0-9]+]]
 ; CHECK: define {{.*}} @_Znwy({{.*}}) #[[OTHER:[0-9]+]]
-; CHECK: attributes #[[NB]] = {{{.*}}nobuiltin
+; CHECK-DAG: attributes #[[NB]] = {{{.*}}nobuiltin
+; CHECK-DAG: attributes #[[ND]] = {{{.*}}nobuiltin
 ; CHECK-NOT: attributes #[[OTHER]] = {{{.*}}nobuiltin
 
 frame DECLS

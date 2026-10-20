@@ -33,7 +33,9 @@ after the worker has joined.
 
 #include "clang/CIR/CIRToCIRPasses.h"
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
+#include "clang/CIR/Dialect/Passes.h"
 #include "clang/CIR/LowerToLLVM.h"
+#include "clang/CIR/Passes.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
@@ -49,7 +51,13 @@ after the worker has joined.
 #include "llvm/Transforms/IPO/GlobalDCE.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/OpenMP/OpenMPToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Export.h"
 
+#include "chunk.h"
 #include "cir_module.h"
 #include "emitter.h"
 
@@ -194,12 +202,46 @@ again.
   }
 }  /* unguard_member_declarations */
 
+std::unique_ptr<llvm::Module> lower_to_llvm_ir(a_cir_module &cm,
+                                               mlir::ModuleOp module,
+                                               llvm::LLVMContext &context,
+                                               bool verify)
+/*
+cir::direct::lowerDirectlyFromCIRToLLVMIR with the verifiers optional: the
+upstream function verifies the module after each of its passes and verifies
+the LLVM module (about 17% of the instructions of a compile, 26% of the
+lowering stage).  The CIR module was verified before and after the CIR
+passes; the per-pass and LLVM verifiers run only for EDG_CIR_FLAG_VERIFY_EACH.
+Same pass list, same translation, same module name.
+*/
+{
+  mlir::PassManager pm(&cm.context);
+  std::unique_ptr<llvm::Module> result;
+
+  cir::direct::populateCIRToLLVMPasses(pm, /*enableOpenMP=*/false);
+  /* MLIR's own debugging options (--mlir-print-ir-after-all,
+     --mlir-timing, ...), when the process registered them and got them
+     through llvm_args; it fails quietly when they are not registered. */
+  (void)mlir::applyPassManagerCLOptions(pm);
+  pm.enableVerifier(verify);
+  if (mlir::succeeded(pm.run(module))) {
+    mlir::registerBuiltinDialectTranslation(cm.context);
+    mlir::registerLLVMDialectTranslation(cm.context);
+    mlir::registerOpenMPDialectTranslation(cm.context);
+    mlir::registerCIRDialectTranslation(cm.context);
+    result = mlir::translateModuleToLLVMIR(
+        module, context, module.getName().value_or("CIRToLLVMModule"),
+        /*disableVerification=*/!verify);
+  }
+  return result;
+}  /* lower_to_llvm_ir */
+
 void lower_and_emit(an_edg_cir_session &session, mlir::ModuleOp module,
                     llvm::raw_string_ostream &out)
 /*
 Lower the (CIR-pass-processed) module to LLVM IR, run GlobalDCE and the
-optimizer (unless EDG_CIR_FLAG_NO_LLVM_PASSES), and produce the requested LLVM-level output.  Sets
-session.status on failure.
+optimizer (unless EDG_CIR_FLAG_NO_LLVM_PASSES), and produce the requested
+LLVM-level output.  Sets session.status on failure.
 */
 {
   a_cir_module &cm = *session.module;
@@ -212,11 +254,32 @@ session.status on failure.
                         &a_session_stats::rss_lowered_kib));
 
   llvm_context.setDiagnosticHandlerCallBack(llvm_diagnostic, &session);
-  lowered = cir::direct::lowerDirectlyFromCIRToLLVMIR(module, llvm_context,
-                                                      /*enableOpenMP=*/false);
+#if EDG_CIR_TEST_HOOKS
+  /* Test hook: upstream's own lowering function, to compare the output of
+     lower_to_llvm_ir with it (lowering-drift.test). */
+  if (std::getenv("EDG_CIR_TEST_UPSTREAM_LOWERING") != nullptr)
+    lowered = cir::direct::lowerDirectlyFromCIRToLLVMIR(
+        module, llvm_context, /*enableOpenMP=*/false);
+  else
+#endif
+  {
+    bool verify = (session.flags & EDG_CIR_FLAG_VERIFY_EACH) != 0;
+    uint64_t bodies = session.emitter ? session.emitter->emitted_bodies() : 0;
+
+    if (chunking_wanted(session, bodies))
+      lowered = lower_in_chunks(
+          session, module, llvm_context,
+          [&](mlir::ModuleOp chunk) {
+            return lower_to_llvm_ir(cm, chunk, llvm_context, verify);
+          });
+    else
+      lowered = lower_to_llvm_ir(cm, module, llvm_context, verify);
+  }
   if (!lowered) {
-    session.fail(EDG_CIR_ERROR_PIPELINE, edc_pipeline,
-                 "lowering CIR to LLVM IR failed");
+    /* (A failed chunk has been diagnosed already.) */
+    if (session.status == EDG_CIR_OK)
+      session.fail(EDG_CIR_ERROR_PIPELINE, edc_pipeline,
+                   "lowering CIR to LLVM IR failed");
     go = false;
   }
   if (go) {

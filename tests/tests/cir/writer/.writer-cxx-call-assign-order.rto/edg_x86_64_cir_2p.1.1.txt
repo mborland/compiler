@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++20 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -14,11 +14,11 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   STR 5 "E"
   TY_RECORD_DECL 4 0 5
   TY_PTR 5 4
-  TY_FUNC 6 5 0 [5, 1]
+  TY_FUNC 6 5 0 [5, 1] supp{15: 3}
   STR 6 "v"
   TY_RECORD_BODY 4 4 4 4 0 1
   REC_FIELD 1 0 nil nil 6 0
@@ -31,16 +31,11 @@ frame REGION
   PARAM 1 5 5 8 1
   PARAM 2 1 1 9 0
   BLOCK_BEGIN
-  LOCAL 3 1 nil 0 0
-  LREF 3
-  LREF 2
-  LOAD 0
-  STORE 2 0
   LREF 1
   LOAD 0
   DEREF
   FIELD 4 0
-  LREF 3
+  LREF 2
   LOAD 0
   STORE 0 0
   LREF 1
@@ -50,12 +45,12 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 10 "R"
   TY_RECORD_DECL 8 0 10
   TY_PTR 9 8
   TY_PTR 10 1
-  TY_FUNC 11 9 0 [9, 10]
+  TY_FUNC 11 9 0 [9, 10] supp{15: 7}
   TY_RECORD_BODY 8 4 4 4 0 1
   REC_FIELD 1 0 nil nil 6 0
   STR 11 "_ZN1RaSERKi"
@@ -65,18 +60,13 @@ frame REGION
   PARAM 1 9 9 8 1
   PARAM 2 10 10 9 0
   BLOCK_BEGIN
-  LOCAL 3 1 nil 0 0
-  LREF 3
-  LREF 2
-  LOAD 0
-  DEREF
-  LOAD 0
-  STORE 2 0
   LREF 1
   LOAD 0
   DEREF
   FIELD 8 0
-  LREF 3
+  LREF 2
+  LOAD 0
+  DEREF
   LOAD 0
   STORE 0 0
   LREF 1
@@ -86,11 +76,11 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 12 "Vec"
   TY_RECORD_DECL 13 0 12
   TY_PTR 14 13
-  TY_FUNC 15 5 0 [14, 1]
+  TY_FUNC 15 5 0 [14, 1] supp{15: 3}
   TY_ARRAY 16 4 4 0
   TY_ARRAY 17 8 4 0
   STR 13 "e"
@@ -106,7 +96,7 @@ frame REGION
   TY_PTR 20 19
   TY_FUNC 21 1 1 [20]
   STR 17 "printf"
-  DECL_FUNC 22 21 0 0 17
+  DECL_FUNC 22 21 0 256 17
   TY_ARRAY 23 19 7 0
   STR 18 ".str"
   DECL_VAR 24 23 2 11 0 18
@@ -137,8 +127,8 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
-  TY_FUNC 25 9 0 [14, 1]
+frame REGION supp
+  TY_FUNC 25 9 0 [14, 1] supp{15: 3}
   STR 19 "_ZN3Vec3ratEi"
   DECL_FUNC 26 25 0 2 19
   DECL_FUNC 26 25 3 67 19
@@ -266,7 +256,7 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   TY_BOOL 41 1 1
   STR 29 "B"
   TY_RECORD_DECL 42 0 29
@@ -274,7 +264,7 @@ frame REGION
   STR 30 "A"
   TY_RECORD_DECL 44 0 30
   TY_PTR 45 44
-  TY_FUNC 46 41 0 [43, 45]
+  TY_FUNC 46 41 0 [43, 45] supp{15: 6}
   TY_RECORD_BODY 42 4 4 4 0 1
   REC_FIELD 1 0 nil nil 6 0
   TY_RECORD_BODY 44 4 4 4 0 1
@@ -524,11 +514,6 @@ frame REGION
   CALL 7 6 2 0
   DEREF
   DROP
-  LOCAL 8 1 nil 0 0
-  LREF 8
-  LREF 2
-  LOAD 0
-  STORE 2 0
   LREF 1
   FIELD 13 0
   ADDR
@@ -537,7 +522,7 @@ frame REGION
   PTR_STRIDE 0
   DEREF
   ADDR
-  LREF 8
+  LREF 2
   LOAD 0
   CALL 7 6 2 0
   DEREF
@@ -559,28 +544,28 @@ frame REGION
   LOAD 0
   CALL 22 21 3 5
   DROP
-  LOCAL 9 41 41 0 0
+  LOCAL 8 41 41 0 0
+  LREF 8
+  LOCAL 9 45 nil 0 0
   LREF 9
-  LOCAL 10 45 nil 0 0
+  LOCAL 10 44 nil 0 2
   LREF 10
-  LOCAL 11 44 nil 0 2
-  LREF 11
   CALL 49 48 0 0
   STORE 0 0
-  LREF 11
+  LREF 10
   ADDR
   STORE 2 0
   CALL 53 52 0 0
-  MATERIALIZE_TEMP 12 42
+  MATERIALIZE_TEMP 11 42
   ADDR
-  LREF 10
+  LREF 9
   LOAD 0
   CALL 47 46 2 0
   STORE 0 0
   GREF 59
   ADDR
   ADDR_OFFSET 20 0
-  LREF 9
+  LREF 8
   LOAD 0
   CAST 4 1
   CALL 22 21 2 5

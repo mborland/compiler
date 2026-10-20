@@ -1,0 +1,7 @@
+; The library's lowering driver (lower_to_llvm_ir: the passes of
+; populateCIRToLLVMPasses and mlir::translateModuleToLLVMIR, the verifiers
+; off) against upstream's cir::direct::lowerDirectlyFromCIRToLLVMIR, on every
+; stream of the cirgen tests: the LLVM IR must be identical.  A pin bump that
+; changes what the upstream function does fails this test.
+; REQUIRES: test-hooks
+; RUN: %python %scripts/lowering_drift_tests.py %S %ecil-asm %edg-cir %t.d

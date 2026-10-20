@@ -91,6 +91,24 @@ struct a_session_stats {
   uint64_t passes_ns = 0;    /* CIR-to-CIR passes. */
   uint64_t lower_ns = 0;     /* CIR to LLVM IR, GlobalDCE and the optimizer. */
   uint64_t codegen_ns = 0;   /* Target code generation or printing. */
+  /* Lazy emission (the bodies of discardable functions are kept as their
+     records until finish).  deferred = replayed + dropped. */
+  uint64_t lazy_deferred = 0;   /* Bodies kept instead of emitted. */
+  uint64_t lazy_replayed = 0;   /* ... emitted at finish (reachable). */
+  uint64_t lazy_dropped = 0;    /* ... never emitted (unreachable). */
+  uint64_t lazy_kept = 0;       /* Dropped bodies that a dead entity (an
+                                   unused vtable) still named: erased with
+                                   the namer. */
+  uint64_t lazy_namers = 0;     /* ... the dead entities erased for that. */
+  uint64_t lazy_vars = 0;       /* Variables erased with the dropped bodies. */
+  uint64_t lazy_bytes = 0;      /* Bytes held for deferred bodies. */
+  uint64_t lazy_resolve_ns = 0; /* The reachability closure. */
+  uint64_t lazy_replay_ns = 0;  /* Replay of the reachable bodies. */
+  /* Chunked lowering: the chunks the module was lowered in (the globals
+     chunk included; 0 when it was lowered as one module) and the number of
+     function bodies at most in one. */
+  uint64_t chunks = 0;
+  uint64_t chunk_size = 0;
   /* Peak resident memory (KiB, the process's maximum so far) at the end of
      each stage: the growth between two of them is what the stage added.  The
      module is resident from emit to the end. */
@@ -147,6 +165,7 @@ struct an_edg_cir_session {
   bool                                  have_triple_override;
   int32_t                               opt_level;
   uint32_t                              flags;
+  uint32_t                              chunk_threshold;  /* 0 = default. */
 
   /* State. */
   an_edg_cir_status                     status;
@@ -172,6 +191,8 @@ struct an_edg_cir_session {
   uint32_t                              last_column;
 
   void print_stats();
+  void print_chunk_line();
+  bool stats_printed = false;
   an_edg_cir_status consume(const void *bytes, size_t length);
   bool consume_guarded(const void *bytes, size_t length);
   bool consume_timed(const void *bytes, size_t length);

@@ -3,7 +3,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
   }
   ^
 
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -239,7 +239,7 @@ frame REGION
   TY_PTR 19 18
   TY_FUNC 20 1 1 [19]
   STR 20 "printf"
-  DECL_FUNC 21 20 0 0 20
+  DECL_FUNC 21 20 0 256 20
   TY_ARRAY 22 18 10 0
   STR 21 ".str"
   DECL_VAR 23 22 2 11 0 21

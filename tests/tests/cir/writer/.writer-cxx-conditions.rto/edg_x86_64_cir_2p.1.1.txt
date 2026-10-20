@@ -3,7 +3,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
   int for_step(int c) { for (int i = 0; M q = mk(); i++) { c += i; } return c; }
                                                                                ^
 
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -18,7 +18,7 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_FUNC 4 1 0 [1]
   STR 5 "_Z1fi"
   DECL_FUNC 5 4 0 0 5
@@ -35,14 +35,14 @@ frame REGION
   DECL_FUNC 8 7 0 0 10
   TY_VOID 9
   TY_PTR 10 6
-  TY_FUNC 11 9 0 [10]
+  TY_FUNC 11 9 0 [10] supp{15: 2}
   STR 11 "_ZN1MD1Ev"
   DECL_FUNC 12 11 0 128 11
   STR 12 "_ZN1MD2Ev"
   DECL_FUNC 13 11 0 128 12
   STRUCTOR 12 13 1
   TY_BOOL 14 1 1
-  TY_FUNC 15 14 0 [10]
+  TY_FUNC 15 14 0 [10] supp{15: 2}
   STR 13 "_ZNK1McvbEv"
   DECL_FUNC 16 15 0 0 13
   STR 14 "w"

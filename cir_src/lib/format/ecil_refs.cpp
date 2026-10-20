@@ -755,7 +755,7 @@ ones are the bracket tracker's).
       problem = "STATIC_INIT_BEGIN of G-id " + number(v) +
                 ", which is not a definition";
       ok = false;
-    } else if ((ne->role & vr_static_init) &&
+    } else if ((ne->role & vr_static_init) && !replaying &&
                !static_init_may_repeat(static_cast<uint32_t>(v))) {
       problem = "G-id " + number(v) + " is initialized twice "
                 "(STATIC_INIT_BEGIN already seen)";
@@ -948,7 +948,8 @@ The keys of a supp blob this reader understands.  A key appears at most once
 per blob (any key: a blob may hold several, since 1.3).  unsupported_reason
 (1.1) is UTF-8 text of at most 255 bytes on a DECL_FUNC or DECL_VAR that has
 UNSUPPORTED set.  noinline (1.3) is `true` on a DECL_FUNC; used (1.3) is
-`true` on a DECL_FUNC or DECL_VAR; nonnull_ptrs (1.3) is an unsigned mask on
+`true` on a DECL_FUNC or DECL_VAR; always_inline, cold and hot (16 to 18) are
+`true` on a DECL_FUNC; nonnull_ptrs (1.3) is an unsigned mask on
 a TY_FUNC with no bit above the parameter count.  The 1.3 keys are checked in
 streams of every minor (a reader that knows a key checks it whatever the
 preamble says).  Unknown keys are skipped.
@@ -981,6 +982,19 @@ preamble says).  Unknown keys are skipped.
       } else if (!((value.kind == an_operand_kind::boolean ||
                     value.kind == an_operand_kind::uint) && value.u == 1)) {
         problem = "supp key noinline (14) is not true";
+        ok = false;
+      }
+    } else if (key >= esk_always_inline && key <= esk_hot) {
+      const char *name = key == esk_always_inline ? "always_inline (16)"
+                         : key == esk_cold ? "cold (17)" : "hot (18)";
+
+      if (r.opcode != eop_decl_func) {
+        problem = std::string("supp key ") + name +
+                  " is only valid on a DECL_FUNC";
+        ok = false;
+      } else if (!((value.kind == an_operand_kind::boolean ||
+                    value.kind == an_operand_kind::uint) && value.u == 1)) {
+        problem = std::string("supp key ") + name + " is not true";
         ok = false;
       }
     } else if (key == esk_used) {
@@ -1519,7 +1533,7 @@ Apply the reference rules of one record.
     if (!ok) {
       problem = "unknown declaration: FUNC_BEGIN names a G-id that is not a "
                 "declared function";
-    } else if (ne->flags & gf_defined) {
+    } else if ((ne->flags & gf_defined) && !replaying) {
       problem = "function G-id " + number(v) + " is defined twice";
       ok = false;
     } else if ((ne->role & 1) && !(ne->role & 4)) {

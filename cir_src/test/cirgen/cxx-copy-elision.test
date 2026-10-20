@@ -17,22 +17,22 @@
 ; RUN: %t.exe
 
 ; CHECK-DAG: A = #cir.record_layout<arg_passing_kind = cannot_pass_in_regs, has_trivial_dtor = true, record_align = 4>
-; CHECK-DAG: cir.func private @_ZN1AC1Ei(!cir.ptr<!rec_A>, !s32i) alias(@_ZN1AC2Ei)
-; CHECK-DAG: cir.func private @_ZN1AC1ERKS_(!cir.ptr<!rec_A>, !cir.ptr<!rec_A>) alias(@_ZN1AC2ERKS_)
-; CHECK-LABEL: cir.func {{.*}}@_Z4makei(%arg0: !s32i) -> !rec_A
+; CHECK-DAG: cir.func private @_ZN1AC1Ei(!cir.ptr<!rec_A>{{.*}}, !s32i{{.*}}) alias(@_ZN1AC2Ei)
+; CHECK-DAG: cir.func private @_ZN1AC1ERKS_(!cir.ptr<!rec_A>{{.*}}, !cir.ptr<!rec_A>{{.*}}) alias(@_ZN1AC2ERKS_)
+; CHECK-LABEL: cir.func {{.*}}@_Z4makei(%arg0: !s32i{{.*}}) -> !rec_A
 ; CHECK: %[[R:[0-9]+]] = cir.alloca "__retval"
 ; CHECK: cir.call @_ZN1AC1Ei(%[[R]], {{.*}}) nothrow
 ; CHECK: cir.load {{.*}}%[[R]]
 ; CHECK: cir.return
-; CHECK-LABEL: cir.func {{.*}}@_Z5chaini(%arg0: !s32i) -> !rec_A
+; CHECK-LABEL: cir.func {{.*}}@_Z5chaini(%arg0: !s32i{{.*}}) -> !rec_A
 ; CHECK: cir.alloca "__retval"
-; CHECK: cir.call @_Z4makei({{.*}}) nothrow : (!s32i) -> !rec_A
+; CHECK: cir.call @_Z4makei({{.*}}) nothrow : (!s32i{{.*}}) -> !rec_A
 ; CHECK-NEXT: cir.store
-; CHECK-LABEL: cir.func {{.*}}@_Z4nrvoi(%arg0: !s32i) -> !rec_A
+; CHECK-LABEL: cir.func {{.*}}@_Z4nrvoi(%arg0: !s32i{{.*}}) -> !rec_A
 ; CHECK: %[[N:[0-9]+]] = cir.alloca "__retval"
 ; CHECK: cir.call @_ZN1AC1Ei(%[[N]], {{.*}})
 ; CHECK-LABEL: cir.func {{.*}}@main
-; CHECK: cir.call @_Z4makei({{.*}}) nothrow : (!s32i) -> !rec_A
+; CHECK: cir.call @_Z4makei({{.*}}) nothrow : (!s32i{{.*}}) -> !rec_A
 ; CHECK-NEXT: cir.store
 
 frame DECLS

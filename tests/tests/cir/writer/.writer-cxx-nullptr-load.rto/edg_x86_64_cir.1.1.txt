@@ -1,0 +1,135 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=140000 Test_name.c
+ecil 1.3 features=0x0000001a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  TY_FUNC 5 4 0 []
+  STR 5 "_Z6uninitv"
+  DECL_FUNC 6 5 0 0 5
+  DECL_FUNC 6 5 0 1 5
+  TY_PTR 7 4
+  STR 6 "n"
+  TY_FUNC 8 4 0 [7]
+  STR 7 "_Z1fDn"
+  DECL_FUNC 9 8 0 0 7
+  FUNC_BEGIN 6 0
+  BLOCK_BEGIN
+  LOCAL 1 7 6 0 0
+  LREF 1
+  DROP
+  CONST_NULL 7
+  CALL 9 8 1 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 8 "_Z5paramDn"
+  DECL_FUNC 10 8 0 0 8
+  DECL_FUNC 10 8 0 1 8
+  STR 9 "p"
+  FUNC_BEGIN 10 0
+  PARAM 1 7 7 9 0
+  BLOCK_BEGIN
+  LREF 1
+  DROP
+  CONST_NULL 7
+  CALL 9 8 1 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 10 "_Z6globalv"
+  DECL_FUNC 11 5 0 0 10
+  DECL_FUNC 11 5 0 1 10
+  STR 11 "gn"
+  DECL_VAR 12 7 0 0 0 11
+  FUNC_BEGIN 11 0
+  BLOCK_BEGIN
+  GREF 12
+  DROP
+  CONST_NULL 7
+  CALL 9 8 1 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 12 "S"
+  TY_RECORD_DECL 13 0 12
+  TY_PTR 14 13
+  TY_FUNC 15 4 0 [14] supp{15: 2}
+  STR 13 "m"
+  TY_RECORD_BODY 13 8 8 8 0 1
+  REC_FIELD 7 0 nil nil 13 0
+  STR 14 "_Z6memberR1S"
+  DECL_FUNC 16 15 0 0 14
+  DECL_FUNC 16 15 0 1 14
+  STR 15 "s"
+  FUNC_BEGIN 16 0
+  PARAM 1 14 14 15 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 13 0
+  DROP
+  CONST_NULL 7
+  CALL 9 8 1 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 16 "_Z11initializedv"
+  DECL_FUNC 17 5 0 0 16
+  DECL_FUNC 17 5 0 1 16
+  STR 17 "a"
+  TY_FUNC 18 7 0 []
+  STR 18 "_Z3getv"
+  DECL_FUNC 19 18 0 0 18
+  FUNC_BEGIN 17 0
+  BLOCK_BEGIN
+  LOCAL 1 7 17 0 0
+  LREF 1
+  CALL 19 18 0 0
+  STORE 0 0
+  LREF 1
+  DROP
+  CONST_NULL 7
+  CALL 9 8 1 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 19 "_Z3volv"
+  DECL_FUNC 20 5 0 0 19
+  DECL_FUNC 20 5 0 1 19
+  STR 20 "v"
+  FUNC_BEGIN 20 0
+  BLOCK_BEGIN
+  LOCAL 1 7 20 0 0
+  LREF 1
+  C_NULL 7
+  INIT_CONST
+  LREF 1
+  LOAD 1
+  CALL 9 8 1 4
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+  DECL_VAR 12 7 0 33 0 11
+frame NAMES
+frame END
+  END 9 0

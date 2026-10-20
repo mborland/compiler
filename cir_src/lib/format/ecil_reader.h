@@ -465,6 +465,10 @@ class a_ref_checker {
 public:
   a_ref_checker(a_id_tables &ids, a_bracket_tracker &tracker);
 
+  bool replaying = false;
+  /* A function body saved from an earlier frame is being replayed: the rules
+     that a function or a static initializer is seen once do not apply. */
+
   void begin_frame();
   bool check(const a_record &record, std::string &problem);
   /* False with a message in problem when the record breaks a rule. */
@@ -657,6 +661,16 @@ public:
   bool finish();
   /* Check that F_END or F_ABORT was seen.  Return false otherwise. */
 
+  bool replay_body(const uint8_t *begin, const uint8_t *end,
+                   uint64_t base_offset, const a_frame_info &frame,
+                   a_stream_handler &sink);
+  /* Run the bracket tracker, the id checks (without the once-only
+     definition rules) and the handler over the records of one function body
+     saved from an earlier frame (lazy emission).  base_offset is the stream
+     offset of begin; frame is the frame the records came from. */
+  const a_function_info &last_function_info() const
+  /* What the checker learned about the function it read last. */
+    { return refs_.function_info(); }
   const an_error &error() const
     { return error_; }
   bool stopped_by_handler() const

@@ -1,0 +1,55 @@
+; S2: a function whose DECL_FUNC carries NOTHROW (the front end's non-throwing
+; predicate: noexcept, throw(), implicit noexcept) is `nothrow` on its
+; declaration and its definition, which LLVM lowers to nounwind.  A function
+; without the flag, in a translation unit with exceptions, is not.
+; RUN: cat %S/Inputs/header12_cxx_eh.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=cir %t.ecil | %FileCheck %s --check-prefix=CIR
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=LLVM
+
+; CIR-DAG: cir.func private @decl_nothrow() attributes {nothrow}
+; CIR-DAG: cir.func private @decl_plain()
+; CIR-DAG: cir.func {{.*}}@def_nothrow() attributes {{{.*}}nothrow
+; CIR-DAG: cir.func {{.*}}@def_plain()
+; LLVM-DAG: declare void @decl_nothrow() #[[NU:[0-9]+]]
+; LLVM-DAG: declare void @decl_plain(){{$}}
+; LLVM-DAG: define {{.*}}void @def_nothrow() #[[NU2:[0-9]+]]
+; LLVM-DAG: define {{.*}}void @def_plain() #[[PL2:[0-9]+]]
+; LLVM-DAG: attributes #[[NU]] = {{{.*}}nounwind
+; LLVM-DAG: attributes #[[NU2]] = {{{.*}}nounwind
+; LLVM-NOT: attributes #[[PL2]] = {{{.*}}nounwind
+
+frame DECLS
+  STR 100 "decl_nothrow"
+  STR 101 "decl_plain"
+  STR 102 "def_nothrow"
+  STR 103 "def_plain"
+  STR 104 "main"
+  TY_FUNC 21 11 0 []
+  TY_FUNC 22 1 0 []
+  DECL_FUNC 40 21 0 128 100
+  DECL_FUNC 41 21 0 0 101
+  DECL_FUNC 42 21 0 129 102
+  DECL_FUNC 43 21 0 1 103
+  DECL_FUNC 44 22 0 9 104
+frame REGION
+  FUNC_BEGIN 42 0
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 44 0
+  CALL 40 21 0 0
+  CALL 41 21 0 0
+  CALL 42 21 0 0
+  CALL 43 21 0 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

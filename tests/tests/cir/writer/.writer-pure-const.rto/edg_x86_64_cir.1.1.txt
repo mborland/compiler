@@ -1,0 +1,157 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --gcc Test_name.c
+ecil 1.3 features=0x00000012
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 201112 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FUNC 4 1 0 [1]
+  STR 5 "toupper"
+  DECL_FUNC 5 4 1 0 5
+  DECL_FUNC 5 4 1 1 5
+  STR 6 "c"
+  FUNC_BEGIN 5 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_PTR 6 1
+  TY_INT 7 8 true 1 1
+  TY_PTR 8 7
+  TY_FUNC 9 1 0 [1, 6, 8, 6]
+  STR 7 "use"
+  DECL_FUNC 10 9 0 0 7
+  DECL_FUNC 10 9 0 1 7
+  STR 8 "i"
+  STR 9 "p"
+  STR 10 "s"
+  STR 11 "w"
+  TY_FUNC 11 1 0 [6]
+  STR 12 "pure_fn"
+  DECL_FUNC 12 11 0 0 12 supp{4: true}
+  STR 13 "const_fn"
+  DECL_FUNC 13 4 0 0 13 supp{5: true}
+  STR 14 "both_fn"
+  DECL_FUNC 14 4 0 0 14 supp{4: true, 5: true}
+  STR 15 "later_fn"
+  DECL_FUNC 15 4 0 0 15
+  STR 16 "isalnum"
+  DECL_FUNC 16 4 0 0 16 supp{4: true}
+  STR 17 "tolower"
+  DECL_FUNC 17 4 0 0 17 supp{4: true}
+  STR 18 "abs"
+  DECL_FUNC 18 4 0 0 18 supp{5: true}
+  TY_FLOAT 19 3 8 8
+  TY_FUNC 20 19 0 [19]
+  STR 19 "fabs"
+  DECL_FUNC 21 20 0 0 19 supp{5: true}
+  STR 20 "sin"
+  DECL_FUNC 22 20 0 0 20
+  TY_FUNC 23 2 0 [8]
+  STR 21 "strlen"
+  DECL_FUNC 24 23 0 0 21
+  TY_FUNC 25 2 0 [6]
+  STR 22 "wcslen"
+  DECL_FUNC 26 25 0 0 22 supp{4: true}
+  STR 23 "my_isdigit"
+  DECL_FUNC 27 4 0 0 23
+  STR 24 "isalpha"
+  DECL_FUNC 28 4 0 0 24 supp{4: true}
+  FUNC_BEGIN 10 0
+  PARAM 1 1 1 8 0
+  PARAM 2 6 6 9 0
+  PARAM 3 8 8 10 0
+  PARAM 4 6 6 11 0
+  BLOCK_BEGIN
+  LREF 2
+  LOAD 0
+  CALL 12 11 1 0
+  LREF 1
+  LOAD 0
+  CALL 13 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 14 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 15 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 16 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 17 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 18 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CAST 6 19
+  CALL 21 20 1 0
+  CAST 7 1
+  ADD 1
+  LREF 1
+  LOAD 0
+  CAST 6 19
+  CALL 22 20 1 0
+  CAST 7 1
+  ADD 1
+  LREF 3
+  LOAD 0
+  CALL 24 23 1 0
+  CAST 0 1
+  ADD 1
+  LREF 4
+  LOAD 0
+  CALL 26 25 1 0
+  CAST 0 1
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 5 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 27 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 28 4 1 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  DECL_FUNC 15 4 0 1 15 supp{5: true}
+  STR 25 "x"
+  FUNC_BEGIN 15 0
+  PARAM 1 1 1 25 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame END
+  END 5 0

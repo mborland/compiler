@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -14,7 +14,7 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   STR 5 "H"
   TY_RECORD_DECL 4 0 5
   TY_PTR 5 4
@@ -46,7 +46,7 @@ frame REGION
   TY_FUNC 17 13 0 [14, 2]
   STR 14 "_ZdlPvm"
   DECL_FUNC 18 17 0 128 14
-  TY_FUNC 19 13 0 [8]
+  TY_FUNC 19 13 0 [8] supp{15: 2}
   STR 15 "_ZN1FI1IEC1Ev"
   DECL_FUNC 20 19 0 0 15
   STR 16 "_ZN1FI1IEC2Ev"
@@ -57,7 +57,7 @@ frame REGION
   LOCAL 1 5 12 0 0
   LREF 1
   CONST_INT 2 8
-  CALL 16 15 1 0
+  CALL 16 15 1 64
   CAST 11 5
   STORE 0 0
   LOCAL 2 8 nil 0 0
@@ -70,14 +70,14 @@ frame REGION
   LREF 4
   LREF 3
   LOAD 0
-  CALL 16 15 1 0
+  CALL 16 15 1 64
   STORE 2 0
   CLEANUP_BEGIN 2 nil 1
   LREF 4
   LOAD 0
   LREF 3
   LOAD 0
-  CALL 18 17 2 0
+  CALL 18 17 2 64
   CLEANUP_BODY
   LREF 4
   LOAD 0
@@ -118,7 +118,7 @@ frame REGION
   LOCAL 2 10 nil 0 0
   LREF 2
   CONST_INT 2 16
-  CALL 16 15 1 0
+  CALL 16 15 1 64
   CAST 11 10
   STORE 2 0
   LREF 1

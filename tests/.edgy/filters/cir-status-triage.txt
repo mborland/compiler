@@ -1,0 +1,20 @@
+# Cases of the corpus and cpp-corpus steps of edg-cir-gate-evidence that
+# passed in the baseline statuses (--status-baseline, the M5p gate's
+# ~/edg-cir-config/m5p-base-status) and do not pass now, and that are accepted.
+#
+# One case per line:
+#
+#   <test path> | <variant> | <config or *> | <reason>
+#
+# <test path> and <variant> are as in the status JSON of edg-cir-summary (the
+# suite directory first), <config> is edg_x86_64_cir or edg_x86_64_cir_2p, or
+# `*` for both.  The reason (at least 8 characters, not a placeholder) says why
+# the regression is accepted; a regression that is to be fixed is not listed.
+# A line for a case that did not regress is stale and fails the step, and so
+# does a case listed twice.
+#
+# torture/pr100382 (the S2 checkpoint's second runtime regression, a pure
+# function that can throw) is fixed, not listed.
+
+# Reference compilers fail this test the same way.
+imported/gnu/cpp/torture/pr101373.sft.cpp | -DTEST_NUMBER=1 | * | reference compilers fail it the same way: clang++ -O0, clang++ -fclangir -O0 and g++ -O0 all segfault (the -O0 code generator drops the dead nounwind const call); the test is dg-xfail-run-if PR100409 (verified by cir-lib on the box)

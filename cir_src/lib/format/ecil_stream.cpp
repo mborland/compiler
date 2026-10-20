@@ -356,6 +356,61 @@ Decode and check every record of the frame and pass it to the handler.
   return result;
 }  /* a_stream_reader::process_records */
 
+bool a_stream_reader::replay_body(const uint8_t *begin, const uint8_t *end,
+                                  uint64_t base_offset,
+                                  const a_frame_info &frame,
+                                  a_stream_handler &sink)
+/*
+Lazy emission: replay the records of one function body saved from an earlier
+frame.  The bracket tracker and the L-id tables run, the G-id definition rules
+do not (refs_.replaying).  The reader's own position is restored.
+*/
+{
+  bool result = true;
+  a_cursor cursor(begin, end);
+  a_decode_context context;
+  a_scope_event event;
+  uint64_t saved_offset = offset_;
+
+  context.stream_minor = preamble_.minor;
+  context.allow_supp = (frame.flags & ECIL_FRAME_FLAG_HAS_SUPP) != 0;
+  tracker_.begin_frame();
+  refs_.begin_frame();
+  refs_.replaying = true;
+  while (result && cursor.remaining() > 0) {
+    a_record record;
+    an_error decode_error;
+    const uint8_t *record_start = cursor.p;
+    uint64_t record_offset = base_offset +
+                             static_cast<uint64_t>(record_start - begin);
+
+    if (!decode_record(cursor, context, record, decode_error)) {
+      result = fail(decode_error.kind, decode_error.message, record_offset);
+    } else {
+      offset_ = record_offset;
+      event = a_scope_event();
+      result = check_brackets(record, event) && check_refs(record);
+      if (result) {
+        a_record_context rc;
+        rc.frame = &frame;
+        rc.in_body = true;
+        rc.function_depth = static_cast<uint32_t>(tracker_.function_depth());
+        rc.offset = record_offset;
+        rc.scope = event;
+        if (!sink.on_record(record, rc)) {
+          stopped_ = true;
+          result = false;
+        } else {
+          tracker_.commit(ids_);
+        }
+      }
+    }
+  }
+  refs_.replaying = false;
+  offset_ = saved_offset;
+  return result;
+}  /* a_stream_reader::replay_body */
+
 bool a_stream_reader::process_frame(const uint8_t *header,
                                     const uint8_t *payload)
 /*

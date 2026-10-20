@@ -1,0 +1,166 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=140000 Test_name.c
+ecil 1.3 features=0x0000001a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_VOID 4
+  STR 5 "Dev"
+  TY_RECORD_DECL 5 0 5
+  TY_PTR 6 5
+  TY_FUNC 7 4 0 [6]
+  TY_INT 8 32 false 4 4
+  STR 6 "ctrl"
+  STR 7 "status"
+  STR 8 "a"
+  STR 9 "b"
+  TY_RECORD_BODY 5 16 16 4 0 4
+  REC_FIELD 8 0 nil nil 6 0
+  REC_FIELD 8 4 nil nil 7 0
+  REC_FIELD 8 8 nil nil 8 0
+  REC_FIELD 8 12 nil nil 9 0
+  STR 10 "_Z15member_compoundP3Dev"
+  DECL_FUNC 9 7 0 0 10
+  DECL_FUNC 9 7 0 1 10
+  STR 11 "dev"
+  FUNC_BEGIN 9 0
+  PARAM 1 6 6 11 0
+  BLOCK_BEGIN
+  LOCAL 2 8 nil 0 0
+  LREF 2
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 1
+  LOAD 1
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  DUP
+  LOAD 1
+  LREF 2
+  LOAD 0
+  BIT_OR 0
+  STORE 1 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_FUNC 10 4 0 []
+  STR 12 "_Z14plain_compoundv"
+  DECL_FUNC 11 10 0 0 12
+  DECL_FUNC 11 10 0 1 12
+  STR 13 "vstatus"
+  DECL_VAR 12 8 0 0 0 13
+  STR 14 "vctrl"
+  DECL_VAR 13 8 0 0 0 14
+  FUNC_BEGIN 11 0
+  BLOCK_BEGIN
+  LOCAL 1 8 nil 0 0
+  LREF 1
+  GREF 12
+  LOAD 1
+  STORE 2 0
+  GREF 13
+  DUP
+  LOAD 1
+  LREF 1
+  LOAD 0
+  BIT_OR 0
+  STORE 1 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 15 "_Z13member_assignP3Dev"
+  DECL_FUNC 14 7 0 0 15
+  DECL_FUNC 14 7 0 1 15
+  FUNC_BEGIN 14 0
+  PARAM 1 6 6 11 0
+  BLOCK_BEGIN
+  LOCAL 2 8 nil 0 0
+  LREF 2
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 1
+  LOAD 1
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  LREF 2
+  LOAD 0
+  STORE 1 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 16 "_Z5mixedP3Dev"
+  DECL_FUNC 15 7 0 0 16
+  DECL_FUNC 15 7 0 1 16
+  FUNC_BEGIN 15 0
+  PARAM 1 6 6 11 0
+  BLOCK_BEGIN
+  LOCAL 2 8 nil 0 0
+  LREF 2
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 1
+  LOAD 1
+  STORE 2 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 2
+  DUP
+  LOAD 0
+  LREF 2
+  LOAD 0
+  BIT_OR 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 17 "_Z12not_volatileP3Dev"
+  DECL_FUNC 16 7 0 0 17
+  DECL_FUNC 16 7 0 1 17
+  FUNC_BEGIN 16 0
+  PARAM 1 6 6 11 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 2
+  DUP
+  LOAD 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 3
+  LOAD 0
+  BIT_OR 0
+  STORE 0 0
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 8 0

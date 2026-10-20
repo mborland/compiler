@@ -15,9 +15,9 @@ ecil 1.2 features=0x0000000a
 ; RUN: g++ %t.o -o %t.exe
 ; RUN: %t.exe
 
-; CHECK-LABEL: cir.func {{.*}}@_ZN1EC2Ev(%arg0: !cir.ptr<!rec_E>, %arg1: !cir.ptr<!cir.ptr<!void>>)
-; CHECK: cir.call @_ZN1CC2Ev({{.*}}) nothrow : (!cir.ptr<!rec_C>, !cir.ptr<!cir.ptr<!void>>) -> ()
-; CHECK: cir.call @_ZN1DC2Ev({{.*}}) nothrow : (!cir.ptr<!rec_D>, !cir.ptr<!cir.ptr<!void>>) -> ()
+; CHECK-LABEL: cir.func {{.*}}@_ZN1EC2Ev(%arg0: !cir.ptr<!rec_E>{{.*}}, %arg1: !cir.ptr<!cir.ptr<!void>>{{.*}})
+; CHECK: cir.call @_ZN1CC2Ev({{.*}}) nothrow : (!cir.ptr<!rec_C>{{.*}}, !cir.ptr<!cir.ptr<!void>>{{.*}}) -> ()
+; CHECK: cir.call @_ZN1DC2Ev({{.*}}) nothrow : (!cir.ptr<!rec_D>{{.*}}, !cir.ptr<!cir.ptr<!void>>{{.*}}) -> ()
 ; CHECK-DAG: cir.global {{.*}}@_ZTT1E =
 ; CHECK-DAG: cir.global {{.*}}@_ZTC1E0_1C = #cir.vtable<
 ; CHECK-DAG: cir.global {{.*}}@_ZTC1E0_1A = #cir.vtable<

@@ -3,7 +3,7 @@ edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
   int f6() { S s; return s.x; }
                          ^
 
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -90,7 +90,7 @@ frame REGION
   LOCAL 1 11 9 0 0
   LREF 1
   CONST_INT 2 16
-  CALL 15 14 1 0
+  CALL 15 14 1 64
   CAST 11 11
   DUP
   DEREF
@@ -173,14 +173,14 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 25 "_Z2f7v"
   DECL_FUNC 23 4 0 0 25
   DECL_FUNC 23 4 0 1 25
   STR 26 "F"
   TY_RECORD_DECL 24 0 26
   TY_PTR 25 7
-  TY_FUNC 26 12 0 [25]
+  TY_FUNC 26 12 0 [25] supp{15: 2}
   TY_METHOD 27 26 7
   STR 27 "f"
   STR 28 "k"
@@ -268,7 +268,7 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 39 "_Z3f11v"
   DECL_FUNC 34 4 0 0 39
   DECL_FUNC 34 4 0 1 39
@@ -279,7 +279,7 @@ frame REGION
   REC_FIELD 1 16 nil nil 28 0
   STR 41 "c"
   TY_PTR 36 35
-  TY_FUNC 37 12 0 [36]
+  TY_FUNC 37 12 0 [36] supp{15: 2}
   STR 42 "_ZN1CC1Ev"
   DECL_FUNC 38 37 0 0 42
   STR 43 "_ZN1CC2Ev"
@@ -315,7 +315,7 @@ frame REGION
   LREF 1
   CONST_INT 2 3
   NEW_ARRAY_SIZE 21 0
-  CALL 42 14 1 0
+  CALL 42 14 1 64
   CAST 11 41
   DUP
   CAST 11 44

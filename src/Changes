@@ -1,5 +1,119 @@
 Version 7.1
 
+10/20/26
+CIR back end: always_inline, cold and hot, and more inline hints
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: a
+function declared with the GNU attribute always_inline, cold or hot is marked
+as such in the stream (ECIL supp keys 16, 17 and 18).  The inlining hint is
+given to the implicitly declared constructors, destructors and assignment
+operators, as clang does, and not to a function that has the attribute
+always_inline or noinline.  The library functions abort, exit, _Exit and _exit
+are marked as not returning even when a program declares them without the
+attribute, which clang's builtin table says they are.  The C library
+functions that clang's builtin table says do not throw (memcpy, strlen, the
+math functions, sprintf and so on, not the cancellation points fprintf and
+vfprintf) are marked as not throwing in C++, so that a call of one does not
+need cleanups.  The other configurations are not affected.
+
+10/20/26
+CIR back end: volatile accesses, loop conditions and linkage of closures
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the C++17
+order of evaluation of an assignment (the right operand first) is kept when an
+operand reads a volatile object or a thread_local variable that is initialized
+dynamically, as a memory-mapped register needs; such a read is also kept in a
+loop condition that is a comma expression, which clang does not fold, and the
+expected value of __builtin_expect in a loop condition is dropped only when it
+has no side effects.  A function that has a closure in a default argument or an
+initializer among its parameters or arguments (and a type in an unnamed
+namespace) is again internal, which an optimization of the previous change
+had made external.  The other configurations are not affected.
+
+10/20/26
+CIR back end: pure and const functions
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: a
+function declared with the GNU pure or const attribute is marked as such in
+the stream (ECIL supp keys 4 and 5), so that the optimizer can treat calls
+of it as reads of memory or as no access to memory, and drop or merge them, as
+clang does.  The same goes for the C library functions that clang's builtin
+table marks pure or const without a condition (the ctype functions isalnum to
+toupper, abs, fabs, floor, ceil, wcslen and so on), for a function of C
+language linkage with that name and signature; sin and the other math functions
+that are const only when errno is not set are not.  The table is generated
+from the pinned LLVM's Builtins.inc by dev_tools/builtins/
+generate-libc-builtins.py into src/builtin_libc_attrs.h.  The other
+configurations are not affected.
+
+10/20/26
+CIR back end: loop conditions and std::nullptr_t
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+condition of a loop that clang folds to a constant but the front end does not
+(a comma expression with a constant right operand and operands without side
+effects, __builtin_expect of a constant) is sent as that constant, so that the
+loop is not taken for one that must make progress.  Reading a std::nullptr_t
+is sent as the null pointer and not as a read of the object, which may be
+uninitialized: the value of a nullptr_t is always defined.  The other
+configurations are not affected.
+
+10/20/26
+CIR back end: dropped inline-only functions
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+declaration that the writer sends for a gnu_inline function whose body it cannot
+write (glibc's _FORTIFY_SOURCE wrappers of printf, sprintf and open, which use
+__builtin_va_arg_pack) says that the function is inline-only, as the issue
+before it did, so that the dropped definition is not taken for an external one,
+which was an error even when nothing used it.  The other configurations are not
+affected.
+
+10/20/26
+CIR back end: faster ECIL writer
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+ECIL writer uses fewer instructions on large translation units.  The answer of
+FALSE of cir_entity_is_tu_local is remembered for the entities of the file
+scope before the names are final, the helpers that write records are inline
+(and still do their CHECKING work), and the check that mangles a function name
+again after it was sent (a CHECKING assertion) looks at a deterministic sample
+of a large translation unit instead of all of it (ECIL_CHECK_ALL_NAMES in the
+environment checks every name).  The writer's share of the front end's
+instructions on a file of 6000 C functions goes from 18.6% to 16.4%, and on a
+file of 6000 C++ functions from 24.4% to 20.4%.  A member selection no longer
+makes the right operand of a C++17 assignment spill into a temporary when both
+operands have no side effects, so some streams are shorter (for example
+"a = val;" in a constructor).  The comment of the region kept for a prototype
+instantiation says why (requires-expressions).  The other configurations are
+not affected.
+
+10/19/26
+CIR back end: facts for the optimizer (ECIL 1.3)
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+streamed declarations carry more of what the front end knows, so that the
+optimizer sees what clang's does.  Function types name the pointers that are
+never null (a reference result, a reference parameter and the object
+parameter); the GNU used attribute is sent on functions and on variables
+(a used static or inline variable that nothing refers to is now emitted, as
+gcc does); an extern "C" function and the allocation and deallocation calls of
+new and delete expressions (and of __builtin_operator_new and
+__builtin_operator_delete) are marked; and a function declared with the inline
+specifier (or an instance of a template that has it, or a lambda's call
+operator, conversion function or static invoker) is marked as a hint to the
+inliner, which an in-class definition, constexpr and an implicit member are
+not.  The static invoker of a lambda passes a local object of the closure type
+to the call operator instead of a null pointer.  The right operand of an
+assignment that is a class value of a class that is passed indirectly is no
+longer loaded, which boost multiprecision needed.  The inline
+specifier is found by a new bit of the declaration modifiers
+(cir_inline_keyword, set where decl_spec.c scans the keyword and read by
+update_routine_decl_modifiers) and a bit in the IL entry prefix next to
+ecil_id (mem_tables.h); the hook is compiled only where
+DECL_MODIFIERS_IN_USE is, and without it the hint is not sent.  The other
+configurations are not affected.
+
 10/19/26
 CIR back end: optimization level and follow-ups to the M4 gate
 

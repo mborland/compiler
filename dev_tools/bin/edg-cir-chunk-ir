@@ -1,0 +1,277 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Chunking costs nothing below its threshold (gate step slow-below-threshold).
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-release-cir (the front end, no ASan) and build/cir (edg-cir):
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-chunk-ir
+
+For small translation units, the ones below the library's default chunking
+threshold, the instructions that edg-cir executes (valgrind cachegrind `Ir`,
+as edg-cir-perf counts them) with the default options must equal those with
+chunking disabled (`--chunk-threshold=4294967295`).  The streams are the C
+and the C++ smoke lists (cir_src/scripts/box_collect_streams.py) and a
+generated C file of --functions (500) functions.  Per stream:
+
+  1. the default run reports 0 chunks (it is below the threshold; a stream
+     that the library chunks by default is above it and is listed, not
+     checked);
+  2. its instruction count is at most --tolerance percent (default 0.1)
+     above the unchunked run's (the same code path: the difference is the
+     reading of the option).
+
+At least --min-streams (20) streams must be checked, so that the check cannot
+pass by finding everything above the threshold.  The interface with the
+library is the stats note of edg-cir-chunk-identity:
+
+  stats: chunked lowering: <N> chunks of at most <K> functions
+
+Exit status: 0 if every check holds, 1 if one fails, 2 for a setup problem.
+The last line is `RESULT: PASS` or `RESULT: FAIL`.
+'''
+
+import argparse
+import concurrent.futures
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+BIN = Path(__file__).resolve().parent
+
+CHUNKS_RE = re.compile(
+  r'stats: chunked lowering: (\d+) chunks of at most (\d+) functions')
+NEVER = 4294967295
+
+
+def load_tool(name: str):
+  '''Import dev_tools/bin/<name> (a file without .py) as a module.'''
+  loader = importlib.machinery.SourceFileLoader(
+    name.replace('-', '_'), str(BIN / name))
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+def cachegrind_total(path: Path) -> int:
+  '''The `summary:` instruction count of a cachegrind output file.'''
+  total = 0
+  for line in path.read_text().splitlines():
+    if line.startswith('summary:'):
+      total = int(line.split()[1])
+  return total
+
+
+def count(valgrind: List[str], env: Dict[str, str], tool: str, stream: Path,
+          flags: List[str], work: Path, timeout: int) -> 'Counted':
+  '''(instructions, exit status, chunk counters) of edg-cir on a stream
+  under cachegrind.'''
+  out = work / f"{stream.stem}.{'-'.join(flags) or 'default'}.cg"
+  try:
+    proc = subprocess.run(
+      [*valgrind, f"--cachegrind-out-file={out}", tool, '-O0',
+       '--emit=asm', '--stats', '-o', os.devnull, *flags, str(stream)],
+      cwd = work, env = env, stdout = subprocess.DEVNULL,
+      stderr = subprocess.PIPE, text = True, errors = 'replace',
+      timeout = timeout)
+  except subprocess.TimeoutExpired:
+    return 0, 124, None
+  match = CHUNKS_RE.search(proc.stderr)
+  return (cachegrind_total(out) if out.exists() else 0), proc.returncode, \
+    ((int(match.group(1)), int(match.group(2))) if match else None)
+
+
+class Verdict:
+  '''What the checks say about one stream.'''
+
+  def __init__(self, name: str) -> None:
+    self.name = name
+    self.kind = 'equal'      # equal | above-threshold | different | setup
+    self.problems: List[str] = []
+    self.default_ir = 0
+    self.unchunked_ir = 0
+
+
+Counted = Tuple[int, int, Optional[Tuple[int, int]]]
+
+
+def judge_counts(name: str, default: Counted, unchunked: Counted,
+                 tolerance: float) -> Verdict:
+  '''The checks 1 and 2 of the docstring on the two counted runs.'''
+  verdict = Verdict(name)
+  verdict.default_ir, verdict.unchunked_ir = default[0], unchunked[0]
+  if default[1] == 64 or unchunked[1] == 64:
+    verdict.kind = 'setup'
+    verdict.problems.append('edg-cir does not know --chunk-threshold '
+                            '(exit status 64)')
+    return verdict
+  if default[2] is None or unchunked[2] is None:
+    verdict.kind = 'setup'
+    verdict.problems.append('no "stats: chunked lowering" line (a library '
+                            'without the S3 counters)')
+    return verdict
+  if default[1] != unchunked[1]:
+    verdict.kind = 'different'
+    verdict.problems.append(f"exit status {default[1]} (default) against "
+                            f"{unchunked[1]} (unchunked)")
+    return verdict
+  if default[1] != 0 or not default[0] or not unchunked[0]:
+    verdict.kind = 'different'
+    verdict.problems.append(f"the run failed or counted nothing (exit "
+                            f"status {default[1]})")
+    return verdict
+  if default[2][0] != 0:
+    verdict.kind = 'above-threshold'
+    return verdict
+  excess = 100.0 * (default[0] - unchunked[0]) / unchunked[0]
+  if excess > tolerance:
+    verdict.kind = 'different'
+    verdict.problems.append(
+      f"{default[0]} instructions with the default options against "
+      f"{unchunked[0]} unchunked: {excess:+.3f}% (limit {tolerance}%)")
+  return verdict
+
+
+def summarize(verdicts: List[Verdict], minimum: int
+              ) -> Tuple[bool, List[str]]:
+  checked = [v for v in verdicts if v.kind in ('equal', 'different')]
+  above = [v for v in verdicts if v.kind == 'above-threshold']
+  lines = [f"{len(verdicts)} streams: {len(checked)} checked below the "
+           f"threshold, {len(above)} above it (not checked), "
+           f"{sum(v.kind == 'different' for v in verdicts)} different"]
+  passes = True
+  if len(checked) < minimum:
+    passes = False
+    lines.append(f"  FAIL vacuous: {len(checked)} streams checked, "
+                 f"{minimum} needed")
+  worst = max(((100.0 * (v.default_ir - v.unchunked_ir) / v.unchunked_ir)
+               for v in checked if v.unchunked_ir), default = 0.0)
+  lines.append(f"largest excess of the default run: {worst:+.4f}%")
+  for v in verdicts:
+    if v.kind in ('different', 'setup'):
+      passes = False
+      lines.append(f"  FAIL {v.name}: {'; '.join(v.problems)}")
+  if above:
+    lines.append('  above the threshold: ' + ', '.join(
+      v.name for v in above[:5]) + (' ...' if len(above) > 5 else ''))
+  return passes, lines
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2])
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--fe-build', default = 'build/gcc-release-cir')
+  parser.add_argument('--c-filter',
+                      default = '@tests/.edgy/filters/cir-c-smoke.txt')
+  parser.add_argument('--cpp-filter',
+                      default = '@tests/.edgy/filters/cir-cpp-smoke.txt')
+  parser.add_argument('--types', default = 'rp')
+  parser.add_argument('--functions', type = int, default = 500,
+                      help = 'functions of the generated C file (0: none)')
+  parser.add_argument('--tolerance', type = float, default = 0.1,
+                      help = 'percent of instructions the default run may '
+                             'have above the unchunked one')
+  parser.add_argument('--min-streams', type = int, default = 20)
+  parser.add_argument('--edg-cir', default = '')
+  parser.add_argument('-j', dest = 'jobs', type = int,
+                      default = os.cpu_count() or 1)
+  parser.add_argument('--timeout', type = int, default = 900)
+  parser.add_argument('--keep', default = '',
+                      help = 'make the streams here and keep them')
+  parser.add_argument('--streams', default = '',
+                      help = 'use the .ecil files of this directory instead '
+                             'of making streams')
+  parser.add_argument('--json', default = '')
+  args = parser.parse_args()
+
+  root = Path(args.root).resolve()
+  perf = load_tool('edg-cir-perf')
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-chunk-ir.'))
+  base = Path(args.keep) if args.keep else Path(
+    tempfile.mkdtemp(prefix = 'edg-cir-chunk-ir-streams.'))
+  try:
+    tools = perf.Tools(root, args.fe_build, work)
+    tool = args.edg_cir or tools.edg_cir
+    if not tool or not Path(tool).exists():
+      print('edg-cir-chunk-ir: no edg-cir (build build/cir; run from the '
+            'repository root)', file = sys.stderr)
+      sys.exit(2)
+    directory = Path(args.streams) if args.streams else base
+    if not args.streams:
+      lazy = load_tool('edg-cir-lazy-identity')
+      exports = tools.exports
+      for label, spec, cxx in (('c', args.c_filter, False),
+                               ('cpp', args.cpp_filter, True)):
+        part = base / label
+        part.mkdir(parents = True, exist_ok = True)
+        print(f"making the {label} streams ...", flush = True)
+        if not lazy.make_corpus_streams(root, part, spec, cxx, args.types,
+                                        args.jobs):
+          print(f"edg-cir-chunk-ir: the {label} streams failed",
+                file = sys.stderr)
+          sys.exit(2)
+      if args.functions:
+        rss = load_tool('edg-cir-rss')
+        part = base / 'generated'
+        part.mkdir(parents = True, exist_ok = True)
+        source = work / f"c{args.functions}.c"
+        rss.generate_functions(args.functions, source)
+        chunk = load_tool('edg-cir-chunk-rss')
+        if not chunk.make_stream(root, exports, source, [],
+                                 part / f"c{args.functions}.ecil"):
+          print('edg-cir-chunk-ir: the generated stream failed',
+                file = sys.stderr)
+          sys.exit(2)
+    streams = sorted(directory.rglob('*.ecil'))
+    print(f"counting {len(streams)} streams ...", flush = True)
+
+    def one(stream: Path) -> Verdict:
+      scratch = Path(tempfile.mkdtemp(dir = work))
+      default = count(perf.VALGRIND, tools.counted_env, tool, stream, [],
+                      scratch, args.timeout)
+      unchunked = count(perf.VALGRIND, tools.counted_env, tool, stream,
+                        [f"--chunk-threshold={NEVER}"], scratch,
+                        args.timeout)
+      return judge_counts(f"{stream.parent.name}/{stream.stem}", default,
+                          unchunked, args.tolerance)
+
+    with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+      verdicts = list(pool.map(one, streams))
+    passes, lines = summarize(verdicts, args.min_streams)
+    print('\n'.join(lines))
+    if any(v.kind == 'setup' for v in verdicts):
+      print('RESULT: FAIL (setup problem)')
+      sys.exit(2)
+    if args.json:
+      Path(args.json).write_text(json.dumps(
+        [{'name': v.name, 'kind': v.kind, 'problems': v.problems,
+          'default_ir': v.default_ir, 'unchunked_ir': v.unchunked_ir}
+         for v in verdicts], indent = 1) + '\n')
+    print(f"RESULT: {'PASS' if passes else 'FAIL'}")
+    sys.exit(0 if passes else 1)
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+    if not args.keep:
+      shutil.rmtree(base, ignore_errors = True)
+
+
+if __name__ == '__main__':
+  main()

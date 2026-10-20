@@ -820,3 +820,105 @@ variable; boost multiprecision is the first one found.
   only and are not in the repository; the keep-reason counters would become the
   CHECKING-only `ECIL_STATS` line proposed in §2.3.
 - `cg_writer.py` (`cir_src/test/writer/tools`) is the one new tool.
+
+## 6. S4 item 5: the lambda / local-class region keep (measured, no action)
+
+Question: the local-class keep (`contains_local_class_type`) holds about 20%
+of the front end's peak on the template TU (W4). Can it be narrowed?
+
+Experiment 1 (box, release FE, C++17): the keep disabled by an environment
+variable. Peak RSS 357.4 MB with it, 357.2 MB without; the 6000-function C++
+TU 57.7 MB both; the C TU 64.7 MB both. The C++ corpus sweep with the keep off
+(debug FE, ASan poisoning on) differs from the sweep with it only in the 199
+purity cases (writer.md section 11), the C corpus has 0 differences, and
+nothing crashed.
+
+Why nothing moves: the reasons overlap. A second measurement counted, at
+every hand-off of a function region (`check_for_done_with_memory_region`),
+all the reasons in `memory_region_should_be_kept_for_routine` that apply, not
+only the first:
+
+| TU | regions kept by | regions | payload |
+| --- | --- | ---: | ---: |
+| templates and lambdas | inline body (constexpr) + local class + constexpr lambda call operator or conversion function + prototype instantiation | 2,400 | 59.9 MB |
+| | kept for a prototype instantiation only | 1,800 | 4.2 MB |
+| | a constexpr function (declared constexpr) | 300 | 1.9 MB |
+| | prototype instantiation and an expression node reference | 300 | 0.7 MB |
+| | freed | 7,201 | 24.8 MB |
+| C++, 6000 functions | inline + local class + constexpr lambda | 300 | 1.8 MB |
+
+Every one of the 2,400 big regions is kept for four reasons at once: its
+lambda call operator is implicitly constexpr in C++17 (a constexpr body is
+kept for the constant evaluator: `keep_function_body_for_possible_inlining`
+returns TRUE for it, and so does the lambda test), its closure is a local
+class, it has the conversion function to a function pointer, and it is a
+prototype instantiation. Removing one reason frees nothing; all four would
+have to be replaced by a predicate that says "this closure cannot be
+constant-evaluated or instantiated later", which the front end cannot
+decide when the function ends (a closure can escape through an auto return
+type or a template argument).
+
+The kept payload is 59.9 MB of the 357 MB peak (17%) on the template TU and
+1.8 MB on the 6000-function C++ TU. The peak that matters is the library's
+in-process one (719 MB), which slice S3 attacks. **No action.**
+
+Method: `memory_region_should_be_kept_for_routine` instrumented in a box-only
+build (the source is restored); `S4_LCSTAT=1` prints one line per hand-off.
+A region is handed off more than once while its functions are unfinished; the
+table counts the final decision of each.
+
+## 7. FE finding: the mangled name of a function whose type has a dependent expression
+
+Found by the attr-diff of checkpoint 20261020-075708 (the callee names of
+libstdc++ and Boost instances that only ours or only clangir had). It is a
+bug of the EDG mangler (`lower_name.c`, the Itanium mangling that every EDG
+back end uses), not of the writer: the writer sends the name the mangler
+gives. A function template whose return type or parameter types contain an
+expression that depends on a template parameter (the usual `enable_if<...>`)
+gets another encoding of that expression than g++ and clang, so the symbol
+differs from the one a g++ or clang object has (an ABI difference: no link
+error unless the instance is shared with such an object, but a different
+symbol).
+
+One translation unit (no headers), mangled by g++ 15.3.1, clang 24 (pin
+2d6f180e) and ours:
+
+    template<bool B, class T = void> struct enable_if {};
+    template<class T> struct enable_if<true, T> { typedef T type; };
+    namespace n {
+    template<class T> struct is_d { static constexpr bool value = true; };
+    template<class T> struct is_e { static constexpr bool value = true; };
+    template<class T> constexpr bool vt = true;
+    template<class T> typename enable_if<is_d<T>::value, T>::type r1(T x);
+    template<class T> typename enable_if<vt<T>, T>::type r2(T x);
+    template<class T> typename enable_if<is_d<T>::value || is_e<T>::value,
+                                         T>::type r3(T x);
+    }
+    int use() { return n::r1(1) + n::r2(1) + n::r3(1); }
+
+| Function | g++ | clang | ours |
+| --- | --- | --- | --- |
+| `n::r1<int>` | `..IXsrNS_4is_dIT_EE5valueES3_E4typeES3_` | `..IXsr4is_dIT_EE5valueES2_E4typeES2_` | `..IXsr1n4is_dIT_EE5valueES2_E4typeES2_` |
+| `n::r2<int>` | `..IX2vtIT_EES2_E4typeES2_` | the same as g++ | `..IL_ZNS_2vtEET_E4typeES2_` |
+| `n::r3<int>` | `..IXoosrNS_4is_dIT_EE5valuesrNS_4is_eIS3_EE5valueES3_E4typeES3_` | `..IXoosr4is_dIT_EE5valuesr4is_eIS2_EE5valueES2_E4typeES2_` | `..IXoosr1n4is_dIT_EE5valuesr1n4is_eIS2_EE5valueES2_E4typeES2_` |
+
+(`..` stands for `_ZN1n2r1IiEEN9enable_if`, `_ZN1n2r2IiEEN9enable_if` and
+`_ZN1n2r3IiEEN9enable_if`.)
+
+What differs:
+- **`r1`, `r3`**: the scope of `is_d<T>::value` in `sr`. g++ writes the
+  qualified scope as a nested name (`srNS_4is_dIT_EE`), clang leaves the
+  namespace out (`sr4is_dIT_EE`), ours writes it as a source-style qualifier
+  (`sr1n4is_dIT_EE`). g++ and clang differ here too, so which one is the
+  Itanium-correct form needs the ABI document or a decision; ours matches
+  neither.
+- **`r2`**: a variable template with a dependent argument is a template-id
+  expression (`vtIT_E`, as both compilers write it); ours mangles it as a
+  reference to an external entity (`L_ZNS_2vtEET_E`), which is only valid for
+  a non-dependent entity.
+
+In libstdc++ these show as `std::duration_cast` (`sr3std6chrono13__is_duration`
+against `sr13__is_duration`) and `std::__invoke_r` (`L_ZSt16is_invocable_r_vET_E`
+against `X16is_invocable_r_vIT_T0_DpT1_EE`), and in Boost's `lcast`
+`stream_in`. How to reproduce: compile the file with `g++ -S`, `clang++ -S` and
+`cpfe-cir --ecil_output` (the name is the STR of the function's DECL_FUNC).

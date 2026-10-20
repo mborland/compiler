@@ -1,0 +1,88 @@
+; S2: ECIL 1.3 key 15 (nonnull_ptrs) on a TY_FUNC marks the references and the
+; object parameter: llvm.noundef, llvm.nonnull, llvm.dereferenceable(size of
+; the pointee) and llvm.align(alignment of the pointee), on the declarations,
+; the definitions and the calls through the type.  The size of a class with
+; CLASS_INFO is its non-virtual size (12 for V: 16 bytes with a 12-byte
+; non-virtual part), of another complete object its size; an incomplete
+; pointee has neither dereferenceable nor align, a function pointee neither.
+; A reference result (bit 0) gets the same.  A pointer that is not marked
+; (bit clear) gets noundef only.
+; RUN: sed 's/features=0x00000000/features=0x00000002/' %S/Inputs/header12_cxx_eh.txt > %t.h
+; RUN: cat %t.h %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s
+
+; CHECK-DAG: declare void @take_s(ptr noundef nonnull align 4 dereferenceable(8))
+; CHECK-DAG: declare void @take_v(ptr noundef nonnull align 8 dereferenceable(12))
+; CHECK-DAG: declare void @take_incomplete(ptr noundef nonnull)
+; CHECK-DAG: declare void @take_fn(ptr noundef nonnull)
+; CHECK-DAG: declare void @plain(ptr noundef)
+; CHECK-DAG: declare noundef nonnull align 4 dereferenceable(8) ptr @ref_result()
+; CHECK-DAG: declare void @second(ptr noundef, ptr noundef nonnull align 4 dereferenceable(8))
+; CHECK-LABEL: define {{.*}}i32 @main(ptr
+; CHECK: call void @take_s(ptr noundef nonnull align 4 dereferenceable(8) %{{.*}})
+; CHECK: call void @plain(ptr noundef %{{.*}})
+
+frame DECLS supp
+  STR 100 "take_s"
+  STR 101 "take_v"
+  STR 102 "take_incomplete"
+  STR 103 "take_fn"
+  STR 104 "plain"
+  STR 105 "ref_result"
+  STR 106 "second"
+  STR 107 "main"
+  STR 108 "S"
+  STR 109 "V"
+  STR 110 "I"
+  STR 111 "a"
+  STR 112 "v"
+  STR 113 "1V"
+  TY_RECORD_DECL 30 0 108
+  TY_RECORD_BODY 30 8 8 4 0 2
+  REC_FIELD 1 0 nil nil nil 0
+  REC_FIELD 1 4 nil nil 112 0
+  TY_RECORD_DECL 31 0 110
+  TY_PTR 32 30
+  TY_PTR 33 31
+  TY_FUNC 34 11 0 []
+  TY_PTR 35 34
+  TY_VPTR 36
+  TY_RECORD_DECL 37 0 109
+  TY_RECORD_BODY 37 16 12 8 12 2
+  REC_FIELD 36 0 nil nil nil 1
+  REC_FIELD 1 8 nil nil 112 0
+  CLASS_MANGLE 37 113
+  CLASS_INFO 37 12 8 nil 2
+  CLASS_BASES 37 []
+  TY_PTR 38 37
+  TY_FUNC 40 11 0 [32] supp{15: 2}
+  TY_FUNC 41 11 0 [38] supp{15: 2}
+  TY_FUNC 42 11 0 [33] supp{15: 2}
+  TY_FUNC 43 11 0 [35] supp{15: 2}
+  TY_FUNC 44 11 0 [32]
+  TY_FUNC 45 32 0 [] supp{15: 1}
+  TY_FUNC 46 11 0 [32, 32] supp{15: 4}
+  TY_FUNC 47 1 0 [32]
+  DECL_FUNC 50 40 0 1 100
+  DECL_FUNC 51 41 0 1 101
+  DECL_FUNC 52 42 0 1 102
+  DECL_FUNC 53 43 0 1 103
+  DECL_FUNC 54 44 0 1 104
+  DECL_FUNC 55 45 0 1 105
+  DECL_FUNC 56 46 0 1 106
+  DECL_FUNC 57 47 0 9 107
+frame REGION
+  FUNC_BEGIN 57 0
+  PARAM 1 32 32 nil 0
+  LREF 1
+  LOAD 0
+  CALL 50 40 1 0
+  LREF 1
+  LOAD 0
+  CALL 54 44 1 0
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

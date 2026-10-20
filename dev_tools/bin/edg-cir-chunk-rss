@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''Peak memory of edg-cir against the size of the translation unit, with
+chunked lowering forced on (gate step chunk-rss, slice S3).
+
+Run it inside the cir-env image from the repository root, after building
+build/gcc-release-cir (the front end, no ASan) and build/cir (edg-cir):
+
+  edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-chunk-rss \\
+      --json curve.json [--baseline m5a-base-rss-curve.json]
+
+It generates C files of 3000, 6000 and 12000 functions and a C++ file of 6000
+functions (edg-cir-rss's generators), makes their ECIL streams with the
+front end and measures the peak resident memory (GNU time, %M) of
+`edg-cir -O0 --emit=asm` on each stream, the minimum of --runs (3) runs, in
+three modes:
+
+  default    no chunk option: what the library does by itself
+  unchunked  `--chunk-threshold=4294967295`: never chunk
+  forced     `--chunk-functions=500 --chunk-threshold=1`: chunk whenever the
+             module has one emitted body or more (the options of the API 2
+             contract: 0 means the library default for both, so forcing is
+             a threshold of 1; --force-threshold and --chunk-size change them)
+
+The table is the curve of peak MB against the number of functions per mode.
+--baseline (a JSON file of an earlier run, e.g. the M5a one, measured with
+--modes default) adds the ratio of every mode to the baseline's default peak
+of the same case, and --target CASE=RATIO (for example c12000=0.55, the S3
+target against M5p) fails the run if the forced mode's peak is above RATIO
+times the baseline's.  The pinned real-world units (--pinned, with
+--boost-include) are measured in the same modes for information: the report
+shows the peak of every unit and which one is the largest.
+
+Non-vacuity: in the forced mode every case must report at least 2 chunks
+(the line below), and the unchunked mode 0.  The interface with the library
+is the stats note of edg-cir-chunk-identity:
+
+  stats: chunked lowering: <N> chunks of at most <K> functions
+
+Exit status: 0 if every check holds, 1 if a target is missed or a run is
+vacuous, 2 for a setup problem.  The last line is `RESULT: PASS` or
+`RESULT: FAIL`.
+'''
+
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+BIN = Path(__file__).resolve().parent
+
+CHUNKS_RE = re.compile(
+  r'stats: chunked lowering: (\d+) chunks of at most (\d+) functions')
+NEVER = 4294967295
+MODES = ('default', 'unchunked', 'forced')
+C_SIZES = (3000, 6000, 12000)
+CXX_SIZES = (6000,)
+
+
+def load_tool(name: str):
+  '''Import dev_tools/bin/<name> (a file without .py) as a module.'''
+  loader = importlib.machinery.SourceFileLoader(
+    name.replace('-', '_'), str(BIN / name))
+  spec = importlib.util.spec_from_loader(loader.name, loader)
+  module = importlib.util.module_from_spec(spec)
+  loader.exec_module(module)
+  return module
+
+
+def mode_flags(mode: str, force_threshold: int, chunk_size: int
+               ) -> List[str]:
+  '''The edg-cir options of a mode.'''
+  if mode == 'default':
+    return []
+  if mode == 'unchunked':
+    return [f"--chunk-threshold={NEVER}"]
+  return [f"--chunk-functions={chunk_size}",
+          f"--chunk-threshold={force_threshold}"]
+
+
+def measure(tool: str, stream: Path, flags: List[str], runs: int,
+            timeout: int) -> Dict[str, object]:
+  '''The minimum peak RSS (MB) over `runs` runs of edg-cir on a stream, the
+  exit status of the last run and the chunk counters it reported.'''
+  peaks: List[float] = []
+  status = 0
+  chunks: Optional[Tuple[int, int]] = None
+  for _ in range(runs):
+    with tempfile.NamedTemporaryFile(prefix = 'edg-cir-chunk-rss.') as out:
+      try:
+        proc = subprocess.run(
+          ['/usr/bin/env', 'time', '-f', 'RSSKB %M', tool, '-O0',
+           '--emit=asm', '--stats', '-o', out.name, *flags, str(stream)],
+          stdout = subprocess.DEVNULL, stderr = subprocess.PIPE, text = True,
+          errors = 'replace', timeout = timeout)
+      except subprocess.TimeoutExpired:
+        return {'error': 'timeout'}
+    status = proc.returncode
+    if status != 0:
+      return {'error': f"exit status {status}: "
+                       f"{proc.stderr.strip().splitlines()[-1:]}"}
+    match = CHUNKS_RE.search(proc.stderr)
+    if match:
+      chunks = (int(match.group(1)), int(match.group(2)))
+    rss = re.search(r'^RSSKB (\d+)', proc.stderr, re.M)
+    if rss:
+      peaks.append(int(rss.group(1)) / 1024.0)
+  if not peaks:
+    return {'error': 'no peak RSS in the output of time'}
+  return {'peak_mb': round(min(peaks), 1), 'runs': peaks,
+          'chunks': chunks[0] if chunks else None,
+          'chunk_size': chunks[1] if chunks else None}
+
+
+def judge(curve: Dict[str, Dict[str, dict]], baseline: Optional[dict],
+          targets: Dict[str, float], modes: List[str]
+          ) -> Tuple[bool, List[str]]:
+  '''(passes, report lines): the curve table, the non-vacuity of the forced
+  runs and the targets against the baseline.'''
+  lines: List[str] = []
+  passes = True
+  header = f"{'case':<10}" + ''.join(f"{m:>12}" for m in modes)
+  if baseline:
+    header += f"{'forced/base':>13}"
+  lines.append(header)
+  for case, by_mode in curve.items():
+    cells = []
+    for mode in modes:
+      row = by_mode.get(mode, {})
+      cells.append(f"{row['peak_mb']:>12.1f}" if 'peak_mb' in row
+                   else f"{'n/a':>12}")
+    ratio = ''
+    base = (baseline or {}).get(case, {}).get('default', {}).get('peak_mb')
+    forced = by_mode.get('forced', {}).get('peak_mb')
+    if baseline:
+      ratio = f"{forced / base:>13.2f}" if forced and base else f"{'-':>13}"
+    lines.append(f"{case:<10}" + ''.join(cells) + ratio)
+    for mode in modes:
+      row = by_mode.get(mode, {})
+      if 'error' in row:
+        passes = False
+        lines.append(f"FAIL {case} {mode}: {row['error']}")
+      elif mode == 'forced' and (row.get('chunks') or 0) < 2:
+        passes = False
+        lines.append(f"FAIL {case} forced: vacuous: {row.get('chunks')} "
+                     f"chunks (2 or more expected)")
+      elif mode == 'unchunked' and row.get('chunks') != 0:
+        passes = False
+        lines.append(f"FAIL {case} unchunked: {row.get('chunks')} chunks "
+                     f"(0 expected)")
+  for case, limit in targets.items():
+    forced = curve.get(case, {}).get('forced', {}).get('peak_mb')
+    base = (baseline or {}).get(case, {}).get('default', {}).get('peak_mb')
+    if not forced or not base:
+      passes = False
+      lines.append(f"FAIL target {case}: not measured or no baseline")
+      continue
+    ratio = forced / base
+    ok = ratio <= limit
+    passes = passes and ok
+    lines.append(f"{'ok  ' if ok else 'FAIL'} target {case}: forced "
+                 f"{forced:.1f} MB is {100 * ratio:.1f}% of the baseline's "
+                 f"{base:.1f} MB (limit {100 * limit:.0f}%)")
+  return passes, lines
+
+
+def make_stream(root: Path, exports: Dict[str, str], source: Path,
+                options: List[str], out: Path) -> bool:
+  '''The ECIL stream of a source through eccp and the front end (the stream
+  is out); whether it exists.'''
+  env = dict(os.environ)
+  env.update(exports)
+  env['EDG_BASE'] = str(root / 'bases/docker/cir-env/gcc')
+  env['ECCP_LIBDIR'] = exports.get('EDG_CIR_RT_LIBDIR', '')
+  env['EDG_USE_SYSTEM_HEADERS'] = '1'
+  env['KEEP_FE'] = exports['CPFE_CIR']
+  env['CPFE'] = str(root / 'cir_src/scripts/keep-stream-fe.sh')
+  env['KEEP_STREAM'] = str(out.with_suffix(''))
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-chunk-rss-fe.'))
+  try:
+    shutil.copy2(source, work / source.name)
+    subprocess.run([str(root / 'util/eccp.sh'), '-S', *options, source.name],
+                   cwd = work, env = env, stdout = subprocess.DEVNULL,
+                   stderr = subprocess.DEVNULL, timeout = 1800)
+  except (OSError, subprocess.TimeoutExpired):
+    pass
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+  return out.exists() and out.stat().st_size > 0
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(
+    description = __doc__.split('\n')[0],
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = __doc__.split('\n', 2)[2])
+  parser.add_argument('--root', default = '.', help = 'repository root')
+  parser.add_argument('--fe-build', default = 'build/gcc-release-cir',
+                      help = 'build directory of the (non-ASan) cpfe-cir')
+  parser.add_argument('--c-sizes', default = ','.join(map(str, C_SIZES)))
+  parser.add_argument('--cxx-sizes', default = ','.join(map(str, CXX_SIZES)))
+  parser.add_argument('--modes', default = ','.join(MODES),
+                      help = f"comma separated: {', '.join(MODES)}")
+  parser.add_argument('--runs', type = int, default = 3,
+                      help = 'runs per measurement (the minimum counts)')
+  parser.add_argument('--force-threshold', type = int, default = 1)
+  parser.add_argument('--chunk-size', type = int, default = 500)
+  parser.add_argument('--baseline', default = '',
+                      help = 'JSON of an earlier run (--json)')
+  parser.add_argument('--target', action = 'append', default = [],
+                      metavar = 'CASE=RATIO',
+                      help = 'the forced peak of CASE (c12000, cxx6000, ...) '
+                             'at most RATIO of the baseline default peak')
+  parser.add_argument('--pinned', action = 'store_true',
+                      help = 'also measure the pinned real-world units '
+                             '(for information)')
+  parser.add_argument('--boost-include', default = '')
+  parser.add_argument('--edg-cir', default = '')
+  parser.add_argument('--timeout', type = int, default = 1200)
+  parser.add_argument('--json', default = '')
+  args = parser.parse_args()
+
+  root = Path(args.root).resolve()
+  rss = load_tool('edg-cir-rss')
+  exports = rss.load_exports(root / args.fe_build / 'environment.sh')
+  tool = args.edg_cir or exports.get('EDG_CIR_TOOL', '')
+  if not tool or not Path(tool).exists() or 'CPFE_CIR' not in exports:
+    print(f"edg-cir-chunk-rss: no edg-cir or cpfe-cir (build build/cir and "
+          f"{args.fe_build}; run from the repository root)", file = sys.stderr)
+    sys.exit(2)
+  modes = [m for m in args.modes.split(',') if m]
+  if [m for m in modes if m not in MODES]:
+    print(f"edg-cir-chunk-rss: modes are {', '.join(MODES)}",
+          file = sys.stderr)
+    sys.exit(2)
+  targets: Dict[str, float] = {}
+  for item in args.target:
+    case, _, ratio = item.partition('=')
+    targets[case] = float(ratio)
+  baseline = None
+  if args.baseline:
+    data = json.loads(Path(args.baseline).read_text())
+    baseline = data.get('curve', data)
+  work = Path(tempfile.mkdtemp(prefix = 'edg-cir-chunk-rss.'))
+  curve: Dict[str, Dict[str, dict]] = {}
+  try:
+    inputs: List[Tuple[str, Path, List[str]]] = []
+    for size in [int(s) for s in args.c_sizes.split(',') if s]:
+      source = work / f"c{size}.c"
+      rss.generate_functions(size, source)
+      inputs.append((f"c{size}", source, []))
+    for size in [int(s) for s in args.cxx_sizes.split(',') if s]:
+      source = work / f"cxx{size}.cpp"
+      rss.generate_cxx_functions(size, source)
+      inputs.append((f"cxx{size}", source, ['--c++17']))
+    if args.pinned:
+      perf = load_tool('edg-cir-perf')
+      boost = str((root / args.boost_include).resolve()) \
+        if args.boost_include else ''
+      for unit in perf.PINNED_UNITS:
+        include = [f"-I{boost}"] if boost and 'boost' in unit else []
+        inputs.append((unit, root / 'dev_tools/cir-realworld' /
+                       f"{unit}.cpp", [*perf.REALWORLD_FLAGS, *include]))
+    failed: List[str] = []
+    for case, source, options in inputs:
+      stream = work / (case.replace('/', '__') + '.ecil')
+      print(f"making the stream of {case} ...", flush = True)
+      if not make_stream(root, exports, source, options, stream):
+        failed.append(case)
+        continue
+      curve[case] = {}
+      for mode in modes:
+        print(f"measuring {case} {mode} ...", flush = True)
+        curve[case][mode] = measure(
+          tool, stream, mode_flags(mode, args.force_threshold,
+                                   args.chunk_size), args.runs, args.timeout)
+      stream.unlink()
+    passes, lines = judge({c: m for c, m in curve.items()
+                           if '/' not in c}, baseline, targets, modes)
+    pinned = {c: m for c, m in curve.items() if '/' in c}
+    if pinned:
+      lines.append('pinned real-world units (information):')
+      lines.append(f"{'unit':<24}" + ''.join(f"{m:>12}" for m in modes))
+      for case, by_mode in sorted(pinned.items()):
+        lines.append(f"{case:<24}" + ''.join(
+          f"{by_mode.get(m, {}).get('peak_mb', float('nan')):>12.1f}"
+          for m in modes))
+      largest = max(pinned, key = lambda c: pinned[c].get(
+        'default', pinned[c].get(modes[0], {})).get('peak_mb', 0))
+      lines.append(f"largest: {largest}")
+    for case in failed:
+      passes = False
+      lines.append(f"FAIL {case}: the front end made no stream")
+    print('\n'.join(lines))
+    if args.json:
+      Path(args.json).write_text(json.dumps(
+        {'curve': curve, 'meta': {'runs': args.runs, 'modes': modes,
+                                  'chunk_size': args.chunk_size,
+                                  'force_threshold': args.force_threshold}},
+        indent = 1, sort_keys = True) + '\n')
+    print(f"RESULT: {'PASS' if passes else 'FAIL'}")
+    sys.exit(0 if passes else 1)
+  finally:
+    shutil.rmtree(work, ignore_errors = True)
+
+
+if __name__ == '__main__':
+  main()

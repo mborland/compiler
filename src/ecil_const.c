@@ -1532,7 +1532,8 @@ one literal to the next.
           ecil_word_register(key, n_words, gid);
           ecil_emit_decl_var(frame, gid, t, (unsigned int)elk_private,
                              ECIL_DECL_VAR_DEFINITION | ECIL_DECL_VAR_CONST |
-                             ECIL_DECL_VAR_STRING_LITERAL, 0, name_sid);
+                             ECIL_DECL_VAR_STRING_LITERAL, 0, name_sid,
+                             FALSE);
           saved = ecil_frame_enter_decl(frame);
           emit_string_bytes(frame, constant, t);
           ecil_rec1(frame, eop_var_init, gid);
@@ -1684,7 +1685,8 @@ GUARDED if it is a static local or has vague linkage (spec 11.7).
   }  /* if */
   if (ecil_unsupported_reason == NULL) {
     ecil_emit_decl_var(frame, gid, type, linkage, flags,
-                       (uint32_t)ecil_variable_alignment(var), name_sid);
+                       (uint32_t)ecil_variable_alignment(var), name_sid,
+                       ecil_variable_is_used(var));
     ecil_gid_info(gid)->flags |= ECIL_GF_DEFINED;
   }  /* if */
 }  /* begin_variable_definition */
@@ -2068,11 +2070,13 @@ this translation unit (tentative definitions included, without VAR_INIT).
       skip = TRUE;                   /* A declaration only. */
     }  /* if */
     if (!skip && var->storage_class == (a_storage_class)sc_static &&
-        !var->source_corresp.referenced && ecil_gid_of(var) == 0) {
-      skip = TRUE;                   /* An unreferenced static. */
+        !var->source_corresp.referenced && ecil_gid_of(var) == 0 &&
+        !ecil_variable_is_used(var)) {
+      skip = TRUE;                   /* An unreferenced static (that is not
+                                        marked used). */
     }  /* if */
     if (!skip && !C_mode() && ecil_gid_of(var) == 0 &&
-        !var->source_corresp.referenced &&
+        !var->source_corresp.referenced && !ecil_variable_is_used(var) &&
         !(var->explicit_instantiation &&
           !var->explicit_do_not_instantiate) &&
         ecil_variable_may_have_multiple_copies(var)) {

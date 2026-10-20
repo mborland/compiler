@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -51,9 +51,9 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   TY_PTR 9 4
-  TY_FUNC 10 4 0 [9]
+  TY_FUNC 10 4 0 [9] supp{15: 2}
   STR 11 "_Z4copyRK1A"
   DECL_FUNC 11 10 0 0 11
   DECL_FUNC 11 10 0 1 11
@@ -68,11 +68,11 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 13 "B"
   TY_RECORD_DECL 12 0 13
   TY_PTR 13 12
-  TY_FUNC 14 1 0 [13]
+  TY_FUNC 14 1 0 [13] supp{15: 2}
   STR 14 "j"
   TY_RECORD_BODY 12 4 4 4 0 1
   REC_FIELD 1 0 nil nil 14 0
@@ -91,8 +91,8 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
-  TY_FUNC 16 1 0 [13, 1]
+frame REGION supp
+  TY_FUNC 16 1 0 [13, 1] supp{15: 2}
   STR 17 "_ZN1B3setEi"
   DECL_FUNC 17 16 0 2 17
   DECL_FUNC 17 16 3 67 17
@@ -101,16 +101,11 @@ frame REGION
   PARAM 1 13 13 16 1
   PARAM 2 1 1 18 0
   BLOCK_BEGIN
-  LOCAL 3 1 nil 0 0
-  LREF 3
-  LREF 2
-  LOAD 0
-  STORE 2 0
   LREF 1
   LOAD 0
   DEREF
   FIELD 12 0
-  LREF 3
+  LREF 2
   LOAD 0
   STORE 0 0
   LREF 2
@@ -131,8 +126,8 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
-  TY_FUNC 20 1 0 [13, 13]
+frame REGION supp
+  TY_FUNC 20 1 0 [13, 13] supp{15: 4}
   STR 20 "_Z3useP1BRS_"
   DECL_FUNC 21 20 0 0 20
   DECL_FUNC 21 20 0 1 20
@@ -218,9 +213,9 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   TY_PTR 28 1
-  TY_FUNC 29 1 0 [28, 28]
+  TY_FUNC 29 1 0 [28, 28] supp{15: 6}
   STR 27 "_Z4refsRiRKi"
   DECL_FUNC 30 29 0 0 27
   DECL_FUNC 30 29 0 1 27

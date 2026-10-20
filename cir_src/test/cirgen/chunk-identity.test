@@ -1,0 +1,7 @@
+; Chunked lowering (S3) against the whole-module lowering, on every stream of
+; the cirgen tests, at -O0 and -O2: with chunking forced on and one function
+; body per chunk the assembly (and the status and diagnostics) must be the
+; same as when the module is lowered as one.  The streams cover internal
+; linkage, comdats, aliases (structor pairs), global constructors, catch-copy
+; thunks, vtables and available_externally functions across chunks.
+; RUN: %python %scripts/chunk_identity_tests.py %S %ecil-asm %edg-cir %t.d

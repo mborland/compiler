@@ -1,0 +1,24 @@
+; A format error inside the body of a function that lazy emission defers is
+; still reported on arrival: the reader validates the records before they are
+; kept.  (Here LREF names a local that was never declared.)  The body is
+; never replayed (nothing calls the function), yet the stream is rejected, as
+; in eager mode.
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: %not %edg-cir --eager-bodies --emit=cir %t.ecil 2>&1 | %FileCheck %s
+
+; CHECK: error [1001]: LREF: unknown local id
+
+frame DECLS
+  STR 100 "f"
+  TY_FUNC 21 1 0 []
+  DECL_FUNC 40 21 3 65 100
+frame REGION
+  FUNC_BEGIN 40 0
+  LREF 7
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

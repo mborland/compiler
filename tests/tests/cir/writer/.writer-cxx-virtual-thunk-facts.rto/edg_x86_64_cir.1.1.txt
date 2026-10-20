@@ -1,5 +1,5 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
-ecil 1.3 features=0x0000000a
+ecil 1.3 features=0x0000001a
 frame HEADER
   STR 1 "x86_64-unknown-linux-gnu"
   STR 2 ""
@@ -14,12 +14,12 @@ frame HEADER
   HDR_TYPE_ROLE 3 1
   HDR_TYPE_ROLE 1 2
   HDR_TYPE_ROLE 2 3
-frame REGION
+frame REGION supp
   TY_VOID 4
   STR 5 "R0"
   TY_RECORD_DECL 5 0 5
   TY_PTR 6 5
-  TY_FUNC 7 4 0 [6]
+  TY_FUNC 7 4 0 [6] supp{15: 2}
   TY_VPTR 8
   TY_RECORD_BODY 5 8 8 8 12 1
   REC_FIELD 8 0 nil nil nil 1
@@ -52,11 +52,11 @@ frame REGION
   RETURN_STMT false
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 12 "A1"
   TY_RECORD_DECL 15 0 12
   TY_PTR 16 15
-  TY_FUNC 17 1 0 [16]
+  TY_FUNC 17 1 0 [16] supp{15: 2}
   STR 13 "a1"
   TY_RECORD_BODY 15 16 12 8 4 2
   REC_FIELD 8 0 nil nil nil 1
@@ -77,11 +77,11 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 16 "A2"
   TY_RECORD_DECL 19 0 16
   TY_PTR 20 19
-  TY_FUNC 21 1 0 [20, 1]
+  TY_FUNC 21 1 0 [20, 1] supp{15: 2}
   STR 17 "a2"
   TY_RECORD_BODY 19 16 12 8 4 2
   REC_FIELD 8 0 nil nil nil 1
@@ -93,7 +93,7 @@ frame REGION
   STR 19 "_ZN2A21gEi"
   DECL_FUNC 22 21 0 2 19
   DECL_FUNC 22 21 3 67 19
-  TY_FUNC 23 6 0 [20]
+  TY_FUNC 23 6 0 [20] supp{15: 2}
   STR 20 "_ZN2A21hEv"
   DECL_FUNC 24 23 0 2 20
   CLASS_VFUNCS 19 [22, 0, 0, 2, 24, 1, 0, 3]
@@ -115,11 +115,11 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 21 "C"
   TY_RECORD_DECL 25 0 21
   TY_PTR 26 25
-  TY_FUNC 27 1 0 [26, 1]
+  TY_FUNC 27 1 0 [26, 1] supp{15: 2}
   TY_RECORD_BODY 25 32 28 8 4 2
   REC_FIELD 15 0 nil nil nil 17
   REC_FIELD 19 16 nil nil nil 17
@@ -138,11 +138,11 @@ frame REGION
   CLASS_MANGLE 29 25
   CLASS_INFO 29 8 8 0 2
   CLASS_BASES 29 [0, 1]
-  TY_FUNC 30 1 0 [26]
+  TY_FUNC 30 1 0 [26] supp{15: 2}
   STR 26 "_ZN1C1fEv"
   DECL_FUNC 31 30 0 0 26
   TY_PTR 32 29
-  TY_FUNC 33 32 0 [26]
+  TY_FUNC 33 32 0 [26] supp{15: 2}
   STR 27 "_ZN1C1hEv"
   DECL_FUNC 34 33 0 0 27
   CLASS_VFUNCS 25 [31, 0, 0, 1, 28, 1, 0, 2, 34, 2, 0, 3]

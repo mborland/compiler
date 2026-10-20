@@ -48,6 +48,13 @@ summary = load_tool('edg-cir-summary')
 gate = load_tool('edg-cir-gate-evidence')
 rss = load_tool('edg-cir-rss')
 checkpoint = load_tool('edg-cir-checkpoint')
+perf = load_tool('edg-cir-perf')
+lazy = load_tool('edg-cir-lazy-identity')
+attr = load_tool('edg-cir-attr-diff')
+chunk_identity = load_tool('edg-cir-chunk-identity')
+chunk_rss = load_tool('edg-cir-chunk-rss')
+chunk_ir = load_tool('edg-cir-chunk-ir')
+names_check = load_tool('edg-cir-names-check')
 
 # The compile output of the M3 gate's one excused crash
 # (imported/gnu/cpp/DRs/dr2867-2.sft.cpp, --c++11): the front end aborts in
@@ -1186,28 +1193,31 @@ class CheckpointTest(unittest.TestCase):
     self.assertEqual(checkpoint.headroom_gb('ssh: error\n'), -1)
 
   def make_tree(self, tree: Path) -> None:
-    '''Entries old1..old5 (old1 has a KEEP file), fresh1 and fresh2 (now) in
-    every directory that can be pruned, and the evidence directories.'''
+    '''Entries prunetest_old1..prunetest_old5 (prunetest_old1 has a KEEP
+    file), fresh1 and fresh2 (now) in every directory that can be pruned, and
+    the evidence directories.'''
     directories = [*checkpoint.PRUNE_DIRS, *checkpoint.EVIDENCE_DIRS]
     for directory in directories:
-      names = [f"old{n}" for n in range(1, 6)] + ['fresh1', 'fresh2']
+      names = [f"prunetest_old{n}" for n in range(1, 6)] + ['fresh1', 'fresh2']
       for name in names:
         entry = tree / directory / name
         entry.mkdir(parents = True, exist_ok = True)
         (entry / 'f').write_text('x')
-        if name.startswith('old'):
-          stamp = 1_700_000_000 + int(name[3:])
+        if name.startswith('prunetest_old'):
+          stamp = 1_700_000_000 + int(name[len('prunetest_old'):])
           os.utime(entry, (stamp, stamp))
-    for name in [f"old{n}" for n in range(1, 6)] + ['fresh1', 'fresh2']:
+    for name in [f"prunetest_old{n}" for n in range(1, 6)] + \
+        ['fresh1', 'fresh2']:
       entry = tree / '.tmp' / f"checkpoint-{name}"
       entry.mkdir(parents = True, exist_ok = True)
-      if name.startswith('old'):
-        stamp = 1_700_000_000 + int(name[3:])
+      if name.startswith('prunetest_old'):
+        stamp = 1_700_000_000 + int(name[len('prunetest_old'):])
         os.utime(entry, (stamp, stamp))
     for directory in (*checkpoint.PRUNE_DIRS, *checkpoint.EVIDENCE_DIRS):
-      (tree / directory / 'old1' / 'KEEP').write_text('')
-      os.utime(tree / directory / 'old1', (1_700_000_001, 1_700_000_001))
-    (tree / '.tmp' / 'checkpoint-old1' / 'KEEP').write_text('')
+      (tree / directory / 'prunetest_old1' / 'KEEP').write_text('')
+      os.utime(tree / directory / 'prunetest_old1',
+               (1_700_000_001, 1_700_000_001))
+    (tree / '.tmp' / 'checkpoint-prunetest_old1' / 'KEEP').write_text('')
 
   def names(self, tree: Path, directory: str, pattern: str = '*') -> List[str]:
     return sorted(p.name for p in (tree / directory).glob(pattern))
@@ -1216,21 +1226,25 @@ class CheckpointTest(unittest.TestCase):
     with tempfile.TemporaryDirectory() as tmp:
       tree = Path(tmp)
       self.make_tree(tree)
-      # A process that uses old3: its name is on a command line.
-      user = subprocess.Popen(['bash', '-c', 'sleep 20; : old3 checkpoint-old3'])
+      # A process that uses prunetest_old3: its name is on a command line.
+      user = subprocess.Popen(['bash', '-c', 'sleep 20; : prunetest_old3 '
+                              'checkpoint-prunetest_old3'])
       self.addCleanup(user.kill)
       proc = subprocess.run(
         ['bash', '-c', checkpoint.prune_command(1)], cwd = tree,
         stdout = subprocess.PIPE, text = True)
       self.assertEqual(proc.returncode, 0)
-      # keep=1: the newest (fresh) survive by age; old1 has KEEP; old3 is in
-      # use; old2, old4 and old5 are pruned.
+      # keep=1: the newest (fresh) survive by age; prunetest_old1 has KEEP;
+      # prunetest_old3 is in use; prunetest_old2, prunetest_old4 and
+      # prunetest_old5 are pruned.
       for directory in checkpoint.PRUNE_DIRS:
         self.assertEqual(self.names(tree, directory),
-                         ['fresh1', 'fresh2', 'old1', 'old3'], directory)
+                         ['fresh1', 'fresh2', 'prunetest_old1',
+                          'prunetest_old3'], directory)
       self.assertEqual(self.names(tree, '.tmp', 'checkpoint-*'),
                        ['checkpoint-fresh1', 'checkpoint-fresh2',
-                        'checkpoint-old1', 'checkpoint-old3'])
+                        'checkpoint-prunetest_old1',
+                        'checkpoint-prunetest_old3'])
       # The evidence directories are not touched without the option.
       for directory in checkpoint.EVIDENCE_DIRS:
         self.assertEqual(len(self.names(tree, directory)), 7, directory)
@@ -1243,7 +1257,8 @@ class CheckpointTest(unittest.TestCase):
         cwd = tree, stdout = subprocess.PIPE, text = True)
       for directory in checkpoint.EVIDENCE_DIRS:
         self.assertEqual(self.names(tree, directory),
-                         ['fresh1', 'fresh2', 'old1', 'old3'], directory)
+                         ['fresh1', 'fresh2', 'prunetest_old1',
+                          'prunetest_old3'], directory)
 
   def test_protected_trees(self) -> None:
     for tree in ('m3-final', 'm4-final', 'm41-int', 'm5p-int'):
@@ -1616,6 +1631,1472 @@ class CheckpointLean(unittest.TestCase):
        sys.argv, directory) = saved
       os.chdir(directory)
     self.assertEqual(raised.exception.code, 2)
+
+
+ASM_A = """\t.text
+\t.file\t"x.cpp"
+\t.globl\tmain
+\t.type\tmain,@function
+main:
+.LBB0_0:
+\tcallq\t_Z1fv
+\tjmp\t.LBB0_1
+.LBB0_1:
+\tretq
+.Lfunc_end0:
+\t.size\tmain, .Lfunc_end0-main
+                                        # -- End function
+\t.section\t.text._Z1fv,"axG",@progbits,_Z1fv,comdat
+\t.type\t_Z1fv,@function
+_Z1fv:
+.LBB1_0:
+\tretq
+.Lfunc_end1:
+\t.size\t_Z1fv, .Lfunc_end1-_Z1fv
+                                        # -- End function
+\t.hidden\t__dso_handle
+"""
+
+
+class LazyAsm(unittest.TestCase):
+  def test_split_asm(self):
+    functions, rest = lazy.split_asm(ASM_A)
+    self.assertEqual(sorted(functions), ['_Z1fv', 'main'])
+    self.assertTrue(functions['main'][0].startswith('\t.type\tmain'))
+    self.assertTrue(functions['main'][-1].endswith('End function'))
+    self.assertIn('\t.hidden\t__dso_handle', rest)
+    self.assertIn('\t.globl\tmain', rest)
+
+  def test_labels_are_numbered_by_first_appearance(self):
+    lines = ['.Ltmp7:', 'jmp .LBB3_2', '.Ltmp7:', '.Ltmp9:']
+    self.assertEqual(lazy.renumber_labels(lines),
+                     ['.Ltmp0:', 'jmp .LBB1_2', '.Ltmp0:', '.Ltmp2:'])
+
+  def test_identical_assembly(self):
+    self.assertEqual(lazy.compare_asm(ASM_A, ASM_A), ([], True))
+
+  def test_a_moved_line_and_other_numbers_are_no_difference(self):
+    other = ASM_A.replace('\t.hidden\t__dso_handle\n', '')
+    other = other.replace('\t.file\t"x.cpp"\n',
+                          '\t.file\t"x.cpp"\n\t.hidden\t__dso_handle\n')
+    other = other.replace('.LBB1_0', '.LBB5_0').replace('.Lfunc_end1',
+                                                         '.Lfunc_end5')
+    self.assertEqual(lazy.compare_asm(ASM_A, other), ([], False))
+
+  def test_a_changed_body_is_a_problem(self):
+    other = ASM_A.replace('\tretq\n.Lfunc_end1', '\tnop\n\tretq\n.Lfunc_end1')
+    problems, same = lazy.compare_asm(ASM_A, other)
+    self.assertFalse(same)
+    self.assertEqual(len(problems), 1)
+    self.assertIn('different bodies: _Z1fv', problems[0])
+
+  def test_a_missing_function_is_a_problem(self):
+    functions = ASM_A[:ASM_A.index('\t.section\t.text._Z1fv')]
+    problems, _ = lazy.compare_asm(functions, ASM_A)
+    self.assertTrue(any('only in eager: _Z1fv' in p for p in problems))
+
+  def test_a_changed_data_line_is_a_problem(self):
+    problems, _ = lazy.compare_asm(
+      ASM_A, ASM_A.replace('.hidden\t__dso_handle', '.weak\t__dso_handle'))
+    self.assertEqual(len(problems), 1)
+    self.assertIn('remaining lines', problems[0])
+
+
+def lazy_run(status=0, asm=ASM_A, counts=(10, 6, 4), replayed=(), dropped=(),
+             diagnostics=()):
+  '''A Run of edg-cir as the tool reads it.'''
+  lines = list(diagnostics)
+  if counts is not None:
+    lines.append('note: stats: lazy bodies: %d deferred, %d replayed, '
+                 '%d dropped' % counts)
+  lines += ['note: stats: lazy replayed %s' % s for s in replayed]
+  lines += ['note: stats: lazy dropped %s' % s for s in dropped]
+  lines.append('note: stats: 12 frames, 90 records, 1000 bytes, peak RSS 5')
+  return lazy.Run(status, asm, '\n'.join(lines))
+
+
+class LazyJudge(unittest.TestCase):
+  def judge(self, lazy_run_, eager_run, pinned=False):
+    return lazy.judge_pair('s', lazy_run_, eager_run, pinned)
+
+  def test_an_equal_pair_is_identical(self):
+    verdict = self.judge(lazy_run(replayed=['_Z1fv'] + ['a'] * 5,
+                                  dropped=['b'] * 4),
+                         lazy_run(counts=(0, 0, 0)))
+    self.assertEqual((verdict.kind, verdict.problems), ('identical', []))
+    self.assertTrue(verdict.byte_identical)
+    self.assertEqual(verdict.survivors_deferred, 1)
+    self.assertEqual(verdict.overshoot, 1)
+
+  def test_the_stats_notes_are_no_diagnostics(self):
+    run = lazy_run(diagnostics=['warning: x'])
+    self.assertEqual(run.diagnostics, ['warning: x'])
+    self.assertEqual(run.counts, (10, 6, 4))
+
+  def test_different_assembly_fails(self):
+    verdict = self.judge(lazy_run(),
+                         lazy_run(counts=(0, 0, 0),
+                                  asm=ASM_A.replace('callq', 'call')))
+    self.assertEqual(verdict.kind, 'different')
+
+  def test_a_dropped_function_that_eager_keeps_fails_the_oracle(self):
+    verdict = self.judge(lazy_run(replayed=['x'] * 6,
+                                  dropped=['_Z1fv', 'b', 'c', 'd']),
+                         lazy_run(counts=(0, 0, 0)))
+    self.assertEqual(verdict.kind, 'different')
+    self.assertTrue(any('oracle' in p and '_Z1fv' in p
+                        for p in verdict.problems))
+
+  def test_eager_only_diagnostics_are_a_finding_with_their_diagnostics(self):
+    eager = lazy_run(status=1, counts=(0, 0, 0), asm='',
+                     diagnostics=['error: unsupported construct'])
+    verdict = self.judge(lazy_run(asm=''), eager)
+    self.assertEqual((verdict.kind, verdict.problems), ('eager-only', []))
+    self.assertEqual(verdict.eager_extra, ['error: unsupported construct'])
+    pinned = self.judge(lazy_run(asm=''), eager, pinned=True)
+    self.assertTrue(pinned.problems)
+
+  def test_an_eager_only_case_fails_the_step_unless_triaged(self):
+    eager = lazy_run(status=1, counts=(0, 0, 0), asm='',
+                     diagnostics=['error: unsupported construct'])
+    verdict = lazy.judge_pair('c/x.0', lazy_run(asm=''), eager, False)
+    passes, lines = lazy.summarize({'c': [verdict]})
+    self.assertFalse(passes)
+    self.assertTrue(any('FAIL finding c/x.0' in l and
+                        'error: unsupported construct' in l for l in lines))
+    passes, lines = lazy.summarize({'c': [verdict]},
+                                   {'c/x.0': 'a dropped inline asm body'})
+    self.assertTrue(passes, lines)
+    self.assertTrue(any(l.startswith('  triaged c/x.0: a dropped inline')
+                        for l in lines))
+
+  def test_a_pinned_case_is_never_triaged(self):
+    eager = lazy_run(status=1, counts=(0, 0, 0), asm='',
+                     diagnostics=['error: x'])
+    verdict = lazy.judge_pair('pinned/u', lazy_run(asm=''), eager, True)
+    passes, lines = lazy.summarize({'pinned': [verdict]},
+                                   {'pinned/u': 'a long enough reason'})
+    self.assertFalse(passes)
+    self.assertTrue(any('FAIL finding pinned/u' in l for l in lines))
+
+  def test_a_stale_triage_line_fails_only_for_a_set_that_was_run(self):
+    good = lazy.judge_pair('c/a.0', lazy_run(), lazy_run(counts=(0, 0, 0)),
+                           False)
+    passes, lines = lazy.summarize({'c': [good]},
+                                   {'c/gone.0': 'old reason ok'})
+    self.assertFalse(passes)
+    self.assertTrue(any('stale triage line c/gone.0' in l for l in lines))
+    passes, _ = lazy.summarize({'c': [good]}, {'cpp/other.0': 'a reason ok'})
+    self.assertTrue(passes)
+
+  def test_the_triage_file(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      path = Path(tmp) / 'triage.txt'
+      path.write_text('# c\ncpp/a.0 | a real reason here\n\n')
+      self.assertEqual(lazy.read_triage(str(path)),
+                       ({'cpp/a.0': 'a real reason here'}, []))
+      path.write_text('cpp/a.0 | todo\ncpp/b.0\ncpp/c.0 | fine reason x\n'
+                      'cpp/c.0 | fine reason x\n')
+      problems = lazy.read_triage(str(path))[1]
+      self.assertEqual(len(problems), 3)
+      self.assertEqual(lazy.read_triage(''), ({}, []))
+
+  def test_the_gate_files(self):
+    root = BIN.parent.parent
+    self.assertEqual(gate.areas_of(gate.LAZY_TRIAGE), ('lazy',))
+    self.assertEqual(lazy.read_triage(str(root / gate.LAZY_TRIAGE))[1], [])
+
+  def test_a_milestone_gate_runs_lazy_identity(self):
+    base = gate.default_steps(False, False)
+    full = gate.default_steps(True, True)
+    self.assertNotIn('lazy-identity', base)
+    for step in ('lazy-identity', 'attr-diff', 'chunk-rss', 'cpp-smoke',
+                 'abi-diff', 'perf', 'day'):
+      self.assertIn(step, full)
+    self.assertEqual(set(full), set(gate.STEPS) - set(gate.LONG_STEPS))
+
+  def test_extra_diagnostics_of_the_lazy_run_fail(self):
+    verdict = self.judge(lazy_run(diagnostics=['error: new']),
+                         lazy_run(counts=(0, 0, 0)))
+    self.assertEqual(verdict.kind, 'different')
+
+  def test_a_different_exit_status_fails(self):
+    verdict = self.judge(lazy_run(status=1, asm=''),
+                         lazy_run(counts=(0, 0, 0)))
+    self.assertEqual(verdict.kind, 'different')
+
+  def test_a_vacuous_pinned_unit_fails(self):
+    for counts in ((0, 0, 0), (5, 5, 0), (5, 0, 5)):
+      verdict = self.judge(lazy_run(counts=counts),
+                           lazy_run(counts=(0, 0, 0)), pinned=True)
+      self.assertTrue(any('vacuous' in p for p in verdict.problems), counts)
+    ok = self.judge(lazy_run(), lazy_run(counts=(0, 0, 0)), pinned=True)
+    self.assertEqual(ok.problems, [])
+    # off the pinned set a stream without dead bodies is fine
+    self.assertEqual(self.judge(lazy_run(counts=(0, 0, 0)),
+                                lazy_run(counts=(0, 0, 0))).problems, [])
+
+  def test_incoherent_counters_fail(self):
+    verdict = self.judge(lazy_run(counts=(10, 6, 3)),
+                         lazy_run(counts=(0, 0, 0)))
+    self.assertTrue(any('coherent' in p for p in verdict.problems))
+
+  def test_symbol_lines_must_match_the_counters(self):
+    verdict = self.judge(lazy_run(replayed=['a'], dropped=['b'] * 4),
+                         lazy_run(counts=(0, 0, 0)))
+    self.assertTrue(any('do not match' in p for p in verdict.problems))
+
+  def test_an_eager_run_that_defers_fails(self):
+    verdict = self.judge(lazy_run(), lazy_run(counts=(3, 3, 0)))
+    self.assertTrue(any('eager run reports' in p for p in verdict.problems))
+
+  def test_runs_that_fail_before_the_finish_are_checked_for_status_only(self):
+    failed = dict(status=1, asm='', counts=None,
+                  diagnostics=['error: bad stream'])
+    verdict = self.judge(lazy_run(**failed), lazy_run(**failed))
+    self.assertEqual((verdict.kind, verdict.problems, verdict.early),
+                     ('identical', [], True))
+    other = dict(failed, diagnostics=['error: other'])
+    verdict = self.judge(lazy_run(**failed), lazy_run(**other))
+    self.assertEqual(verdict.kind, 'different')
+    # a run that succeeds without counters is still a setup problem
+    self.assertEqual(self.judge(lazy_run(status=1, asm='', counts=None),
+                                lazy_run(counts=None)).kind, 'setup')
+    # and a set in which no run reached the finish fails
+    good = self.judge(lazy_run(**failed), lazy_run(**failed))
+    passes, lines = lazy.summarize({'c': [good]})
+    self.assertFalse(passes)
+    self.assertTrue(any('no run reached the finish' in l for l in lines))
+
+  def test_a_library_without_the_counters_is_a_setup_problem(self):
+    self.assertEqual(self.judge(lazy_run(counts=None),
+                                lazy_run(counts=None)).kind, 'setup')
+    self.assertEqual(self.judge(lazy_run(status=64, asm=''),
+                                lazy_run(status=64, asm='')).kind, 'setup')
+
+  def test_the_report_counts_and_fails(self):
+    good = self.judge(lazy_run(), lazy_run(counts=(0, 0, 0)))
+    bad = self.judge(lazy_run(counts=(10, 6, 3)), lazy_run(counts=(0, 0, 0)))
+    passes, lines = lazy.summarize({'cpp': [good]})
+    self.assertTrue(passes)
+    self.assertIn('cpp: 1 streams: 1 identical', lines[0])
+    self.assertIn('deferred 10, replayed 6, dropped 4', lines[0])
+    passes, lines = lazy.summarize({'cpp': [good, bad]})
+    self.assertFalse(passes)
+    self.assertTrue(any(l.startswith('  FAIL s:') for l in lines))
+    self.assertFalse(lazy.summarize({'pinned': []})[0])
+
+
+FAKE_EDG_CIR = """#!/usr/bin/env python3
+import sys
+eager = '--eager-bodies' in sys.argv
+asm = open(sys.argv[-1]).read()
+sys.stderr.write('note: stats: lazy bodies: %s\\n' %
+                 ('0 deferred, 0 replayed, 0 dropped' if eager else
+                  '4 deferred, 3 replayed, 1 dropped'))
+if not eager:
+  for name in ('a', 'b', 'c'):
+    sys.stderr.write('note: stats: lazy replayed %s\\n' % name)
+  sys.stderr.write('note: stats: lazy dropped d\\n')
+sys.stdout.write(asm)
+"""
+
+
+class LazyEndToEnd(unittest.TestCase):
+  def run_tool(self, asm, stream_name = 'unit.ecil', fake = FAKE_EDG_CIR):
+    with tempfile.TemporaryDirectory() as tmp:
+      directory = Path(tmp) / 'pinned'
+      directory.mkdir()
+      (directory / stream_name).write_text(asm)
+      tool = Path(tmp) / 'edg-cir'
+      tool.write_text(fake)
+      tool.chmod(0o755)
+      proc = subprocess.run(
+        [sys.executable, str(BIN / 'edg-cir-lazy-identity'), '--root', tmp,
+         '--edg-cir', str(tool), '--sets', 'pinned', '--streams',
+         f"pinned={directory}", '-j', '2', '--json',
+         str(Path(tmp) / 'v.json')],
+        text = True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+      return proc, (Path(tmp) / 'v.json')
+
+  def test_a_passing_tool(self):
+    proc, _ = self.run_tool(ASM_A)
+    self.assertEqual(proc.returncode, 0, proc.stdout)
+    self.assertIn('RESULT: PASS', proc.stdout)
+    self.assertIn('pinned: 1 streams: 1 identical', proc.stdout)
+    self.assertIn('deferred 4, replayed 3, dropped 1', proc.stdout)
+
+  def test_the_oracle_catches_a_dropped_function_that_is_defined(self):
+    asm = ASM_A.replace('_Z1fv', 'd')
+    proc, _ = self.run_tool(asm)
+    self.assertEqual(proc.returncode, 1, proc.stdout)
+    self.assertIn('oracle', proc.stdout)
+    self.assertIn('RESULT: FAIL', proc.stdout)
+
+  def test_a_library_without_the_options_exits_2(self):
+    fake = '#!/bin/sh\necho "usage: edg-cir" >&2\nexit 64\n'
+    proc, _ = self.run_tool(ASM_A, fake = fake)
+    self.assertEqual(proc.returncode, 2, proc.stdout)
+    self.assertIn('setup problem', proc.stdout)
+
+  def test_the_gate_judges_the_tool_output(self):
+    text = ('pinned: 6 streams: 6 identical (6 byte-identical), 0 eager-only '
+            'diagnostics, 0 different, 0 setup problems; deferred 1, '
+            'replayed 1, dropped 0; oracle: 0\nRESULT: PASS\n')
+    ok, detail = gate.judge_lazy_identity(text, 0)
+    self.assertTrue(ok, detail)
+    self.assertIn('pinned: 6 streams', detail)
+    self.assertFalse(gate.judge_lazy_identity(text, 1)[0])
+    self.assertFalse(gate.judge_lazy_identity(
+      text.replace('PASS', 'FAIL') + '  FAIL s: x\n', 1)[0])
+    self.assertFalse(gate.judge_lazy_identity('RESULT: PASS\n', 0)[0])
+
+
+def pinned_perf(ratio_chrono = 0.6, ratio_cxx = 0.85, error = False):
+  def unit(ir):
+    return {'O0': {'cir_ir': ir, 'fe_ir': 1000, 'ir': ir + 1000}}
+  before = {'realworld': {u: unit(1000) for u in perf.PINNED_UNITS},
+            'big_cxx': {'2p-edg-cir': {'ir': 1000}}}
+  after = {'realworld': {u: unit(600) for u in perf.PINNED_UNITS},
+           'big_cxx': {'2p-edg-cir': {'ir': int(1000 * ratio_cxx)}}}
+  after['realworld']['libstdcxx/chrono']['O0']['cir_ir'] = int(
+    1000 * ratio_chrono)
+  if error:
+    after['realworld']['boost/mp11']['O0'] = {'error': 'edg-cir exit 1'}
+  return before, after
+
+
+class PerfTargets(unittest.TestCase):
+  def test_the_pinned_units_have_sources(self):
+    for unit in perf.PINNED_UNITS:
+      self.assertTrue((BIN.parent / 'cir-realworld' / f"{unit}.cpp").exists(),
+                      unit)
+
+  def test_the_units_filter(self):
+    root = BIN.parent / 'cir-realworld'
+    names = [f"{u.parent.name}/{u.stem}" for u in
+             perf.realworld_units(root, ['pinned'])]
+    self.assertEqual(sorted(names), sorted(perf.PINNED_UNITS))
+    self.assertEqual([u.stem for u in perf.realworld_units(
+      root, ['libstdcxx/chrono'])], ['chrono'])
+    self.assertGreater(len(perf.realworld_units(root)), len(names))
+
+  def test_s1_targets_met(self):
+    before, after = pinned_perf()
+    ok, report = perf.check_targets(before, after, 's1')
+    self.assertTrue(ok, report)
+
+  def test_s1_missed_on_a_unit(self):
+    before, after = pinned_perf(ratio_chrono = 0.71)
+    ok, report = perf.check_targets(before, after, 's1')
+    self.assertFalse(ok)
+    self.assertTrue(any(l.startswith('FAIL libstdcxx/chrono') for l in report))
+
+  def test_s1_missed_on_the_generated_unit(self):
+    before, after = pinned_perf(ratio_cxx = 0.91)
+    self.assertFalse(perf.check_targets(before, after, 's1')[0])
+
+  def test_the_generated_unit_is_gated_at_o0_only(self):
+    before, after = pinned_perf()
+    before['big_cxx_O2'] = {'2p-edg-cir': {'ir': 1000}}
+    after['big_cxx_O2'] = {'2p-edg-cir': {'ir': 930}}
+    ok, report = perf.check_targets(before, after, 's1')
+    self.assertTrue(ok, report)
+    self.assertTrue(any(l.startswith('info') and 'big_cxx_O2' in l and
+                        'reported only' in l for l in report))
+    # a missing -O2 row is not a failure either, a missing -O0 row is
+    del after['big_cxx_O2']
+    self.assertTrue(perf.check_targets(before, after, 's1')[0])
+    del after['big_cxx']
+    self.assertFalse(perf.check_targets(before, after, 's1')[0])
+
+  def test_a_unit_that_stops_compiling_fails(self):
+    before, after = pinned_perf(error = True)
+    ok, report = perf.check_targets(before, after, 's1')
+    self.assertFalse(ok)
+    self.assertTrue(any('stopped compiling' in l for l in report))
+
+  def test_a_unit_that_is_not_measured_fails(self):
+    before, after = pinned_perf()
+    del after['realworld']['boost/lexical_cast']
+    self.assertFalse(perf.check_targets(before, after, 's1')[0])
+
+  def test_a_unit_the_baseline_could_not_compile_is_skipped(self):
+    before, after = pinned_perf()
+    before['realworld']['boost/mp11']['O0'] = {'error': 'x'}
+    ok, report = perf.check_targets(before, after, 's1')
+    self.assertTrue(ok, report)
+    self.assertTrue(any('skipped' in l for l in report))
+
+  def test_a_baseline_without_the_sections_fails(self):
+    before, after = pinned_perf()
+    self.assertFalse(perf.check_targets({}, after, 's1')[0])
+
+  def test_the_gate_compares_the_real_world_rows(self):
+    before, after = pinned_perf()
+    worst, compared, problems = gate.perf_worst_change(before, after)
+    self.assertEqual(problems, [])
+    self.assertGreaterEqual(compared, 2 * len(perf.PINNED_UNITS))
+    # a unit that vanished from a run that measured the section fails
+    del after['realworld']['boost/mp11']
+    problems = gate.perf_worst_change(before, after)[2]
+    self.assertTrue(any('boost/mp11' in p for p in problems))
+    # a run without the section is not compared (it was not requested)
+    del after['realworld']
+    self.assertEqual(gate.perf_worst_change(before, after)[2], [])
+
+  def test_the_slice_areas_and_the_new_step(self):
+    self.assertEqual(gate.AREA_STEPS['lazy'], ('lazy-identity',))
+    self.assertEqual(set(gate.AREA_STEPS['speed']), {
+      'perf', 'rss', 'stress', 'cpp-stress', 'm4-stress', 'crash-sweep'})
+    self.assertEqual(gate.AREA_STEPS['crashes'], ('crash-sweep',))
+    self.assertIn('lazy-identity', gate.STEPS)
+    self.assertIn('lazy-identity', gate.STEP_FUNCTIONS)
+    steps, _ = gate.lean_steps(['library', 'lazy', 'speed'])
+    self.assertIn('lazy-identity', steps)
+    self.assertIn('perf', steps)
+
+
+SAMPLE_OURS_IR = """
+define dso_local i32 @f(i32 %0) #0 {
+  %2 = call i32 @g(i32 %0) #1
+  %3 = call i32 @h(i32 %2) #2
+  ret i32 %3
+}
+define dso_local i32 @d(i32 %0) #1 {
+  ret i32 %0
+}
+declare i32 @g(i32)
+declare i32 @h(i32) #1
+attributes #0 = { uwtable }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind }
+"""
+
+SAMPLE_CLANGIR_IR = """
+define dso_local i32 @f(i32 %0) #1 {
+  %2 = call i32 @g(i32 %0) #1
+  %3 = call i32 @h(i32 %2) #0
+  ret i32 %3
+}
+define dso_local i32 @d(i32 %0) #1 {
+  ret i32 %0
+}
+declare i32 @g(i32) #1
+declare i32 @h(i32) #1
+attributes #0 = { uwtable }
+attributes #1 = { nounwind }
+"""
+
+GOOD_KNOWN = """# header
+# improvement: we emit nonnull where clangir does not
+param0 | * | only-ours:nonnull | an improvement over clangir, reviewed
+"""
+
+
+class AttrDiff(unittest.TestCase):
+  def known(self, text):
+    with tempfile.TemporaryDirectory() as tmp:
+      path = Path(tmp) / 'known.txt'
+      path.write_text(text)
+      return attr.validate_known(str(path))
+
+  def test_a_good_known_file(self):
+    entries, problems = self.known(GOOD_KNOWN)
+    self.assertEqual(problems, [])
+    self.assertEqual(entries, [('param0', '*', 'only-ours:nonnull',
+                                'an improvement over clangir, reviewed')])
+    self.assertEqual(attr.known_entry(entries, 2, 'param0',
+                                      'only-ours:nonnull'), entries[0])
+    self.assertIsNone(attr.known_entry(entries, 2, 'param1',
+                                       'only-ours:nonnull'))
+
+  def test_a_glob_detail_matches_a_family_of_differences(self):
+    entries, problems = self.known(
+      '# std::forward is folded by clangir\n'
+      'call | * | only-ours:_ZSt7forward* | clangir folds the call away\n')
+    self.assertEqual(problems, [])
+    self.assertEqual(attr.known_entry(
+      entries, 0, 'call', 'only-ours:_ZSt7forwardIiEOT_RNSt16remove_'
+      'referenceIS0_E4typeE:arg0:noundef'), entries[0])
+    self.assertIsNone(attr.known_entry(
+      entries, 0, 'call', 'only-clangir:_ZSt7forwardIiE:arg0:noundef'))
+    self.assertIsNone(attr.known_entry(
+      entries, 0, 'call', 'only-ours:_ZSt4moveIiE:arg0:noundef'))
+    self.assertIsNone(attr.known_entry(
+      entries, 0, 'fn', 'only-ours:_ZSt7forwardIiE'))
+
+  def test_the_known_entries_of_the_gate_are_narrow(self):
+    entries, problems = attr.validate_known(
+      str(BIN.parent.parent / 'tests/.edgy/filters/cir-attr-known.txt'))
+    self.assertEqual(problems, [])
+    def known(detail):
+      return attr.known_entry(entries, 0, 'call', detail) is not None
+    # the builtin forms: one-argument std::move, forward, addressof
+    self.assertTrue(known('only-ours:_ZSt4moveIRiEONSt16remove_referenceIT_'
+                          'E4typeEOS2_:arg0:noundef'))
+    self.assertTrue(known('only-ours:_ZSt7forwardIiEOT_RNSt16remove_reference'
+                          'IS0_E4typeE:ret:nonnull'))
+    self.assertTrue(known('only-ours:_ZnwmPv:arg1:noundef'))
+    # the real calls stay unexplained: the three-argument std::move, the
+    # ordinary operator new, and everything clangir has and ours lacks
+    self.assertFalse(known('only-ours:_ZSt4moveIPiS0_ET0_T_S2_S1_:arg0:'
+                           'noundef'))
+    self.assertFalse(known('only-ours:_Znwm:arg0:noundef'))
+    self.assertFalse(known('only-ours:_Znam:fn:nounwind'))
+    self.assertFalse(known('only-clangir:_ZSt7forwardIiE:arg0:noundef'))
+
+  def calls(self, *items):
+    return [('f', 'call', f"{side}:{callee}:{attribute}")
+            for side, callee, attribute in items]
+
+  def modules(self, ours_params, theirs_params):
+    """Parsed modules with the callees and their parameter counts."""
+    def make(table):
+      result = {}
+      for name, count in table.items():
+        function = attr.Function()
+        function.params = [set() for _ in range(count)]
+        result[name] = function
+      return result
+    return make(ours_params), make(theirs_params)
+
+  def pair(self, diffs, enabled, ours = None, theirs = None):
+    return attr.explain_pairs(diffs, enabled, ours, theirs)
+
+  def test_structor_variants_pair_c1_with_c2_of_the_same_class(self):
+    diffs = self.calls(
+      ('only-ours', '_ZN1AC1Ev', 'arg0:noundef'),
+      ('only-ours', '_ZN1AC1Ev', 'fn:nounwind'),
+      ('only-clangir', '_ZN1AC2Ev', 'arg0:noundef'),
+      ('only-clangir', '_ZN1AC2Ev', 'fn:nounwind'),
+      ('only-clangir', '_ZN1AC2Ev', 'arg0:nonnull'))
+    ours, theirs = self.modules({'_ZN1AC1Ev': 1}, {'_ZN1AC2Ev': 1})
+    explained = self.pair(diffs, {'structor-variants'}, ours, theirs)
+    # the attributes both calls have are explained, the extra one stays
+    self.assertEqual(sorted(explained), [0, 1, 2, 3])
+    self.assertEqual(set(explained.values()), {'structor-variants'})
+
+  def test_a_base_variant_that_takes_a_vtt_does_not_pair(self):
+    diffs = self.calls(('only-ours', '_ZN1AC1Ev', 'arg0:noundef'),
+                       ('only-clangir', '_ZN1AC2Ev', 'arg0:noundef'))
+    ours, theirs = self.modules({'_ZN1AC1Ev': 1}, {'_ZN1AC2Ev': 2})
+    self.assertEqual(self.pair(diffs, {'structor-variants'}, ours, theirs),
+                     {})
+
+  def test_structors_do_not_pair_without_the_modules_or_a_declaration(self):
+    diffs = self.calls(('only-ours', '_ZN1AC1Ev', 'arg0:noundef'),
+                       ('only-clangir', '_ZN1AC2Ev', 'arg0:noundef'))
+    self.assertEqual(self.pair(diffs, {'structor-variants'}), {})
+    ours, theirs = self.modules({'_ZN1AC1Ev': 1}, {})
+    self.assertEqual(self.pair(diffs, {'structor-variants'}, ours, theirs),
+                     {})
+
+  def test_destructors_pair_d1_with_d2(self):
+    diffs = self.calls(('only-ours', '_ZN3BoxIiED1Ev', 'arg0:noundef'),
+                       ('only-clangir', '_ZN3BoxIiED2Ev', 'arg0:noundef'))
+    ours, theirs = self.modules({'_ZN3BoxIiED1Ev': 1}, {'_ZN3BoxIiED2Ev': 1})
+    self.assertEqual(sorted(self.pair(diffs, {'structor-variants'}, ours,
+                                      theirs)), [0, 1])
+
+  def test_other_structor_differences_are_not_paired(self):
+    for ours_name, theirs_name in (
+        ('_ZN1AC1Ev', '_ZN1BC2Ev'),        # other class
+        ('_ZN1AC1Ei', '_ZN1AC2Ev'),        # other parameters
+        ('_ZN1AC2Ev', '_ZN1AC1Ev'),        # the other way
+        ('_ZN1AD0Ev', '_ZN1AD2Ev'),        # deleting dtor
+        ('_ZN1AC1Ev', '_ZN1AC1Ev')):       # same callee
+      diffs = self.calls(('only-ours', ours_name, 'arg0:noundef'),
+                         ('only-clangir', theirs_name, 'arg0:noundef'))
+      ours, theirs = self.modules({ours_name: 1}, {theirs_name: 1})
+      self.assertEqual(self.pair(diffs, {'structor-variants'}, ours, theirs),
+                       {}, (ours_name, theirs_name))
+    # a class named C1: only the real structor position pairs
+    diffs = self.calls(('only-ours', '_ZN2C1C1Ev', 'arg0:noundef'),
+                       ('only-clangir', '_ZN2C1C2Ev', 'arg0:noundef'))
+    ours, theirs = self.modules({'_ZN2C1C1Ev': 1}, {'_ZN2C1C2Ev': 1})
+    self.assertEqual(len(self.pair(diffs, {'structor-variants'}, ours,
+                                   theirs)), 2)
+    diffs = self.calls(('only-ours', '_ZN2C1C1Ev', 'arg0:noundef'),
+                       ('only-clangir', '_ZN2C2C1Ev', 'arg0:noundef'))
+    ours, theirs = self.modules({'_ZN2C1C1Ev': 1}, {'_ZN2C2C1Ev': 1})
+    self.assertEqual(self.pair(diffs, {'structor-variants'}, ours, theirs),
+                     {})
+
+  def test_a_matcher_works_only_when_its_entry_is_there(self):
+    diffs = self.calls(('only-ours', '_ZN1AC1Ev', 'arg0:noundef'),
+                       ('only-clangir', '_ZN1AC2Ev', 'arg0:noundef'))
+    ours, theirs = self.modules({'_ZN1AC1Ev': 1}, {'_ZN1AC2Ev': 1})
+    self.assertEqual(self.pair(diffs, set(), ours, theirs), {})
+    self.assertEqual(self.pair(diffs, {'builtin-mem-calls'}, ours, theirs),
+                     {})
+
+  def test_builtin_mem_calls_explain_only_the_intrinsic_vocabulary(self):
+    diffs = self.calls(
+      ('only-ours', 'memcpy', 'arg0:noundef'),                     # 0
+      ('only-ours', 'memcpy', 'arg1:noundef'),                     # 1
+      ('only-ours', 'memcpy', 'fn:nounwind'),                      # 2
+      ('only-ours', 'memcpy', 'arg0:align 8'),                     # 3
+      ('only-ours', 'memcpy', 'arg0:dereferenceable(16)'),         # 4
+      ('only-ours', 'memcpy', 'arg1:nonnull'),                     # 5
+      ('only-ours', 'memcpy', 'arg0:noalias'),                     # 6
+      ('only-ours', 'memcpy', 'fn:memory(argmem: readwrite)'),     # 7
+      ('only-ours', 'memcpy', 'ret:noundef'),                      # 8
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'arg0:noalias'),   # 9
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'arg0:align 8'),   # 10
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'arg1:readonly'),  # 11
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'arg2:immarg'),    # 12
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'arg0:captures(none)'),  # 13
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'arg0:writeonly'),  # 14
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'fn:nocallback'),  # 15
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'fn:willreturn'),  # 16
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64',
+       'fn:memory(argmem: readwrite)'),                            # 17
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'arg0:dereferenceable(8)'),
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'arg0:noundef'),   # 19
+      ('only-clangir', 'llvm.memcpy.p0.p0.i64', 'fn:mustprogress'))  # 20
+    explained = self.pair(diffs, {'builtin-mem-calls'})
+    # only the intrinsic's own attributes (9 to 17) and our argument noundef
+    # and nounwind (0 to 2); our align, dereferenceable, nonnull, noalias,
+    # memory and return noundef (3 to 8) and clangir's other attributes
+    # (18, 19, 20) stay
+    self.assertEqual(sorted(explained), [0, 1, 2, 9, 10, 11, 12, 13, 14, 15,
+                                         16, 17])
+
+  def test_builtin_mem_calls_pair_only_the_three_names(self):
+    diffs = self.calls(
+      ('only-ours', 'memset', 'arg0:noundef'),                    # 0
+      ('only-clangir', 'llvm.memset.p0.i64', 'arg0:align 4'),     # 1
+      ('only-ours', 'memcmp', 'arg0:noundef'),
+      ('only-clangir', 'llvm.memcmp.p0.p0.i64', 'arg0:align 4'),
+      ('only-ours', 'strlen', 'arg0:noundef'),
+      ('only-clangir', 'llvm.memmove.p0.p0.i64', 'arg0:align 4'))
+    self.assertEqual(sorted(self.pair(diffs, {'builtin-mem-calls'})), [0, 1])
+
+  def test_the_inline_memcpy_intrinsic_is_matched_on_purpose(self):
+    diffs = self.calls(
+      ('only-ours', 'memcpy', 'arg0:noundef'),
+      ('only-clangir', 'llvm.memcpy.inline.p0.p0.i64', 'fn:nounwind'))
+    self.assertEqual(sorted(self.pair(diffs, {'builtin-mem-calls'})), [0, 1])
+
+  def test_an_intrinsic_that_only_ours_calls_is_not_explained(self):
+    diffs = self.calls(('only-ours', 'llvm.memcpy.p0.p0.i64', 'arg0:align 8'))
+    self.assertEqual(self.pair(diffs, {'builtin-mem-calls'}), {})
+
+  def test_the_pair_entries_of_the_known_file(self):
+    entries, problems = attr.validate_known(
+      str(BIN.parent.parent / 'tests/.edgy/filters/cir-attr-known.txt'))
+    self.assertEqual(problems, [])
+    pairs = sorted(e[2] for e in entries if e[0] == 'pair')
+    self.assertEqual(pairs, ['builtin-mem-calls', 'structor-variants'])
+    _, problems = self.known(
+      '# c\npair | * | no-such-matcher | a reason here\n')
+    self.assertTrue(any('no pair matcher' in p for p in problems))
+
+  def test_an_empty_known_file_is_valid(self):
+    self.assertEqual(self.known('# only comments\n\n'), ([], []))
+    self.assertEqual(attr.read_known(''), [])
+
+  def test_an_entry_needs_a_comment_above(self):
+    _, problems = self.known('ret | 0 | only-ours:noundef | because we say\n')
+    self.assertTrue(any('no comment line' in p for p in problems))
+    _, problems = self.known(GOOD_KNOWN + 'ret | 0 | only-ours:noundef | '
+                             'a reason here\n')
+    self.assertTrue(any('no comment line' in p for p in problems))
+
+  def test_an_entry_needs_a_real_reason(self):
+    for reason in ('', 'none', 'todo', '-', 'short'):
+      _, problems = self.known(f"# c\nret | 0 | only-ours:x | {reason}\n")
+      self.assertTrue(any('no real reason' in p for p in problems), reason)
+
+  def test_a_duplicate_and_a_malformed_entry(self):
+    entry = GOOD_KNOWN.splitlines()[-1]
+    _, problems = self.known(GOOD_KNOWN + '# again\n' + entry + '\n')
+    self.assertTrue(any('listed twice' in p for p in problems))
+    _, problems = self.known('# c\nret | only two fields\n')
+    self.assertTrue(any('not `category' in p for p in problems))
+
+  def test_nounwind_counts(self):
+    counts = attr.nounwind_counts(attr.parse_ir(SAMPLE_OURS_IR),
+                                  attr.parse_ir(SAMPLE_CLANGIR_IR))
+    # f is only clangir's nounwind; d is both's
+    self.assertEqual(counts['define'], [2, 1, 2])
+    # g is ours without and clangir's with; h both
+    self.assertEqual(counts['declare'], [2, 1, 2])
+    # f: calls of g (ours: nounwind, clangir: nounwind), h (ours nounwind,
+    # clangir without); d calls nothing
+    self.assertEqual(counts['call'], [2, 2, 1])
+
+  def test_the_units_of_the_pinned_list(self):
+    cases = attr.unit_cases(BIN.parent.parent, 'pinned', '/b')
+    self.assertEqual([c[0] for c in cases], list(perf.PINNED_UNITS))
+    boost = [c for c in cases if c[0] == 'boost/mp11'][0]
+    self.assertIn('-I/b', boost[2])
+    self.assertNotIn('-I/b', [c for c in cases
+                              if c[0] == 'libstdcxx/chrono'][0][2])
+    self.assertTrue(all(c[1].exists() for c in cases))
+
+  def test_a_bad_known_file_is_a_setup_problem(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      known = Path(tmp) / 'known.txt'
+      known.write_text('ret | 0 | only-ours:x | nope\n')
+      source = Path(tmp) / 'a.cpp'
+      source.write_text('int x;\n')
+      proc = subprocess.run(
+        [sys.executable, str(BIN / 'edg-cir-attr-diff'), '--root', tmp,
+         '--known', str(known), str(source)], text = True,
+        stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+      self.assertEqual(proc.returncode, 2, proc.stdout)
+      self.assertIn('not valid', proc.stdout)
+
+
+def attr_run(compared = None, explained = 3, unexplained = (), used = (),
+             uncompared = (), below = (), no_llvm = True, code = 0,
+             residue = None):
+  return (code, {
+    'residue': residue or {},
+    'compared': compared or {'0': 100, '2': 100}, 'explained': explained,
+    'unexplained': [list(u) for u in unexplained],
+    'known_used': list(used), 'uncompared': list(uncompared),
+    'nounwind': {'0': {'define': [10, 8, 9], 'declare': [5, 4, 4],
+                       'call': [20, 10, 10]}},
+    'nounwind_below': list(below), 'no_llvm_passes': no_llvm, 'exit': code})
+
+
+ENTRY = ('param0', '*', 'only-ours:nonnull', 'an improvement, reviewed')
+
+
+class AttrGate(unittest.TestCase):
+  def judge(self, probe, pinned, entries = (ENTRY,)):
+    return gate.judge_attr_diff({'probe': probe, 'pinned': pinned},
+                                list(entries))
+
+  def used(self):
+    return [' | '.join(ENTRY)]
+
+  def test_a_passing_step(self):
+    ok, detail = self.judge(attr_run(used = self.used()), attr_run())
+    self.assertTrue(ok, detail)
+    self.assertIn('probe: -O0 100 symbols, -O2 100 symbols', detail)
+    self.assertIn('6 explained by 1 of 1 known entries, 0 unexplained in the '
+                  'gated attributes; residue (not gated) 0', detail)
+    self.assertIn('define 80% vs 90%', detail)
+
+  def test_the_residue_is_reported_and_not_gated(self):
+    residue = {'0|callset': 100, '2|callset': 50, '0|fn norecurse': 80,
+               '2|md tbaa': 7}
+    ok, detail = self.judge(attr_run(used = self.used(), residue = residue),
+                            attr_run(residue = {'0|fn cold': 3}))
+    self.assertTrue(ok, detail)
+    self.assertIn('0 unexplained in the gated attributes', detail)
+    self.assertIn('residue (not gated) 240 (callset 150, fn norecurse 80',
+                  detail)
+
+  def test_unexplained_differences_fail(self):
+    ok, detail = self.judge(
+      attr_run(used = self.used(), code = 1,
+               unexplained = [(2, 'a', 'f', 'ret', 'only-clangir:noundef')]),
+      attr_run())
+    self.assertFalse(ok)
+    self.assertIn('1 unexplained', detail)
+
+  def test_a_stale_entry_fails(self):
+    ok, detail = self.judge(attr_run(), attr_run())
+    self.assertFalse(ok)
+    self.assertIn('stale known-difference entry', detail)
+
+  def test_a_missing_pinned_unit_fails(self):
+    ok, detail = self.judge(
+      attr_run(used = self.used()),
+      attr_run(code = 1, uncompared = ['boost/mp11: clang -fclangir cannot '
+                                       'compile it']))
+    self.assertFalse(ok)
+    self.assertIn('boost/mp11', detail)
+
+  def test_nothing_compared_fails(self):
+    ok, detail = self.judge(
+      attr_run(used = self.used(), compared = {'0': 100, '2': 0}, code = 1),
+      attr_run())
+    self.assertFalse(ok)
+    self.assertIn('nothing compared', detail)
+
+  def test_nounwind_below_clangirs_share_fails(self):
+    ok, detail = self.judge(
+      attr_run(used = self.used()),
+      attr_run(code = 1, below = ['-O0 declares: ours 80% < clangir 90%']))
+    self.assertFalse(ok)
+    self.assertIn('nounwind', detail)
+
+  def test_a_run_with_the_llvm_passes_fails(self):
+    ok, detail = self.judge(attr_run(used = self.used(), no_llvm = False),
+                            attr_run())
+    self.assertFalse(ok)
+    self.assertIn('LLVM passes', detail)
+
+  def test_a_run_without_a_result_fails(self):
+    ok, detail = gate.judge_attr_diff(
+      {'probe': (2, None), 'pinned': attr_run()}, [])
+    self.assertFalse(ok)
+    self.assertIn('probe: no result', detail)
+
+  def test_the_codequality_report(self):
+    text = '10 kernel(s); CIR built 2\n'
+    results = {
+      'a': {'ours': {'ir': 110, 'text': 200, 'output': 'x'},
+            'clang': {'ir': 100, 'text': 100, 'output': 'x'}},
+      'b': {'ours': {'ir': 90, 'text': 100, 'output': 'y'},
+            'clang': {'ir': 100, 'text': 100, 'output': 'x'}},
+      'c': {'ours': {'error': 'unsupported'}, 'clang': {'ir': 1}}}
+    ok, detail = gate.judge_codequality(text, 0, results)
+    self.assertTrue(ok, detail)
+    self.assertIn('10 kernels, CIR built 2', detail)
+    self.assertIn('instructions x0.99', detail)
+    self.assertIn('.text x1.41', detail)
+    self.assertIn('output DIFFERS: b', detail)
+    self.assertIn('not gated', detail)
+    self.assertFalse(gate.judge_codequality(text, 1, results)[0])
+    self.assertFalse(gate.judge_codequality('', 0, results)[0])
+
+
+def chunk_run(status = 0, asm = ASM_A, chunks = (0, 500), diagnostics = ()):
+  lines = list(diagnostics)
+  if chunks is not None:
+    lines.append('note: stats: chunked lowering: %d chunks of at most %d '
+                 'functions' % chunks)
+  lines.append('note: stats: 12 frames, 90 records')
+  return chunk_identity.Run(status, asm, '\n'.join(lines))
+
+
+class ChunkIdentity(unittest.TestCase):
+  def judge(self, plain, chunked, pinned = False):
+    return chunk_identity.judge_pair('s', plain, chunked, pinned)
+
+  def test_an_equal_pair_is_identical(self):
+    verdict = self.judge(chunk_run(), chunk_run(chunks = (7, 1)))
+    self.assertEqual((verdict.kind, verdict.problems), ('identical', []))
+    self.assertTrue(verdict.byte_identical)
+    self.assertEqual(verdict.chunks, 7)
+
+  def test_different_assembly_fails(self):
+    verdict = self.judge(chunk_run(), chunk_run(
+      chunks = (7, 1), asm = ASM_A.replace('callq', 'call')))
+    self.assertEqual(verdict.kind, 'different')
+
+  def test_a_failing_chunk_fails(self):
+    verdict = self.judge(chunk_run(), chunk_run(
+      status = 1, asm = '', chunks = (7, 1),
+      diagnostics = ['error: chunk 3 did not lower']))
+    self.assertEqual(verdict.kind, 'different')
+    self.assertTrue(any('exit status 1' in p for p in verdict.problems))
+
+  def test_the_unchunked_run_must_not_chunk(self):
+    verdict = self.judge(chunk_run(chunks = (3, 500)),
+                         chunk_run(chunks = (7, 1)))
+    self.assertTrue(any('unchunked run lowered' in p
+                        for p in verdict.problems))
+
+  def test_a_vacuous_pinned_unit_fails(self):
+    for chunks in ((0, 1), (1, 1), (7, 500)):
+      verdict = self.judge(chunk_run(), chunk_run(chunks = chunks),
+                           pinned = True)
+      self.assertTrue(any('vacuous' in p for p in verdict.problems), chunks)
+    ok = self.judge(chunk_run(), chunk_run(chunks = (7, 1)), pinned = True)
+    self.assertEqual(ok.problems, [])
+
+  def test_a_library_without_the_counters_is_a_setup_problem(self):
+    self.assertEqual(self.judge(chunk_run(chunks = None),
+                                chunk_run(chunks = None)).kind, 'setup')
+    self.assertEqual(self.judge(chunk_run(status = 64, asm = ''),
+                                chunk_run(status = 64, asm = '')).kind,
+                     'setup')
+
+  def test_the_set_needs_a_chunked_stream(self):
+    good = self.judge(chunk_run(), chunk_run(chunks = (7, 1)))
+    unchunked = self.judge(chunk_run(), chunk_run(chunks = (0, 1)))
+    passes, lines = chunk_identity.summarize({'cpp': [good, unchunked]})
+    self.assertTrue(passes)
+    self.assertIn('1 lowered in 2 chunks or more (largest 7)', lines[0])
+    passes, lines = chunk_identity.summarize({'cpp': [unchunked]})
+    self.assertFalse(passes)
+    self.assertTrue(any('vacuous: no stream was chunked' in l for l in lines))
+    self.assertFalse(chunk_identity.summarize({'c': []})[0])
+
+  def run_tool(self, asm, fake):
+    with tempfile.TemporaryDirectory() as tmp:
+      for level in ('O0', 'O2'):
+        directory = Path(tmp) / 'pinned' / level
+        directory.mkdir(parents = True)
+        (directory / 'unit.ecil').write_text(asm)
+      tool = Path(tmp) / 'edg-cir'
+      tool.write_text(fake)
+      tool.chmod(0o755)
+      return subprocess.run(
+        [sys.executable, str(BIN / 'edg-cir-chunk-identity'), '--root', tmp,
+         '--edg-cir', str(tool), '--sets', 'pinned', '--streams',
+         f"pinned={Path(tmp) / 'pinned'}", '-j', '2'], text = True,
+        stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+
+  FAKE = """#!/usr/bin/env python3
+import sys
+chunked = any(a.startswith('--chunk-functions=') for a in sys.argv)
+sys.stderr.write('note: stats: chunked lowering: %s\\n' %
+                 ('6 chunks of at most 1 functions' if chunked else
+                  '0 chunks of at most 500 functions'))
+sys.stdout.write(open(sys.argv[-1]).read())
+"""
+
+  def test_the_tool_end_to_end(self):
+    proc = self.run_tool(ASM_A, self.FAKE)
+    self.assertEqual(proc.returncode, 0, proc.stdout)
+    self.assertIn('pinned-O0: 1 streams: 1 identical', proc.stdout)
+    self.assertIn('pinned-O2: 1 streams: 1 identical', proc.stdout)
+    self.assertIn('RESULT: PASS', proc.stdout)
+
+  def test_the_tool_catches_a_changed_body(self):
+    fake = self.FAKE.replace(
+      "sys.stdout.write(open(sys.argv[-1]).read())",
+      "t = open(sys.argv[-1]).read()\n"
+      "sys.stdout.write(t.replace('retq', 'nop') if chunked else t)")
+    proc = self.run_tool(ASM_A, fake)
+    self.assertEqual(proc.returncode, 1, proc.stdout)
+    self.assertIn('different bodies', proc.stdout)
+
+  def test_a_library_without_the_options_exits_2(self):
+    proc = self.run_tool(ASM_A, '#!/bin/sh\necho usage >&2\nexit 64\n')
+    self.assertEqual(proc.returncode, 2, proc.stdout)
+
+  def test_the_modes_options(self):
+    self.assertEqual(chunk_rss.mode_flags('default', 1, 500), [])
+    self.assertEqual(chunk_rss.mode_flags('unchunked', 1, 500),
+                     ['--chunk-threshold=4294967295'])
+    self.assertEqual(chunk_rss.mode_flags('forced', 1, 500),
+                     ['--chunk-functions=500', '--chunk-threshold=1'])
+
+
+def curve(c12000_default = 800.0, c12000_forced = 400.0, chunks = 25):
+  def row(mb, n = None):
+    return {'peak_mb': mb, 'chunks': n}
+  return {
+    'c12000': {'default': row(c12000_default, 0),
+               'unchunked': row(c12000_default, 0),
+               'forced': row(c12000_forced, chunks)},
+    'c3000': {'default': row(200.0, 0), 'unchunked': row(200.0, 0),
+              'forced': row(150.0, 7)}}
+
+
+BASE = {'c12000': {'default': {'peak_mb': 810.0}},
+        'c3000': {'default': {'peak_mb': 205.0}}}
+
+
+class ChunkRss(unittest.TestCase):
+  modes = ['default', 'unchunked', 'forced']
+
+  def test_the_target_is_met(self):
+    ok, lines = chunk_rss.judge(curve(), BASE, {'c12000': 0.55}, self.modes)
+    self.assertTrue(ok, lines)
+    self.assertTrue(any(l.startswith('ok   target c12000') and '49.4%' in l
+                        for l in lines))
+    self.assertIn('forced/base', lines[0])
+
+  def test_the_target_is_missed(self):
+    ok, lines = chunk_rss.judge(curve(c12000_forced = 500.0), BASE,
+                                {'c12000': 0.55}, self.modes)
+    self.assertFalse(ok)
+    self.assertTrue(any(l.startswith('FAIL target c12000') for l in lines))
+
+  def test_a_forced_run_that_did_not_chunk_fails(self):
+    ok, lines = chunk_rss.judge(curve(chunks = 1), BASE, {}, self.modes)
+    self.assertFalse(ok)
+    self.assertTrue(any('vacuous' in l for l in lines))
+
+  def test_an_unchunked_run_that_chunked_fails(self):
+    data = curve()
+    data['c3000']['unchunked']['chunks'] = 4
+    self.assertFalse(chunk_rss.judge(data, BASE, {}, self.modes)[0])
+
+  def test_a_failed_measurement_fails(self):
+    data = curve()
+    data['c3000']['forced'] = {'error': 'exit status 1'}
+    ok, lines = chunk_rss.judge(data, BASE, {}, self.modes)
+    self.assertFalse(ok)
+    self.assertTrue(any('c3000 forced: exit status 1' in l for l in lines))
+
+  def test_a_target_without_a_baseline_fails(self):
+    self.assertFalse(chunk_rss.judge(curve(), None, {'c12000': 0.55},
+                                     self.modes)[0])
+    self.assertFalse(chunk_rss.judge(curve(), {}, {'c12000': 0.55},
+                                     self.modes)[0])
+
+  def test_the_baseline_mode_only_needs_the_default_run(self):
+    data = {'c12000': {'default': {'peak_mb': 810.0, 'chunks': None}}}
+    ok, lines = chunk_rss.judge(data, None, {}, ['default'])
+    self.assertTrue(ok, lines)
+
+  def test_the_gate_judges_the_report(self):
+    ok_text = ('case  default unchunked forced forced/base\n'
+               'c3000   200.0 200.0 150.0 0.73\n'
+               'c12000  800.0 800.0 400.0 0.49\n'
+               'ok   target c12000: forced 400.0 MB is 49.4% of the '
+               'baseline\'s 810.0 MB (limit 55%)\nRESULT: PASS\n')
+    ok, detail = gate.judge_chunk_rss(ok_text, 0)
+    self.assertTrue(ok, detail)
+    self.assertIn('c12000 800.0/800.0/400.0', detail)
+    self.assertIn('target c12000', detail)
+    self.assertFalse(gate.judge_chunk_rss(ok_text, 1)[0])
+    self.assertFalse(gate.judge_chunk_rss(
+      ok_text.replace('PASS', 'FAIL'), 1)[0])
+
+
+FAKE_IR = {'edg-cir': 1}
+
+
+class ChunkIr(unittest.TestCase):
+  def judge(self, default, unchunked, tolerance = 0.1):
+    return chunk_ir.judge_counts('s', default, unchunked, tolerance)
+
+  def test_equal_counts_pass(self):
+    verdict = self.judge((1000000, 0, (0, 500)), (1000000, 0, (0, 500)))
+    self.assertEqual((verdict.kind, verdict.problems), ('equal', []))
+
+  def test_a_small_excess_is_within_the_tolerance(self):
+    self.assertEqual(self.judge((1000500, 0, (0, 500)),
+                                (1000000, 0, (0, 500))).kind, 'equal')
+    self.assertEqual(self.judge((1002000, 0, (0, 500)),
+                                (1000000, 0, (0, 500))).kind, 'different')
+
+  def test_a_stream_chunked_by_default_is_above_the_threshold(self):
+    self.assertEqual(self.judge((2000000, 0, (4, 500)),
+                                (1000000, 0, (0, 500))).kind,
+                     'above-threshold')
+
+  def test_a_failing_run_is_different(self):
+    self.assertEqual(self.judge((0, 1, (0, 500)),
+                                (0, 1, (0, 500))).kind, 'different')
+    self.assertEqual(self.judge((1000, 0, (0, 500)),
+                                (1000, 1, (0, 500))).kind, 'different')
+
+  def test_a_library_without_the_counters_is_a_setup_problem(self):
+    self.assertEqual(self.judge((1000, 0, None), (1000, 0, None)).kind,
+                     'setup')
+    self.assertEqual(self.judge((0, 64, None), (0, 64, None)).kind, 'setup')
+
+  def test_the_report_needs_enough_checked_streams(self):
+    verdicts = [self.judge((1000, 0, (0, 500)), (1000, 0, (0, 500)))
+                for _ in range(25)]
+    passes, lines = chunk_ir.summarize(verdicts, 20)
+    self.assertTrue(passes, lines)
+    self.assertIn('25 streams: 25 checked below the threshold', lines[0])
+    passes, lines = chunk_ir.summarize(verdicts[:5], 20)
+    self.assertFalse(passes)
+    self.assertTrue(any('vacuous' in l for l in lines))
+    above = [self.judge((2000, 0, (4, 500)), (1000, 0, (0, 500)))
+             for _ in range(30)]
+    self.assertFalse(chunk_ir.summarize(above, 20)[0])
+
+  def test_the_gate_judges_the_report(self):
+    text = ('30 streams: 25 checked below the threshold, 5 above it (not '
+            'checked), 0 different\nlargest excess of the default run: '
+            '+0.0000%\nRESULT: PASS\n')
+    ok, detail = gate.judge_slow_below_threshold(text, 0)
+    self.assertTrue(ok, detail)
+    self.assertIn('25 checked', detail)
+    self.assertFalse(gate.judge_slow_below_threshold(text, 1)[0])
+    self.assertFalse(gate.judge_slow_below_threshold('RESULT: PASS\n', 0)[0])
+
+
+class SliceSteps(unittest.TestCase):
+  def test_the_s2_and_s3_steps_and_areas(self):
+    for step in ('attr-diff', 'codequality', 'chunk-identity', 'chunk-rss',
+                 'slow-below-threshold'):
+      self.assertIn(step, gate.STEPS)
+      self.assertIn(step, gate.STEP_FUNCTIONS)
+      self.assertIn(step, gate.M4_STEPS)
+    self.assertEqual(gate.AREA_STEPS['attr'], ('attr-diff', 'codequality'))
+    self.assertEqual(set(gate.AREA_STEPS['chunk']), {
+      'chunk-identity', 'chunk-rss', 'slow-below-threshold'})
+    self.assertEqual(gate.areas_of(
+      'tests/.edgy/filters/cir-attr-known.txt'), ('attr',))
+    steps, _ = gate.lean_steps(['library', 'attr', 'chunk', 'speed'])
+    self.assertIn('attr-diff', steps)
+    self.assertIn('chunk-rss', steps)
+    self.assertIn('perf', steps)
+
+  def test_the_known_differences_file_of_the_gate_is_valid(self):
+    path = BIN.parent.parent / gate.ATTR_KNOWN
+    self.assertTrue(path.exists())
+    entries, problems = attr.validate_known(str(path))
+    self.assertEqual(problems, [])
+
+
+def corpus_result(path, bucket = 'PASS', status = None, variant = '-D',
+                  kind = 'rp'):
+  return {'path': path, 'variant': variant, 'test_type': kind,
+          'bucket': bucket, 'status': status or bucket}
+
+
+BASE_RESULTS = [corpus_result('a.cpp'), corpus_result('b.cpp'),
+                corpus_result('c.cpp', 'FAIL', 'FAIL(COMPILE)')]
+
+
+class StatusRegressions(unittest.TestCase):
+  def test_a_pass_that_stops_passing_is_a_regression(self):
+    after = [corpus_result('a.cpp'),
+             corpus_result('b.cpp', 'RUN_FAIL', 'FAIL--OUTPUT MISMATCH'),
+             corpus_result('c.cpp', 'FAIL', 'FAIL(COMPILE)')]
+    self.assertEqual(gate.status_regressions(BASE_RESULTS, after),
+                     [('b.cpp', '-D', 'PASS', 'FAIL--OUTPUT MISMATCH')])
+
+  def test_improvements_output_changes_and_new_cases_are_not(self):
+    after = [corpus_result('a.cpp', 'PASS', 'PASS--OUTPUT MISMATCH'),
+             corpus_result('b.cpp'), corpus_result('c.cpp'),
+             corpus_result('d.cpp', 'FAIL', 'FAIL')]
+    self.assertEqual(gate.status_regressions(BASE_RESULTS, after), [])
+
+  def test_the_variant_and_type_tell_cases_apart(self):
+    before = [corpus_result('a.cpp', variant = '-DX'),
+              corpus_result('a.cpp', variant = '-DY')]
+    after = [corpus_result('a.cpp', variant = '-DX'),
+             corpus_result('a.cpp', 'FAIL', variant = '-DY')]
+    self.assertEqual([r[1] for r in gate.status_regressions(before, after)],
+                     ['-DY'])
+
+  def judge(self, after, triage = None, config = 'edg_x86_64_cir'):
+    return gate.judge_status_regressions('cpp-corpus', BASE_RESULTS, after,
+                                         config, triage or {})
+
+  def test_an_untriaged_regression_is_a_problem(self):
+    after = [corpus_result('a.cpp', 'FAIL'), corpus_result('b.cpp')]
+    problems, note = self.judge(after)
+    self.assertEqual(len(problems), 1)
+    self.assertIn('a.cpp [-D] PASS -> FAIL', problems[0])
+    self.assertIn('1 PASS->not PASS against the baseline (0 triaged)', note)
+
+  def test_a_triaged_regression_passes_for_its_config(self):
+    after = [corpus_result('a.cpp', 'FAIL'), corpus_result('b.cpp')]
+    triage = {('a.cpp', '-D', 'edg_x86_64_cir'): 'accepted, see the review'}
+    problems, note = self.judge(after, triage)
+    self.assertEqual(problems, [])
+    self.assertIn('(1 triaged)', note)
+    # not for the other config
+    self.assertTrue(self.judge(after, triage, 'edg_x86_64_cir_2p')[0])
+    # a * line covers both
+    star = {('a.cpp', '-D', '*'): 'accepted, see the review'}
+    self.assertEqual(self.judge(after, star, 'edg_x86_64_cir_2p')[0], [])
+
+  def test_a_stale_triage_line_is_a_problem(self):
+    after = [corpus_result('a.cpp'), corpus_result('b.cpp')]
+    triage = {('a.cpp', '-D', '*'): 'accepted, see the review'}
+    problems, _ = self.judge(after, triage)
+    self.assertEqual(len(problems), 1)
+    self.assertIn('stale status triage line a.cpp', problems[0])
+    # a line for a case this run does not have is not judged here
+    other = {('z.cpp', '-D', '*'): 'a test of another list'}
+    self.assertEqual(self.judge(after, other)[0], [])
+
+  def test_a_baseline_without_results_is_a_problem(self):
+    problems, _ = gate.judge_status_regressions('c', [], BASE_RESULTS,
+                                                'edg_x86_64_cir', {})
+    self.assertEqual(len(problems), 1)
+
+  def test_the_triage_file(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      path = Path(tmp) / 'triage.txt'
+      path.write_text('# c\na.cpp | -D | * | accepted: the reason\n')
+      self.assertEqual(gate.read_status_triage(path), (
+        {('a.cpp', '-D', '*'): 'accepted: the reason'}, []))
+      path.write_text('a.cpp | -D | * | todo\nb.cpp | x\n'
+                      'c.cpp | -D | * | fine reason\n'
+                      'c.cpp | -D | * | fine reason\n')
+      problems = gate.read_status_triage(path)[1]
+      self.assertEqual(len(problems), 3)
+      self.assertEqual(gate.read_status_triage(Path(tmp) / 'none.txt'),
+                       ({}, []))
+
+  def ctx(self, tmp, baseline):
+    import types
+    out = Path(tmp) / 'out'
+    out.mkdir(exist_ok = True)
+    return types.SimpleNamespace(
+      tree = Path(tmp), out = out,
+      args = types.SimpleNamespace(status_baseline = baseline))
+
+  def test_the_step_check_reads_the_baseline_and_writes_the_regressions(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      base = Path(tmp) / 'base'
+      base.mkdir()
+      (base / 'cpp_edg_x86_64_cir.json').write_text(json.dumps(
+        {'edg_x86_64_cir': BASE_RESULTS}))
+      ctx = self.ctx(tmp, str(base))
+      after = [corpus_result('a.cpp', 'RUN_FAIL'), corpus_result('b.cpp')]
+      problems, note = gate.status_check(ctx, 'cpp-corpus', 'cpp',
+                                         'edg_x86_64_cir', after)
+      self.assertEqual(len(problems), 1)
+      text = (ctx.out / 'cpp-corpus' / 'status-regressions.txt').read_text()
+      self.assertIn('a.cpp', text)
+      # the check is off with an empty option
+      off = self.ctx(tmp, '')
+      off.out = Path(tmp) / 'out2'
+      self.assertEqual(gate.status_check(off, 'cpp-corpus', 'cpp',
+                                         'edg_x86_64_cir', after), ([], ''))
+      # a baseline without the file fails
+      missing = self.ctx(tmp, str(Path(tmp) / 'nowhere'))
+      missing.out = Path(tmp) / 'out3'
+      self.assertTrue(gate.status_check(missing, 'cpp-corpus', 'cpp',
+                                        'edg_x86_64_cir', after)[0])
+
+  def test_the_gate_files(self):
+    root = BIN.parent.parent
+    self.assertEqual(gate.read_status_triage(root / gate.STATUS_TRIAGE)[1],
+                     [])
+    self.assertEqual(gate.areas_of(gate.STATUS_TRIAGE), ('tests',))
+    for name in ('c_edg_x86_64_cir', 'cpp_edg_x86_64_cir'):
+      self.assertTrue(name)
+
+
+class NamesCheck(unittest.TestCase):
+  def made(self, status = 0, output = '', stream = b'abc'):
+    return names_check.Made(status, output, stream)
+
+  def test_a_clean_unit_has_no_problem(self):
+    self.assertEqual(names_check.judge_unit('u', self.made(), self.made()),
+                     [])
+
+  def test_a_unit_that_does_not_compile_fails(self):
+    failed = self.made(status = 2, stream = None)
+    problems = names_check.judge_unit('u', failed, failed)
+    self.assertEqual(len(problems), 1)
+    self.assertIn('fails without ECIL_CHECK_ALL_NAMES', problems[0])
+
+  def test_a_changed_name_is_reported_with_its_line(self):
+    line = ('ECIL: the name of a function changed after it was sent: '
+            '"_Z1fv" is now "_Z1gv"')
+    problems = names_check.judge_unit(
+      'u', self.made(), self.made(status = 134, output = line + '\nabort\n'))
+    self.assertTrue(any('_Z1fv' in p for p in problems))
+    self.assertTrue(any('exit status 134' in p for p in problems))
+
+  def test_an_assertion_or_a_different_stream_fails(self):
+    problems = names_check.judge_unit(
+      'u', self.made(), self.made(output = 'assertion failed: x (il.c)'))
+    self.assertTrue(any('assertion failed' in p for p in problems))
+    problems = names_check.judge_unit('u', self.made(),
+                                      self.made(stream = b'abd'))
+    self.assertTrue(any('differs from the stream without' in p
+                        for p in problems))
+
+  def fake_root(self, tmp, check = True, bug = False, functions = 2500,
+                dump = True):
+    root = Path(tmp)
+    (root / 'util').mkdir()
+    (root / 'src').mkdir()
+    (root / 'src/ecil_type.c').write_text(
+      '#define ECIL_NAME_CHECK_ALL    2000\n'
+      '#define ECIL_NAME_CHECK_STRIDE 16\n')
+    counter = root / 'ecil-dump'
+    counter.write_text('#!/bin/sh\nawk \'BEGIN { for (i = 0; i < %d; i++) '
+                       'print "  DECL_FUNC 1 2 3" }\'\n' % functions)
+    counter.chmod(0o755)
+    eccp = root / 'util/eccp.sh'
+    eccp.write_text(
+      '#!/bin/sh\n'
+      'printf stream-bytes > "$KEEP_STREAM.ecil"\n'
+      + ('if [ -n "$ECIL_CHECK_ALL_NAMES" ]; then echo "ECIL: the name of a '
+         'function changed after it was sent: x is now y"; exit 134; fi\n'
+         if bug else '') + 'exit 0\n')
+    eccp.chmod(0o755)
+    for unit in perf.PINNED_UNITS:
+      source = root / 'dev_tools/cir-realworld' / f"{unit}.cpp"
+      source.parent.mkdir(parents = True, exist_ok = True)
+      source.write_text('int main() {}\n')
+    build = root / 'build/gcc-cir'
+    build.mkdir(parents = True)
+    fe = root / 'cpfe-cir'
+    fe.write_text('binary ECIL_CHECK_ALL_NAMES text' if check else 'binary')
+    (build / 'environment.sh').write_text(
+      f'export CPFE_CIR="{fe}"\n' +
+      (f'export ECIL_DUMP="{counter}"\n' if dump else ''))
+    return root
+
+  def run_tool(self, root):
+    return subprocess.run(
+      [sys.executable, str(BIN / 'edg-cir-names-check'), '--root', str(root),
+       '--functions', '0', '-j', '2'], text = True, stdout = subprocess.PIPE,
+      stderr = subprocess.STDOUT)
+
+  def test_the_tool_end_to_end(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proc = self.run_tool(self.fake_root(tmp))
+      self.assertEqual(proc.returncode, 0, proc.stdout)
+      self.assertIn('6 unit(s) with ECIL_CHECK_ALL_NAMES=1', proc.stdout)
+      self.assertIn('2500 DECL_FUNC', proc.stdout)
+      self.assertIn('RESULT: PASS', proc.stdout)
+
+  def test_a_run_that_checks_nothing_extra_is_vacuous(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proc = self.run_tool(self.fake_root(tmp, functions = 2000))
+      self.assertEqual(proc.returncode, 1, proc.stdout)
+      self.assertIn('vacuous: no unit has more than 2000 DECL_FUNC',
+                    proc.stdout)
+    with tempfile.TemporaryDirectory() as tmp:
+      proc = self.run_tool(self.fake_root(tmp, functions = 2001))
+      self.assertEqual(proc.returncode, 0, proc.stdout)
+
+  def test_a_missing_ecil_dump_is_a_setup_problem(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proc = self.run_tool(self.fake_root(tmp, dump = False))
+      self.assertEqual(proc.returncode, 2, proc.stdout)
+      self.assertIn('no ecil-dump', proc.stdout)
+
+  def test_the_coverage_rule_and_the_limit(self):
+    self.assertEqual(names_check.judge_coverage({'a': 5, 'b': 2001}, 2000), [])
+    self.assertEqual(len(names_check.judge_coverage({'a': 5}, 2000)), 1)
+    self.assertEqual(len(names_check.judge_coverage({}, 2000)), 1)
+    self.assertEqual(names_check.name_check_limit(BIN.parent.parent), 2000)
+    with tempfile.TemporaryDirectory() as tmp:
+      self.assertEqual(names_check.name_check_limit(Path(tmp)), 2000)
+
+  def test_the_tool_catches_a_changed_name(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proc = self.run_tool(self.fake_root(tmp, bug = True))
+      self.assertEqual(proc.returncode, 1, proc.stdout)
+      self.assertIn('FAIL', proc.stdout)
+      self.assertIn('RESULT: FAIL', proc.stdout)
+
+  def test_a_front_end_without_the_check_is_a_setup_problem(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proc = self.run_tool(self.fake_root(tmp, check = False))
+      self.assertEqual(proc.returncode, 2, proc.stdout)
+      self.assertIn('not a CHECKING build', proc.stdout)
+
+  def test_the_gate_judges_the_report_and_has_the_step(self):
+    text = ('8 unit(s) with ECIL_CHECK_ALL_NAMES=1; the front end checks '
+            'every function name\nu: ok (3 KB stream)\nRESULT: PASS\n')
+    ok, detail = gate.judge_names_check(text, 0)
+    self.assertTrue(ok, detail)
+    self.assertIn('8 unit(s)', detail)
+    self.assertFalse(gate.judge_names_check(text, 1)[0])
+    self.assertFalse(gate.judge_names_check('RESULT: PASS\n', 0)[0])
+    self.assertIn('names-check', gate.STEPS)
+    self.assertIn('names-check', gate.STEP_FUNCTIONS)
+    self.assertEqual(gate.AREA_STEPS['names'], ('names-check',))
+    self.assertIn('names-check', gate.lean_steps(['writer', 'names'])[0])
+
+
+class AttrResidue(unittest.TestCase):
+  def classify(self, category, detail, callset = False):
+    return attr.classify_difference(category, detail, callset)
+
+  def test_the_high_value_attributes_are_gated(self):
+    for category, detail in (
+        ('fn', 'only-clangir:nounwind'), ('fn', 'only-ours:nounwind'),
+        ('param0', 'only-clangir:noundef'), ('ret', 'only-clangir:noundef'),
+        ('param1', 'only-clangir:nonnull'),
+        ('param0', 'only-clangir:dereferenceable(8)'),
+        ('param0', 'only-clangir:dereferenceable_or_null(8)'),
+        ('param0', 'only-clangir:align 8'),
+        ('fn', 'only-ours:memory(argmem: read)'),
+        ('fn', 'only-clangir:mustprogress'), ('fn', 'only-clangir:noreturn'),
+        ('fn', 'only-clangir:builtin'), ('fn', 'only-ours:nobuiltin'),
+        ('fn', 'only-clangir:inlinehint'), ('fn', 'only-clangir:alwaysinline'),
+        ('call', 'only-clangir:foo:arg0:noundef'),
+        ('call', 'only-ours:foo:fn:nounwind'),
+        ('call', 'only-clangir:foo:ret:align 4')):
+      self.assertEqual(self.classify(category, detail), (True, ''),
+                       (category, detail))
+
+  def test_the_rest_is_residue_by_category(self):
+    expected = {
+      ('fn', 'only-clangir:norecurse'): 'fn norecurse',
+      ('fn', 'only-clangir:cold'): 'fn cold',
+      ('fn', 'only-clangir:uwtable'): 'fn uwtable',
+      ('param0', 'only-ours:sret(%class.basic_string)'): 'param sret',
+      ('param2', 'only-clangir:readonly'): 'param readonly',
+      ('ret', 'only-ours:noalias'): 'ret noalias',
+      ('md', 'only-ours:tbaa'): 'md:tbaa',
+      ('call', 'only-ours:foo:arg0:captures(none)'): 'call captures'}
+    for (category, detail), key in expected.items():
+      self.assertEqual(self.classify(category, detail), (False, key),
+                       (category, detail))
+
+  def test_a_callee_that_only_one_side_calls_is_residue_whatever_it_says(self):
+    self.assertEqual(self.classify('call', 'only-ours:foo:arg0:noundef', True),
+                     (False, 'callset'))
+    self.assertEqual(self.classify('call', 'only-clangir:foo:fn:nounwind',
+                                   True), (False, 'callset'))
+
+  def test_the_attribute_of_a_difference(self):
+    self.assertEqual(attr.difference_attribute(
+      'call', 'only-ours:_ZN1AC1Ev:arg0:noundef'), 'noundef')
+    self.assertEqual(attr.difference_attribute(
+      'fn', 'only-clangir:memory(argmem: readwrite)'),
+      'memory(argmem: readwrite)')
+    self.assertEqual(attr.difference_attribute('md', 'only-ours:tbaa'),
+                     'md:tbaa')
+
+  def test_the_gate_documents_the_gated_set(self):
+    text = (BIN / 'edg-cir-gate-evidence').read_text()
+    for word in ('nounwind', 'noundef', 'nonnull', 'dereferenceable',
+                 'alwaysinline', 'residue.txt'):
+      self.assertIn(word, text)
+
+
+class Milestone(unittest.TestCase):
+  def test_the_milestone_options_fill_in_what_is_missing(self):
+    extra = checkpoint.milestone_extra('')
+    for option in ('--perf-realworld pinned', '--perf-levels 0,2',
+                   '--perf-targets s1', '--day-baseline-run'):
+      self.assertIn(option, extra)
+    self.assertEqual(checkpoint.milestone_extra(
+      '--perf-levels 0 --perf-targets s1').count('--perf-levels'), 1)
+    self.assertIn('--perf-levels 0',
+                  checkpoint.milestone_extra('--perf-levels 0'))
+    self.assertNotIn('--perf-levels 0,2',
+                     checkpoint.milestone_extra('--perf-levels 0'))
+    self.assertTrue(checkpoint.milestone_extra('--foo').endswith('--foo'))
+
+  def test_the_milestone_baselines_are_the_m5a_perf_and_the_day_run(self):
+    self.assertEqual(checkpoint.MILESTONE_PERF_BASELINE,
+                     '~/edg-cir-config/m5a-base-perf.json')
+    self.assertIn('day-base', checkpoint.MILESTONE_DAY_BASELINE)
+
+  def test_milestone_runs_every_step(self):
+    steps = gate.default_steps(True, True)
+    for step in ('lazy-identity', 'attr-diff', 'codequality',
+                 'chunk-identity', 'chunk-rss', 'slow-below-threshold',
+                 'names-check', 'perf', 'rss', 'stress', 'cpp-stress',
+                 'm4-stress', 'crash-sweep', 'day', 'identity'):
+      self.assertIn(step, steps)
+
+  def test_milestone_excludes_lean(self):
+    saved = (checkpoint.box_reachable, sys.argv, os.getcwd())
+    checkpoint.box_reachable = lambda: True
+    sys.argv = ['edg-cir-checkpoint', '--milestone', '--lean', 'tooling']
+    os.chdir(BIN.parent.parent)
+    try:
+      with self.assertRaises(SystemExit) as raised, \
+           contextlib.redirect_stderr(io.StringIO()):
+        checkpoint.main()
+    finally:
+      checkpoint.box_reachable, sys.argv, directory = saved
+      os.chdir(directory)
+    self.assertEqual(raised.exception.code, 2)
+
+
+class MilestonePreparation(unittest.TestCase):
+  def test_the_status_triage_has_pr101373_for_both_configs_only(self):
+    triage, problems = gate.read_status_triage(
+      BIN.parent.parent / gate.STATUS_TRIAGE)
+    self.assertEqual(problems, [])
+    self.assertEqual(sorted(k[:3] for k in triage), [
+      ('imported/gnu/cpp/torture/pr101373.sft.cpp', '-DTEST_NUMBER=1', '*')])
+    self.assertFalse(any('pr100382' in k[0] for k in triage))
+
+  def test_slow_below_threshold_runs_with_two_jobs(self):
+    import inspect
+    self.assertEqual(gate.SLOW_JOBS, 2)
+    source = inspect.getsource(gate.step_slow_below_threshold)
+    self.assertIn('-j {SLOW_JOBS}', source)
+    self.assertNotIn('BUILD_JOBS', source)
 
 
 if __name__ == '__main__':

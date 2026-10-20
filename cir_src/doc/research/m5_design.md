@@ -79,6 +79,19 @@ corpus bodies and 63% on the TUs, but only 3.3% on the C corpus.
   (`m5_library.md` §L6).
 - **The flag** `EDG_CIR_FLAG_EAGER_BODIES` keeps eager emission for A/B
   runs and the `lazy-identity` step.
+- **Consequence for tools** (as implemented). The output no longer contains
+  unused linkonce_odr or internal definitions. With `NO_LLVM_PASSES` the
+  lazy erase alone removes them, because no GlobalDCE runs. A consumer that
+  needs a body or symbol for every streamed function must pass
+  `EAGER_BODIES` / `--eager-bodies`. That covers `lazy-identity`, the
+  symbol-presence checks, and attr-diff where unused inline functions
+  matter.
+- **Diagnosing a missed edge.** It is an internal error. Use
+  `--lazy-symbols` to see what was replayed or dropped, or rerun with
+  `--eager-bodies`.
+- **Implementation choice.** Deferral is per function, not per frame,
+  because the function is the unit the reader validates and replays. The
+  S1 review judged this sound.
 
 ## 3. S3: chunked lowering, design (a)
 
@@ -105,9 +118,9 @@ at -O2, and the libstdc++ TUs.
 - the globals chunk linked first.
 
 **Threshold.** Chunk only when the TU has at least `chunk_threshold`
-emitted bodies. The default is fixed from S3 measurements on real
-header-heavy TUs; the spike suggests about 2000 bodies, or a CIR module of
-about 100 MB. The chunk size `chunk_functions` defaults to 500.
+emitted bodies. **The default is 4000** (user decision 2026-10-20, after the M5 gate). The S3 work chose 2000, and the M5 gate was measured at 2000. At 2000 the generated 6000-function C++ TU chunked (about 6000 emitted bodies, 13 chunks; 3600 of its bodies are deferred and replayed). Lowering took +21% to save 39 MB, so its library Ir was 102.6% of M5a, missing S1's 90% target.
+- **Correction recorded:** the orchestrator first described that TU as having 3600 bodies, but 4000 does not unchunk it. The S1 miss on that TU remains open (handoff_4). 4000 only spares TUs of 2000 to 4000 bodies, for example the generated 3000-function C TU.
+- The default was raised without re-running the gate. The next session re-runs perf, rss and slow-below-threshold, and should consider a threshold on estimated CIR module size instead of a body count. The L3 spike had suggested about 2000 bodies, or a CIR module of about 100 MB. The chunk size `chunk_functions` defaults to 500.
 
 **Bound.** The CIR module stays resident until its chunk is lowered:
 names are chosen at finish, and the CIR passes are whole-module. A failed
@@ -130,10 +143,23 @@ a text post-processor.
 | `used` → `llvm.compiler.used` | key 11 (writer) plus the library | Also an S1 root |
 | available_externally for C99/gnu_inline inline-only bodies | the library | Today they become declarations, so they are never inlined at -O1 and up (`m5_baseline.md` §5) |
 | `builtin` on new-expression allocation calls | `CALL ALLOC_EXPR` (writer) plus the library | Confirmed at the pin: clangir's LLVM IR gives the new-expression calls `builtin allocsize(0)`, operator delete `builtin nounwind`, and an explicit `::operator new` only `allocsize(0)`. The declarations carry `nobuiltin` (`m5_library.md` §8.4). |
+| Allocation elision (user decision 2026-10-20) | — | With `builtin`, LLVM may omit a new-expression's call to a replaced global `operator new`, as C++14 [expr.new]/14 permits and clang does; g++ keeps the calls. Four gnu tests that count calls to a replaced `operator new` (`defaulted19`, `sized-dealloc1`, `aligned-new3`, `new41`) are triaged as permitted elision. |
 | Branch weights / `[[likely]]` | not at parity: CIRGen ignores it at the pin | Optional, last; `cir.expect` covers `__builtin_expect` |
 | `builtin-ctype-1` (our IR at -O2) | to be diagnosed in S2 | |
 
-**Hazards** (reviewer checklist):
+**Hazards** (reviewer checklist; the S2 library review found the first
+one in the code):
+- **available_externally bodies that call their own symbol.** glibc's C++
+  `<string.h>` under `__OPTIMIZE__` (`memchr` calling `__builtin_memchr`,
+  the `_FORTIFY_SOURCE` `__X_alias` wrappers) would become an infinite loop
+  under TailCallElim, then UB with pure/willreturn and mustprogress. Keep
+  such a body a declaration, as clang does (`isTriviallyRecursive`); also
+  keep `noinline` bodies a declaration. An available_externally function
+  gets no comdat and no `dso_local`.
+- **Volatile and dynamically initialized `thread_local` accesses are never
+  "pure"** in the writer's `expression_is_pure` (S4/S5 review). The
+  C++17 compound-assignment order and the loop-condition fold rely on it, so
+  a volatile read could otherwise be reordered or dropped.
 - the static invoker's null `this` versus nonnull: the invoker passes a
   real closure object (spec 11.9);
 - noundef on a GNU value-less `return;`;
@@ -219,11 +245,13 @@ compiling joins the list at the next baseline.
 
 | Slice | Target |
 | --- | --- |
-| S1 | **`lazy-identity`:** lazy against eager at -O0, per-symbol bodies identical, non-vacuous (deferred, replayed and dropped counts above 0 on every pinned TU). **Instructions:** library Ir on each pinned TU at most 70% of M5p, and at most 90% on the generated 6000-function C++ TU (few dead bodies). The research measured CPU time (63% on 8 libstdc++ TUs, with lazy emission plus verifier-off). S1 re-measures in Ir before it is gated, and the target moves only with the user's agreement. |
-| S2 | **`attr-diff`:** at -O0 and -O2, on the probe set and the pinned TUs. It reports the number of compared symbols and the number of explained differences. Every new entry in the known-differences file is reviewed, and the unexplained count is 0. **`opt-corpus`:** no new our-IR case. **`codequality`** is reported. **nounwind coverage:** declarations and definitions at least at clangir's share on the pinned TUs. |
+| S1 | **`lazy-identity`:** lazy against eager at -O0, per-symbol bodies identical, non-vacuous (deferred, replayed and dropped counts above 0 on every pinned TU). **Instructions:** library Ir on each pinned TU at most 70% of M5a, at -O0 and at -O2. On the generated 6000-function C++ TU (few dead bodies) the limit is 90% at -O0. At -O2 that TU is reported but not gated, because LLVM's optimization pipeline, which S1 does not touch, dominates there (user decision 2026-10-20; S1 checkpoint: 88.3% at -O0, 93.2% at -O2). The research measured CPU time (63% on 8 libstdc++ TUs, with lazy emission plus verifier-off). S1 re-measures in Ir before it is gated, and the target moves only with the user's agreement. |
+| S2 | **`attr-diff`** (user decision 2026-10-20) at -O0 and -O2, on the probe set and the pinned TUs, reporting compared symbols and explained differences. **Gated:** 0 unexplained differences in the high-value attributes: `nounwind`, `noundef`, `nonnull`, `dereferenceable`, `align`, `memory(...)`, `mustprogress`, `noreturn`, `builtin`/`nobuiltin`, `inlinehint`, `alwaysinline`. **Reported, not gated:** the remaining residue (call-set differences, `norecurse`, `cold`, structural EDG-against-clang differences), by category in handoff_4 for M6. Every known-difference entry is reviewed. **`opt-corpus`:** no new our-IR case. **`codequality`** is reported. |
 | S3 | **Peak RSS** (minimum of 3 runs) on c12000 at most 55% of M5p with chunking forced on. On the largest pinned TU it is reported. **Below the threshold**, time and output are unchanged. **Forced to 1 function per chunk**, chunked output is identical to unchunked on both corpora. |
 | S4 | **Writer share of release-FE Ir:** at least 2 points lower on the 6000-function C TU (W3: inline record primitives) and at least 4 points lower on the 6000-function C++ TU (W3: the func-state cache, the TU-local memo, the primitives). Streams are identical, except the C++17 purity spills, which are attributed. |
 | All | **Both corpora at -O0:** 0 PASS→FAIL against M5p. **-O2:** no new our-IR. **Crash-sweep:** 0. **The full gate at M5.** |
+
+**Gate order** (user decision 2026-10-20). After S1 and the S2+S4 checkpoint, the rest of M5 (S2 round 2, S3, the writer S6/S7 fixes) lands together and goes straight to the full M5 milestone gate (`--milestone`). After the gate, only the affected steps are re-run.
 
 **Slice gate steps.** S1 and S3 change memory, speed and recursion. Their
 lean gates add `rss`, `perf`, `stress`, `cpp-stress`, `m4-stress` and
@@ -244,6 +272,25 @@ out. S2 adds `crash-sweep`, `symbols` and `mixed-tu`.
   only with a concurrent consumer, which the user deferred ("room only").
   §7 keeps the deferred bodies independent, so a future consumer thread can
   replay them early.
+- **Dropped bodies are checked by the reader only** (S1 review). The
+  emitter-level format checks no longer run on a deferred body that is never
+  replayed: the stack floor, ZERO_BYTES, value categories, "values left",
+  and the NONTRIVIAL_ABI `DROP`. So a writer bug in a dead inline function is
+  invisible in a default (lazy) run; the boost/multiprecision `LOAD; DROP`
+  was such a case. Therefore:
+  - every milestone gate runs `lazy-identity` (an `EAGER_BODIES` run over
+    both corpora and the pinned TUs);
+  - an eager-only failure is a finding to triage, not an accepted
+    difference.
+- **"Unsupported" diagnostics** that the library raises inside dropped
+  bodies, and the keep-going drops that go with them, no longer appear.
+  This is a user-visible change, listed in the gate notes and handoff_4.
+- **Kept declarations.** A dropped body that a dead entity still names, an
+  unused vtable for example, is left as a declaration. That relies on
+  GlobalDCE removing the dead namer. With `NO_LLVM_PASSES` (no GlobalDCE)
+  the library erases or replays it instead. A kept function named by a live
+  entity is an internal error: a missed reachability edge must never become
+  a silent undefined reference.
 - **Defects tracked into the slices:**
   - the writer's empty-class assignment `LOAD; DROP` of a NONTRIVIAL_ABI
     record (`m5_writer.md` §4, boost/multiprecision) → S2 or S4;

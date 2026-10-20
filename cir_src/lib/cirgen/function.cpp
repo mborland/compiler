@@ -78,6 +78,12 @@ records and they are ignored here, up to the one that closes it.
 {
   bool ok = true;
 
+  cur_context_ = &context;
+  if (skipping_) {
+    /* The body of a deferred function: only note what finish needs. */
+    lazy_note(r);
+    return session_.status == EDG_CIR_OK;
+  }
   record_depth_ = context.scope.bracket_depth;
   if (in_function_ && !entry_mark_set_ && r.opcode != eop_param &&
       r.opcode != eop_func_eh_spec && !frames_.empty() &&
@@ -540,6 +546,76 @@ Label names are hints; use a unique, stable spelling per label id.
   return "L" + std::to_string(l);
 }  /* a_emitter::label_name */
 
+namespace {
+
+bool is_constant_true(mlir::Value value)
+/*
+A condition that is a constant true: a !cir.bool constant, or a nonzero
+integer constant converted to bool.  (clang's checkIfLoopMustProgress asks
+whether the controlling expression folds to a true integer.)
+*/
+{
+  bool result = false;
+  mlir::Operation *def = value ? value.getDefiningOp() : nullptr;
+
+  if (auto cast = mlir::dyn_cast_or_null<cir::CastOp>(def)) {
+    if (cast.getKind() == cir::CastKind::int_to_bool)
+      return is_constant_true(cast.getSrc());
+    return false;
+  }
+  if (auto constant = mlir::dyn_cast_or_null<cir::ConstantOp>(def)) {
+    if (auto flag = mlir::dyn_cast<cir::BoolAttr>(constant.getValue()))
+      result = flag.getValue();
+    else if (auto integer = mlir::dyn_cast<cir::IntAttr>(constant.getValue()))
+      result = !integer.getValue().isZero();
+  }
+  return result;
+}  /* is_constant_true */
+
+bool is_trivially_true(mlir::Value value)
+/*
+A condition that is a constant true and nothing else: the block that holds
+it has no operation but the constant and its conversion.  A comma expression
+(`(v, true)`: a read of a volatile, `(x++, true)`) leaves operations behind
+that clang's EvaluateAsInt cannot fold, so such a loop is not trivial (a
+volatile access is observable, so the loop stays and the function keeps
+mustprogress).
+*/
+{
+  bool result = is_constant_true(value);
+
+  if (result) {
+    for (mlir::Operation &op : *value.getParentBlock()) {
+      if (!mlir::isa<cir::ConstantOp, cir::CastOp>(op))
+        result = false;
+    }
+  }
+  return result;
+}  /* is_trivially_true */
+
+bool region_is_empty(mlir::Region &region)
+/*
+No statement in the region: only the terminator and scopes (the blocks `{}`)
+that are empty themselves.
+*/
+{
+  bool empty = true;
+
+  for (mlir::Block &block : region) {
+    for (mlir::Operation &op : block) {
+      if (mlir::isa<cir::YieldOp>(op))
+        continue;
+      if (auto scope = mlir::dyn_cast<cir::ScopeOp>(op))
+        empty = empty && region_is_empty(scope.getScopeRegion());
+      else
+        empty = false;
+    }
+  }
+  return empty;
+}  /* region_is_empty */
+
+}  /* anonymous namespace */
+
 mlir::Value a_emitter::pop_bool_condition()
 /*
 Pop a condition and make sure it is a !cir.bool.
@@ -574,14 +650,24 @@ FUNC_BEGIN: create the entry block and open the function frame.
                      "in ECIL v0");
   else if (e == nullptr)
     ok = false;
-  else if (e->has_body)
+  else if (e->body_arrived && !replaying_)
     ok = internal("function " + std::string(e->want) + " defined twice");
-  if (ok) {
+  if (ok && lazy_ && !replaying_ && cur_context_ != nullptr &&
+      lazy_can_defer(*e, *cur_context_)) {
+    lazy_begin(r, *e, *cur_context_);
+  } else if (ok) {
     t = type_at(e->type);
     fn = mlir::cast<cir::FuncOp>(e->op);
     e->has_body = true;
+    e->body_arrived = true;
     e->referenced = true;
     apply_function_attributes(*e, fn);
+    /* A cold definition is also optimized for size (not at -O0, where
+       clang makes everything optnone). */
+    if (e->cold && !e->hot && session_.opt_level >= 1)
+      fn->setAttr(mlir::StringAttr::get(
+                      ctx_, cir::CIRDialect::getOptimizeForSizeAttrName()),
+                  unit_attr_);
     /* As CIRGen: a definition compiled without exceptions cannot throw. */
     if (is_nothrow_call(0, e))
       fn->setAttr(nothrow_name_, unit_attr_);
@@ -836,6 +922,7 @@ FUNC_END: apply the fall-off-the-end rule and close the function.
   else
     ok = pop_frame();
   if (ok) {
+    ++emitted_bodies_;
     uint_operand(r.ops[0], flags);
     block = builder_.getBlock();
     terminated = !block->empty() &&
@@ -861,6 +948,15 @@ FUNC_END: apply the fall-off-the-end rule and close the function.
       for (mlir::Block *b : dead)
         b->erase();
     }
+    /* Every function of C++11 and later makes progress (CIRGen's
+       checkIfFunctionMustProgress), unless it has a trivial infinite loop
+       (while (true) {}: a constant-true condition and nothing in the body). */
+    if (!c_language_ && session_.header.standard >= 201103 &&
+        !fn_entity_->trivial_loop)
+      fn_->setAttr(mustprogress_name_, unit_attr_);
+    /* C++ main cannot be called recursively (CIRGen's startFunction). */
+    if (!c_language_ && (fn_entity_->flags & ECIL_DECL_FUNC_IS_MAIN))
+      fn_->setAttr(norecurse_name_, unit_attr_);
     builder_.clearInsertionPoint();
     builder_.setInsertionPointToEnd(module_.getBody());
     in_function_ = false;
@@ -918,6 +1014,7 @@ RETURN_STMT: cir.return directly at the statement (no shared return block).
     if ((fn_entity_->flags & ECIL_DECL_FUNC_IS_MAIN) != 0) {
       implicit_return(true);
     } else {
+      fn_entity_->valueless_return = true;
       uint32_t align = static_cast<uint32_t>(type_align(ret->cir));
       mlir::Value slot = return_slot();
       mlir::Value v = builder_.createLoad(loc(), slot, false, align);
@@ -1752,6 +1849,7 @@ Function-level records and statements.
       ok = format_error("values left on the stack at WHILE_BODY");
     } else {
       cir::WhileOp op = mlir::cast<cir::WhileOp>(f->op);
+      f->cond_true = is_trivially_true(cond);
       builder_.createCondition(cond);
       f->phase = 1;
       builder_.setInsertionPointToStart(&op.getBody().front());
@@ -1766,6 +1864,9 @@ Function-level records and statements.
       cir::WhileOp op = mlir::cast<cir::WhileOp>(f->op);
       close_cleanups(frames_.size() - 1, 1);
       terminate_region(op.getBody());
+      if (f->cond_true && region_is_empty(op.getBody()) &&
+          fn_entity_ != nullptr)
+        fn_entity_->trivial_loop = true;
       builder_.setInsertionPointAfter(op.getOperation());
       ok = pop_frame();
     }
@@ -1802,6 +1903,9 @@ Function-level records and statements.
       ok = false;
     } else {
       cir::DoWhileOp op = mlir::cast<cir::DoWhileOp>(f->op);
+      if (is_trivially_true(cond) && region_is_empty(op.getBody()) &&
+          fn_entity_ != nullptr)
+        fn_entity_->trivial_loop = true;
       builder_.createCondition(cond);
       builder_.setInsertionPointAfter(op.getOperation());
       ok = pop_frame();
@@ -1844,8 +1948,10 @@ Function-level records and statements.
       if (f->has_cond) {
         cond = pop_bool_condition();
         ok = static_cast<bool>(cond);
+        f->cond_true = ok && is_trivially_true(cond);
       } else {
         cond = builder_.getTrue(loc());
+        f->cond_true = true;
       }
       if (ok && values_.size() != f->value_base)
         ok = format_error("values left on the stack at FOR_STEP");
@@ -1885,6 +1991,9 @@ Function-level records and statements.
       cir::ScopeOp scope = mlir::cast<cir::ScopeOp>(f->scope_op);
       close_cleanups(frames_.size() - 1, 3);
       terminate_region(op.getBody());
+      if (f->cond_true && region_is_empty(op.getBody()) &&
+          region_is_empty(op.getStep()) && fn_entity_ != nullptr)
+        fn_entity_->trivial_loop = true;
       builder_.setInsertionPointAfter(op.getOperation());
       close_cleanups(frames_.size() - 1, 0);
       terminate_region(scope.getScopeRegion());

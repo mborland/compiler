@@ -435,6 +435,78 @@ even where the packs had the same length:
 
 Only the parameters that belong to the pack are counted now.  Packs of
 different lengths are still an error.
+
+10/19/26  [GH #218]
+Reachability after a temporary with a "noreturn" constructor or destructor
+
+An expression statement that constructs a temporary of a class type whose
+constructor or destructor is declared "noreturn" was not recognized as not
+returning.  Consequently, a spurious warning could be issued when control
+reached the end of an enclosing "noreturn" or non-void function.  That is now
+fixed.  For example, with --c++11:
+
+  struct A { [[noreturn]] A(); };
+  struct B { [[noreturn]] ~B(); };
+  [[noreturn]] void f() { A{}; }  // Previously warned that f returns.
+  int g() { B{}; }                // Previously warned about missing return.
+
+
+10/15/26  [GH #309]
+Position of (lowered) cleanups at the end of a function body
+
+The cleanup actions (e.g., destructor calls) performed when control reaches
+the end of a function body were attributed to the source position of the
+preceding statement instead of to that of the closing brace of the function
+body.  That is now fixed.  For example:
+
+  int v = 0;
+  struct D { ~D() { v = v + 1; } };
+  void f() {
+    D d;
+    v = 2;
+  }  // The call of d's destructor is now positioned on this line.
+     // Previously it was positioned on the line with "v = 2;" above.
+
+
+10/16/26 [GH #302]
+Incorrect order of base-class initializers in class template
+
+Previously, in the IL for prototype instantiations of class templates,
+base-class mem-initializers with non-type template arguments could appear after
+the initializers for other base classes.  Such initializers are now recorded in
+base-class declaration order when the base class can be identified.
+Initializers for base classes that cannot yet be identified now retain their
+source order relative to the next initializer for an identified nonvirtual
+direct base class.  For example, with --c++11:
+
+  template<int> struct A { };
+  struct B { };
+  template<int N> struct C : A<N>, B {
+    C() : A<N>(), B() { }      // Previously recorded as "B(), A<N>()".
+    C(int) : A<+N>(), B() { }  // Previously recorded as "B(), A<+N>()".
+  };
+
+Both initializer lists are now recorded in the order shown.
+
+
+10/16/26 [GH #229]
+Improper handling of "if constexpr" substatements
+
+Previously, when a substatement of an "if constexpr" was discarded during
+instantiation and was not enclosed in braces, statements following the
+discarded statement could additionally be discarded, e.g.:
+
+  template <bool B> constexpr int f() {
+    return [] {
+        if constexpr (B) while (false) {}
+        return 1; // Previously erroneously discarded when B was false.
+        return 2;
+    }();
+  }
+
+This is now fixed.
+
+
 10/9/26  [GH #260]
 GNU and Clang C++ modes: members skipped by a designated initializer
 
@@ -597,6 +669,7 @@ behavior standard-mandated.  It is now the default behavior, except in
 Microsoft mode with microsoft_version < 1951.
 
 
+-------------------------------------------------------------------------------
 Version 7.0, September 28, 2026
 
 9/15/26  [EDGcpfe/28958]
@@ -2150,6 +2223,7 @@ For example, with --c++11:
   C<{}> c0;  // Previously a spurious error, now okay.
 
 
+-------------------------------------------------------------------------------
 Version 6.9, July 20, 2026
 
 7/16/26  [EDGcpfe/28936]

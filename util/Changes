@@ -1,6 +1,6 @@
 Version 7.1
 
-10/15/26  [GH #?]
+10/15/26  [GH #307]
 Suppress the blocks macros in make_predef_macro_table output
 
 The __BLOCKS__ and __block macros are now suppressed when running

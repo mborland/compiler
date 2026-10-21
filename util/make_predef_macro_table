@@ -119,11 +119,6 @@ delete_unneeded_entries()
     unneeded="$unneeded __clang_minor__"
     unneeded="$unneeded __clang_patchlevel__"
     unneeded="$unneeded __clang_version__"
-    # The front end does not support the blocks extension (block pointer
-    # types and "^" declarators), so these must not be predefined: clang
-    # defines __BLOCKS__ and __block together, and only with -fblocks (the
-    # default for Apple clang), and headers use them to select code that
-    # needs blocks.
     unneeded="$unneeded __BLOCKS__"
     unneeded="$unneeded __block"
   else

@@ -18,7 +18,7 @@ frame REGION
   TY_FUNC 4 1 0 []
   STR 5 "main"
   DECL_FUNC 5 4 0 8 5
-  DECL_FUNC 5 4 0 9 5
+  DECL_FUNC 5 4 0 137 5
   STR 6 "S"
   TY_RECORD_DECL 6 0 6
   TY_FUNC 7 6 0 []

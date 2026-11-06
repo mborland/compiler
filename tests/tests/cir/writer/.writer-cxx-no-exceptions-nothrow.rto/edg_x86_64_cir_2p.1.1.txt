@@ -1,0 +1,120 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --no_exceptions --g++ --gnu_version=150200 Test_name.c
+ecil 1.3 features=0x0000001a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 12
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FUNC 4 1 0 [1]
+  STR 5 "_Z7definedi"
+  DECL_FUNC 5 4 0 0 5
+  DECL_FUNC 5 4 0 129 5
+  STR 6 "x"
+  STR 7 "_Z9user_decli"
+  DECL_FUNC 6 4 0 0 7
+  STR 8 "_Z12user_nothrowi"
+  DECL_FUNC 7 4 0 128 8
+  STR 9 "_Z13user_noexcepti"
+  DECL_FUNC 8 4 0 128 9
+  STR 10 "_Z11user_throw0i"
+  DECL_FUNC 9 4 0 128 10
+  FUNC_BEGIN 5 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CALL 6 4 1 0
+  LREF 1
+  LOAD 0
+  CALL 7 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 8 4 1 0
+  ADD 1
+  LREF 1
+  LOAD 0
+  CALL 9 4 1 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_INT 10 8 true 1 1
+  TY_PTR 11 10
+  STR 11 "S"
+  TY_RECORD_DECL 12 0 11
+  TY_PTR 13 12
+  TY_FUNC 14 1 0 [11, 11, 13] supp{15: 8}
+  TY_RECORD_BODY 12 1 0 1 12 0
+  STR 12 "_Z3usePKcS0_R1S"
+  DECL_FUNC 15 14 0 0 12
+  DECL_FUNC 15 14 0 129 12
+  STR 13 "a"
+  STR 14 "b"
+  STR 15 "s"
+  STR 16 "T"
+  TY_RECORD_DECL 16 0 16
+  TY_RECORD_BODY 16 1 0 1 12 0
+  STR 17 "t"
+  TY_VOID 17
+  TY_PTR 18 16
+  TY_FUNC 19 17 0 [18] supp{15: 2}
+  STR 18 "_ZN1TD1Ev"
+  DECL_FUNC 20 19 0 0 18
+  STR 19 "_ZN1TD2Ev"
+  DECL_FUNC 21 19 0 0 19
+  STRUCTOR 20 21 1
+  TY_FUNC 22 2 0 [11]
+  STR 20 "strlen"
+  DECL_FUNC 23 22 0 384 20
+  TY_FUNC 24 1 0 [13, 1] supp{15: 2}
+  STR 21 "_ZN1S1mEi"
+  DECL_FUNC 25 24 0 0 21
+  FUNC_BEGIN 15 0
+  PARAM 1 11 11 13 0
+  PARAM 2 11 11 14 0
+  PARAM 3 13 13 15 0
+  BLOCK_BEGIN
+  LOCAL 4 16 17 0 0
+  CLEANUP_BEGIN 3 nil 0
+  LREF 4
+  ADDR
+  CALL 20 19 1 0
+  CLEANUP_BODY
+  LREF 1
+  LOAD 0
+  CALL 23 22 1 0
+  CAST 0 1
+  LREF 2
+  LOAD 0
+  CALL 23 22 1 0
+  CAST 0 1
+  ADD 1
+  CONST_INT 1 1
+  CALL 5 4 1 0
+  ADD 1
+  LREF 3
+  LOAD 0
+  DEREF
+  ADDR
+  CONST_INT 1 2
+  CALL 25 24 2 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 5 0

@@ -32,7 +32,7 @@ function reads memory and has no other effect), const ('c': it reads no
 memory), noreturn ('r') and nothrow ('n'), without a condition ('-' for none),
 with the classes of the result and the parameters (i integer, f floating, p
 pointer, v void).  The CIR back end sends supp keys pure and const, the
-NORETURN flag and the NOTHROW flag (C++ only) for a function of C language
+NORETURN flag and the NOTHROW flag for a function of C language
 linkage that has one of these names and that signature.  Sorted by name and
 ended by an entry without a name.
 */

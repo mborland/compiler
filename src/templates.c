@@ -46,6 +46,17 @@ templates.c -- Support for C++ templates.
 #endif /* ifdef lint */
 
 
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+/* TRUE if the GNU dialect gives an instance of a const variable template
+   internal linkage.  g++ 15 and later implement core issue 2387 and do not
+   (clang does not either, and the clang dialect never did); a CIR stream
+   then has a linkonce_odr _Z1kIiE and not an internal copy per translation
+   unit. */
+#define GNU_CONST_VAR_TEMPL_INTERNAL gnu_version_is(<150000)
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
+#define GNU_CONST_VAR_TEMPL_INTERNAL gnu_version_is(any_version)
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
+
 /* Conditionally open the "edg" namespace. */
 BEGIN_EDG_NAMESPACE
 
@@ -7863,12 +7874,12 @@ expression context) rather than a declaration.
   }  /* if */
 #endif /* GENERATE_SOURCE_SEQUENCE_LISTS */
   /* Core issue 2387 clarified that instantiated variable templates of const
-     qualified type don't get internal linkage.  However, GCC does not
-     implement that resolution, and MSVC only implements it for instances of
-     primary templates (but not for instances of partial specializations)
+     qualified type don't get internal linkage.  However, GCC before 15 does
+     not implement that resolution, and MSVC only implements it for instances
+     of primary templates (but not for instances of partial specializations)
      starting with 19.28. */
   if (!template_sym->is_class_member &&
-      (((gnu_version_is(any_version) ||
+      (((GNU_CONST_VAR_TEMPL_INTERNAL ||
          (ms_version_is(<=1927) ||
           (ms_version_is(any_version) &&
            var_ptr->template_info->partial_spec_template_arg_list == NULL))) &&
@@ -35450,13 +35461,13 @@ that follows.
         if (dps->is_definition) {
           a_boolean  incomplete_type_error_reported = FALSE;
 
-          if (gnu_version_is(any_version) &&
+          if (GNU_CONST_VAR_TEMPL_INTERNAL &&
               symbol_is(sym, sk_variable) && !vp->is_inline &&
               is_const_qualified_type(dps->type) &&
               !is_volatile_qualified_type(dps->type)) {
             /* Core issue 2387 clarified that only non-template variables of
                const-qualified type are given internal linkage.  However, GCC
-               does not implement that resolution. */
+               before 15 does not implement that resolution. */
             vp->storage_class = sc_static;
             vp->source_corresp.name_linkage = nlk_internal;
 #if GNU_EXTENSIONS_ALLOWED && GNU_VISIBILITY_ATTRIBUTE_ALLOWED

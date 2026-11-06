@@ -18,7 +18,7 @@ frame REGION
   TY_FUNC 4 1 0 [1]
   STR 5 "c99_inline"
   DECL_FUNC 5 4 0 514 5
-  DECL_FUNC 5 4 0 531 5
+  DECL_FUNC 5 4 0 659 5
   STR 6 "x"
   FUNC_BEGIN 5 0
   PARAM 1 1 1 6 0
@@ -31,7 +31,7 @@ frame REGION
 frame REGION
   STR 7 "static_inline"
   DECL_FUNC 6 4 1 514 7
-  DECL_FUNC 6 4 1 515 7
+  DECL_FUNC 6 4 1 643 7
   FUNC_BEGIN 6 0
   PARAM 1 1 1 6 0
   BLOCK_BEGIN
@@ -43,7 +43,7 @@ frame REGION
 frame REGION
   STR 8 "plain"
   DECL_FUNC 7 4 0 0 8
-  DECL_FUNC 7 4 0 1 8
+  DECL_FUNC 7 4 0 129 8
   FUNC_BEGIN 7 0
   PARAM 1 1 1 6 0
   BLOCK_BEGIN
@@ -55,7 +55,7 @@ frame REGION
 frame REGION
   STR 9 "use"
   DECL_FUNC 8 4 0 0 9
-  DECL_FUNC 8 4 0 1 9
+  DECL_FUNC 8 4 0 129 9
   STR 10 "a"
   FUNC_BEGIN 8 0
   PARAM 1 1 1 10 0

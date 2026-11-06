@@ -3,22 +3,30 @@
 #
 # One entry per line:
 #
-#   <category> | <level or *> | <detail> | <reason>
+#   <category> | <level or *> | <detail> [symbol=GLOB] [unit=GLOB] | <reason>
 #
-# where the category is fn, ret, paramN, call or md, the level is the -O level
-# or `*`, and the detail is what the report prints after the category
-# (`only-ours:noundef`, `only-clangir:nonnull`, `only-clangir:foo:arg0:noundef`
-# for a call).  Rules (the tool refuses a file that breaks them):
+# where the category is fn, ret, paramN, call or md (a glob such as `param*`
+# stands for any position), the level is the -O level or `*`, and the detail
+# is what the report prints after the category (`only-ours:noundef`,
+# `only-clangir:nonnull`, `only-clangir:foo:arg0:noundef` for a call; `*` is a
+# glob).  The optional symbol and unit globs narrow an entry to the functions
+# (for a call: the caller) and the translation units (the names of the
+# report: `boost/mp11`, `libstdcxx/chrono`, the smoke tests) that they match;
+# an entry without them matches everywhere.  Rules (the tool refuses a file
+# that breaks them):
 #
 #   - a comment line directly above every entry says what the difference is;
 #   - the last field says why it is accepted (at least 8 characters, not
 #     none, todo, - or ?): a difference that we mean to fix is not an entry;
+#   - a row that was looked at and accepted reads `accepted, checked
+#     YYYY-MM-DD: <why>`; a RISK or MISSED row stays a difference until it is
+#     checked and recorded that way, or fixed;
 #   - no entry twice, and none that explains nothing in a gate run (the step
 #     fails on a stale entry).
 #
-# Every new entry is reviewed (m5_design.md section 9, slice S2).  The file is
-# empty at M5a: the gaps of m5_library.md section 8 are to be closed, not
-# listed.
+# Every new entry is reviewed (m5_design.md section 9, slice S2).  The gaps
+# of m5_library.md section 8 are to be closed, not listed: what is recorded
+# here was checked.
 
 # clang and clangir treat the one-argument std::forward, std::move,
 # std::addressof and std::__addressof as builtins and emit the argument's
@@ -72,3 +80,86 @@ pair | * | structor-variants | we call the complete-object structor C1/D1 where 
 # that only ours has: an align, dereferenceable, nonnull, noalias or memory
 # of ours stays a difference.
 pair | * | builtin-mem-calls | memcpy/memmove/memset and their __builtin_ forms are sent as a call of the library function where clang emits the llvm.mem* intrinsic; the semantics are the same and LLVM recognizes the library calls by name (only the intrinsic's fixed attributes and our argument noundef and nounwind are explained)
+
+# The checked rows of M5.1 session 2 (C2): differences that were looked at on
+# 2026-11-06 and accepted, each with the symbol and unit that it covers.
+
+# Call sites in C: every C stream is nothrow (ecil_format.md, C streams), so
+# our call sites of C functions carry nounwind; clangir's do not in the units
+# that the probe set compares.
+call | * | only-ours:*:fn:nounwind unit=*.c#* | accepted, checked 2026-11-06: every C stream is nothrow (ecil_format.md), so ours marks the call sites of C functions nounwind where clangir's lack it in the compared C units; true for C
+
+# abort (a C++ unit declares it): nothrow and noreturn in the library table
+# (builtin_libc_attrs.h, from clang's own builtin table); clangir's declaration
+# lacks both.
+fn | * | only-ours:nounwind symbol=abort | accepted, checked 2026-11-06: abort is nothrow in clang's builtin table (our library table); clangir's declaration lacks nounwind
+# (the row above, the other side or the other form of the same difference)
+fn | * | only-ours:noreturn symbol=abort | accepted, checked 2026-11-06: abort is noreturn in clang's builtin table (our library table); clangir's declaration lacks noreturn
+# (the row above, the other side or the other form of the same difference)
+call | * | only-ours:abort:fn:nounwind unit=*.cpp#* | accepted, checked 2026-11-06: abort is nothrow in the library table; clangir's call sites lack nounwind
+# (the row above, the other side or the other form of the same difference)
+call | * | only-ours:abort:fn:noreturn unit=*.cpp#* | accepted, checked 2026-11-06: abort is noreturn in the library table; clangir's call sites lack noreturn
+
+# _exit is noreturn in the library table.
+fn | * | only-ours:noreturn symbol=_exit | accepted, checked 2026-11-06: _exit is noreturn in clang's builtin table (our library table); clangir's declaration lacks noreturn
+
+# libstdc++ declares std::terminate with _GLIBCXX_USE_NOEXCEPT (throw()), the
+# front end answers NOTHROW; clangir's declaration lacks nounwind.
+fn | * | only-ours:nounwind symbol=_ZSt9terminatev | accepted, checked 2026-11-06: std::terminate is declared throw() (noexcept) in libstdc++, so the front end answers nothrow; clangir's declaration lacks nounwind
+
+# The runtime function of dynamic_cast to a reference: declared noreturn by the
+# front end (the declaration of __cxa_bad_cast in libsupc++ is noreturn).
+fn | * | only-ours:noreturn symbol=__cxa_bad_cast | accepted, checked 2026-11-06: __cxa_bad_cast is declared noreturn (libsupc++ typeinfo), the front end answers noreturn; clangir's implicit declaration lacks it
+
+# clangir marks memcmp nounwind from its builtin table; builtin_libc_attrs.h
+# has no memcmp entry, so ours says less (a missing nounwind only costs
+# optimization).
+fn | * | only-clangir:nounwind symbol=memcmp unit=libstdcxx/functional | accepted, checked 2026-11-06: ours claims less; builtin_libc_attrs.h has no memcmp, a missing nounwind is safe
+# (the row above, the other side or the other form of the same difference)
+call | * | only-clangir:memcmp:fn:nounwind unit=libstdcxx/functional | accepted, checked 2026-11-06: ours claims less; builtin_libc_attrs.h has no memcmp, a missing nounwind is safe
+
+# The zeroing llvm.memset of an aggregate in main: ours claims align 8 where
+# clangir claims 16 (the alignment of the object): we claim less.  One entry per
+# unit and side, for the four rows seen.
+call | * | only-ours:llvm.memset.p0.i64:arg0:align 8 symbol=main unit=imported/gnu/c/torture/pr100492.sft.c#1 | accepted, checked 2026-11-06: ours claims a smaller alignment (8) than clangir (16) on the memset of an aggregate in main; the smaller claim is true
+# (the row above, clangir's side)
+call | * | only-clangir:llvm.memset.p0.i64:arg0:align 16 symbol=main unit=imported/gnu/c/torture/pr100492.sft.c#1 | accepted, checked 2026-11-06: ours claims a smaller alignment (8) than clangir (16) on the memset of an aggregate in main; the smaller claim is true
+# (the same row for the next unit)
+call | * | only-ours:llvm.memset.p0.i64:arg0:align 8 symbol=main unit=imported/gnu/cpp/abi/covariant4.sft.cpp#1 | accepted, checked 2026-11-06: ours claims a smaller alignment (8) than clangir (16) on the memset of an aggregate in main; the smaller claim is true
+# (the row above, clangir's side)
+call | * | only-clangir:llvm.memset.p0.i64:arg0:align 16 symbol=main unit=imported/gnu/cpp/abi/covariant4.sft.cpp#1 | accepted, checked 2026-11-06: ours claims a smaller alignment (8) than clangir (16) on the memset of an aggregate in main; the smaller claim is true
+# (the same row for the next unit)
+call | * | only-ours:llvm.memset.p0.i64:arg0:align 8 symbol=main unit=imported/gnu/cpp/inherit/covariant1.sft.cpp#1 | accepted, checked 2026-11-06: ours claims a smaller alignment (8) than clangir (16) on the memset of an aggregate in main; the smaller claim is true
+# (the row above, clangir's side)
+call | * | only-clangir:llvm.memset.p0.i64:arg0:align 16 symbol=main unit=imported/gnu/cpp/inherit/covariant1.sft.cpp#1 | accepted, checked 2026-11-06: ours claims a smaller alignment (8) than clangir (16) on the memset of an aggregate in main; the smaller claim is true
+# (the same row for the next unit)
+call | * | only-ours:llvm.memset.p0.i64:arg0:align 8 symbol=main unit=imported/gnu/cpp/inherit/thunk10.sft.cpp#1 | accepted, checked 2026-11-06: ours claims a smaller alignment (8) than clangir (16) on the memset of an aggregate in main; the smaller claim is true
+# (the row above, clangir's side)
+call | * | only-clangir:llvm.memset.p0.i64:arg0:align 16 symbol=main unit=imported/gnu/cpp/inherit/thunk10.sft.cpp#1 | accepted, checked 2026-11-06: ours claims a smaller alignment (8) than clangir (16) on the memset of an aggregate in main; the smaller claim is true
+
+# llvm.memcpy argument alignment in libstdc++'s iostream unit: ours has none.
+call | * | only-clangir:llvm.memcpy.p0.p0.i64:arg*:align 4 unit=libstdcxx/iostream | accepted, checked 2026-11-06: ours claims no alignment on this memcpy where clangir claims 4; the missing claim is safe
+
+# new42: for a constant `new T[0]` we emit the constructor loop and its cleanup,
+# clang and clangir emit neither (structural; ours keeps the delete[] call).
+call | * | only-ours:_ZdaPv:fn:builtin unit=imported/gnu/cpp/init/new42.sft.cpp#1 | accepted, checked 2026-11-06: for a constant new T[0] we emit the constructor loop and its cleanup, clangir neither; ours keeps the operator delete[] call
+# (the row above, the other side or the other form of the same difference)
+call | * | only-ours:_ZdaPv:arg0:noundef unit=imported/gnu/cpp/init/new42.sft.cpp#1 | accepted, checked 2026-11-06: for a constant new T[0] we emit the constructor loop and its cleanup, clangir neither; ours keeps the operator delete[] call
+
+# libstdc++ declares _Rb_tree_insert_and_rebalance and _S_insert_and_rebalance
+# with __attribute__((nonnull)); the stream carries no nonnull for that
+# attribute, so ours claims less.
+param* | * | only-clangir:nonnull symbol=_ZSt29_Rb_tree_insert_and_rebalance* unit=libstdcxx/functional | accepted, checked 2026-11-06: libstdc++ declares it __attribute__((nonnull)); ours sends no nonnull for that attribute (claims less; a nonnull fact is an M6 option)
+# (the row above, the other side or the other form of the same difference)
+param* | * | only-clangir:nonnull symbol=_ZNSt9__rb_tree12_Node_traits*_S_insert_and_rebalance* unit=libstdcxx/functional | accepted, checked 2026-11-06: libstdc++ declares it __attribute__((nonnull)); ours sends no nonnull for that attribute (claims less; a nonnull fact is an M6 option)
+# (the row above, the other side or the other form of the same difference)
+call | * | only-clangir:_ZSt29_Rb_tree_insert_and_rebalance*:nonnull unit=libstdcxx/functional | accepted, checked 2026-11-06: libstdc++ declares it __attribute__((nonnull)); ours sends no nonnull for that attribute (claims less)
+# (the row above, the other side or the other form of the same difference)
+call | * | only-clangir:_ZNSt9__rb_tree12_Node_traits*_S_insert_and_rebalance*:nonnull unit=libstdcxx/functional | accepted, checked 2026-11-06: libstdc++ declares it __attribute__((nonnull)); ours sends no nonnull for that attribute (claims less)
+
+# A reference to a function (std::function<int(int)> built from a function
+# reference): clangir writes dereferenceable(0), ours writes no attribute for a
+# pointee without a size.
+param* | * | only-clangir:dereferenceable(0) unit=libstdcxx/functional | accepted, checked 2026-11-06: a reference to a function; clangir writes dereferenceable(0), ours no attribute (claims less)
+# (the row above, the other side or the other form of the same difference)
+call | * | only-clangir:*:arg*:dereferenceable(0) unit=libstdcxx/functional | accepted, checked 2026-11-06: a reference to a function; clangir writes dereferenceable(0), ours no attribute (claims less)

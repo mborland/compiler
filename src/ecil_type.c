@@ -43,6 +43,7 @@ are visited, which breaks cycles.
 #if ECIL_WRITER_ENABLED
 
 #include "class_decl.h"
+#include "templates.h"
 
 /* Conditionally open the "edg" namespace. */
 BEGIN_EDG_NAMESPACE
@@ -3095,6 +3096,33 @@ instantiation (not an extern template).
 }  /* routine_is_explicit_instantiation_definition */
 
 
+static a_boolean routine_has_nothrow_spec(a_routine_ptr rout)
+/*
+Return TRUE if the routine has the GNU nothrow attribute or a noexcept or
+throw() specification, whether or not exceptions are enabled:
+is_non_throwing_routine answers TRUE for everything when they are not.  (A
+destructor declaration has no specification of its own: it stays unmarked.)
+*/
+{
+  a_boolean   result = rout->never_throws;
+  a_type_ptr  rtp = skip_typerefs(rout->type);
+
+  if (!result && !C_mode() && rtp->kind == (a_type_kind)tk_routine) {
+    a_routine_type_supplement_ptr  rtsp = rtp->variant.routine.extra_info;
+
+    if (rout->is_defaulted) complete_defaulted_exc_spec(rout);
+    if (rtsp->exception_specification != NULL &&
+        rtsp->exception_specification->indeterminate) {
+      resolve_indeterminate_exception_specification(rout);
+    }  /* if */
+    instantiate_exception_spec_if_needed(symbol_for(rout));
+    result = rout->never_throws ||
+             is_nothrow_spec(rtsp->exception_specification);
+  }  /* if */
+  return result;
+}  /* routine_has_nothrow_spec */
+
+
 static void compute_func_state(an_ecil_frame *frame,
                                a_routine_ptr rout,
                                uint32_t      gid,
@@ -3232,15 +3260,19 @@ entities may be gone, and a C++ name does not change after it is sent).
   }  /* if */
   state->facts |= library_facts &
                   ~(ECIL_FACT_NORETURN | ECIL_FACT_NOTHROW);
-  if (ecil_has_exceptions()) {
-    /* NOTHROW only from the front end's own answer, and never taken back by
-       a re-issue (a wrong NOTHROW skips cleanups: spec 12.6). */
-    if ((gid != 0 && (ecil_gid_info(gid)->decl_flags &
-                                      ECIL_DECL_FUNC_NOTHROW) != 0) ||
-        (library_facts & ECIL_FACT_NOTHROW) != 0 ||
-        is_non_throwing_routine(rout)) {
-      state->flags |= ECIL_DECL_FUNC_NOTHROW;
-    }  /* if */
+  if ((gid != 0 && (ecil_gid_info(gid)->decl_flags &
+                                    ECIL_DECL_FUNC_NOTHROW) != 0) ||
+      (library_facts & ECIL_FACT_NOTHROW) != 0 ||
+      (ecil_has_exceptions() ? is_non_throwing_routine(rout) :
+                               (defining || routine_has_nothrow_spec(rout)))) {
+    /* NOTHROW only from the front end's own answer and the library table,
+       and never taken back by a re-issue (a wrong NOTHROW skips cleanups:
+       spec 12.6).  Without exceptions (C, --no_exceptions) the front end's
+       answer is "everything", and the stream marks what clang marks: the
+       library table, the nothrow attribute and a noexcept or throw() in
+       the prototype (C++) and the definitions (clangir gives no other
+       declaration nounwind, probed at the pin). */
+    state->flags |= ECIL_DECL_FUNC_NOTHROW;
   }  /* if */
   if (gid != 0 && !C_mode()) {
     an_ecil_gid_info  *info = ecil_gid_info(gid);

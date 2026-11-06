@@ -21,7 +21,7 @@ frame REGION supp
   TY_FUNC 7 4 0 [6]
   STR 5 "bar"
   DECL_FUNC 8 7 0 0 5 supp{14: true}
-  DECL_FUNC 8 7 0 1 5 supp{14: true}
+  DECL_FUNC 8 7 0 129 5 supp{14: true}
   STR 6 "p"
   FUNC_BEGIN 8 0
   PARAM 1 6 6 6 0
@@ -40,7 +40,7 @@ frame REGION supp
   TY_FUNC 9 1 0 [6]
   STR 7 "foo"
   DECL_FUNC 10 9 0 0 7 supp{14: true}
-  DECL_FUNC 10 9 0 1 7 supp{14: true}
+  DECL_FUNC 10 9 0 129 7 supp{14: true}
   FUNC_BEGIN 10 0
   PARAM 1 6 6 6 0
   BLOCK_BEGIN
@@ -57,7 +57,7 @@ frame REGION supp
   TY_FUNC 12 1 0 [11]
   STR 8 "loop_next"
   DECL_FUNC 13 12 0 0 8 supp{14: true}
-  DECL_FUNC 13 12 0 1 8 supp{14: true}
+  DECL_FUNC 13 12 0 129 8 supp{14: true}
   STR 9 "loop_next.state"
   DECL_VAR 14 1 1 17 0 9
   C_INT 1 0
@@ -88,7 +88,7 @@ frame REGION
   TY_FUNC 15 1 0 []
   STR 10 "main"
   DECL_FUNC 16 15 0 8 10
-  DECL_FUNC 16 15 0 9 10
+  DECL_FUNC 16 15 0 137 10
   TY_ARRAY 17 5 256 0
   STR 11 "buffer"
   STR 12 "t"

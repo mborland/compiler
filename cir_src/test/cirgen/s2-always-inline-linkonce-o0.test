@@ -1,0 +1,59 @@
+; An always_inline function that is not inline-only: a linkonce_odr member of a
+; class template (key 16, as the writer sends it for libstdc++'s
+; _GLIBCXX_ALWAYS_INLINE members).  It always has the inline kind alwaysinline;
+; at -O0 the AlwaysInliner now inlines it and erases it (it is discardable and
+; has no other use), so the object has no definition of it.  A control
+; (kept) is the same function without key 16: it stays a call.
+; RUN: sed 's/features=0x00000000/features=0x00000002/' %S/Inputs/header12_cxx_eh.txt > %t.h
+; RUN: cat %t.h %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=FORM
+; RUN: %edg-cir --verify-each --emit=llvm %t.ecil | %FileCheck %s --check-prefix=INL
+; RUN: %edg-cir --verify-each --chunk-threshold=1 --chunk-functions=1 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=INL
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYM --implicit-check-not=_ZN2ns2aiEi
+
+; FORM-DAG: define linkonce_odr {{.*}}@_ZN2ns2aiEi({{.*}}) #[[AI:[0-9]+]]
+; FORM-DAG: define linkonce_odr {{.*}}@_ZN2ns4keptEi(
+; FORM-DAG: attributes #[[AI]] = {{{.*}}alwaysinline
+; INL: define {{.*}}@main
+; INL-NOT: call {{.*}}@_ZN2ns2aiEi
+; INL: call {{.*}}@_ZN2ns4keptEi
+; INL-NOT: define {{.*}}@_ZN2ns2aiEi
+; SYM-DAG: W _ZN2ns4keptEi
+; SYM-DAG: T main
+
+frame DECLS supp
+  STR 100 "_ZN2ns2aiEi"
+  STR 101 "_ZN2ns4keptEi"
+  STR 102 "main"
+  TY_FUNC 21 1 0 [1]
+  TY_FUNC 22 1 0 []
+  DECL_FUNC 40 21 3 67 100 supp{16: true}
+  DECL_FUNC 41 21 3 67 101
+  DECL_FUNC 42 22 0 9 102
+frame REGION
+  FUNC_BEGIN 40 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  CONST_INT 1 1
+  CALL 40 21 1 0
+  CONST_INT 1 2
+  CALL 41 21 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

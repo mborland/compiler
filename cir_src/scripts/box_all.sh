@@ -13,5 +13,5 @@ esac
 lit_arg=
 [ -f /lit/lit.py ] && lit_arg=-DEDG_CIR_LIT=/lit/lit.py
 (cd cir_src && cmake --preset "$preset" $lit_arg > /dev/null)
-ninja -C build/$dir 2>&1 | grep -E "error|warning|FAILED" || true
+ninja -C build/$dir -j"${EDG_CIR_JOBS:-48}" 2>&1 | grep -E "error|warning|FAILED" || true
 (cd build/$dir && ctest 2>&1 | tail -14)

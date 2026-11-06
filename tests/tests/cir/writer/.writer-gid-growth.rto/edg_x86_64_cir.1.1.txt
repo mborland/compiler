@@ -18,7 +18,7 @@ frame REGION
   TY_FUNC 4 1 0 []
   STR 5 "later_func"
   DECL_FUNC 5 4 0 0 5
-  DECL_FUNC 5 4 0 1 5
+  DECL_FUNC 5 4 0 129 5
   FUNC_BEGIN 5 0
   BLOCK_BEGIN
   CONST_INT 1 4
@@ -35,7 +35,7 @@ frame REGION
   TY_FUNC 10 1 0 [7, 9]
   STR 8 "uses_incomplete"
   DECL_FUNC 11 10 0 0 8
-  DECL_FUNC 11 10 0 1 8
+  DECL_FUNC 11 10 0 129 8
   STR 9 "b"
   STR 10 "c"
   FUNC_BEGIN 11 0
@@ -75,7 +75,7 @@ frame REGION
   REC_FIELD 18 0 nil nil 13 0
   STR 14 "after_completion"
   DECL_FUNC 19 4 0 0 14
-  DECL_FUNC 19 4 0 1 14
+  DECL_FUNC 19 4 0 129 14
   FUNC_BEGIN 19 0
   BLOCK_BEGIN
   CONST_INT 1 0

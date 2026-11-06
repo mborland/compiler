@@ -1014,7 +1014,19 @@ RETURN_STMT: cir.return directly at the statement (no shared return block).
     if ((fn_entity_->flags & ECIL_DECL_FUNC_IS_MAIN) != 0) {
       implicit_return(true);
     } else {
-      fn_entity_->valueless_return = true;
+      /* The statement the front end puts after a noreturn call that ends a
+         function (a throw helper: libstdc++'s use_facet) sits in the fresh
+         block that follows the call's unreachable: empty, with no
+         predecessor.  It returns nothing at run time, so it does not make
+         the result of the function undefined.  (A block with a label or a
+         switch case marker is not empty, though a goto edge or the switch
+         edge comes later: that return is reachable.) */
+      mlir::Block *here = builder_.getBlock();
+      bool dead = here != &here->getParent()->front() && here->empty() &&
+                  here->hasNoPredecessors();
+
+      if (!dead)
+        fn_entity_->valueless_return = true;
       uint32_t align = static_cast<uint32_t>(type_align(ret->cir));
       mlir::Value slot = return_slot();
       mlir::Value v = builder_.createLoad(loc(), slot, false, align);

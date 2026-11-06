@@ -18,7 +18,7 @@ frame REGION
   TY_FUNC 4 1 0 [1]
   STR 5 "toupper"
   DECL_FUNC 5 4 1 0 5
-  DECL_FUNC 5 4 1 1 5
+  DECL_FUNC 5 4 1 129 5
   STR 6 "c"
   FUNC_BEGIN 5 0
   PARAM 1 1 1 6 0
@@ -35,7 +35,7 @@ frame REGION supp
   TY_FUNC 9 1 0 [1, 6, 8, 6]
   STR 7 "use"
   DECL_FUNC 10 9 0 0 7
-  DECL_FUNC 10 9 0 1 7
+  DECL_FUNC 10 9 0 129 7
   STR 8 "i"
   STR 9 "p"
   STR 10 "s"
@@ -50,27 +50,27 @@ frame REGION supp
   STR 15 "later_fn"
   DECL_FUNC 15 4 0 0 15
   STR 16 "isalnum"
-  DECL_FUNC 16 4 0 0 16 supp{4: true}
+  DECL_FUNC 16 4 0 128 16 supp{4: true}
   STR 17 "tolower"
-  DECL_FUNC 17 4 0 0 17 supp{4: true}
+  DECL_FUNC 17 4 0 128 17 supp{4: true}
   STR 18 "abs"
-  DECL_FUNC 18 4 0 0 18 supp{5: true}
+  DECL_FUNC 18 4 0 128 18 supp{5: true}
   TY_FLOAT 19 3 8 8
   TY_FUNC 20 19 0 [19]
   STR 19 "fabs"
-  DECL_FUNC 21 20 0 0 19 supp{5: true}
+  DECL_FUNC 21 20 0 128 19 supp{5: true}
   STR 20 "sin"
-  DECL_FUNC 22 20 0 0 20
+  DECL_FUNC 22 20 0 128 20
   TY_FUNC 23 2 0 [8]
   STR 21 "strlen"
-  DECL_FUNC 24 23 0 0 21
+  DECL_FUNC 24 23 0 128 21
   TY_FUNC 25 2 0 [6]
   STR 22 "wcslen"
-  DECL_FUNC 26 25 0 0 22 supp{4: true}
+  DECL_FUNC 26 25 0 128 22 supp{4: true}
   STR 23 "my_isdigit"
   DECL_FUNC 27 4 0 0 23
   STR 24 "isalpha"
-  DECL_FUNC 28 4 0 0 24 supp{4: true}
+  DECL_FUNC 28 4 0 128 24 supp{4: true}
   FUNC_BEGIN 10 0
   PARAM 1 1 1 8 0
   PARAM 2 6 6 9 0
@@ -142,7 +142,7 @@ frame REGION supp
   BLOCK_END
   FUNC_END 0
 frame REGION supp
-  DECL_FUNC 15 4 0 1 15 supp{5: true}
+  DECL_FUNC 15 4 0 129 15 supp{5: true}
   STR 25 "x"
   FUNC_BEGIN 15 0
   PARAM 1 1 1 25 0

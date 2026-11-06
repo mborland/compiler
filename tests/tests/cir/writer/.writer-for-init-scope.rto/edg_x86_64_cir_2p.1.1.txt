@@ -18,7 +18,7 @@ frame REGION
   TY_FUNC 4 1 0 [1]
   STR 5 "declared_init"
   DECL_FUNC 5 4 0 0 5
-  DECL_FUNC 5 4 0 1 5
+  DECL_FUNC 5 4 0 129 5
   STR 6 "n"
   STR 7 "s"
   STR 8 "i"
@@ -78,7 +78,7 @@ frame REGION
   TY_FUNC 7 6 0 [1]
   STR 10 "no_init"
   DECL_FUNC 8 7 0 0 10
-  DECL_FUNC 8 7 0 1 10
+  DECL_FUNC 8 7 0 129 10
   FUNC_BEGIN 8 0
   PARAM 1 1 1 6 0
   BLOCK_BEGIN
@@ -103,7 +103,7 @@ frame REGION
 frame REGION
   STR 11 "nested_loops"
   DECL_FUNC 9 4 0 0 11
-  DECL_FUNC 9 4 0 1 11
+  DECL_FUNC 9 4 0 129 11
   FUNC_BEGIN 9 0
   PARAM 1 1 1 6 0
   BLOCK_BEGIN
@@ -169,7 +169,7 @@ frame REGION
 frame REGION
   STR 12 "expression_init"
   DECL_FUNC 10 4 0 0 12
-  DECL_FUNC 10 4 0 1 12
+  DECL_FUNC 10 4 0 129 12
   FUNC_BEGIN 10 0
   PARAM 1 1 1 6 0
   BLOCK_BEGIN
@@ -213,7 +213,7 @@ frame REGION
 frame REGION
   STR 13 "init_scope_shadow"
   DECL_FUNC 11 4 0 0 13
-  DECL_FUNC 11 4 0 1 13
+  DECL_FUNC 11 4 0 129 13
   STR 14 "i2"
   FUNC_BEGIN 11 0
   PARAM 1 1 1 6 0

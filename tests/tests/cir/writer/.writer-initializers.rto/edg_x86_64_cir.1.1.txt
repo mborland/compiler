@@ -18,7 +18,7 @@ frame REGION
   TY_FUNC 4 1 0 [1]
   STR 5 "local_init"
   DECL_FUNC 5 4 0 0 5
-  DECL_FUNC 5 4 0 1 5
+  DECL_FUNC 5 4 0 129 5
   STR 6 "x"
   STR 7 "P"
   TY_RECORD_DECL 6 0 7

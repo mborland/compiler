@@ -1,0 +1,126 @@
+; The chain of s2-always-inline-nested-o0.test with f defined before g (the
+; AlwaysInliner then inlines f into g first): g calls f twice, both
+; always_inline (INLINE_ONLY, key 16), and four callers, defined between
+; and after them, call g and f.  The AlwaysInliner takes the callees in module order and each
+; callee's call sites in use-list order; both decide where the allocas of the
+; inlined bodies land, and whether f is inlined into g before g into its
+; callers.  pipeline.cpp (order_always_inline_uses) fixes the call-site order
+; per callee only, so the chunked, merged module must also keep the function
+; order of the whole one.  With one function per chunk (and forced chunking)
+; the output must equal the unchunked output, as LLVM IR and as assembly, with
+; and without eager bodies.
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --verify-each --emit=llvm %t.ecil > %t.whole.ll
+; RUN: %edg-cir --verify-each --chunk-threshold=1 --chunk-functions=1 --emit=llvm %t.ecil > %t.c1.ll
+; RUN: %edg-cir --verify-each --chunk-threshold=1 --chunk-functions=2 --emit=llvm %t.ecil > %t.c2.ll
+; RUN: %edg-cir --verify-each --eager-bodies --chunk-threshold=1 --chunk-functions=1 --emit=llvm %t.ecil > %t.c3.ll
+; RUN: diff %t.whole.ll %t.c1.ll
+; RUN: diff %t.whole.ll %t.c2.ll
+; RUN: diff %t.whole.ll %t.c3.ll
+; RUN: %FileCheck %s --check-prefix=INL --implicit-check-not=@ai_ < %t.whole.ll
+; RUN: %edg-cir --emit=asm -o %t.a1 %t.ecil
+; RUN: %edg-cir --stats --chunk-threshold=1 --chunk-functions=1 --emit=asm -o %t.a2 %t.ecil 2>&1 | %FileCheck %s --check-prefix=CHUNKS
+; RUN: diff %t.a1 %t.a2
+
+; Every body of f and g is inlined and erased.
+; INL-DAG: define {{.*}}@c1(
+; INL-DAG: define {{.*}}@c2(
+; INL-DAG: define {{.*}}@c3(
+; INL-DAG: define {{.*}}@c4(
+; INL-DAG: define {{.*}}@main(
+; CHUNKS: chunked lowering: {{[2-9]|[1-9][0-9]}} chunks
+
+frame DECLS supp
+  STR 100 "ai_f"
+  STR 101 "ai_g"
+  STR 102 "c1"
+  STR 103 "c2"
+  STR 104 "c3"
+  STR 105 "c4"
+  STR 106 "main"
+  TY_FUNC 21 1 0 [1]
+  TY_FUNC 22 1 0 []
+  DECL_FUNC 40 21 0 19 100 supp{16: true}
+  DECL_FUNC 41 21 0 19 101 supp{16: true}
+  DECL_FUNC 42 21 0 3 102
+  DECL_FUNC 43 21 0 3 103
+  DECL_FUNC 44 21 0 3 104
+  DECL_FUNC 45 21 0 3 105
+  DECL_FUNC 46 22 0 9 106
+frame REGION
+  FUNC_BEGIN 42 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CALL 41 21 1 0
+  CONST_INT 1 5
+  CALL 40 21 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 40 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CALL 41 21 1 0
+  CONST_INT 1 6
+  CALL 40 21 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CALL 40 21 1 0
+  LREF 1
+  LOAD 0
+  CALL 40 21 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 44 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CALL 41 21 1 0
+  CONST_INT 1 7
+  CALL 40 21 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 45 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CALL 41 21 1 0
+  CONST_INT 1 8
+  CALL 40 21 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 46 0
+  CONST_INT 1 1
+  CALL 42 21 1 0
+  CONST_INT 1 2
+  CALL 43 21 1 0
+  ADD 1
+  CONST_INT 1 3
+  CALL 44 21 1 0
+  ADD 1
+  CONST_INT 1 4
+  CALL 45 21 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

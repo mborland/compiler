@@ -5,9 +5,9 @@
 // Supp keys 16 (always_inline), 17 (cold) and 18 (hot) on DECL_FUNC: the GNU
 // attributes in both spellings, on members, templates and instances; sticky
 // (a later declaration may add them); in the blob in increasing key order
-// with noinline (14). always_inline without the inline specifier is ignored
-// by the front end (as gcc 4.7 and later do not mark the routine inline) and
-// not sent.
+// with noinline (14). always_inline without the inline specifier does not
+// make the routine inline (gcc 4.7 and later), but it is sent, as clang does
+// (the front end drops the attribute there, except in the CIR back end).
 __attribute__((always_inline)) inline int ai(int x) { return x; }
 [[gnu::always_inline]] inline int ai2(int x) { return x; }
 __attribute__((cold)) int cold_fn(int x) { return x; }

@@ -1,0 +1,130 @@
+; always_inline inline-only functions at -O0.  A C99 or gnu_inline function
+; whose definition lives in another translation unit (INLINE_ONLY) keeps no
+; body at -O0 (it is an external declaration) unless it is always_inline: as
+; clang's shouldEmitFunction, the body then stays as an available_externally
+; definition and the AlwaysInliner, which runs at -O0 too, inlines it.  Still
+; declarations, as in clang: an inline-only function without key 16 (plain), a
+; noinline one even with key 16 (nin: noinline wins), and a trivially
+; recursive one (rec: PR9614, its body calls its own symbol).  ai_unused is
+; always_inline and nothing calls it: lazy emission never emits it.
+; ai is called twice in main and once in `other`: with several inlined calls
+; the order of the AlwaysInliner decides where the allocas of the bodies land,
+; and the chunked output must be byte-identical (the use list of ai is put in
+; program order before the pass: pipeline.cpp, order_always_inline_uses).
+; The stream also runs with chunking forced on and one function per chunk
+; (the available_externally function crosses a chunk boundary and must come
+; back from the merge intact) and with --eager-bodies (the same output as the
+; lazy default).
+; RUN: cat %S/Inputs/header11_supp.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=FORM --implicit-check-not=ai_unused
+; RUN: %edg-cir --no-llvm-passes --eager-bodies --emit=llvm %t.ecil | %FileCheck %s --check-prefix=FORM --implicit-check-not=ai_unused
+; RUN: %edg-cir --no-llvm-passes --chunk-threshold=1 --chunk-functions=1 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=FORM --implicit-check-not=ai_unused
+; RUN: %edg-cir --verify-each --emit=llvm %t.ecil | %FileCheck %s --check-prefix=INL --implicit-check-not=@ai
+; RUN: %edg-cir --verify-each --chunk-threshold=1 --chunk-functions=1 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=INL --implicit-check-not=@ai
+; RUN: %edg-cir --emit=asm -o %t.a1 %t.ecil
+; RUN: %edg-cir --stats --chunk-threshold=1 --chunk-functions=1 --emit=asm -o %t.a2 %t.ecil 2>&1 | %FileCheck %s --check-prefix=CHUNKS
+; RUN: diff %t.a1 %t.a2
+; RUN: %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYM --implicit-check-not=" ai"
+; RUN: %edg-cir -O1 --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=O1
+
+; FORM-DAG: define available_externally noundef i32 @ai(i32 noundef %0) #[[AI:[0-9]+]]
+; FORM-DAG: declare noundef i32 @plain(i32 noundef)
+; FORM-DAG: declare noundef i32 @nin(i32 noundef)
+; FORM-DAG: declare noundef i32 @rec(i32 noundef)
+; FORM-DAG: attributes #[[AI]] = {{{.*}}alwaysinline
+; The passes inline ai and erase it; the others are still called.
+; INL: define {{.*}}@main
+; INL-DAG: call {{.*}}@plain
+; INL-DAG: call {{.*}}@nin
+; INL-DAG: call {{.*}}@rec
+; CHUNKS: chunked lowering: {{[2-9]}} chunks
+; SYM-DAG: U plain
+; SYM-DAG: U nin
+; SYM-DAG: U rec
+; SYM-DAG: T main
+; At -O1 every inline-only function but the noinline and the recursive one
+; keeps its body (unchanged).
+; O1-DAG: define available_externally {{.*}}@ai(
+; O1-DAG: define available_externally {{.*}}@plain(
+; O1-DAG: declare {{.*}}@nin(
+; O1-DAG: declare {{.*}}@rec(
+
+frame DECLS supp
+  STR 100 "ai"
+  STR 101 "plain"
+  STR 102 "nin"
+  STR 103 "rec"
+  STR 104 "main"
+  STR 105 "ai_unused"
+  STR 106 "other"
+  TY_FUNC 21 1 0 [1]
+  TY_FUNC 22 1 0 []
+  DECL_FUNC 40 21 0 19 100 supp{16: true}
+  DECL_FUNC 41 21 0 19 101
+  DECL_FUNC 42 21 0 19 102 supp{14: true, 16: true}
+  DECL_FUNC 43 21 0 19 103 supp{16: true}
+  DECL_FUNC 44 22 0 9 104
+  DECL_FUNC 45 21 0 19 105 supp{16: true}
+  DECL_FUNC 46 21 0 3 106
+frame REGION
+  FUNC_BEGIN 40 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 41 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 42 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 43 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CALL 43 21 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 45 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 46 0
+  PARAM 1 1 1 nil 0
+  LREF 1
+  LOAD 0
+  CALL 40 21 1 0
+  RETURN_STMT true
+  FUNC_END 0
+  FUNC_BEGIN 44 0
+  CONST_INT 1 1
+  CALL 40 21 1 0
+  CONST_INT 1 7
+  CALL 40 21 1 0
+  ADD 1
+  CONST_INT 1 2
+  CALL 41 21 1 0
+  ADD 1
+  CONST_INT 1 3
+  CALL 42 21 1 0
+  ADD 1
+  CONST_INT 1 4
+  CALL 43 21 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

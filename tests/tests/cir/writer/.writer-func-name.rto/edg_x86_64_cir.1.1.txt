@@ -18,12 +18,12 @@ frame REGION
   TY_FUNC 4 1 0 []
   STR 5 "main"
   DECL_FUNC 5 4 0 8 5
-  DECL_FUNC 5 4 0 9 5
+  DECL_FUNC 5 4 0 137 5
   TY_INT 6 8 true 1 1
   TY_PTR 7 6
   TY_FUNC 8 1 0 [7, 7]
   STR 6 "strcmp"
-  DECL_FUNC 9 8 0 0 6
+  DECL_FUNC 9 8 0 128 6
   TY_ARRAY 10 6 5 0
   STR 7 "main.var"
   DECL_VAR 11 10 1 17 0 7

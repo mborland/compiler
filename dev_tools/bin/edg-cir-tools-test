@@ -28,7 +28,7 @@ import sys
 import tempfile
 import unittest
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import List
 
 BIN = Path(__file__).resolve().parent
@@ -1474,7 +1474,7 @@ class LeanAreas(unittest.TestCase):
     self.assertEqual(gate.AREA_STEPS['tests-crashes'], ('crash-sweep',))
     self.assertEqual(set(gate.AREA_STEPS['tests-smoke']),
                      {'smoke', 'cpp-smoke', 'opt-corpus', 'release-smoke'})
-    self.assertEqual(gate.AREA_STEPS['tests-reference'], ('day',))
+    self.assertEqual(gate.AREA_STEPS['tests-reference'], ('day', 'day32'))
     steps, _ = gate.lean_steps(['tests-triage'])
     self.assertEqual(steps, ['build', 'opt-corpus'])
     self.assertEqual(gate.uncovered_areas(
@@ -2343,6 +2343,13 @@ class AttrDiff(unittest.TestCase):
                               if c[0] == 'libstdcxx/chrono'][0][2])
     self.assertTrue(all(c[1].exists() for c in cases))
 
+  def test_the_units_use_the_gnu_version_of_the_image_headers(self):
+    cases = attr.unit_cases(BIN.parent.parent, 'pinned', '/b')
+    self.assertTrue(all('--gnu_version=150000' in c[2] for c in cases))
+    cases = attr.unit_cases(BIN.parent.parent, 'libstdcxx/chrono', '',
+                            '140000')
+    self.assertIn('--gnu_version=140000', cases[0][2])
+
   def test_a_bad_known_file_is_a_setup_problem(self):
     with tempfile.TemporaryDirectory() as tmp:
       known = Path(tmp) / 'known.txt'
@@ -2639,8 +2646,8 @@ class ChunkRss(unittest.TestCase):
     ok_text = ('case  default unchunked forced forced/base\n'
                'c3000   200.0 200.0 150.0 0.73\n'
                'c12000  800.0 800.0 400.0 0.49\n'
-               'ok   target c12000: forced 400.0 MB is 49.4% of the '
-               'baseline\'s 810.0 MB (limit 55%)\nRESULT: PASS\n')
+               'ok   target c12000: forced 400.0 MB is 50.0% of the '
+               'unchunked 800.0 MB (limit 55%)\nRESULT: PASS\n')
     ok, detail = gate.judge_chunk_rss(ok_text, 0)
     self.assertTrue(ok, detail)
     self.assertIn('c12000 800.0/800.0/400.0', detail)
@@ -3099,12 +3106,136 @@ class Milestone(unittest.TestCase):
     self.assertEqual(raised.exception.code, 2)
 
 
+HOST_VARIABLES = ('EDG_CIR_HOST', 'EDG_CIR_SSH_KEY', 'EDG_CIR_SSH_SOCKET',
+                  'EDG_BOX_SOCKET', 'EDG_CIR_SG_DOCKER', 'EDG_CIR_HOSTNAME')
+
+
+def load_with_environment(name: str, **values: str):
+  '''The tool `name` imported with the host variables removed from the
+  environment and `values` set (the tools read them at import time, and the
+  operator's shell may export any of them).'''
+  saved = {k: os.environ.pop(k) for k in HOST_VARIABLES if k in os.environ}
+  os.environ.update(values)
+  try:
+    return load_tool(name)
+  finally:
+    for key in values:
+      os.environ.pop(key, None)
+    os.environ.update(saved)
+
+
 class HostSettings(unittest.TestCase):
   def test_the_defaults_name_clang4_and_the_key(self):
-    self.assertEqual(checkpoint.BOX, 'matt@clang4.cpp.al')
-    self.assertEqual(checkpoint.SSH_KEY, '~/.ssh/id_rsa')
-    self.assertEqual(checkpoint.SOCKET, '')
-    self.assertFalse(checkpoint.SG_DOCKER)
+    fresh = load_with_environment('edg-cir-checkpoint')
+    self.assertEqual(fresh.BOX, 'matt@clang4.cpp.al')
+    self.assertEqual(fresh.SSH_KEY, '~/.ssh/id_rsa')
+    self.assertEqual(fresh.SOCKET, '')
+    self.assertFalse(fresh.SG_DOCKER)
+    self.assertEqual(fresh.EXPECTED_HOSTNAME, 'clang4')
+
+  def test_the_old_box_socket_variable_is_ignored(self):
+    for name in ('edg-cir-checkpoint', 'edg-cir-record'):
+      stale = load_with_environment(name, EDG_BOX_SOCKET = '/tmp/cm-edgbox')
+      self.assertEqual(stale.SOCKET, '', name)
+      new = load_with_environment(name, EDG_CIR_SSH_SOCKET = '/tmp/cm-cir')
+      self.assertEqual(new.SOCKET, '/tmp/cm-cir', name)
+
+  def test_the_host_name_is_checked_before_a_sync(self):
+    record = load_with_environment('edg-cir-record')
+    for tool in (checkpoint, record):
+      self.assertEqual(tool.hostname_problem('clang4\n'), '')
+      self.assertEqual(tool.hostname_problem('Warning: x\nclang4\n'), '')
+      self.assertIn("'edgbox'", tool.hostname_problem('edgbox\n'))
+      self.assertIn('ControlPath', tool.hostname_problem(''))
+    other = load_with_environment('edg-cir-checkpoint',
+                                  EDG_CIR_HOSTNAME = 'clang5')
+    self.assertEqual(other.hostname_problem('clang5'), '')
+    self.assertNotEqual(other.hostname_problem('clang4'), '')
+
+  def test_a_wrong_host_stops_the_checkpoint_before_any_sync(self):
+    saved = (checkpoint.box_reachable, checkpoint.ssh, checkpoint.subprocess,
+             sys.argv, os.getcwd())
+    calls: List[str] = []
+    checkpoint.box_reachable = lambda: True
+    checkpoint.ssh = lambda command, capture = False: (
+      calls.append(command) or subprocess.CompletedProcess(
+        [], 0, stdout = 'edgbox\n'))
+    sys.argv = ['edg-cir-checkpoint', '--quick']
+    os.chdir(BIN.parent.parent)
+    try:
+      with self.assertRaises(SystemExit) as raised, \
+           contextlib.redirect_stderr(io.StringIO()) as err:
+        checkpoint.main()
+    finally:
+      (checkpoint.box_reachable, checkpoint.ssh, checkpoint.subprocess,
+       sys.argv, directory) = saved
+      os.chdir(directory)
+    self.assertEqual(raised.exception.code, 2)
+    self.assertIn("answers as 'edgbox'", err.getvalue())
+    self.assertEqual(calls, ['hostname -s'])
+
+  def test_files_that_are_not_synced_are_no_part_of_the_change_set(self):
+    for path in ('monthly_report/make_report.py', 'boost-bug-1-x.md',
+                 'x.int.c', 'a.ti', 'build/x', 'tests/runs/a', '.tmp/a',
+                 '.git/config'):
+      self.assertFalse(checkpoint.is_synced(path), path)
+    for path in ('src/cfe.c', 'dev_tools/bin/edg-cir-checkpoint',
+                 'tests/tests/cir/a.c', 'tests/.edgy/postures/day32.json',
+                 'cir_src/lib/a.cpp'):
+      self.assertTrue(checkpoint.is_synced(path), path)
+
+  def test_the_image_prebuild_scripts_are_tooling_not_toolchain(self):
+    self.assertEqual(gate.areas_of('dev_tools/docker/llvm-cir/prebuild.py'),
+                     ('tooling',))
+    self.assertEqual(gate.areas_of('dev_tools/docker/cir-env/prebuild.py'),
+                     ('tooling',))
+    self.assertEqual(gate.areas_of('dev_tools/docker/llvm-cir/Dockerfile'),
+                     ('toolchain',))
+    self.assertEqual(gate.areas_of('dev_tools/docker/cir-env/Dockerfile'),
+                     ('toolchain',))
+
+  def detached_script(self, sg_docker):
+    saved = (checkpoint.box_reachable, checkpoint.ssh,
+             checkpoint.local_fingerprint, checkpoint.SG_DOCKER, sys.argv,
+             os.getcwd())
+    commands: List[str] = []
+    def fake(command, capture = False):
+      commands.append(command)
+      text = 'clang4\n' if command == 'hostname -s' else 'F\n'
+      return subprocess.CompletedProcess([], 0, stdout = text)
+    checkpoint.box_reachable = lambda: True
+    checkpoint.ssh = fake
+    checkpoint.local_fingerprint = lambda root: 'F'
+    checkpoint.SG_DOCKER = sg_docker
+    sys.argv = ['edg-cir-checkpoint', '--quick', '--no-sync', '--detach']
+    os.chdir(BIN.parent.parent)
+    try:
+      with contextlib.redirect_stdout(io.StringIO()):
+        checkpoint.main()
+    finally:
+      (checkpoint.box_reachable, checkpoint.ssh, checkpoint.local_fingerprint,
+       checkpoint.SG_DOCKER, sys.argv, directory) = saved
+      os.chdir(directory)
+    return [c for c in commands if c.startswith('nohup')]
+
+  def test_the_remote_gate_gets_sg_docker_only_when_asked_for(self):
+    script, = self.detached_script(True)
+    self.assertIn('EDG_CIR_SG_DOCKER=1', script)
+    script, = self.detached_script(False)
+    self.assertNotIn('EDG_CIR_SG_DOCKER', script)
+    self.assertIn('nice -n 10', script)
+
+  def test_a_protected_tree_is_synced_without_delete(self):
+    plain = checkpoint.rsync_command('m51-int', False)
+    kept = checkpoint.rsync_command('m5-int', True)
+    self.assertIn('--delete', plain)
+    self.assertNotIn('--delete', kept)
+    self.assertTrue(plain[-1].endswith(':edg-cir-config/m51-int/'))
+    self.assertTrue(kept[-1].endswith(':edg-cir-config/m5-int/'))
+    for command in (plain, kept):
+      self.assertIn('--checksum', command)
+    self.assertIn('m5-int', checkpoint.PROTECTED_TREES)
+    self.assertIn('day-base', checkpoint.PROTECTED_TREES)
 
   def test_ssh_options_have_batch_mode_and_the_key(self):
     saved = checkpoint.SOCKET
@@ -3291,11 +3422,6 @@ class PerfTargetsBaseline(unittest.TestCase):
     text = (BIN / 'edg-cir-gate-evidence').read_text()
     self.assertIn("'--perf-targets-baseline'", text)
     self.assertIn('m5a-base-perf.json', text)
-    import inspect
-    source = inspect.getsource(gate.step_perf)
-    self.assertIn('perf_targets_baseline', source)
-    # the targets are not checked against the regression baseline
-    self.assertIn('json.loads(targets_file.read_text())', source)
 
 
 class MilestonePreparation(unittest.TestCase):
@@ -3313,6 +3439,807 @@ class MilestonePreparation(unittest.TestCase):
     source = inspect.getsource(gate.step_slow_below_threshold)
     self.assertIn('-j {SLOW_JOBS}', source)
     self.assertNotIn('BUILD_JOBS', source)
+
+
+
+def gate_context(tmp: str, **values):
+  '''A gate Context over a scratch evidence directory (the tree is this
+  one unless `tree` is given) with the arguments the steps under test read.'''
+  import types
+  tree = values.pop('tree', str(BIN.parent.parent))
+  args = types.SimpleNamespace(
+    tree = tree, out = str(Path(tmp) / 'out'), command_timeout = 60,
+    step_timeout = [])
+  for key, value in values.items():
+    setattr(args, key, value)
+  ctx = gate.Context(args)
+  ctx.out.mkdir(parents = True, exist_ok = True)
+  return ctx
+
+
+def run_gate_main(argv: List[str], steps = None):
+  '''gate.main() with `argv`, `steps` ({name: function}) replacing steps and
+  the image lookup stubbed: (exit code, stderr).'''
+  saved = (sys.argv, gate.image_ids, dict(gate.STEP_FUNCTIONS))
+  sys.argv = ['edg-cir-gate-evidence', *argv]
+  gate.image_ids = lambda: {'edgcpp/cir-env:latest': 'sha256:' + 'a' * 64}
+  gate.STEP_FUNCTIONS.update(steps or {})
+  try:
+    with contextlib.redirect_stdout(io.StringIO()), \
+         contextlib.redirect_stderr(io.StringIO()) as err:
+      try:
+        gate.main()
+        code = None
+      except SystemExit as raised:
+        code = raised.code
+  finally:
+    sys.argv, gate.image_ids = saved[0], saved[1]
+    gate.STEP_FUNCTIONS.clear()
+    gate.STEP_FUNCTIONS.update(saved[2])
+  return code, err.getvalue()
+
+
+class GatePreflight(unittest.TestCase):
+  '''main(): the baselines check, --allow-missing-baselines and the
+  milestone perf options.'''
+
+  def argv(self, tmp, *more):
+    return ['--tree', tmp, '--out', str(Path(tmp) / 'ev'), *more]
+
+  def test_a_missing_baseline_stops_the_gate_with_status_2(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      ran: List[str] = []
+      code, err = run_gate_main(
+        self.argv(tmp, '--only', 'identity', '--identity-baseline',
+                  str(Path(tmp) / 'none')),
+        {'identity': lambda ctx: ran.append('x') or (True, 'ok')})
+      self.assertEqual(code, 2)
+      self.assertIn('--allow-missing-baselines', err)
+      self.assertEqual(ran, [])
+
+  def test_allow_missing_baselines_runs_and_leaves_a_banner(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      code, _ = run_gate_main(
+        self.argv(tmp, '--only', 'identity', '--allow-missing-baselines',
+                  '--identity-baseline', str(Path(tmp) / 'none')),
+        {'identity': lambda ctx: (True, 'ok')})
+      self.assertEqual(code, 0)
+      summary = (Path(tmp) / 'ev' / 'summary.md').read_text()
+      self.assertTrue(summary.startswith(
+        'WARNING: --allow-missing-baselines: 1 baseline(s) were unusable'),
+        summary)
+      self.assertIn('identity-baseline', summary.splitlines()[0])
+      self.assertIn('| identity | PASS |', summary)
+
+  def test_no_banner_without_the_option(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      code, _ = run_gate_main(self.argv(tmp, '--only', 'smoke'),
+                              {'smoke': lambda ctx: (True, 'ok')})
+      self.assertEqual(code, 0)
+      self.assertNotIn('WARNING', (Path(tmp) / 'ev' / 'summary.md').read_text())
+
+  def test_the_milestone_refuses_allow_missing_baselines(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      code, err = run_gate_main(
+        self.argv(tmp, '--milestone', '--allow-missing-baselines'))
+      self.assertEqual(code, 2)
+      self.assertIn('refused with --milestone', err)
+
+  def perf_args(self, tmp, *more):
+    seen: List[object] = []
+    base = Path(tmp) / 'p.json'
+    base.write_text('{"a": 1}')
+    code, _ = run_gate_main(
+      self.argv(tmp, '--only', 'perf', '--perf-baseline', str(base),
+                '--perf-targets-baseline', str(base), *more),
+      {'perf': lambda ctx: seen.append(ctx.args) or (True, 'ok')})
+    self.assertEqual(code, 0)
+    return seen[0]
+
+  def test_the_milestone_evaluates_the_perf_options_itself(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      args = self.perf_args(tmp, '--milestone')
+      self.assertEqual((args.perf_realworld, args.perf_levels,
+                        args.perf_targets), ('pinned', '0,2', 's1'))
+      self.assertEqual(
+        {'perf_realworld': args.perf_realworld,
+         'perf_levels': args.perf_levels, 'perf_targets': args.perf_targets},
+        gate.MILESTONE_PERF)
+
+  def test_a_given_perf_option_wins_over_the_milestone_one(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      args = self.perf_args(tmp, '--milestone', '--perf-levels', '0',
+                            '--perf-targets', '')
+      self.assertEqual((args.perf_realworld, args.perf_levels,
+                        args.perf_targets), ('pinned', '0', ''))
+
+  def test_without_the_milestone_the_perf_options_are_plain(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      args = self.perf_args(tmp)
+      self.assertEqual((args.perf_realworld, args.perf_levels,
+                        args.perf_targets), ('', '0', ''))
+
+  def test_the_checkpoint_and_the_gate_agree_on_the_milestone_options(self):
+    gate_options = {f"--{k.replace('_', '-')}": v
+                    for k, v in gate.MILESTONE_PERF.items()}
+    self.assertEqual(dict(checkpoint.MILESTONE_OPTIONS), gate_options)
+
+  def test_the_checkpoint_refuses_allow_missing_with_the_milestone(self):
+    saved = (checkpoint.box_reachable, checkpoint.ssh, sys.argv, os.getcwd())
+    checkpoint.box_reachable = lambda: True
+    checkpoint.ssh = lambda command, capture = False: \
+      subprocess.CompletedProcess([], 0, stdout = 'clang4\n')
+    sys.argv = ['edg-cir-checkpoint', '--milestone', '--extra',
+                '--allow-missing-baselines --jobs 3']
+    os.chdir(BIN.parent.parent)
+    try:
+      with self.assertRaises(SystemExit) as raised, \
+           contextlib.redirect_stderr(io.StringIO()) as err:
+        checkpoint.main()
+    finally:
+      checkpoint.box_reachable, checkpoint.ssh, sys.argv, directory = saved
+      os.chdir(directory)
+    self.assertEqual(raised.exception.code, 2)
+    self.assertIn('refused with --milestone', err.getvalue())
+
+
+class PerfStep(unittest.TestCase):
+  '''step_perf with a faked measurement (the judging is real).'''
+
+  def run_step(self, tmp, after, baseline_json = None, **values):
+    import types
+    from unittest import mock
+    targets_file = Path(tmp) / 'm5a.json'
+    before, _ = pinned_perf()
+    targets_file.write_text(json.dumps(before))
+    options = dict(
+      rss_functions = 10, perf_realworld = 'pinned', boost_include = 'b',
+      perf_only = '', perf_levels = '0,2', perf_sample = 1,
+      perf_baseline = '', perf_measure_only = True, perf_targets = 's1',
+      perf_targets_baseline = str(targets_file), perf_max_regression = 2.0)
+    options.update(values)
+    ctx = gate_context(tmp, tree = tmp, **options)
+    (ctx.out / 'perf').mkdir(exist_ok = True)
+    (Path(tmp) / 'cir_src/scripts').mkdir(parents = True, exist_ok = True)
+    seen: List[str] = []
+    def measure(ctx, step, command, *a, **k):
+      seen.append(command)
+      work = ctx.tree / '.tmp' / 'gate-perf' / ctx.out.name
+      (work / 'perf.json').write_text(json.dumps(after))
+      return 0
+    done = subprocess.CompletedProcess([], 0, stdout = 'table')
+    with mock.patch.object(gate, 'in_cir_env', measure), \
+         mock.patch.object(gate.subprocess, 'run', return_value = done), \
+         contextlib.redirect_stdout(io.StringIO()):
+      passed, detail = gate.step_perf(ctx)
+    return passed, detail, seen
+
+  def test_measure_only_still_checks_the_targets(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      _, after = pinned_perf()
+      passed, detail, seen = self.run_step(tmp, after)
+      self.assertTrue(passed, detail)
+      self.assertIn('--perf-measure-only', detail)
+      self.assertIn('targets s1 against m5a.json: met', detail)
+      self.assertIn('--levels 0,2', seen[0])
+      self.assertIn("--units pinned", seen[0])
+      _, after = pinned_perf(ratio_chrono = 0.71)
+      passed, detail, _ = self.run_step(tmp, after)
+      self.assertFalse(passed, detail)
+      self.assertIn('MISSED', detail)
+
+  def test_measure_only_without_targets_only_measures(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      _, after = pinned_perf(ratio_chrono = 0.71)
+      passed, detail, _ = self.run_step(tmp, after, perf_targets = '')
+      self.assertTrue(passed, detail)
+      self.assertNotIn('targets', detail)
+
+  def test_no_baseline_and_not_measure_only_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      _, after = pinned_perf()
+      passed, detail, _ = self.run_step(tmp, after, perf_measure_only = False)
+      self.assertFalse(passed)
+      self.assertIn('no --perf-baseline', detail)
+
+  def test_a_baseline_and_the_targets_are_both_judged(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      before, after = pinned_perf()
+      base = Path(tmp) / 'base.json'
+      base.write_text(json.dumps(before))
+      passed, detail, _ = self.run_step(
+        tmp, after, perf_baseline = str(base), perf_measure_only = False)
+      self.assertTrue(passed, detail)
+      self.assertIn('largest instruction count change', detail)
+      self.assertIn('targets s1', detail)
+
+  def test_the_unused_baselines_leave_no_image_note_option(self):
+    import types
+    args = types.SimpleNamespace(perf_measure_only = True, perf_targets = '')
+    self.assertEqual(gate.step_baseline_options(args, 'perf'), ())
+    args.perf_targets = 's1'
+    self.assertEqual(gate.step_baseline_options(args, 'perf'),
+                     ('perf_targets_baseline',))
+    args.perf_measure_only = False
+    self.assertEqual(gate.step_baseline_options(args, 'perf'),
+                     ('perf_baseline', 'perf_targets_baseline'))
+    args.perf_targets = ''
+    self.assertEqual(gate.step_baseline_options(args, 'perf'),
+                     ('perf_baseline',))
+    self.assertEqual(gate.step_baseline_options(args, 'day32'),
+                     ('day32_baseline_run',))
+
+
+class ContainerLimits(unittest.TestCase):
+  def test_the_gate_sets_a_nice_value_for_the_containers(self):
+    saved = os.environ.pop('EDG_DOCKER_NICE', None)
+    try:
+      with tempfile.TemporaryDirectory() as tmp:
+        self.assertEqual(gate_context(tmp).env['EDG_DOCKER_NICE'], '10')
+        os.environ['EDG_DOCKER_NICE'] = '5'
+        self.assertEqual(gate_context(tmp).env['EDG_DOCKER_NICE'], '5')
+    finally:
+      os.environ.pop('EDG_DOCKER_NICE', None)
+      if saved is not None:
+        os.environ['EDG_DOCKER_NICE'] = saved
+
+  def test_edgdocker_runs_the_container_command_under_nice(self):
+    sys.path.insert(0, str(BIN.parent / 'pylibs'))
+    try:
+      import edgdocker
+    finally:
+      sys.path.pop(0)
+    saved = os.environ.get('EDG_DOCKER_NICE')
+    texts = {}
+    try:
+      with tempfile.TemporaryDirectory() as tmp:
+        for value in ('', '10'):
+          os.environ['EDG_DOCKER_NICE'] = value
+          out = io.StringIO()
+          with contextlib.redirect_stdout(out):
+            edgdocker.exec_docker_cmd('dev-env', Path(tmp),
+                                      PurePosixPath('/edg/workspace'),
+                                      'ninja -C build', dry_run = True)
+          texts[value] = out.getvalue()
+    finally:
+      if saved is None:
+        os.environ.pop('EDG_DOCKER_NICE', None)
+      else:
+        os.environ['EDG_DOCKER_NICE'] = saved
+    self.assertIn("edg-container-exec ninja -C build", texts[''])
+    self.assertIn("edg-container-exec nice -n 10 bash -c 'ninja -C build'",
+                  texts['10'])
+
+  def test_ctest_caps_lit_and_the_build(self):
+    from unittest import mock
+    calls = []
+    with tempfile.TemporaryDirectory() as tmp:
+      ctx = gate_context(tmp, ctest_presets = 'linux-cir-asan',
+                         keep_ctest_builds = True)
+      with mock.patch.object(gate, 'in_cir_env',
+                             lambda ctx, step, command, wdir = '',
+                             extra_env = None: calls.append(
+                               (command, extra_env)) or 0), \
+           mock.patch.object(gate, 'BUILD_JOBS', 5):
+        passed, detail = gate.step_ctest(ctx)
+    self.assertTrue(passed, detail)
+    self.assertEqual(len(calls), 3)
+    self.assertTrue(any('-j5' in c and 'ctest' in c for c, _ in calls))
+    self.assertTrue(any('linux-cir-asan' in c for c, _ in calls))
+    for _, extra in calls:
+      self.assertEqual(extra, {'LIT_OPTS': '-j5'})
+
+  def test_the_stress_timeout_reaches_edg_cir_stress(self):
+    from unittest import mock
+    seen = []
+    with tempfile.TemporaryDirectory() as tmp:
+      ctx = gate_context(tmp, stress_timeout = 1234)
+      (ctx.out / 'stress').mkdir()
+      (ctx.out / 'stress' / 'log.txt').write_text('RESULT: PASS (3 cases)\n')
+      with mock.patch.object(gate, 'in_cir_env', lambda c, s, command, *a,
+                             **k: seen.append(command) or 0):
+        passed, detail = gate.step_stress(ctx)
+    self.assertTrue(passed)
+    self.assertIn('edg-cir-stress --timeout 1234', seen[0])
+    self.assertEqual(detail, 'RESULT: PASS (3 cases)')
+
+  @unittest.skipIf(os.path.exists('/.dockerenv'),
+                   'edg-docker-test does not run inside a container')
+  def test_edg_docker_test_jobs_default_changes_nothing(self):
+    env = dict(os.environ, PATH = f"{BIN}:{os.environ['PATH']}",
+               PYTHONPATH = str(BIN.parent / 'pylibs'))
+    root = BIN.parent.parent
+    before = set((root / '.tmp').glob('tmp*')) if (root / '.tmp').exists() \
+      else set()
+    def dry(*options):
+      proc = subprocess.run(
+        [sys.executable, str(BIN / 'edg-docker-test'), '--dry-run',
+         '--non-interactive', *options], env = env, text = True, timeout = 120,
+        stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+      self.assertEqual(proc.returncode, 0, proc.stdout)
+      return proc.stdout
+    try:
+      plain = dry()
+      capped = dry('--jobs', '7')
+    finally:
+      for path in set((root / '.tmp').glob('tmp*')) - before:
+        shutil.rmtree(path, ignore_errors = True)
+    self.assertNotRegex(plain, r'cmake --build \S+ -j\d')
+    self.assertNotIn('--jobs=', plain)
+    self.assertRegex(capped, r'cmake --build build/gcc -j7')
+    self.assertIn('edgy --run-timestamp', capped)
+    self.assertIn('--jobs=7', capped)
+
+
+class Day32(unittest.TestCase):
+  def test_the_posture_file_names_the_32_bit_configurations(self):
+    root = BIN.parent.parent
+    path = root / gate.DEFAULT_DAY32_POSTURE
+    posture = json.loads(path.read_text())
+    build, = posture['builds']
+    self.assertEqual(build['test_configs'], ['edg_x86_32', 'edg_x86_32_cp'])
+    self.assertEqual(build['cmake_preset'], 'linux-i686-gcc-debug')
+    self.assertTrue((root / build['edg_base']).is_dir())
+    presets = json.loads((root / 'CMakePresets.json').read_text())
+    self.assertIn(build['cmake_preset'],
+                  [p['name'] for p in presets['configurePresets']])
+    self.assertEqual(posture['test_filters'], '')
+    self.assertFalse(posture['record_tests'])
+
+  def test_the_step_and_its_areas(self):
+    self.assertIn('day32', gate.STEPS)
+    self.assertIn('day32', gate.STEP_FUNCTIONS)
+    for area in ('shared-src', 'tests-reference', 'pylibs'):
+      self.assertIn('day32', gate.AREA_STEPS[area], area)
+    self.assertIn('day32', gate.default_steps(False, False))
+    self.assertEqual(gate.areas_of('tests/.edgy/postures/day32.json'),
+                     ('tests-reference',))
+    self.assertEqual(gate.areas_of(
+      'tests/expectations/edg_x86_32/edg.log'), ('tests-reference',))
+    self.assertEqual(checkpoint.DAY32_BASELINE,
+                     '~/edg-cir-config/day-base/baseline-32')
+    self.assertEqual(gate.DEFAULT_DAY32_BASELINE, checkpoint.DAY32_BASELINE)
+
+  def test_a_gate_for_the_m51b_areas_runs_day_in_four_configurations(self):
+    steps, _ = gate.lean_steps(['writer', 'library', 'attr', 'tests-triage',
+                                'shared-src', 'crashes', 'perf'])
+    for step in ('day', 'day32', 'identity', 'isolation', 'ctest',
+                 'crash-sweep', 'symbols', 'mixed-tu', 'opt-corpus', 'perf',
+                 'attr-diff', 'codequality'):
+      self.assertIn(step, steps)
+
+  def test_the_baseline_of_day32_is_checked(self):
+    import types
+    args = types.SimpleNamespace(
+      day32_baseline_run = '/b32', perf_measure_only = False,
+      perf_targets = '', cpp_configs = 'edg_x86_64_cir')
+    rows = gate.baseline_requirements(args, ['day32'])
+    self.assertEqual([(o, p, k) for o, p, k, _ in rows],
+                     [('day32-baseline-run', '/b32', 'dir')])
+
+  def test_a_build_dir_with_another_edg_base_is_dropped(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      ctx = gate_context(tmp, tree = tmp)
+      posture = Path(tmp) / 'p.json'
+      posture.write_text(json.dumps({'builds': [
+        {'build_path': 'build/gcc-i686',
+         'edg_base': 'bases/docker/dev-env/gcc-i686'},
+        {'build_path': 'build/other', 'edg_base': 'bases/x'}]}))
+      for name, base in (('gcc-i686', 'gcc'), ('other', 'x')):
+        directory = Path(tmp) / 'build' / name
+        directory.mkdir(parents = True)
+        (directory / 'CMakeCache.txt').write_text(
+          f"A:B=1\nEDG_BASE:STRING=/edg/workspace/bases/docker/dev-env/{base}"
+          '\n' if name == 'gcc-i686' else
+          'EDG_BASE:STRING=/edg/workspace/bases/x\n')
+      self.assertEqual(gate.drop_stale_builds(ctx, 'p.json'),
+                       ['build/gcc-i686'])
+      self.assertFalse((Path(tmp) / 'build/gcc-i686').exists())
+      self.assertTrue((Path(tmp) / 'build/other').exists())
+      # a directory that is not there is left for edg-docker-test to build
+      self.assertEqual(gate.drop_stale_builds(ctx, 'p.json'), [])
+      # the built-in posture is build/gcc with the x86-64 base
+      directory = Path(tmp) / 'build/gcc'
+      directory.mkdir()
+      (directory / 'CMakeCache.txt').write_text(
+        'EDG_BASE:STRING=/edg/workspace/bases/docker/dev-env/gcc\n')
+      self.assertEqual(gate.drop_stale_builds(ctx, ''), [])
+
+  def day_run(self, tmp, base_lines, new_lines):
+    from unittest import mock
+    calls = []
+    ctx = gate_context(tmp, day32_baseline_run = str(Path(tmp) / 'base'),
+                       day32_posture = 'tests/.edgy/postures/day32.json',
+                       day_filter = '')
+    (ctx.out / 'day32').mkdir()
+    run = Path(tmp) / 'new'
+    run.mkdir()
+    lines = iter([base_lines, new_lines])
+    with mock.patch.object(gate, 'run_logged', lambda c, s, cmd, **k:
+                           calls.append((s, cmd)) or 0), \
+         mock.patch.object(gate, 'drop_stale_builds', lambda c, p: []), \
+         mock.patch.object(gate, 'runs_before', lambda c: set()), \
+         mock.patch.object(gate, 'newest_run', lambda c, b: run), \
+         mock.patch.object(gate, '_status_lines', lambda r, s: next(lines)):
+      passed, detail = gate.step_day32(ctx)
+    return passed, detail, calls, ctx
+
+  def test_the_step_runs_the_posture_and_compares_the_32_bit_configs(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      same = {'edg_x86_32': ['a:PASS'], 'edg_x86_32_cp': ['b:PASS']}
+      passed, detail, calls, _ = self.day_run(tmp, same, dict(same))
+      self.assertTrue(passed, detail)
+      step, command = calls[0]
+      self.assertEqual(step, 'day32')
+      self.assertEqual(command[-2:], ['--posture',
+                                      '@tests/.edgy/postures/day32.json'])
+      self.assertIn('statuses identical', detail)
+
+  def test_a_status_change_in_a_32_bit_config_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      base = {'edg_x86_32': ['a:PASS'], 'edg_x86_32_cp': ['b:PASS']}
+      new = {'edg_x86_32': ['a:PASS'], 'edg_x86_32_cp': ['b:FAIL']}
+      passed, detail, _, ctx = self.day_run(tmp, base, new)
+      self.assertFalse(passed)
+      self.assertIn("['edg_x86_32_cp']", detail)
+      diff = (ctx.out / 'day32' / 'diff.txt').read_text()
+      self.assertIn('- b:PASS', diff)
+      self.assertIn('+ b:FAIL', diff)
+
+  def test_the_64_bit_step_has_no_posture_argument(self):
+    from unittest import mock
+    calls = []
+    with tempfile.TemporaryDirectory() as tmp:
+      ctx = gate_context(tmp, day_baseline_run = str(Path(tmp)),
+                         day_filter = '')
+      (ctx.out / 'day').mkdir()
+      with mock.patch.object(gate, 'run_logged', lambda c, s, cmd, **k:
+                             calls.append(cmd) or 0), \
+           mock.patch.object(gate, 'drop_stale_builds', lambda c, p: []), \
+           mock.patch.object(gate, 'runs_before', lambda c: set()), \
+           mock.patch.object(gate, 'newest_run', lambda c, b: Path(tmp)), \
+           mock.patch.object(gate, '_status_lines',
+                             lambda r, s: {'edg_x86_64': ['a:PASS']}):
+        passed, detail = gate.step_day(ctx)
+    self.assertTrue(passed, detail)
+    self.assertNotIn('--posture', calls[0])
+
+
+class IdentityAllowList(unittest.TestCase):
+  OUT = (
+    'linux-gcc-debug: preprocessed output differs: cpfe/src/lower_name.c.i.gz\n'
+    '    --- before\n'
+    'linux-gcc-debug: preprocessed output differs: cpfe-cp/src/macro.c.i.gz\n'
+    'DIFFERENT: 180 files compared across 4 presets, 2 problem(s)\n')
+  ALLOWED = [('*/src/lower_name.c.i.gz', 'the W3 mangler changes'),
+             ('*/src/macro.c.i.gz', 'the W4 __has_builtin values')]
+
+  def test_a_run_whose_only_differences_are_allowed_passes(self):
+    ok, detail, used = gate.judge_identity(self.OUT, 1, self.ALLOWED)
+    self.assertTrue(ok, detail)
+    self.assertIn('all 2 on the allow-list', detail)
+    self.assertIn('W3 mangler', detail)
+    self.assertEqual(sorted(used), sorted(e[0] for e in self.ALLOWED))
+
+  def test_another_file_fails(self):
+    out = self.OUT.replace('macro.c', 'types.c')
+    ok, detail, _ = gate.judge_identity(out, 1, self.ALLOWED)
+    self.assertFalse(ok)
+    self.assertIn('1 of the problems are on the allow-list', detail)
+
+  def test_a_dump_or_generated_difference_is_never_allowed(self):
+    out = self.OUT.replace('preprocessed output differs: cpfe/src/macro.c',
+                           'dump differs beyond allowed changes: dump/cpfe.txt'
+                           ).replace('i.gz', 'txt')
+    out = out.replace('cpfe/src/lower_name.c.txt', 'cpfe/src/lower_name.c.i.gz')
+    allowed = self.ALLOWED + [('dump/*', 'a dump may differ')]
+    self.assertFalse(gate.judge_identity(out, 1, allowed)[0])
+
+  def test_a_stale_entry_fails(self):
+    out = self.OUT.replace(
+      'linux-gcc-debug: preprocessed output differs: cpfe-cp/src/macro.c.i.gz'
+      '\n', '').replace('2 problem(s)', '1 problem(s)')
+    ok, detail, _ = gate.judge_identity(out, 1, self.ALLOWED)
+    self.assertFalse(ok)
+    self.assertIn('STALE', detail)
+    # identical output with entries left over is stale too, without: a pass
+    same = 'IDENTICAL: 180 files compared across 4 presets, 0 problem(s)\n'
+    self.assertFalse(gate.judge_identity(same, 0, self.ALLOWED)[0])
+    self.assertTrue(gate.judge_identity(same, 0, [])[0])
+
+  def test_a_failure_without_a_count_fails(self):
+    self.assertFalse(gate.judge_identity('crash\n', 1, self.ALLOWED)[0])
+    self.assertFalse(gate.judge_identity('', 1, self.ALLOWED)[0])
+
+  def test_the_checked_in_list(self):
+    path = BIN.parent.parent / gate.IDENTITY_ALLOW
+    entries, problems = gate.read_identity_allowlist(str(path))
+    self.assertEqual(problems, [])
+    self.assertEqual([e[0] for e in entries],
+                     ['*/src/lower_name.c.i.gz', '*/src/macro.c.i.gz'])
+    self.assertEqual(gate.areas_of(gate.IDENTITY_ALLOW), ('shared-src',))
+    names = ('cpfe/src/lower_name.c.i.gz', 'cpfe-cp/src/macro.c.i.gz')
+    for name in names:
+      self.assertTrue(any(__import__('fnmatch').fnmatchcase(name, g)
+                          for g, _ in entries), name)
+
+  def test_the_list_is_checked_when_it_is_read(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      path = Path(tmp) / 'allow.txt'
+      path.write_text('*/src/a.c.i.gz | short\n')
+      problems = gate.read_identity_allowlist(str(path))[1]
+      self.assertTrue(any('real reason' in p for p in problems))
+      self.assertTrue(any('no comment line' in p for p in problems))
+      path.write_text('# c\n*/src/a.c.i.gz | a real reason here\n'
+                      '# c\n*/src/a.c.i.gz | a real reason here\n')
+      self.assertTrue(any('twice' in p for p in
+                          gate.read_identity_allowlist(str(path))[1]))
+      self.assertEqual(
+        gate.read_identity_allowlist(str(Path(tmp) / 'none')), ([], []))
+
+
+class ImageRecords(unittest.TestCase):
+  def test_the_dev_env_image_is_the_pinned_one(self):
+    sys.path.insert(0, str(BIN.parent / 'pylibs'))
+    try:
+      import edgdocker
+    finally:
+      sys.path.pop(0)
+    self.assertEqual(gate.image_inspect_ref('edgcpp/dev-env:latest'),
+                     edgdocker.get_latest_image_tag('dev-env'))
+    self.assertEqual(gate.image_inspect_ref('edgcpp/cir-env:latest'),
+                     'edgcpp/cir-env:latest')
+
+  def test_the_record_keeps_the_name_of_the_entry(self):
+    from unittest import mock
+    asked = []
+    def fake(argv, **kw):
+      asked.append(argv[-1])
+      return subprocess.CompletedProcess(argv, 0, stdout = 'sha256:abc\n')
+    with mock.patch.object(gate.subprocess, 'run', fake):
+      ids = gate.image_ids()
+    self.assertEqual(list(ids), list(gate.IMAGE_REFS))
+    self.assertNotEqual(asked[0], 'edgcpp/dev-env:latest')
+    self.assertEqual(asked[1:], list(gate.IMAGE_REFS[1:]))
+
+
+class DevEnvTag(unittest.TestCase):
+  '''tag_dev_env_for_cir never retags an existing :latest of another image.'''
+
+  def run_tag(self, ids):
+    sys.path.insert(0, str(BIN.parent / 'pylibs'))
+    try:
+      import edgdocker
+    finally:
+      sys.path.pop(0)
+    from unittest import mock
+    tags = []
+    def fake(argv, **kw):
+      if argv[:3] == ['docker', 'image', 'inspect']:
+        found = ids.get(argv[-1])
+        return subprocess.CompletedProcess(
+          argv, 0 if found else 1, stdout = (found or '') + '\n')
+      tags.append(argv[2:])
+      return subprocess.CompletedProcess(argv, 0)
+    with mock.patch.object(edgdocker.subprocess, 'run', fake), \
+         mock.patch.object(edgdocker, 'get_latest_image_tag',
+                           lambda name, respect_pins = True:
+                           'PIN' if respect_pins else 'LATEST'), \
+         contextlib.redirect_stderr(io.StringIO()) as err:
+      try:
+        result = edgdocker.tag_dev_env_for_cir()
+        code = None
+      except SystemExit as raised:
+        result, code = None, raised.code
+    return result, code, tags, err.getvalue()
+
+  ID = 'sha256:' + '1c1cf78d322b' + '0' * 52
+
+  def test_a_host_without_latest_gets_it(self):
+    result, code, tags, _ = self.run_tag({'PIN': self.ID})
+    self.assertIsNone(code)
+    self.assertEqual(result, 'docker.io/edgcpp/dev-env:cir-1c1cf78d322b')
+    self.assertEqual(tags, [['PIN', result], ['PIN', 'LATEST']])
+
+  def test_the_same_latest_is_left_alone(self):
+    result, code, tags, _ = self.run_tag({'PIN': self.ID, 'LATEST': self.ID})
+    self.assertIsNone(code)
+    self.assertEqual(tags, [['PIN', result]])
+
+  def test_another_latest_is_not_retagged(self):
+    other = 'sha256:' + 'f' * 64
+    result, code, tags, err = self.run_tag({'PIN': self.ID, 'LATEST': other})
+    self.assertEqual(code, 1)
+    self.assertNotIn(['PIN', 'LATEST'], tags)
+    self.assertIn('not retagged', err)
+
+  def test_the_llvm_build_container_names_are_unique_per_process(self):
+    text = (BIN.parent / 'docker/llvm-cir/prebuild.py').read_text()
+    self.assertNotIn("'cir-config-llvm-build'", text)
+    self.assertNotIn("'cir-config-llvm-strip'", text)
+    self.assertIn('cir-config-llvm-build-{os.getpid()}', text)
+    self.assertNotIn("'docker.io/edgcpp/dev-env:latest'", text)
+
+
+class OptCorpusBaselines(unittest.TestCase):
+  def test_absent_o0_baselines_fail_the_step(self):
+    from unittest import mock
+    with tempfile.TemporaryDirectory() as tmp:
+      ctx = gate_context(
+        tmp, tree = tmp, corpus_filter = 'c', cpp_corpus_filter = 'cc',
+        smoke_filter = 's', cpp_smoke_filter = 'cs', types = 'rp',
+        opt_baseline_status = str(Path(tmp) / 'no-baseline'))
+      def summarize(ctx, step, run, config, json_name, extra = None,
+                    text_tag = ''):
+        return [{'path': gate.OPT_CANARY_CPP if 'cxx' in ' '.join(extra or [])
+                 else gate.OPT_CANARY, 'status': 'PASS--OUTPUT MISMATCH',
+                 'variant': '', 'test_type': 'rp', 'bucket': 'PASS'}], ''
+      with mock.patch.object(gate, 'edgy_run', lambda *a, **k: Path(tmp)), \
+           mock.patch.object(gate, 'summarize_run', summarize), \
+           mock.patch.object(gate, 'canary_output', lambda *a: None), \
+           mock.patch.object(gate, 'killed_tests', lambda *a: []):
+        passed, detail = gate.step_opt_corpus(ctx)
+      self.assertFalse(passed)
+      self.assertIn('no -O0 statuses to compare with', detail)
+      self.assertIn('c_edg_x86_64_cir.json', detail)
+      self.assertEqual(gate._o0_statuses(ctx, 'c', 'c_edg_x86_64_cir.json'),
+                       {})
+
+  def test_a_baseline_directory_supplies_the_statuses(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      base = Path(tmp) / 'base'
+      base.mkdir()
+      (base / 'c_edg_x86_64_cir.json').write_text(json.dumps(
+        {'edg_x86_64_cir': [{'path': 'a', 'variant': '-D', 'bucket': 'PASS',
+                             'status': 'PASS'}]}))
+      ctx = gate_context(tmp, tree = tmp, opt_baseline_status = str(base))
+      got = gate._o0_statuses(ctx, 'c', 'c_edg_x86_64_cir.json')
+      self.assertEqual(len(got), 1)
+
+
+class AttrQualifiers(unittest.TestCase):
+  '''C1: the known entries can name a position (a glob category), a
+  symbol and a unit.'''
+
+  def known(self, text):
+    with tempfile.TemporaryDirectory() as tmp:
+      path = Path(tmp) / 'known.txt'
+      path.write_text(text)
+      return attr.validate_known(str(path))
+
+  ROW = ('# a checked row\n'
+         'param* | 2 | only-clangir:dereferenceable(*) '
+         'symbol=_ZNSt*_Base_manager* unit=libstdcxx/* | accepted, checked '
+         '2026-11-06: final classes, clangir uses the full size\n')
+
+  def test_a_checked_row_with_qualifiers_is_valid(self):
+    entries, problems = self.known(self.ROW)
+    self.assertEqual(problems, [])
+    self.assertEqual(len(entries), 1)
+    self.assertEqual(len(entries[0]), 4)
+
+  def test_the_position_is_a_glob_of_the_category(self):
+    entries, _ = self.known(
+      '# any parameter\nparam* | * | only-ours:nonnull | an improvement\n')
+    for category in ('param0', 'param12'):
+      self.assertIsNotNone(attr.known_entry(
+        entries, 0, category, 'only-ours:nonnull'), category)
+    for category in ('ret', 'fn', 'call'):
+      self.assertIsNone(attr.known_entry(
+        entries, 0, category, 'only-ours:nonnull'), category)
+
+  def test_the_symbol_narrows_an_entry(self):
+    entries, _ = self.known(self.ROW)
+    detail = 'only-clangir:dereferenceable(16)'
+    sym = '_ZNSt14_Base_managerIiE7_M_initEv'
+    self.assertIsNotNone(attr.known_entry(
+      entries, 2, 'param0', detail, sym, 'libstdcxx/memory'))
+    self.assertIsNone(attr.known_entry(
+      entries, 2, 'param0', detail, '_ZN3fooEv', 'libstdcxx/memory'))
+    # a caller that gives no symbol or unit cannot match a narrowed entry
+    self.assertIsNone(attr.known_entry(entries, 2, 'param0', detail))
+    self.assertIsNone(attr.known_entry(entries, 2, 'param0', detail, sym))
+
+  def test_the_unit_narrows_an_entry(self):
+    entries, _ = self.known(self.ROW)
+    detail = 'only-clangir:dereferenceable(16)'
+    sym = '_ZNSt14_Base_managerIiE7_M_initEv'
+    self.assertIsNone(attr.known_entry(
+      entries, 2, 'param0', detail, sym, 'boost/mp11'))
+    self.assertIsNone(attr.known_entry(
+      entries, 0, 'param0', detail, sym, 'libstdcxx/memory'))
+
+  def test_a_symbol_only_and_a_unit_only_entry(self):
+    entries, problems = self.known(
+      '# one function\nfn | * | only-ours:nounwind symbol=main | the entry '
+      'point is nounwind in ours\n'
+      '# one unit\nret | * | only-ours:noundef unit=boost/mp11 | tested '
+      'only in this unit\n')
+    self.assertEqual(problems, [])
+    self.assertIsNotNone(attr.known_entry(entries, 0, 'fn',
+                                          'only-ours:nounwind', 'main', 'u'))
+    self.assertIsNone(attr.known_entry(entries, 0, 'fn',
+                                       'only-ours:nounwind', 'main2', 'u'))
+    self.assertIsNotNone(attr.known_entry(
+      entries, 0, 'ret', 'only-ours:noundef', 'f', 'boost/mp11'))
+    self.assertIsNone(attr.known_entry(
+      entries, 0, 'ret', 'only-ours:noundef', 'f', 'boost/other'))
+
+  def test_a_detail_with_a_space_keeps_it(self):
+    entries, problems = self.known(
+      '# the alignment\ncall | * | only-ours:llvm.memset:arg0:align 8 '
+      'symbol=_Z3f* | we claim less\n')
+    self.assertEqual(problems, [])
+    self.assertIsNotNone(attr.known_entry(
+      entries, 0, 'call', 'only-ours:llvm.memset:arg0:align 8', '_Z3fv'))
+    self.assertIsNone(attr.known_entry(
+      entries, 0, 'call', 'only-ours:llvm.memset:arg0:align', '_Z3fv'))
+
+  def test_entries_without_qualifiers_are_as_wide_as_before(self):
+    entries, _ = self.known(GOOD_KNOWN)
+    self.assertIsNotNone(attr.known_entry(entries, 0, 'param0',
+                                          'only-ours:nonnull'))
+    self.assertIsNotNone(attr.known_entry(entries, 0, 'param0',
+                                          'only-ours:nonnull', 'f', 'u'))
+    self.assertTrue(attr.explained(entries, 0, 'param0',
+                                   'only-ours:nonnull', 'f', 'u'))
+
+  def test_an_unknown_qualifier_a_pair_qualifier_and_an_empty_one_are_refused(
+      self):
+    _, problems = self.known(
+      '# c\nret | * | only-ours:noundef symbl=x | a real reason here\n')
+    self.assertTrue(any('unknown qualifier' in p for p in problems), problems)
+    _, problems = self.known(
+      '# c\npair | * | structor-variants unit=x | a real reason here\n')
+    self.assertTrue(any('no pair matcher' in p for p in problems), problems)
+    _, problems = self.known(
+      '# c\nret | * | only-ours:noundef symbol= | a real reason here\n')
+    self.assertTrue(any('empty qualifier' in p for p in problems), problems)
+    _, problems = self.known(
+      '# c\nret | * | symbol=f | a real reason here\n')
+    self.assertTrue(any('no detail' in p for p in problems), problems)
+
+  def test_a_checked_reason_needs_a_date_and_a_why(self):
+    for reason in ('accepted, checked: because', 'accepted, checked '
+                   '2026-11-06: short', 'accepted, checked 2026-11-06'):
+      _, problems = self.known(
+        f"# c\nret | * | only-ours:noundef | {reason}\n")
+      self.assertTrue(any('checked row' in p or 'real reason' in p
+                          for p in problems), reason)
+    _, problems = self.known(
+      '# c\nret | * | only-ours:noundef | accepted, checked 2026-11-06: '
+      'the callee is a builtin in ours\n')
+    self.assertEqual(problems, [])
+
+  def test_two_entries_that_differ_only_in_qualifiers_are_not_duplicates(
+      self):
+    _, problems = self.known(
+      '# a\nret | * | only-ours:noundef symbol=a | a real reason here\n'
+      '# b\nret | * | only-ours:noundef symbol=b | a real reason here\n')
+    self.assertEqual(problems, [])
+
+  def test_the_gate_judges_stale_entries_with_qualifiers(self):
+    entries, _ = self.known(self.ROW)
+    ok, detail = gate.judge_attr_diff(
+      {'probe': (0, {'compared': {'0': 5}, 'explained': 0, 'unexplained': [],
+                     'known_used': [], 'uncompared': [], 'nounwind': {},
+                     'nounwind_below': [], 'no_llvm_passes': True,
+                     'residue': {}})}, entries)
+    self.assertFalse(ok)
+    self.assertIn('stale', detail)
+    used = [' | '.join(e) for e in entries]
+    ok, detail = gate.judge_attr_diff(
+      {'probe': (0, {'compared': {'0': 5}, 'explained': 1, 'unexplained': [],
+                     'known_used': used, 'uncompared': [], 'nounwind': {},
+                     'nounwind_below': [], 'no_llvm_passes': True,
+                     'residue': {}})}, entries)
+    self.assertTrue(ok, detail)
+
+  def test_the_policy_text_describes_the_qualifiers_and_checked_rows(self):
+    text = (BIN.parent.parent / gate.ATTR_KNOWN).read_text()
+    self.assertIn('symbol=GLOB', text)
+    self.assertIn('unit=GLOB', text)
+    self.assertIn('accepted, checked', text)
 
 
 if __name__ == '__main__':

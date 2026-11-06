@@ -7700,8 +7700,9 @@ end_arg_expansion:;
       }  /* if */
       strcpy(repl_text, value);
     } else if (macro_symbol == has_builtin_symbol) {
-      /* The clang-style __has_builtin macro.  Has the value 1 if the named
-         builtin function is available in the current execution of the
+      /* The clang-style __has_builtin macro.  Has a nonzero value (1 except
+         for __builtin_operator_new and __builtin_operator_delete) if the
+         named builtin function is available in the current execution of the
          front end and 0 otherwise. */
 #if BUILTIN_FUNCTIONS_ENABLED
       a_const_char *builtin_name = clang_feature_test_id(map, NULL,
@@ -7722,7 +7723,15 @@ end_arg_expansion:;
            they're not technically builtin functions (in the sense that they're
            not in the table of builtin functions, but are implemented by the
            front end). */
-        strcpy(repl_text, "1");
+        if (strcmp(builtin_name, "__builtin_operator_new") == 0 ||
+            strcmp(builtin_name, "__builtin_operator_delete") == 0) {
+          /* g++ 15 and clang give the value of the feature test macro for
+             the C++ version in which sized deallocation and aligned new were
+             adopted (libstdc++ tests for >= 201802L). */
+          strcpy(repl_text, clang_mode ? "201802L" : "201802");
+        } else {
+          strcpy(repl_text, "1");
+        }  /* if */
       } else {
         strcpy(repl_text, "0");
       }  /* if */

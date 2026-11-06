@@ -19,7 +19,7 @@ frame REGION
   TY_FUNC 5 1 0 [1, 4]
   STR 5 "callee"
   DECL_FUNC 6 5 0 0 5
-  DECL_FUNC 6 5 0 1 5
+  DECL_FUNC 6 5 0 129 5
   STR 6 "x"
   STR 7 "y"
   STR 8 "ext"
@@ -51,7 +51,7 @@ frame REGION
   TY_FUNC 10 1 0 [1]
   STR 10 "varcalls"
   DECL_FUNC 11 10 0 0 10
-  DECL_FUNC 11 10 0 1 10
+  DECL_FUNC 11 10 0 129 10
   STR 11 "n"
   TY_INT 12 8 true 1 1
   TY_PTR 13 12
@@ -99,7 +99,7 @@ frame REGION
   STR 16 "kr"
   DECL_FUNC 23 20 0 0 16
   TY_FUNC 24 1 2 [1, 4]
-  DECL_FUNC 23 24 0 1 16
+  DECL_FUNC 23 24 0 129 16
   STR 17 "a"
   STR 18 "b"
   FUNC_BEGIN 23 0
@@ -120,7 +120,7 @@ frame REGION
   TY_FUNC 25 1 1 [1]
   STR 19 "sum"
   DECL_FUNC 26 25 0 0 19
-  DECL_FUNC 26 25 0 1 19
+  DECL_FUNC 26 25 0 129 19
   STR 20 "__va_list_tag"
   TY_RECORD_DECL 27 0 20
   TY_INT 28 32 false 4 4

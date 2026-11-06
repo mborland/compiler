@@ -1,0 +1,101 @@
+fe_only -DTEST_NUMBER=1 --clang -e 200 --no_wrap_diagnostics --clang_version 999999 --c Test_name.c
+"Test_name.c", line 5: warning: unrecognized #pragma
+  #pragma clang attribute pop // expected-error {{'#pragma clang attribute pop' with no matching '#pragma clang attribute push'}}
+          ^
+
+"Test_name.c", line 8: warning: unrecognized #pragma
+  #pragma clang attribute push (__attribute__((annotate)), apply_to = function) // expected-warning {{unused attribute 'annotate' in '#pragma clang attribute push' region}}
+          ^
+
+"Test_name.c", line 9: warning: unrecognized #pragma
+  #pragma clang attribute pop // expected-note {{'#pragma clang attribute push' regions ends here}}
+          ^
+
+"Test_name.c", line 12: warning: unrecognized #pragma
+  #pragma clang attribute push (__attribute__((annotate)), apply_to = function) // expected-error 4 {{'annotate' attribute takes at least 1 argument}}
+          ^
+
+"Test_name.c", line 17: warning: unrecognized #pragma
+  #pragma clang attribute push (__attribute__((annotate())), apply_to = function) // expected-error 2 {{'annotate' attribute takes at least 1 argument}}
+          ^
+
+"Test_name.c", line 21: warning: unrecognized #pragma
+  #pragma clang attribute push (__attribute__((annotate("hello", "world"))), apply_to = function)
+          ^
+
+"Test_name.c", line 25: warning: unrecognized #pragma
+  #pragma clang attribute pop
+          ^
+
+"Test_name.c", line 26: warning: unrecognized #pragma
+  #pragma clang attribute pop
+          ^
+
+"Test_name.c", line 27: warning: unrecognized #pragma
+  #pragma clang attribute pop
+          ^
+
+"Test_name.c", line 31: warning: unrecognized #pragma
+  #pragma clang attribute push (__attribute__((optnone)), apply_to = function) // expected-note 2 {{conflicting attribute is here}}
+          ^
+
+"Test_name.c", line 41: warning: unrecognized #pragma
+  #pragma clang attribute pop
+          ^
+
+"Test_name.c", line 43: warning: unrecognized #pragma
+  #pragma clang attribute push (__attribute__((annotate())), apply_to = function) // expected-error{{'annotate' attribute takes at least 1 argument}}
+          ^
+
+"Test_name.c", line 44: warning: unrecognized #pragma
+  #pragma clang attribute (__attribute__((annotate())), apply_to = function) // expected-error{{'annotate' attribute takes at least 1 argument}}
+          ^
+
+"Test_name.c", line 48: warning: unrecognized #pragma
+  #pragma clang attribute pop
+          ^
+
+"Test_name.c", line 49: warning: unrecognized #pragma
+  #pragma clang attribute pop // expected-error{{'#pragma clang attribute pop' with no matching '#pragma clang attribute push'}}
+          ^
+
+"Test_name.c", line 52: warning: unrecognized #pragma
+  #pragma clang attribute push
+          ^
+
+"Test_name.c", line 53: warning: unrecognized #pragma
+  #pragma clang attribute (__attribute__((annotate())), apply_to = function) // expected-error 2 {{'annotate' attribute takes at least 1 argument}}
+          ^
+
+"Test_name.c", line 57: warning: unrecognized #pragma
+  #pragma clang attribute push (__attribute__((annotate())), apply_to = function) // expected-error{{'annotate' attribute takes at least 1 argument}}
+          ^
+
+"Test_name.c", line 59: warning: unrecognized #pragma
+  #pragma clang attribute pop
+          ^
+
+"Test_name.c", line 61: warning: unrecognized #pragma
+  #pragma clang attribute pop
+          ^
+
+"Test_name.c", line 62: warning: unrecognized #pragma
+  #pragma clang attribute pop // expected-error{{'#pragma clang attribute pop' with no matching '#pragma clang attribute push'}}
+          ^
+
+"Test_name.c", line 64: warning: unrecognized #pragma
+  #pragma clang attribute (__attribute__((annotate)), apply_to = function) // expected-error{{'#pragma clang attribute' attribute with no matching '#pragma clang attribute push}}
+          ^
+
+"Test_name.c", line 66: warning: unrecognized #pragma
+  #pragma clang attribute push ([[]], apply_to = function) // A noop
+          ^
+
+"Test_name.c", line 68: warning: unrecognized #pragma
+  #pragma clang attribute pop // expected-error {{'#pragma clang attribute pop' with no matching '#pragma clang attribute push'}}
+          ^
+
+"Test_name.c", line 70: warning: unrecognized #pragma
+  #pragma clang attribute push (__attribute__((annotate("func"))), apply_to = function) // expected-error {{unterminated '#pragma clang attribute push' at end of file}}
+          ^
+

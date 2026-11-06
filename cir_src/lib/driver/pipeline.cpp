@@ -36,9 +36,13 @@ after the worker has joined.
 #include "clang/CIR/Dialect/Passes.h"
 #include "clang/CIR/LowerToLLVM.h"
 #include "clang/CIR/Passes.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
@@ -48,6 +52,7 @@ after the worker has joined.
 #include "llvm/Support/CrashRecoveryContext.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Transforms/IPO/GlobalDCE.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Verifier.h"
@@ -236,6 +241,46 @@ Same pass list, same translation, same module name.
   return result;
 }  /* lower_to_llvm_ir */
 
+void order_always_inline_uses(llvm::Module &module)
+/*
+Put the call sites of every always_inline function in program order (function
+order, then instruction order) in its use list.  The AlwaysInliner takes the
+call sites in use-list order, and that order decides where the allocas of the
+inlined bodies land; it depends on how the module was made (whole, or merged
+from chunks, whose bodies the linker clones in another order), so without this
+the output would depend on chunking.
+*/
+{
+  llvm::DenseMap<const llvm::Instruction *, unsigned> position;
+  unsigned next = 0;
+
+  for (llvm::Function &fn : module) {
+    for (llvm::Instruction &inst : llvm::instructions(fn)) {
+      if (auto *call = llvm::dyn_cast<llvm::CallBase>(&inst)) {
+        llvm::Function *callee = call->getCalledFunction();
+
+        if (callee != nullptr &&
+            callee->hasFnAttribute(llvm::Attribute::AlwaysInline))
+          position[call] = next++;
+      }
+    }
+  }
+  if (position.empty())
+    return;
+  auto before = [&](const llvm::Use &left, const llvm::Use &right) {
+    auto find = [&](const llvm::Use &use) {
+      auto *inst = llvm::dyn_cast<llvm::Instruction>(use.getUser());
+      auto found = inst != nullptr ? position.find(inst) : position.end();
+      return found != position.end() ? found->second : ~0u;
+    };
+    return find(left) < find(right);
+  };
+  for (llvm::Function &fn : module) {
+    if (fn.hasFnAttribute(llvm::Attribute::AlwaysInline) && !fn.use_empty())
+      fn.sortUseList(before);
+  }
+}  /* order_always_inline_uses */
+
 void lower_and_emit(an_edg_cir_session &session, mlir::ModuleOp module,
                     llvm::raw_string_ostream &out)
 /*
@@ -306,6 +351,13 @@ LLVM-level output.  Sets session.status on failure.
     builder.registerLoopAnalyses(lam);
     builder.crossRegisterProxies(lam, fam, cgam, mam);
     if (session.opt_level <= 0) {
+      /* As clang's -O0 pipeline: always_inline functions are inlined (on
+         the merged module: with chunked lowering a callee can be in another
+         chunk).  The functions that were inlined everywhere and are
+         discardable are erased by the pass itself. */
+      if ((session.flags & EDG_CIR_FLAG_NO_LLVM_PASSES) == 0)
+        order_always_inline_uses(*lowered);
+      mpm.addPass(llvm::AlwaysInlinerPass(/*InsertLifetimeIntrinsics=*/false));
       /* Dead internal functions of streamed regions must go even at -O0. */
       mpm.addPass(llvm::GlobalDCEPass());
     } else {

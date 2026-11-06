@@ -10,8 +10,11 @@
 Run it on the Mac, from the repository root.  The host is $EDG_CIR_HOST
 (default matt@clang4.cpp.al) and the ssh key $EDG_CIR_SSH_KEY (default
 ~/.ssh/id_rsa); ssh and rsync run with -o BatchMode=yes -i <key>.  An open SSH
-master socket is used only if $EDG_BOX_SOCKET names it.  Docker runs directly
-(the user is in the docker group); set EDG_CIR_SG_DOCKER=1 to run it through
+master socket is used only if $EDG_CIR_SSH_SOCKET names it (the old
+workflow's EDG_BOX_SOCKET is ignored: a stale socket of the retired box would
+send rsync --delete there), and the box must report the host name
+$EDG_CIR_HOSTNAME (default clang4) before anything is synced.  Docker runs
+directly (the user is in the docker group); set EDG_CIR_SG_DOCKER=1 to run it through
 `sg docker -c` as the old box needed:
 
   edg-cir-checkpoint                # sync, clean build, the default steps
@@ -35,11 +38,17 @@ It does, in this order:
      on the box (default tree m51-int; build/, tests/runs/, .tmp/ and .git/
      are not touched).  --no-times gives changed files the time of the
      transfer: with `rsync -a` a changed source can keep a time older than
-     the objects of an earlier build, and ninja then rebuilds nothing.
+     the objects of an earlier build, and ninja then rebuilds nothing.  The
+     sync deletes files of the box tree that this tree lacks (--delete),
+     except in a protected tree (see PROTECTED_TREES: day-base, m5-int) and in
+     a tree with a KEEP file, which are only added to.
   2. wipes the CIR build directories (build/cir, build/cir-*, build/gcc-cir,
      build/gcc-release-cir), unless --incremental.
   3. runs edg-cir-gate-evidence there with the chosen steps, in the
-     background (nohup, with an exit file), and polls until it is done.
+     background (nohup, with an exit file), and polls until it is done.  The
+     gate runs every container command under `nice -n 10` (EDG_DOCKER_NICE,
+     which edgdocker applies inside the container) with --jobs as the cap of
+     the build, test and lit jobs.
   4. prints the PASS/FAIL table and the paths of the evidence.
 
 The default steps are:
@@ -99,7 +108,9 @@ from typing import List
 
 BOX = os.environ.get('EDG_CIR_HOST', 'matt@clang4.cpp.al')
 SSH_KEY = os.environ.get('EDG_CIR_SSH_KEY', '~/.ssh/id_rsa')
-SOCKET = os.environ.get('EDG_BOX_SOCKET', '')
+SOCKET = os.environ.get('EDG_CIR_SSH_SOCKET', '')
+# The host name (`hostname -s`) that the box must report before a sync.
+EXPECTED_HOSTNAME = os.environ.get('EDG_CIR_HOSTNAME', 'clang4')
 SG_DOCKER = os.environ.get('EDG_CIR_SG_DOCKER', '') not in ('', '0')
 # The default tree is wiped and rebuilt by every checkpoint; the trees that
 # hold baselines or the evidence they came from are not (see PROTECTED_TREES).
@@ -150,7 +161,7 @@ def local_fingerprint(root: Path) -> str:
 
 def ssh_options() -> List[str]:
   '''The ssh options: batch mode and the key, and the master socket if
-  EDG_BOX_SOCKET names one.'''
+  EDG_CIR_SSH_SOCKET names one.'''
   options = ['-o', 'BatchMode=yes', '-i', str(Path(SSH_KEY).expanduser())]
   if SOCKET:
     options += ['-o', f"ControlPath={Path(SOCKET).expanduser()}",
@@ -167,6 +178,18 @@ def docker_wrap(command: str) -> str:
   '''The shell command that runs `command` as a user that can run docker:
   directly, or through `sg docker -c` with EDG_CIR_SG_DOCKER=1.'''
   return f"sg docker -c {shlex.quote(command)}" if SG_DOCKER else command
+
+
+def hostname_problem(reported: str) -> str:
+  '''"" if `reported` (the output of `hostname -s` on the box) is the
+  expected host, else the message.  A stale ssh ControlPath sends a command to
+  another host whatever name was given, and the sync below deletes files.'''
+  reported = (reported.strip().splitlines() or [''])[-1]
+  if reported == EXPECTED_HOSTNAME:
+    return ''
+  return (f"the host answers as {reported!r}, not {EXPECTED_HOSTNAME!r} "
+          f"(EDG_CIR_HOST={BOX}; a stale ssh ControlPath? "
+          f"EDG_CIR_HOSTNAME names another expected host)")
 
 
 def box_reachable() -> bool:
@@ -188,6 +211,19 @@ EVIDENCE_DIRS = ('.tmp/gate-evidence', '.tmp/gate-asm', '.tmp/gate-cpp-asm',
 # Trees that are never pruned (the gate evidence is kept in them); any tree
 # or entry that holds a file named KEEP is not pruned either.
 PROTECTED_TREES = ('day-base', 'm5-int')
+
+
+def rsync_command(tree: str, protected: bool) -> List[str]:
+  '''The rsync command that syncs this tree to `tree` on the box; it
+  deletes files there (--delete) except in a protected tree, which keeps
+  every file it has (the baselines and the evidence they came from).'''
+  command = ['rsync', '-az', '--checksum', '--no-times']
+  if not protected:
+    command.append('--delete')
+  command += ['-e', ssh_command()]
+  for exclude in EXCLUDES:
+    command += ['--exclude', exclude]
+  return command + ['./', f"{BOX}:edg-cir-config/{tree}/"]
 RECENT_MINUTES = 360
 
 
@@ -227,6 +263,7 @@ def headroom_gb(text: str) -> int:
 # regression one is the M5 run (--perf-baseline), the S1 targets are against
 # the M5a run.
 DAY_BASELINE = '~/edg-cir-config/day-base/baseline-64'
+DAY32_BASELINE = '~/edg-cir-config/day-base/baseline-32'
 PERF_BASELINE = '~/edg-cir-config/m5-base-perf.json'
 PERF_TARGETS_BASELINE = '~/edg-cir-config/m5a-base-perf.json'
 # The perf step measures the pinned real-world units at -O0 and -O2 whenever
@@ -261,6 +298,23 @@ def load_gate_tool():
   module = importlib.util.module_from_spec(spec)
   loader.exec_module(module)
   return module
+
+
+def is_synced(path: str) -> bool:
+  """Whether `path` (relative to the repository root) goes to the box: the
+  files of EXCLUDES' anchored entries (another session's untracked files)
+  never do, so they are no part of the change set that the areas cover."""
+  import fnmatch
+  for exclude in EXCLUDES:
+    if not exclude.startswith('/'):
+      continue
+    pattern = exclude[1:]
+    if pattern.endswith('/'):
+      if path.startswith(pattern):
+        return False
+    elif fnmatch.fnmatchcase(path, pattern):
+      return False
+  return True
 
 
 def upload_changed_files(out: str, text: str) -> int:
@@ -364,6 +418,9 @@ def main() -> None:
                              'empty, whether the images match) and exit '
                              '(1 if one is missing); syncs first, since it '
                              'runs the gate tool of the box tree')
+  parser.add_argument('--day32-baseline-run', default = DAY32_BASELINE,
+                      help = 'the 32-bit day suite of the baseline commit '
+                             '(step day32)')
   parser.add_argument('--smoke-all-pass', action = 'store_true',
                       help = 'cpp-smoke fails unless every test passes')
   parser.add_argument('--jobs', type = int, default = 12)
@@ -379,14 +436,23 @@ def main() -> None:
     sys.exit(2)
   if not box_reachable():
     print(f"the host {BOX} does not answer (EDG_CIR_HOST, EDG_CIR_SSH_KEY, "
-          f"EDG_BOX_SOCKET): check `ssh -o BatchMode=yes -i {SSH_KEY} "
+          f"EDG_CIR_SSH_SOCKET): check `ssh -o BatchMode=yes -i {SSH_KEY} "
           f"{BOX} true`", file = sys.stderr)
+    sys.exit(2)
+
+  problem = hostname_problem(ssh('hostname -s', capture = True).stdout)
+  if problem:
+    print(problem, file = sys.stderr)
     sys.exit(2)
 
   steps = QUICK_STEPS if args.quick else args.steps
   if args.milestone:
     if args.lean or args.quick:
       print('--milestone excludes --lean and --quick', file = sys.stderr)
+      sys.exit(2)
+    if '--allow-missing-baselines' in args.extra.split():
+      print('--allow-missing-baselines is refused with --milestone (it '
+            'turns the status checks off)', file = sys.stderr)
       sys.exit(2)
     steps = 'every step (--milestone)'
   changed = ''
@@ -398,7 +464,8 @@ def main() -> None:
       print(f"unknown area(s) {', '.join(unknown)}; the areas are "
             f"{', '.join(gate_tool.AREA_STEPS)}", file = sys.stderr)
       sys.exit(2)
-    paths = gate_tool.changed_paths(root, args.lean_base, '')
+    paths = [p for p in gate_tool.changed_paths(root, args.lean_base, '')
+             if is_synced(p)]
     problems = gate_tool.uncovered_areas(paths, areas)
     print(f"change set against {args.lean_base}: {len(paths)} file(s), areas "
           f"{','.join(sorted(gate_tool.required_areas(paths))) or 'none'}",
@@ -421,10 +488,14 @@ def main() -> None:
   done = f"~/edg-cir-config/checkpoint-{args.tree}.exit"
 
   ssh(f"mkdir -p {tree}")
+  protected = args.tree in PROTECTED_TREES or ssh(
+    f"test -e {tree}/KEEP", capture = True).returncode == 0
+  if protected and not args.no_sync:
+    print(f"{args.tree} is a protected tree: synced without --delete (a file "
+          f"removed here stays there, and the fingerprint check says so)",
+          flush = True)
   if args.prune or args.prune_only:
     keep = args.prune or 3
-    protected = args.tree in PROTECTED_TREES or ssh(
-      f"test -e {tree}/KEEP", capture = True).returncode == 0
     if protected:
       print(f"not pruning {args.tree}: it is a protected tree or has a KEEP "
             f"marker", flush = True)
@@ -455,12 +526,7 @@ def main() -> None:
       print(f"syncing to {args.tree} ..." + (
         f" (again: the tree changed while syncing)" if attempt else ''),
             flush = True)
-      command = ['rsync', '-az', '--checksum', '--no-times', '--delete',
-                 '-e', ssh_command()]
-      for exclude in EXCLUDES:
-        command += ['--exclude', exclude]
-      command += ['./', f"{BOX}:edg-cir-config/{args.tree}/"]
-      if subprocess.run(command).returncode != 0:
+      if subprocess.run(rsync_command(args.tree, protected)).returncode != 0:
         print('rsync failed', file = sys.stderr)
         sys.exit(2)
     local = local_fingerprint(root)
@@ -515,7 +581,8 @@ def main() -> None:
     '--cpp-asm-baseline', args.cpp_asm_baseline,
     '--perf-baseline', args.perf_baseline,
     '--perf-targets-baseline', args.perf_targets_baseline,
-    '--day-baseline-run', args.day_baseline_run
+    '--day-baseline-run', args.day_baseline_run,
+    '--day32-baseline-run', args.day32_baseline_run
   ]
   if args.smoke_all_pass:
     gate.append('--cpp-smoke-all-pass')
@@ -529,7 +596,8 @@ def main() -> None:
     # box is where the baselines and the images are).
     check = ssh(f"T=$(cd {tree} && pwd); cd $T; "
                 f"export PATH=$T/dev_tools/bin:$PATH "
-                f"PYTHONPATH=$T/dev_tools/pylibs; "
+                f"PYTHONPATH=$T/dev_tools/pylibs"
+                f"{' EDG_CIR_SG_DOCKER=1' if SG_DOCKER else ''}; "
                 f"{gate_command} --check-baselines", capture = True)
     print(check.stdout.rstrip())
     sys.exit(check.returncode)
@@ -538,7 +606,8 @@ def main() -> None:
     'build/gcc-release-cir; ')
   script = (
     f"T=$(cd {tree} && pwd); cd $T; mkdir -p .git/hooks .tmp; "
-    f"export PATH=$T/dev_tools/bin:$PATH PYTHONPATH=$T/dev_tools/pylibs; "
+    f"export PATH=$T/dev_tools/bin:$PATH PYTHONPATH=$T/dev_tools/pylibs"
+    f"{' EDG_CIR_SG_DOCKER=1' if SG_DOCKER else ''}; "
     f"[ -f dev-pref.json ] || {docker_wrap('python3 dev-init.py docker')} "
     f">/dev/null 2>&1; {wipe}rm -f {done}; "
     f"nice -n 10 {gate_command} > {log} 2>&1; echo $? > {done}"

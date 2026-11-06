@@ -21,6 +21,7 @@ Tags: `H1`–`H4` cite the archived handoffs (`archive/handoff.md` …
 | M3.1, M4a, M4 | `511d7a76fc` `6a52c93316` `0ce8b90333` | Re-look items (ECIL 1.1); the ECIL 1.2 contract; virtual functions, RTTI, EH, member pointers |
 | M4.1, M5p, M5a, M5 | `9d518c3178` `e6bdad03f4` `77a24448fa` `1a6d11c284` | -O plumbing; pin 2d6f180e; the ECIL 1.3 contract and C API 2; lazy emission, optimization facts, chunked lowering, writer speed |
 | (answers) | `89013a6337` | The user's answers to H4 §8 |
+| M5.1-docs, M5.1a, M5.1b | `991737c19a` `2eb008a3ad` (M5.1b: the commit that adds this row) | This document set; clang4 and the re-derived baselines; attr-diff facts, the -O0 always_inline inliner, the mangler and `__has_builtin` (ungated), CWG2387 under CIR |
 
 **Format and toolchain.** ECIL **1.3** (frozen at M5). C API **2**
 (`EDG_CIR_API_VERSION`). llvm-project pin
@@ -30,19 +31,19 @@ local patches.
 **Host.** x86-64 work runs on `matt@clang4.cpp.al` (user, 2026-11-05).
 The old box `192.168.1.167` is retired: its home directory was wiped on
 2026-10-28, with the M5 trees, gate evidence and every baseline. M5.1
-session 1 rebuilds the images and baselines on clang4.
+session 1 rebuilt the images and baselines on clang4.
 
-**Numbers at M5** (old box; to be reproduced on clang4): C corpus 1661/2561;
-C++ corpus 1471/1823; smoke 40/40 (C) and 98/98 (C++); cir-suite 259/259;
-crash-sweep 0 problems over 30,191 cases. Four steps were open at the gate:
-`asm-diff` and `cpp-asm-diff` (expected, attributed), `perf` (the generated
-6000-function C++ unit at 102.6% of M5a at -O0, target 90%) and `attr-diff`
-(539 unexplained differences in the gated attributes).
+**Numbers at M5.1b** (clang4): C corpus 1663/2561; C++ corpus 1472/1823;
+smoke 40/40 (C) and 98/98 (C++); cir-suite 266/266; crash-sweep 0
+problems; attr-diff 0 unexplained (28 checked rows at the gate, 34 after
+R2 narrowed the memset rows); perf at most +0.50% against M5. Open for the
+milestone: the S1 target (the generated C++ unit at most 92% of M5a at
+-O0, decision 37), which session 3's size-based chunk threshold addresses,
+and the attributed `asm-diff` and `cpp-asm-diff`.
 
-**Now:** milestone **M5.1**: session 1 is done (gates M5.1-docs
-`991737c19a` and M5.1a); session 2 is next (§6). The baselines live on
-clang4 (`cookbook.md` §1), and the M5 reproduction there matched
-`archive/handoff_4.md` §9.
+**Now:** milestone **M5.1**: sessions 1 and 2 are done (gates M5.1-docs,
+M5.1a, M5.1b); session 3 is next (§6). The baselines live on clang4
+(`cookbook.md` §1).
 
 ## 1. Map
 
@@ -148,7 +149,8 @@ decision.
     non-standard-layout union is true (H3 §2.9).
 28. Mangling: M5.1 fixes the dependent variable-template defect for every
     back end and uses g++'s `sr` form in GNU mode; clang's as-written form
-    under clang mode is M6 (user, 2026-11-05).
+    under clang mode is M6 (user, 2026-11-05). The ABI guard is
+    `ABI_COMPATIBILITY_VERSION >= 701`, the release under development.
 
 **Optimization and code quality**
 29. -O: `--cir_opt_level=N` (0–3, CIR-gated) predefines `__OPTIMIZE__` and
@@ -300,31 +302,32 @@ cited notes. "M5.1" marks an item the current milestone fixes (§6).
   `_ZdaPvm` (`ecil_code.c` around 6495-6540, L-c).
 - An extern `thread_local` access is treated as possibly dynamically
   initialized (impure); a local one is not (H4 §4.2).
-- **M5.1:** library NOTHROW is not sent in C streams (`ecil_type.c:3235-3244`
-  gates it on `ecil_has_exceptions()`), so C declarations such as `abort`
-  and `memcmp` lack nounwind (66 attr-diff rows).
-- **M5.1:** `__has_builtin(__builtin_operator_new/delete)` returns 1
-  (`macro.c:7702-7727`), so libstdc++ calls `::operator new` directly and
-  misses `builtin` (21 rows). To be fixed ungated.
-- **M5.1:** `always_inline` is dropped from C++17 class-template members
-  without `inline` or `constexpr` (`attribute.c:6330-6338`, gnu_version >=
-  40700); g++ and clang keep it (W-a).
+- Without exceptions the writer marks NOTHROW as clang does (M5.1b,
+  `ecil_format.md` 12.6) except destructor declarations under C++
+  `--no_exceptions`, which clang marks (the safe direction; M6).
+- GNU `nonnull` attributes do not reach the nonnull mask, and `memcmp` is
+  not in the generated table: 16 + 4 checked attr-diff rows (M6).
+- `__has_builtin(__builtin_operator_new/delete)` is `201802L` in every
+  clang mode (M5.1b); clang 18 to 22 confirmed, clang 6 and earlier
+  returned 1, the first version is unconfirmed.
 
-### 4.5 attr-diff after M5.1 planning (H4 §4.1 has the full annotated table)
+### 4.5 attr-diff after M5.1b
+
+attr-diff passes with 0 unexplained gated differences (M5: 539). Fixed:
+`this`/reference dereferenceable (L1), alwaysinline (W2, L2), nounwind on
+C declarations (W1), `builtin` on `_Znwm`/`_ZdlPvm` (W4, with the harness
+at `--gnu-version 150000` for the image's g++ 15.3.1), the `use_facet`
+result `noundef` (B2). `tests/.edgy/filters/cir-attr-known.txt` holds the
+checked rows (decision 31), each with its reason:
 
 | Rows | Disposition |
 | --- | --- |
-| `this` and reference dereferenceable(N), about 30 rows: `SvMetaSlot` 16 vs 12, `BOOL::BOOL(int)` 4 vs 1, `_Tuple_impl::_M_head`/`__get_helper` 16 vs 9 | **Bug**: without CLASS_INFO the size falls back to sizeof (`signature.cpp:133-140`). Fix in session 2 (L1); a trial fix leaves mp11 with 0 unexplained gated rows |
-| alwaysinline only clangir (93: 43 at -O0, 50 at -O2), 6 mustprogress, 6 uwtable | The FE drops key 16 on C++17 class-template members without `inline`/`constexpr` (W-a); W2 is expected to close the 93, confirm by re-diff. The 6 + 6 are `allocator<char>` INLINE_ONLY members that need W2 and L2 together. The -O0 rule: `inline_only_declaration` (`lazy.cpp:205-215`) and `keep_body` (`globals.cpp:2158-2185`) must share one predicate, plus an AlwaysInliner after the chunk merge (`pipeline.cpp:306-310`). Session 2 (W2, L2) |
-| nounwind on C declarations (66 rows) | Writer W1, session 2 |
-| 21 `builtin` on `_Znwm`/`_ZdlPvm` calls | `__has_builtin` (W4), session 2; a permanent checked entry if GNU mode cannot return 201802 |
-| nounwind (42) and noreturn (40) only ours on declarations: `std::terminate`, `abort`, `__cxa_bad_cast`, `_exit` | Facts true for these functions; clangir's declarations lack them. Check and record in session 2 |
-| Call-site nounwind and noreturn only ours, in C (118 + 34) | Known: C streams are nothrow everywhere (`ecil_format.md:1463`) |
-| `builtin` and `noundef` on new42's `delete[]` | Known, structural: for a constant `new T[0]` we emit the constructor loop and its cleanup, clang and clangir emit neither |
-| dereferenceable only clangir (`_Base_manager` helpers) | Known: likely `final` classes (clangir uses the full size; the stream has no `final` fact); a `FINAL` flag is an M6 option |
-| `align 8` vs 16 on `llvm.memset` | Known: we claim less |
-| Reference parameters without nonnull; `llvm.mem*` call alignment; the `use_facet` result | Re-diff after L1, L2, W1, W2; then record or fix |
-| Residue (1913, not gated) | callset 1805; sret spelling 58; noalias on `_Znwm` 34; cold 10; uwtable 6 |
+| nounwind and noreturn only ours on `abort`, `exit`, `std::terminate`, `__cxa_bad_cast`, `_exit` (declarations and C++ call sites) | True facts clangir's declarations lack |
+| Call-site nounwind and noreturn only ours, in C | C streams are nothrow everywhere (`ecil_format.md` 12.6) |
+| `align 8` vs 16 on `llvm.memset`, `llvm.memcpy` alignment, `memcmp` nounwind, GNU `nonnull` on `_Rb_tree_insert_and_rebalance`, `dereferenceable(0)` on references to functions | We claim less (M6 for `nonnull` and `memcmp`, §4.4) |
+| `builtin` and `noundef` on new42's `delete[]` | Structural: for a constant `new T[0]` we emit the constructor loop and its cleanup |
+| dereferenceable only clangir (`_Base_manager` helpers) | Likely `final` classes; a `FINAL` flag is an M6 option |
+| Residue (not gated; 1913 at M5) | callset 1805; sret spelling 58; noalias on `_Znwm` 34; cold 10; uwtable 6. L2 inlines always_inline bodies away at -O0, so the pinned units' only-clangir symbols rose from 114 to 181 |
 
 ### 4.6 Library
 
@@ -373,6 +376,9 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
   error at `folding.c:6477` (`binary_operation`) on `(&vtg<T> != nullptr)`.
   It also folds `vt<int>` to `Lb1E` inside dependent conditions and adds a
   spurious `ad` on `CT<T>::template cv<T>` (`.tmp/m51/s1/cir-writer-wb.md`).
+  Also, in every mode: `C<T>::template tf<T>(x)` loses its qualifier in
+  the mangled name, and a pseudo-destructor is `dn` where g++ writes `co`
+  (M5.1b, `.tmp/m51/s2/cir-writer-c1/w3-table.txt`).
 
 ## 5. Needs re-look
 
@@ -402,7 +408,12 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
 **Writer**
 - The sampled name check (the first 2000 functions in full, then 1 in 16;
   `ECIL_CHECK_ALL_NAMES=1` for all) sees a mangler bug that only large TUs
-  have late; relevant to the M5.1 mangler change (H4 §5).
+  have late (H4 §5); the full check over the C++ corpus and two
+  `bits/stdc++.h` units was clean after the M5.1b mangler change.
+- The unit harness `unit/run_unit.sh` does not build on the Mac (headers
+  lack `ec_cir_error`, BSD `od`); run it on clang4 with
+  `UNIT_BUILD=build/gcc-cir CXX=g++`. `run_cases.sh` and `cases/*.dump`
+  are stale. `asm_cmp.sh` and `perf_ir.sh` default to 12 jobs.
 - The prefix bit `ecil_inline_specifier`: if the local-class keep is ever
   narrowed, check `template_pattern_has_inline_specifier` (H4 §5).
 - `loop_condition` drops a comma's left operands only when
@@ -416,13 +427,16 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
   (H1 §5).
 
 **Linkage**
-- CIR streams give const variable-template instances internal linkage
-  with an `L` marker (`cir_internal_name_marker_needed`: `_ZL1kIiE`) where
-  clang emits `linkonce_odr` `_Z1kIiE`; CWG2387 (a const variable template
-  keeps external linkage) suggests clang is right; settle it in session 2
-  (found by W3, 2026-11-06).
+- CWG2387, settled in M5.1b: under CIR, GNU mode 15 and later gives const
+  variable-template instances external linkage, as g++ 15 and clang do
+  (`GNU_CONST_VAR_TEMPL_INTERNAL`, `templates.c`); other configurations
+  and older GNU modes keep internal linkage, and CIR writes no `L` for an
+  internal instance in GNU mode. Ungating it is §8 Q1.
 
 **Library**
+- L2's call-site sort (`order_always_inline_uses`) is exercised only by
+  the pinned chunk-identity runs; small lit streams already have use
+  lists in program order (M5.1b).
 - A new lowering that reads a callee's body must be told to the chunker
   (`inline_bodies_`, `chunk.cpp`; the catch-copy thunk is the one case)
   (H4 §5).
@@ -482,83 +496,14 @@ of §0, §6 and §8.
   `__has_builtin` values. Re-read the clangir sources at the pin
   (`~/edg-cir-config/llvm-project`), not the old local checkout.
 
-**Session 2: gate M5.1b** (facts, attr-diff, the ungated FE changes)
-- First, the M5.1a review follow-ups (before any gate run): run `nice` and
-  the job caps inside the containers (`gate-evidence` container command,
-  both `box.sh` `run`/`test`; ninja `-j${EDG_CIR_JOBS:-48}`, lit `-j`);
-  rename `EDG_BOX_SOCKET` to `EDG_CIR_SSH_SOCKET` (a stale old-box socket
-  would send rsync `--delete` to the wrong host) or check the remote
-  hostname; a `day` step for `edg_x86_32`/`_32_cp` with `posture32.json`
-  checked in; `--perf-measure-only` must not skip the targets; a banner
-  for `--allow-missing-baselines` (refused with `--milestone`); the
-  milestone perf options in the gate itself; no sync with `--delete` into
-  a protected tree; `tag_dev_env_for_cir` must not retag a shared
-  `:latest`; the tools-test gaps (`.tmp/m51/s1/` has the review).
-- Prepared in session 1 as patch series (apply with `git apply --check`
-  first, then review): `.tmp/m51/s2/cir-lib/` (L1, L2: lit 222/222, ASan,
-  pinned lazy- and chunk-identity at -O0 and -O2; the -O0 inliner orders
-  call sites by program order so chunked and whole output agree; one C++
-  smoke asm changes, `rtti/typeid12`) and `.tmp/m51/s2/cir-writer/` (W1–W4:
-  29 C goldens differ only in the NOTHROW flag; the mangler is under
-  `ABI_COMPATIBILITY_VERSION >= 609` and matches g++ 15 on 20/20 GNU-mode
-  names; 811 day tests that mangle or use `__has_builtin` show 0
-  expectation changes). Merge the four `src/Changes` entries into one CIR
-  entry plus the two release notes at commit.
-  The new run test `tests/tests/cir/cirgen/c-always-inline-o0.sft.c` needs
-  its expectation recorded.
-- cir-lib L1: `this` and reference dereferenceable use `max(nvsize, 1)` and
-  `nvalign` with CLASS_INFO, else the record's alignment
-  (`signature.cpp:133-140`); the orchestrator updates `ecil_format.md`
-  (lines 255-256) to match. L2: always_inline at -O0: one predicate shared by
-  `inline_only_declaration` (`lazy.cpp:205-215`) and `keep_body`
-  (`globals.cpp:2158-2185`), reusing the `calls_own_symbol` guard; an
-  `AlwaysInlinerPass` before GlobalDCE after the chunk merge; the lit tests
-  of `.tmp/m51/s1/cir-lib-ld.md`, a forced-chunk one included.
-- cir-writer W1: NOTHROW in C streams. W2 (needed, W-a): in C++17 the FE
-  drops `always_inline` from class-template members that are neither
-  `inline` nor `constexpr` (libstdc++'s `_GLIBCXX20_CONSTEXPR` members)
-  before they are marked inline; under `BACK_END_TYPE_CIR` keep
-  `rp->always_inline` in that branch (`attribute.c:6330-6338`) without
-  making the routine inline (`.tmp/m51/s1/cir-writer-wa.md`). W3: the
-  mangler (ungated; `.tmp/m51/s1/cir-writer-wb.md` has the matrix), under
-  an `ABI_COMPATIBILITY_VERSION` guard so old-ABI configurations keep
-  their names:
-  - every mode: a dependent variable template is the unresolved name
-    `X<name><args>E` (widen `use_sr`, `lower_name.c:4163`; reuse the
-    simple-id branch at `:4278`); a non-dependent one keeps `L_Z…E` and
-    gains its arguments (`add_variable_template_indication`; g++ 13+ and
-    clang agree);
-  - GNU mode (`gnu_mode && !clang_mode && gnu_version >= 40900`): `sr` plus
-    the parent class's type encoding (the branch at `:4189-4193` and the
-    top step of `mangled_scope_resolution`, `:4043-4050`), not through
-    `emulate_gnu_abi_bugs`; g++ 4.9–16 agree for `-fabi-version` 3 and up
-    (2 differs), so no `gnu_abi_version` key; the non-dependent
-    variable-template form changed in g++ 13 (older g++ writes `X2vtIiEE`),
-    so GNU mode below 130000 differs from that g++;
-  - clang mode keeps today's `sr` output;
-  - tests: shapes s1–s8, q1–q3, p3, p4, p8 under `tests/tests/edg/`, byte
-    for byte against g++ 15 and clang 22; a release note in `src/Changes`.
-  W4: `__has_builtin(__builtin_operator_new/delete)` returns `201802L` in
-  clang mode and `201802` in GNU mode where it returns 1 today
-  (`macro.c:7702-7727`; the gnu_version >= 150000 gating already matches
-  g++; no other builtin has this pattern); a release note. The C++
-  generating back end then needs g++ 15 or newer for the builtin.
-- cir-config C1: attr-diff known entries gain optional symbol, position and
-  unit globs; the policy text accepts checked rows. C2: record the checked
-  rows (§4.5). C5: an `identity` allow-list for `src/lower_name.c` and
-  `src/macro.c` with the reason (the approved ungated changes; `day`
-  covers them); re-record any non-CIR expectations the ungated changes
-  move.
-- **Gate M5.1b** (lean): the writer, library, attr, tests-triage and
-  shared-src areas (identity with the allow-list, isolation, `day` in the
-  four configurations), `crash-sweep`, `symbols`, `mixed-tu`,
-  `opt-corpus`, `perf`, ctest with ASan. Passes when attr-diff has 0
-  unexplained differences; every asm and status change is attributed (the
-  -O0 inliner, nounwind on C declarations, the new manglings); `day`
-  changes are only the attributed mangling and `__has_builtin` ones;
-  `opt-corpus` has no new our-IR case; `perf` is within 2% or each row
-  over it is attributed to L2 and accepted by the user.
-- After the commit: take `identity-m51b` at the M5.1b commit for session 3.
+**Session 2: gate M5.1b — done 2026-11-06** (facts, attr-diff, the
+ungated FE changes). The M5.1a review follow-ups; L1, L2 (the -O0
+AlwaysInliner) and B2 (a dead value-less return keeps `noundef`); W1
+(NOTHROW without exceptions, as clang marks it), W2 (`always_inline` kept
+on class-template members and function templates under CIR), W3 (the
+mangler, ungated, `ABI_COMPATIBILITY_VERSION >= 701`), W4
+(`__has_builtin`, ungated); CWG2387 under CIR (§5); C1, C2, C5. Three
+reviews (`.tmp/m51/s2/review-m51b-{1,2,3}.md`; R3 APPROVE); evidence §9.
 
 **Session 3: gate M5.1** (the chunk threshold; the milestone; stop)
 - cir-lib L3: the default chunk threshold becomes the L-a size rule, chunk
@@ -580,12 +525,24 @@ of §0, §6 and §8.
   slow-below-threshold at a low `-j`. C4: the milestone gate; then
   `m51-base-*`, `identity-m51` and a `day-base` at the M5.1 commit; prune
   clang4 to those, the images and `llvm-project`.
-- cir-writer: the session-2 review follow-ups.
+- First: take `identity-m51b` at the M5.1b commit (if session 2 did not)
+  and delete the two `tests/.edgy/filters/cir-identity-allowed.txt`
+  entries in the same change, or the M5.1 gate fails on stale entries.
+- The session-2 review follow-ups (`.tmp/m51/s2/review-m51b-3.md`):
+  cir-config: refuse overwriting a protected tree's sources and
+  `rm -rf build/cir*` there without an explicit flag; `drop_stale_builds`
+  parses `EDG_BASE:<type>=`; prebuild under nice without
+  `EDG_LLVM_CIR_JOBS`. cir-lib and cir-writer: a hostname check before the
+  `--delete` in both `box.sh sync`. cir-lib: tighten the `define` lines of
+  `s2-noundef-dead-return.test`. Before the milestone gate: re-run
+  `cpp-asm-diff` with the AlwaysInliner off (a test hook) to confirm that
+  only the W3/CWG2387 files remain (M5.1b attributed 52 files to L2 by
+  source grep), and trace attr-diff's explained count (1399 at the gate,
+  1395 after B3/C3).
 - **Gate M5.1** (`--milestone`, against `m5-base-*`, identity against
   `identity-m51b`): every step passes except the attributed asm-diffs;
   perf passes with the S1 targets met (the generated C++ unit at most 92%
-  of M5a at -O0, decision 37; rows over 2% that the M5.1b gate accepted are
-  listed as accepted); chunk-rss at most 55%; slow-below-threshold within 0.1%;
+  of M5a at -O0, decision 37; the M5.1b gate had no row over 2%); chunk-rss at most 55%; slow-below-threshold within 0.1%;
   chunk-identity and lazy-identity pass; review APPROVE or APPROVE WITH
   FOLLOW-UPS. Then replace §0 and §9, set §6 to M6, ask §8, and **stop for
   user review**.
@@ -625,8 +582,8 @@ and `cir-review` (read-only Opus reviewer), defined in
 | Owner | Files (exclusive write) |
 | --- | --- |
 | orchestrator | `cir_src/doc/{brief,project,design,ecil_format}.md`, `cir_src/doc/archive/**`, `cir_src/doc/{research/README.md,cookbook.md}`, the contracts `cir_src/include/edg_cir/{ecil_format.h,edg_cir.h}`, `cir_src/LLVM_REVISION`; outside the repo `~/.claude/agents/cir-*.md` and the memory notes |
-| cir-config | `dev_tools/bin/{cpfe-cir-2p,edg-cir-*}`, the CIR files in `tests/.edgy/**`, `tests/expectations/edg_x86_64_cir*/**` and any non-CIR `tests/expectations/edg_x86_*` re-recording an approved ungated FE change needs, `bases/docker/cir-env/**`, `dev_tools/docker/{llvm-cir,cir-env}/**`, the CIR hunks of `util/eccp.sh`, the CIR options in `src/cmd_line.{c,h}`, the clang4 trees and images |
-| cir-writer | `src/ecil_*`, `src/cir_be.*`, the CIR-gated FE hooks (`mem_manage.c`, `scope_stk.c`, `fe_wrapup.c`, `error.c`, `class_decl.c`, `decl_spec.c`, `decls.c`, `symbol_tbl.{h,c}`, `mem_tables.h`, the CIR helpers in `lower_name.c`, the triple call in `fe_init.c`); in M5.1 also `attribute.c` (if needed), the `lower_name.c` mangler and the `macro.c` `__has_builtin` values (ungated); `cir_src/test/writer/**`, `tests/tests/cir/writer/**`, the new mangling test under `tests/tests/edg/`, `cir_src/doc/writer.md` |
+| cir-config | `dev_tools/bin/{cpfe-cir-2p,edg-cir-*}`, the CIR files in `tests/.edgy/**`, `tests/expectations/edg_x86_64_cir*/**` and any non-CIR `tests/expectations/edg_x86_*` re-recording an approved ungated FE change needs, `bases/docker/cir-env/**`, `dev_tools/docker/{llvm-cir,cir-env}/**`, the CIR helpers in `dev_tools/pylibs/edgdocker/__init__.py`, the CIR hunks of `util/eccp.sh`, the CIR options in `src/cmd_line.{c,h}`, the clang4 trees and images |
+| cir-writer | `src/ecil_*`, `src/cir_be.*`, the CIR-gated FE hooks (`mem_manage.c`, `scope_stk.c`, `fe_wrapup.c`, `error.c`, `class_decl.c`, `decl_spec.c`, `decls.c`, `symbol_tbl.{h,c}`, `mem_tables.h`, the CIR helpers in `lower_name.c`, the triple call in `fe_init.c`); in M5.1 also `attribute.c`, the `lower_name.c` mangler, the `macro.c` `__has_builtin` values (ungated) and the CWG2387 macro in `templates.c`; `dev_tools/builtins/generate-libc-builtins.py` and `src/builtin_libc_attrs.h`; `cir_src/test/writer/**`, `tests/tests/cir/writer/**`, the new mangling test under `tests/tests/edg/`, `cir_src/doc/writer.md` |
 | cir-lib | `cir_src/**` except the orchestrator's files and `cir_src/test/writer/**`; `tests/tests/cir/cirgen/**` |
 
 `src/Changes`: one CIR entry per gate; cir-config adds it first and
@@ -675,13 +632,43 @@ release notes. Every `Changes` file stays valid UTF-8.
 
 ## 8. Open questions for the user
 
-None yet.
+1. CWG2387 (§5 Linkage): under CIR, GNU mode 15 and later now gives const
+   variable-template instances external linkage, as g++ 15 and clang do;
+   cpfe and cpfe-cp still give them internal linkage in every GNU mode
+   (`templates.c`, the FE comment says "GCC does not implement it", true
+   only before g++ 15). Should the rule apply to every configuration
+   (an ungated FE change, like the M5.1b mangler), or stay CIR-only?
 
 ## 9. Latest gate evidence
 
-**M5** (`1a6d11c284`, session 4): one full run of the 38 milestone steps on
-the old box, tree `m5-int`. 34 passed (`opt-corpus` after one triage line);
-`asm-diff` and `cpp-asm-diff` failed as expected, every file attributed;
-`perf` and `attr-diff` failed and are the M5.1 work (§0). The evidence
-directory was lost with the box; the full step table and attribution are
-in `archive/handoff_4.md` §9.
+**M5.1b** (session 2, clang4, tree `m51-int`, lean areas writer, library,
+attr, tests-triage, shared-src, crashes, perf, fe-options, pylibs, tests,
+tests-reference, tooling; evidence `m51-int/.tmp/checkpoint-20261106-091503`,
+copies and the step table in `.tmp/m51/s2/cir-config-gate.md`). 26 steps on
+the tree of review snapshot 2. 21 passed: build, identity (16 problems,
+all on the `lower_name.c`/`macro.c` allow-list), isolation, smoke,
+cir-suite, modes, writer-stress, ctest (4 presets, ASan), perf (largest
+change +0.50% over 44 rows), cpp-corpus, cpp-modes, cpp-writer-stress,
+poison, release-smoke, crash-sweep (0 problems in 30,201 cases), symbols,
+mixed-tu (70/70 with g++ and clang), opt-corpus (no our-IR case),
+tools-test, attr-diff (0 unexplained), codequality. Five failed and are
+resolved or attributed:
+- `corpus`: 4 tests changed status lines (W2 removed a warning in two; L2
+  removed the gnu_inline link errors in two, FAIL→PASS); re-recorded, the
+  re-run passes.
+- `day`, `day32`: only the new `cmeerw/unresolved-name-mangling` test
+  (REQUIREMENTS NOT MET in the `_cp` configurations, `DO_IL_LOWERING`);
+  no mangling or `__has_builtin` test changed status. The first `day32`
+  run failed on a tooling bug (identity configured `build/gcc-i686` with
+  the x86-64 base), fixed by `drop_stale_builds`.
+- `asm-diff` (14 files, all L2: the always_inline function is the
+  baseline-only symbol) and `cpp-asm-diff` (57 files: 52 L2 by source grep
+  and baseline-only symbol, 5 W3/CWG2387: `var-templ29`, `var-templ87`,
+  `dr2387`, `gnats-24564-run`, `pr89303`).
+After R2's fixes (B3, C3, the narrowed rows), a delta check
+(`checkpoint-20261106-124047`): build, cir-suite 266/266, ctest with
+ASan, tools-test 302, attr-diff 0 unexplained (34/34 rows used); cpp-corpus,
+asm-diff and identity skipped (attribute-only changes in C++
+`--no_exceptions` and GNU `return;` shapes; CIR-only files). Reviews: R1
+BLOCK (ABI guard) then fixed, R2 APPROVE WITH FOLLOW-UPS, R3 APPROVE.
+M5's evidence is in `archive/handoff_4.md` §9.

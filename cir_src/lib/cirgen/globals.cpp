@@ -2146,20 +2146,21 @@ entity policy (spec 8.11).
     }
   }
   /* C99 inline-only functions (their definition lives in another
-     translation unit): with inlining on (-O1 and up) the body stays as an
-     available_externally definition, as clang makes it, so that the
-     inliner can use it; at -O0 they keep no body and are external
-     declarations.  So do a `noinline` function and a trivially recursive
-     one at any level (clang's isTriviallyRecursive, PR9614): glibc's
-     inline-only memchr, strchr, ... call __builtin_memchr, which is their
-     own symbol, and an available_externally body that calls itself becomes
-     a loop (TailCallElim) that is undefined behavior once the function is
-     pure and willreturn. */
+     translation unit): with inlining on (-O1 and up), and an always_inline
+     one at -O0, the body stays as an available_externally definition, as
+     clang makes it, so that the inliner can use it (inline_only_keeps_body);
+     the others keep no body and are external declarations.  So do a
+     `noinline` function and a trivially recursive one at any level
+     (clang's isTriviallyRecursive, PR9614): glibc's inline-only memchr,
+     strchr, ... call __builtin_memchr, which is their own symbol, and an
+     available_externally body that calls itself becomes a loop
+     (TailCallElim) that is undefined behavior once the function is pure
+     and willreturn. */
   for (a_entity *entity : entity_order_) {
     a_entity &e = *entity;
     bool keep_body = e.is_function && e.has_body && e.op != nullptr &&
-        (e.flags & ECIL_DECL_FUNC_INLINE_ONLY) && session_.opt_level >= 1 &&
-        !e.no_inline && !calls_own_symbol(mlir::cast<cir::FuncOp>(e.op));
+        inline_only_keeps_body(e) &&
+        !calls_own_symbol(mlir::cast<cir::FuncOp>(e.op));
 
     if (keep_body) {
       cir::FuncOp fn = mlir::cast<cir::FuncOp>(e.op);

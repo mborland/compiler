@@ -251,10 +251,15 @@ Its value is `true`.
 - **Consumer.** It may mark those pointers `nonnull` and `noundef` on
   declarations, definitions and calls through that type, and add the
   following, as clang does for references and `this`:
-  - **A class pointee** may be a base subobject. Use its non-virtual size
-    and non-virtual alignment (`CLASS_INFO` `nvsize`/`nvalign`), unless the
-    class is final; for a final class or a class without `CLASS_INFO`, use
-    the complete size and alignment.
+  - **A class pointee** may be a base subobject: `dereferenceable` is its
+    non-virtual size, at least 1 (an empty class gives 1), and `align` its
+    non-virtual alignment, as clang's `getMinimumClassObjectSize`. With
+    `CLASS_INFO` these are `nvsize` and `nvalign`. Without it the class has
+    no virtual bases and no vptr, so the size is its data size (see the
+    `CLASS_INFO` row) and the alignment its own; a displaced empty base
+    can make that smaller than clang's bound, which is still valid. The stream has no `final`
+    fact, so a final class gets this smaller, still valid bound where
+    clang uses the complete size.
   - **Any other complete object pointee:** `dereferenceable(size)` and
     `align(alignment)` of the pointee.
   - **An incomplete pointee:** no `dereferenceable`. A function pointee:
@@ -1462,7 +1467,7 @@ result. If both arms are terminated, the `TERN` is void.
 | --- | --- |
 | `HDR_LANG` | `exceptions` = 1 is valid: functions and calls may throw unless nothrow, `eh` and `all` cleanups are live, the records of 12.5 are allowed, and the library runs with exceptions on. With exceptions = 0, the 1.0 rule stays (every function and call is nothrow) and the records of 12.5 are errors. The supp key `esk_nothrow` is a hint only. |
 | `HDR_LANG` | `rtti` = 0: the RTTI slot of each vtable is null, typeinfo objects exist only for EH, and `TYPEID` and `DYNAMIC_CAST` are errors. `CLASS_MANGLE` is still required. |
-| `DECL_FUNC` | `NOTHROW` 0x80. Since 1.3 it has two sources: (1) the FE's `is_non_throwing_routine`; (2) a C-linkage library function (not static, no asm label, matching name and signature) that clang's builtin table at the LLVM pin marks unconditionally nothrow (`n`). Source 2 excludes the cancellation points glibc declares as throwing (`fprintf`, `vprintf`, `vfprintf`); the generated table is `src/builtin_libc_attrs.h`. A wrong `NOTHROW` silently skips cleanups. A re-issue never clears it. |
+| `DECL_FUNC` | `NOTHROW` 0x80. Since 1.3 it has two sources: (1) the FE's `is_non_throwing_routine`; (2) a C-linkage library function (not static, no asm label, matching name and signature) that clang's builtin table at the LLVM pin marks unconditionally nothrow (`n`). Source 2 excludes the cancellation points glibc declares as throwing (`fprintf`, `vprintf`, `vfprintf`); the generated table is `src/builtin_libc_attrs.h`. With exceptions = 0 every function is nothrow anyway and the flag only selects attributes, so the writer narrows source 1 to what clang marks: definitions and functions with the `nothrow` attribute, and in C++ `--no_exceptions` also a prototype with `noexcept` or `throw()` (a plain declaration gets no `nounwind`; M5.1b). A destructor declaration is not marked where clang marks it (the safe direction). Source 2 is unchanged. A wrong `NOTHROW` silently skips cleanups. A re-issue never clears it. |
 | `CALL`, `CALL_INDIRECT`, `PM_CALL` | `NOTHROW` 0x08: the call type is non-throwing (`is_nothrow_type`). A call is nothrow iff it has the flag or its callee's `DECL_FUNC` has `NOTHROW`. |
 | `CALL` | `VIRTUAL` 0x10: argument 0 is already converted to `g`'s class, and the slot comes from `CLASS_VFUNCS`. The writer devirtualizes as clang does: it looks through the compiler-generated base-class conversion of the object, and the call is plain when the object is a complete object that is neither a reference nor an indirection (`local.f()`), when the object's class is `final`, or when the function is `final`. A plain call calls the final overrider of the named function in the object's class (from the FE's override list of that class), which is not the named function when a using-declaration names a base's function (`struct C : B { using A::f; }; C c; c.f();` calls `B::f`). When that final overrider's return type differs from the named function's (a covariant return), the call stays `VIRTUAL`, as in clang. |
 | `CALL` | `VTT` 0x20: a `VTT_ADDR` operand is inserted between argument 0 and argument 1, and `nargs` still counts the parameters of `t_call`. Required iff the callee is the base variant of a `has_vbases` pair. |

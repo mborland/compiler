@@ -8,7 +8,7 @@ for pd in "linux-cir-relwithdebinfo cir" "linux-cir-release cir-release" \
   echo "=== $1"
   (cd cir_src && cmake --preset $1 -DEDG_CIR_LIT=/lit/lit.py > /dev/null) ||
     echo "CONFIGURE FAILED"
-  ninja -C build/$2 2>&1 | grep -E "error|FAILED|warning" | head -20
+  ninja -C build/$2 -j"${EDG_CIR_JOBS:-48}" 2>&1 | grep -E "error|FAILED|warning" | head -20
   (cd build/$2 && ctest 2>&1 | tail -14)
 done
 echo ALLDONE

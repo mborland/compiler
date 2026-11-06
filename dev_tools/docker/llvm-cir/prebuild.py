@@ -34,7 +34,6 @@ LLVM_GIT_URL = 'https://github.com/llvm/llvm-project.git'
 REPO_DIR = edgtools.get_tools_dir().parent
 LLVM_REVISION_FILE = REPO_DIR / 'cir_src' / 'LLVM_REVISION'
 BUILD_SCRIPT = edgtools.get_tools_dir() / 'bin' / 'edg-build-llvm-cir'
-BUILD_IMAGE = 'docker.io/edgcpp/dev-env:latest'
 
 def llvm_revision() -> str:
   '''Return the pinned llvm-project commit SHA.'''
@@ -67,9 +66,8 @@ def fetch_llvm_project(dest: Path) -> None:
   )
   subprocess.run(['git', 'checkout', 'FETCH_HEAD'], cwd = dest, check = True)
 
-def build_toolchain(work_dir: Path, install_dir: Path) -> None:
-  '''Build and install the toolchain inside edgcpp/dev-env.'''
-  tag_dev_env_for_cir()
+def build_toolchain(work_dir: Path, install_dir: Path, image: str) -> None:
+  '''Build and install the toolchain inside the dev-env image `image`.'''
   src_dir = work_dir / 'llvm-project'
   build_dir = work_dir / 'build'
   fetch_llvm_project(src_dir)
@@ -77,14 +75,14 @@ def build_toolchain(work_dir: Path, install_dir: Path) -> None:
   install_dir.mkdir(exist_ok = True)
   jobs = os.environ.get('EDG_LLVM_CIR_JOBS')
   command = [
-    'docker', 'run', '--rm', '--name', 'cir-config-llvm-build',
+    'docker', 'run', '--rm', '--name', f"cir-config-llvm-build-{os.getpid()}",
     '--user', f"{os.getuid()}:{os.getgid()}",
     '-e', 'HOME=/tmp',
     '-v', f"{src_dir}:/src/llvm-project:ro",
     '-v', f"{build_dir}:/build",
     '-v', f"{install_dir}:/edg/llvm-cir",
     '-v', f"{BUILD_SCRIPT}:/usr/local/bin/edg-build-llvm-cir:ro",
-    BUILD_IMAGE,
+    image,
     *(['nice', '-n', '10'] if jobs else []),
     'edg-build-llvm-cir'
   ]
@@ -95,7 +93,7 @@ def build_toolchain(work_dir: Path, install_dir: Path) -> None:
   command.extend(['/src/llvm-project', '/build', '/edg/llvm-cir'])
   subprocess.run(command, check = True)
 
-def strip_executables(prefix: Path) -> None:
+def strip_executables(prefix: Path, image: str) -> None:
   '''Strip debug info from the ELF executables in <prefix>/bin.
 
   Every tool is statically linked with line tables, so bin/ is ~12 GB.  The
@@ -111,10 +109,11 @@ def strip_executables(prefix: Path) -> None:
   )
   subprocess.run(
     [
-      'docker', 'run', '--rm', '--name', 'cir-config-llvm-strip',
+      'docker', 'run', '--rm', '--name',
+      f"cir-config-llvm-strip-{os.getpid()}",
       '--user', f"{os.getuid()}:{os.getgid()}",
       '-v', f"{prefix}:/prefix",
-      BUILD_IMAGE,
+      image,
       'sh', '-c', script
     ],
     check = True
@@ -122,6 +121,9 @@ def strip_executables(prefix: Path) -> None:
 
 def stage_prefix() -> None:
   '''Copy the installed prefix into ./llvm-cir for the Dockerfile.'''
+  # The build and the strip run in the CIR provenance tag of dev-env (which
+  # does not move), whatever :latest is on this shared host.
+  image = tag_dev_env_for_cir()
   if 'EDG_LLVM_CIR_INSTALL_DIR' in os.environ:
     install_dir = Path(os.environ['EDG_LLVM_CIR_INSTALL_DIR'])
   else:
@@ -130,10 +132,10 @@ def stage_prefix() -> None:
                      Path.home() / '.cache' / 'edg' / 'llvm-cir')
     )
     install_dir = work_dir / 'install'
-    build_toolchain(work_dir, install_dir)
+    build_toolchain(work_dir, install_dir, image)
   staged = Path(os.getcwd()) / 'llvm-cir'
   shutil.copytree(install_dir, staged, symlinks = True)
-  strip_executables(staged)
+  strip_executables(staged, image)
 
 def main() -> None:
   stage_prefix()

@@ -3,8 +3,12 @@
 ; the pointee) and llvm.align(alignment of the pointee), on the declarations,
 ; the definitions and the calls through the type.  The size of a class with
 ; CLASS_INFO is its non-virtual size (12 for V: 16 bytes with a 12-byte
-; non-virtual part), of another complete object its size; an incomplete
-; pointee has neither dereferenceable nor align, a function pointee neither.
+; non-virtual part); a class without CLASS_INFO has no virtual bases and no
+; vptr and takes its data size (at least 1) and its own alignment, as clang's
+; non-virtual size does (N: size 16, data size 12; E: an empty non-POD class
+; of size 4 and data size 0, which still gets 1); another complete object its
+; size; an incomplete pointee has neither dereferenceable nor align, a
+; function pointee neither.
 ; A reference result (bit 0) gets the same.  A pointer that is not marked
 ; (bit clear) gets noundef only.
 ; RUN: sed 's/features=0x00000000/features=0x00000002/' %S/Inputs/header12_cxx_eh.txt > %t.h
@@ -16,6 +20,8 @@
 ; CHECK-DAG: declare void @take_v(ptr noundef nonnull align 8 dereferenceable(12))
 ; CHECK-DAG: declare void @take_incomplete(ptr noundef nonnull)
 ; CHECK-DAG: declare void @take_fn(ptr noundef nonnull)
+; CHECK-DAG: declare void @take_n(ptr noundef nonnull align 8 dereferenceable(12))
+; CHECK-DAG: declare void @take_e(ptr noundef nonnull align 4 dereferenceable(1))
 ; CHECK-DAG: declare void @plain(ptr noundef)
 ; CHECK-DAG: declare noundef nonnull align 4 dereferenceable(8) ptr @ref_result()
 ; CHECK-DAG: declare void @second(ptr noundef, ptr noundef nonnull align 4 dereferenceable(8))
@@ -38,6 +44,10 @@ frame DECLS supp
   STR 111 "a"
   STR 112 "v"
   STR 113 "1V"
+  STR 114 "take_n"
+  STR 115 "take_e"
+  STR 116 "N"
+  STR 117 "E"
   TY_RECORD_DECL 30 0 108
   TY_RECORD_BODY 30 8 8 4 0 2
   REC_FIELD 1 0 nil nil nil 0
@@ -56,6 +66,16 @@ frame DECLS supp
   CLASS_INFO 37 12 8 nil 2
   CLASS_BASES 37 []
   TY_PTR 38 37
+  TY_RECORD_DECL 60 0 116
+  TY_RECORD_BODY 60 16 12 8 0 2
+  REC_FIELD 2 0 nil nil nil 0
+  REC_FIELD 1 8 nil nil 112 0
+  TY_RECORD_DECL 61 0 117
+  TY_RECORD_BODY 61 4 0 4 0 0
+  TY_PTR 62 60
+  TY_PTR 63 61
+  TY_FUNC 64 11 0 [62] supp{15: 2}
+  TY_FUNC 65 11 0 [63] supp{15: 2}
   TY_FUNC 40 11 0 [32] supp{15: 2}
   TY_FUNC 41 11 0 [38] supp{15: 2}
   TY_FUNC 42 11 0 [33] supp{15: 2}
@@ -64,6 +84,8 @@ frame DECLS supp
   TY_FUNC 45 32 0 [] supp{15: 1}
   TY_FUNC 46 11 0 [32, 32] supp{15: 4}
   TY_FUNC 47 1 0 [32]
+  DECL_FUNC 58 64 0 1 114
+  DECL_FUNC 59 65 0 1 115
   DECL_FUNC 50 40 0 1 100
   DECL_FUNC 51 41 0 1 101
   DECL_FUNC 52 42 0 1 102

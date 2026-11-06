@@ -570,6 +570,7 @@ public:
   void lazy_note(const ecil::a_record &r);
   bool replay_function(a_deferred_fn &d);
   bool lazy_finish();
+  bool inline_only_keeps_body(const a_entity &e) const;
   bool inline_only_declaration(const a_entity &e) const;
   bool calls_own_symbol(cir::FuncOp fn) const;
   bool lazy_erase_dropped();

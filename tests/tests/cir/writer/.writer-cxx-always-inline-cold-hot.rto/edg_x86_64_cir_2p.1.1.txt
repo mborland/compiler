@@ -1,8 +1,4 @@
 edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=140000 Test_name.c
-"Test_name.c", line 26: warning: the "always_inline" attribute is ignored on non-inline functions
-  __attribute__((always_inline)) int not_inline(int x) { return x; }
-                 ^
-
 "Test_name.c", line 40: warning: routine is both "inline" and "noinline"
   __attribute__((cold, hot, always_inline, noinline)) inline int all(int x) {
                                            ^
@@ -158,10 +154,10 @@ frame REGION
   RETURN_STMT true
   BLOCK_END
   FUNC_END 0
-frame REGION
+frame REGION supp
   STR 17 "_Z10not_inlinei"
-  DECL_FUNC 16 4 0 0 17
-  DECL_FUNC 16 4 0 1 17
+  DECL_FUNC 16 4 0 0 17 supp{16: true}
+  DECL_FUNC 16 4 0 1 17 supp{16: true}
   FUNC_BEGIN 16 0
   PARAM 1 1 1 6 0
   BLOCK_BEGIN

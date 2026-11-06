@@ -19,6 +19,7 @@ llvm.dereferenceable, llvm.align) in the argument and result dictionaries of
 cir.func and cir.call.
 */
 
+#include <algorithm>
 #include "emitter.h"
 
 namespace edg_cir {
@@ -105,9 +106,11 @@ mlir::DictionaryAttr a_emitter::pointer_attributes(uint64_t pointer_gid,
 /*
 The attributes of a reference or `this`: noundef and nonnull; and, for a
 complete pointee, dereferenceable(size) and align(alignment).  The size of a
-class is its non-virtual size (the pointee may be a base subobject) and the
-alignment its non-virtual alignment; a class without CLASS_INFO, and every
-other object type, uses the complete size and alignment.  An incomplete
+class is its non-virtual size (the pointee may be a base subobject), at
+least 1, and the alignment its non-virtual alignment.  A class without
+CLASS_INFO has no virtual bases: its non-virtual size is its data size (the
+record's nvsize until a CLASS_INFO) and its alignment its own; every other
+object type uses the complete size and alignment.  An incomplete
 pointee has neither, a function pointee neither.  (The stream has no `final`:
 for a final class the non-virtual size is a smaller, still valid, bound.)
 */
@@ -130,10 +133,11 @@ for a final class the non-virtual size is a smaller, still valid, bound.)
         pointee->kind != a_type_kind::void_type &&
         pointee->kind != a_type_kind::opaque_type &&
         type_is_complete(pointee->cir)) {
-      if (pointee->kind == a_type_kind::record_type &&
-          pointee->record->has_class_info) {
-        size = pointee->record->nvsize;
-        align = pointee->record->nvalign;
+      if (pointee->kind == a_type_kind::record_type) {
+        const a_record_info &rec = *pointee->record;
+
+        size = std::max<uint64_t>(rec.nvsize, 1);
+        align = rec.has_class_info ? rec.nvalign : type_align(pointee->cir);
       } else {
         size = type_size(pointee->cir);
         align = type_align(pointee->cir);

@@ -4,13 +4,16 @@
 # native debug build (build/clang) in test mode (ECIL_COMPILE_FOR_TEST), links
 # them with harness.c and stub FE symbols, writes streams and compares them
 # with golden/*.hex.  Usage: run_unit.sh [-r]   (-r re-records the goldens)
+# UNIT_BUILD names the build directory (default build/clang; build/gcc-cir
+# in the cir-env container, with CXX=g++).
 set -e
 root=$(cd "$(dirname "$0")/../../../.." && pwd)
 here=$root/cir_src/test/writer
 tmp=${TMPDIR:-/tmp}/ecil-unit.$$
 mkdir -p "$tmp"
 flags="-DBACK_END_IS_CP_GEN_BE=1 -DBACK_END_IS_C_GEN_BE=0 -DUSE_CMAKE_DEFINES"
-flags="$flags -I$root/build/clang/src/includes -std=c++14 -g -Wall -Wconversion"
+flags="$flags -I$root/${UNIT_BUILD:-build/clang}/src/includes"
+flags="$flags -std=c++14 -g -Wall -Wconversion"
 flags="$flags -Wsign-conversion -Werror=shadow -fno-exceptions -fno-rtti"
 flags="$flags -x c++ -DECIL_COMPILE_FOR_TEST -DECIL_STUB_DECLS"
 flags="$flags -I$root/cir_src/include -I$root/src"
@@ -29,7 +32,9 @@ run() {  # name, harness-mode
   cmp -s "$tmp/$1.ecil" "$tmp/$1.2.ecil" || { echo "$1: NOT DETERMINISTIC"; status=1; }
   od -An -v -tx1 "$tmp/$1.ecil" > "$tmp/$1.hex"
   if [ "$RERECORD" = 1 ]; then cp "$tmp/$1.hex" "$here/golden/$1.hex"; fi
-  if cmp -s "$tmp/$1.hex" "$here/golden/$1.hex"; then echo "$1: ok"
+  # (BSD and GNU od pad the bytes differently: compare without blanks)
+  if [ "$(tr -d ' \n' < "$tmp/$1.hex")" = \
+       "$(tr -d ' \n' < "$here/golden/$1.hex")" ]; then echo "$1: ok"
   else echo "$1: MISMATCH"; diff "$tmp/$1.hex" "$here/golden/$1.hex" | head; status=1; fi
 }
 [ "$1" = "-r" ] && RERECORD=1

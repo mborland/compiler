@@ -1,0 +1,29 @@
+fe_only -DTEST_NUMBER=2 --clang -tused -e 200 --no_wrap_diagnostics --clang_version 999999 --c++11 Test_name.c
+"SemaCXX/pragma-optimize.cpp", line 5: warning: unrecognized #pragma
+  #pragma clang optimize off
+          ^
+
+"SemaCXX/pragma-optimize.cpp", line 62: warning: unknown attribute "minsize"
+  int __attribute__((minsize)) bax(int z) {
+                     ^
+
+"SemaCXX/pragma-optimize.cpp", line 67: warning: unrecognized #pragma
+  #pragma clang optimize on
+          ^
+
+"SemaCXX/pragma-optimize.cpp", line 111: warning: unrecognized #pragma
+  #pragma clang optimize off
+          ^
+
+"SemaCXX/pragma-optimize.cpp", line 118: warning: unrecognized #pragma
+  #pragma clang optimize on
+          ^
+
+"SemaCXX/Inputs/header-with-pragma-optimize-off.h", line 3: warning: unrecognized #pragma
+  #pragma clang optimize off
+          ^
+
+"SemaCXX/pragma-optimize.cpp", line 137: warning: unrecognized #pragma
+  #pragma clang optimize on
+          ^
+

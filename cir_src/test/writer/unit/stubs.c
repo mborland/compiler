@@ -28,6 +28,7 @@ a_host_fp_value fetch_host_fp_value(a_float_kind k,
 void get_variable_initializer(a_variable_ptr v, a_scope_ptr s,
                               an_init_kind *k, an_initializer_ptr *i) {
   (void)v; (void)s; (void)k; (void)i; abort(); }
+a_boolean int_constant_is_signed(a_constant_ptr c) { (void)c; abort(); }
 a_host_large_integer value_of_integer_constant(a_constant *c, a_boolean *o) {
   (void)c; (void)o; abort(); }
 a_host_large_unsigned unsigned_value_of_integer_constant(a_constant *c,

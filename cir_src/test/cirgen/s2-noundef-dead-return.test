@@ -1,0 +1,94 @@
+; The result of a C++ function stays noundef when its body ends in a call of a
+; noreturn function followed by a value-less return statement (the front end
+; leaves one there; libstdc++'s use_facet ends that way: `if (f) return *f;
+; __throw_bad_cast();`).  That return is in the dead block after the call's
+; unreachable, so it does not make the result undefined, unlike a reachable
+; `return;` (valueless, still no noundef: s2-noundef.test), also when it
+; follows a goto label or a switch case, whose blocks have no predecessor yet
+; when the return is emitted.  A reference
+; result takes the same decision (apply_signature_attributes: strict_result).
+; RUN: sed 's/^ecil 1.2/ecil 1.3/' %S/Inputs/header12_cxx_eh.txt > %t.h
+; RUN: cat %t.h %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s
+; RUN: %edg-cir --verify-each --chunk-threshold=1 --chunk-functions=1 --emit=llvm %t.ecil | %FileCheck %s
+
+; CHECK-DAG: define {{.*}}noundef i32 @after_die(i32 noundef %0)
+; CHECK-DAG: define {{.*}}i32 @reachable(i32 noundef %0)
+; CHECK-DAG: declare void @die()
+; CHECK-LABEL: define {{.*}}noundef i32 @main()
+; CHECK: call noundef i32 @after_die(i32 noundef 1)
+; CHECK: call i32 @reachable(i32 noundef 2)
+; CHECK: call i32 @after_label(i32 noundef 3)
+; CHECK: call i32 @after_case(i32 noundef 4)
+; CHECK-DAG: define {{.*}}i32 @after_label(i32 noundef %0)
+; CHECK-DAG: define {{.*}}i32 @after_case(i32 noundef %0)
+
+frame DECLS
+  STR 100 "die"
+  STR 101 "after_die"
+  STR 102 "reachable"
+  STR 103 "main"
+  STR 104 "after_label"
+  STR 105 "after_case"
+  TY_FUNC 40 11 0 []
+  TY_FUNC 41 1 0 [1]
+  TY_FUNC 42 1 0 []
+  DECL_FUNC 50 40 0 4 100
+  DECL_FUNC 51 41 0 1 101
+  DECL_FUNC 52 41 0 1 102
+  DECL_FUNC 53 42 0 9 103
+  DECL_FUNC 54 41 0 1 104
+  DECL_FUNC 55 41 0 1 105
+frame REGION
+  FUNC_BEGIN 51 0
+  PARAM 1 1 1 nil 0
+  BLOCK_BEGIN
+  CALL 50 40 0 2
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 52 0
+  PARAM 1 1 1 nil 0
+  RETURN_STMT false
+  FUNC_END 0
+  FUNC_BEGIN 54 0
+  PARAM 1 1 1 nil 0
+  BLOCK_BEGIN
+  GOTO_STMT 7 0
+  LABEL 7 nil
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 55 0
+  PARAM 1 1 1 nil 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  SWITCH_BEGIN
+  BLOCK_BEGIN
+  CASE_VALUE 1
+  CONST_INT 1 5
+  RETURN_STMT true
+  CASE_VALUE 2
+  RETURN_STMT false
+  BLOCK_END
+  SWITCH_END
+  BLOCK_END
+  FUNC_END 0
+  FUNC_BEGIN 53 0
+  CONST_INT 1 1
+  CALL 51 41 1 0
+  CONST_INT 1 2
+  CALL 52 41 1 0
+  ADD 1
+  CONST_INT 1 3
+  CALL 54 41 1 0
+  ADD 1
+  CONST_INT 1 4
+  CALL 55 41 1 0
+  ADD 1
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

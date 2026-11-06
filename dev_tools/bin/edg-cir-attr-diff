@@ -40,7 +40,18 @@ fixed attributes and our argument noundef and nounwind).  The detail of an
 ordinary entry is exactly what the report prints after the category
 (`only-ours:noundef`, `only-clangir:nonnull`, ...), or a glob with `*` that
 matches it (`only-ours:_ZSt7forward*`: every attribute of the calls of any
-instantiation of std::forward that only ours has).  Exit status: 0 if every
+instantiation of std::forward that only ours has).  An ordinary entry can be
+narrowed (all optional, all globs with `*` that must match the whole name):
+the category may be a glob, the position (`param*`: any parameter, `param?`);
+and `symbol=GLOB` and `unit=GLOB` after the detail restrict the entry to the
+functions (the symbol that holds the difference: the caller, for a call) and
+the translation units that match (the unit is the name in the report, e.g.
+`boost/mp11`):
+
+  param* | 2 | only-clangir:dereferenceable(*) symbol=_ZNSt*_Base_manager* unit=libstdcxx/* | reason
+
+An entry without them is as wide as before; a pair entry has none.  Exit
+status: 0 if every
 difference is explained and at least one symbol was compared (a run that
 compared nothing fails), 1 otherwise, 2 for a setup problem.  The report ends
 with the number of translation units that clang -fclangir could not compile.
@@ -56,7 +67,9 @@ The known-differences file (tests/.edgy/filters/cir-attr-known.txt is the one
 of the gate) is checked when it is read (a bad one is a setup problem): every
 entry has a comment line directly above it (what the difference is) and a
 reason in its last field (why it is accepted: at least 8 characters, not
-`none`, `todo`, `-` or `?`), and no entry is listed twice.  --json writes the
+`none`, `todo`, `-` or `?`; a reason that starts with `accepted, checked` must
+read `accepted, checked YYYY-MM-DD: <why>`, a row that was looked at), and no
+entry is listed twice.  --json writes the
 entries that explained something (`known_used`), so that a stale entry can be
 found.
 
@@ -280,6 +293,30 @@ def compare(ours: Dict[str, Function], theirs: Dict[str, Function]
 
 
 BAD_REASONS = {'', 'none', 'todo', '-', '?', 'tbd'}
+# A reason that claims a checked row must say when and why.
+CHECKED_REASON_RE = re.compile(r'accepted, checked \d{4}-\d{2}-\d{2}: .{8,}')
+QUALIFIERS = ('symbol', 'unit')
+
+
+def split_qualifiers(field: str) -> Tuple[str, Dict[str, str]]:
+  '''(the detail, the qualifiers) of the third field of an entry: the
+  trailing `symbol=GLOB` and `unit=GLOB` words are the qualifiers, the rest
+  (which can hold spaces, as `arg0:align 8` does) is the detail.'''
+  words = field.split(' ')
+  qualifiers: Dict[str, str] = {}
+  while words and words[-1].partition('=')[0] in QUALIFIERS and \
+      '=' in words[-1]:
+    key, _, value = words.pop().partition('=')
+    qualifiers.setdefault(key, value)
+  return ' '.join(words).rstrip(), qualifiers
+
+
+def glob_matches(pattern: str, text: str) -> bool:
+  '''Whether `pattern` (a glob if it holds `*` or `?`, else a name) matches
+  all of `text`.'''
+  if '*' in pattern or '?' in pattern:
+    return fnmatch.fnmatchcase(text, pattern)
+  return pattern == text
 
 
 def validate_known(path: str) -> Tuple[List[Tuple[str, str, str, str]],
@@ -287,7 +324,9 @@ def validate_known(path: str) -> Tuple[List[Tuple[str, str, str, str]],
   '''(the entries, the problems) of a known-differences file: an entry is
   `<category> | <level or *> | <detail> | <reason>`, with a comment line
   directly above it, a reason of at least 8 characters that is not a
-  placeholder, and no duplicate.'''
+  placeholder (and a date and a why after `accepted, checked`), no duplicate,
+  and no qualifier or glob on a pair entry.  The detail may end in
+  `symbol=GLOB` and `unit=GLOB`.'''
   entries: List[Tuple[str, str, str, str]] = []
   problems: List[str] = []
   previous = ''
@@ -302,12 +341,29 @@ def validate_known(path: str) -> Tuple[List[Tuple[str, str, str, str]],
       else:
         if parts[3].lower() in BAD_REASONS or len(parts[3]) < 8:
           problems.append(f"{where}: no real reason ({parts[3]!r})")
+        elif parts[3].startswith('accepted, checked') and \
+            not CHECKED_REASON_RE.match(parts[3]):
+          problems.append(f"{where}: a checked row reads `accepted, checked "
+                          f"YYYY-MM-DD: <why>` ({parts[3][:40]!r})")
         if not previous.startswith('#'):
           problems.append(f"{where}: no comment line directly above the "
                           f"entry")
-        if parts[0] == 'pair' and parts[2] not in PAIR_MATCHERS:
-          problems.append(f"{where}: no pair matcher {parts[2]!r} (the "
-                          f"matchers are {', '.join(PAIR_MATCHERS)})")
+        detail, qualifiers = split_qualifiers(parts[2])
+        if parts[0] == 'pair':
+          if parts[2] not in PAIR_MATCHERS:
+            problems.append(f"{where}: no pair matcher {parts[2]!r} (the "
+                            f"matchers are {', '.join(PAIR_MATCHERS)})")
+        else:
+          if not detail:
+            problems.append(f"{where}: no detail before the qualifiers")
+          extra = [w for w in detail.split(' ')[1:]
+                   if w.partition('=')[2] and
+                   w.partition('=')[0].isidentifier()]
+          if extra:
+            problems.append(f"{where}: unknown qualifier {extra[0]!r} (the "
+                            f"qualifiers are {', '.join(QUALIFIERS)})")
+          if any(not v for v in qualifiers.values()):
+            problems.append(f"{where}: an empty qualifier")
         key = (parts[0], parts[1], parts[2])
         if key in seen:
           problems.append(f"{where}: listed twice ({' | '.join(key)})")
@@ -321,25 +377,37 @@ def read_known(path: str) -> List[Tuple[str, str, str, str]]:
   return validate_known(path)[0] if path else []
 
 
-def explained(known: List[Tuple[str, str, str, str]], level: int,
-              category: str, detail: str) -> bool:
-  for known_category, known_level, known_detail, _ in known:
-    if known_category == category and known_level in ('*', str(level)) and \
-        known_detail == detail:
-      return True
-  return False
-
-
 def known_entry(known: List[Tuple[str, str, str, str]], level: int,
-                category: str, detail: str
+                category: str, detail: str, symbol: Optional[str] = None,
+                unit: Optional[str] = None
                 ) -> Optional[Tuple[str, str, str, str]]:
-  '''The entry of the known-differences list that explains a difference.'''
+  '''The entry of the known-differences list that explains a difference:
+  the category (a glob such as `param*` matches the positions), the level,
+  the detail and, if the entry has them, the symbol and the unit.  An entry
+  with a symbol or unit glob needs the caller to give it (None: not known,
+  no match).'''
   for entry in known:
-    if entry[0] == category and entry[1] in ('*', str(level)) and \
-        (fnmatch.fnmatchcase(detail, entry[2]) if '*' in entry[2]
-         else entry[2] == detail):
-      return entry
+    if entry[0] == 'pair' or not glob_matches(entry[0], category) or \
+        entry[1] not in ('*', str(level)):
+      continue
+    pattern, qualifiers = split_qualifiers(entry[2])
+    if not glob_matches(pattern, detail):
+      continue
+    if 'symbol' in qualifiers and (
+        symbol is None or not glob_matches(qualifiers['symbol'], symbol)):
+      continue
+    if 'unit' in qualifiers and (
+        unit is None or not glob_matches(qualifiers['unit'], unit)):
+      continue
+    return entry
   return None
+
+
+def explained(known: List[Tuple[str, str, str, str]], level: int,
+              category: str, detail: str, symbol: Optional[str] = None,
+              unit: Optional[str] = None) -> bool:
+  return known_entry(known, level, category, detail, symbol, unit) \
+    is not None
 
 
 def nounwind_counts(ours: Dict[str, Function], theirs: Dict[str, Function]
@@ -615,9 +683,11 @@ MODULES: Dict[Tuple[str, int], Tuple[Dict[str, Function],
                                      Dict[str, Function]]] = {}
 
 
-def unit_cases(root: Path, units: str, boost: str
+def unit_cases(root: Path, units: str, boost: str,
+               gnu_version: str = '150000'
                ) -> List[Tuple[str, Path, List[str]]]:
-  '''(name, source, options) of the real-world units (`pinned` or names).'''
+  '''(name, source, options) of the real-world units (`pinned` or names),
+  compiled with --gnu_version=<gnu_version>.'''
   perf = load_tool('edg-cir-perf')
   names = [n for item in units.split(',') if item
            for n in (perf.PINNED_UNITS if item == 'pinned' else (item,))]
@@ -625,7 +695,8 @@ def unit_cases(root: Path, units: str, boost: str
   for name in names:
     include = [f"-I{boost}"] if boost and name.startswith('boost/') else []
     cases.append((name, root / 'dev_tools/cir-realworld' / f"{name}.cpp",
-                  ['--gnu_version=140000', *perf.REALWORLD_FLAGS, *include]))
+                  [f"--gnu_version={gnu_version}", *perf.REALWORLD_FLAGS,
+                   *include]))
   return cases
 
 
@@ -758,6 +829,13 @@ def main() -> None:
   parser.add_argument('--boost-include', default = '',
                       help = 'the Boost headers for the Boost units')
   parser.add_argument('--levels', default = '0,2')
+  parser.add_argument('--gnu-version', default = '150000',
+                      help = 'the --gnu_version of the real-world units and '
+                             'of plain sources (the headers of the image are '
+                             'g++ 15.3.1: below 150000 the front end says '
+                             'there is no __builtin_operator_new, so '
+                             'libstdc++ calls ::operator new, which clangir '
+                             'folds)')
   parser.add_argument('--known', default = '',
                       help = 'file of explained differences')
   parser.add_argument('--json', default = '',
@@ -797,12 +875,12 @@ def main() -> None:
   if args.units:
     boost = str((root / args.boost_include).resolve()) \
       if args.boost_include else ''
-    cases += unit_cases(root, args.units, boost)
+    cases += unit_cases(root, args.units, boost, args.gnu_version)
   for item in args.sources:
     path = Path(item).resolve()
     is_c = path.suffix == '.c'
     cases.append((path.name, path,
-                  ['--gnu_version=140000', *(['--gcc'] if is_c else
+                  [f"--gnu_version={args.gnu_version}", *(['--gcc'] if is_c else
                                              ['--c++17'])]))
   if not cases:
     parser.error('no sources: give files, --filter or --units')
@@ -877,7 +955,7 @@ def main() -> None:
               ).items():
             paired[indexes[position]] = matcher
       for index, (symbol, category, detail) in enumerate(diffs):
-        entry = known_entry(known, level, category, detail) \
+        entry = known_entry(known, level, category, detail, symbol, name) \
           if index not in paired else pair_entries[paired[index]]
         if entry:
           used.add(entry)

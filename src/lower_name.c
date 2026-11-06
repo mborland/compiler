@@ -4116,6 +4116,50 @@ qualifiers seen so far (and is typically set to one by the initial caller).
   }  /* if */
 }  /* mangled_scope_resolution */
 
+#if IA64_ABI && ABI_COMPATIBILITY_VERSION >= 701
+
+static a_boolean gnu_scope_resolution_applies(
+                                           a_scope_resolution_step *current)
+/*
+Return TRUE if g++'s form of the scope resolution of an <unresolved-name> is
+to be used for the qualification that "current" is the innermost step of:
+a g++ emulation (g++ 4.9 and later write the same form at every ABI version)
+whose innermost qualifier is a class that is not rooted in a template
+parameter or a decltype.
+*/
+{
+  a_scope_resolution_step top = *current;
+  a_scope_resolution_step next;
+  a_boolean               is_top_level = FALSE;
+  a_boolean               result = FALSE;
+
+  if (gnu_mode && !clang_mode && gnu_version >= 40900 &&
+      kind_of_step(current) == (an_il_entry_kind)iek_type) {
+    while (!is_top_level) {
+      next_scope_resolution_step(&top, &next, &is_top_level);
+      if (!is_top_level) top = next;
+    }  /* while */
+    result = !(kind_of_step(&top) == (an_il_entry_kind)iek_type &&
+               is_unresolved_type((a_type_ptr)scp_of_step(&top)));
+  }  /* if */
+  return result;
+}  /* gnu_scope_resolution_applies */
+
+
+static void mangled_gnu_scope_resolution(a_scope_resolution_step *current,
+                                         a_mangling_control_block *mctl)
+/*
+Add g++'s form of the scope resolution of an <unresolved-name>: "sr" and the
+type of the innermost class qualifier (srNS_4is_dIT_EE5value), not one level
+for each enclosing scope and no terminating "E".
+*/
+{
+  add_str_to_mangled_name("sr", mctl);
+  mangled_encoding_for_type(skip_typerefs((a_type_ptr)scp_of_step(current)),
+                            mctl);
+}  /* mangled_gnu_scope_resolution */
+
+#endif /* IA64_ABI && ABI_COMPATIBILITY_VERSION >= 701 */
 #endif /* ABI_COMPATIBILITY_VERSION >= 402 */
 #if IA64_ABI
 
@@ -4134,6 +4178,29 @@ typedef struct a_routine_info_block {
 		template_arg_list;
   a_const_char  *ud_suffix;
 } a_routine_info_block;
+
+#if ABI_COMPATIBILITY_VERSION >= 701
+
+static a_template_arg_ptr variable_template_arguments(
+                                           a_source_correspondence *scp,
+                                           an_il_entry_kind        kind)
+/*
+Return the template arguments of the entity if it is a specialization of a
+variable template, and NULL otherwise.
+*/
+{
+  a_template_arg_ptr  result = NULL;
+
+  if (kind == iek_variable) {
+    a_variable_ptr  vp = (a_variable_ptr)scp;
+    if (vp->is_template_variable && vp->template_info != NULL) {
+      result = vp->template_info->template_arg_list;
+    }  /* if */
+  }  /* if */
+  return result;
+}  /* variable_template_arguments */
+
+#endif /* ABI_COMPATIBILITY_VERSION >= 701 */
 
 
 static void mangled_entity_reference(a_source_correspondence  *scp,
@@ -4162,6 +4229,16 @@ add mangling for an eok_address_of operation.
   a_boolean  use_sr = parent_class != NULL &&
                       (emulate_old_gnu_behavior ||
                        is_template_dependent_type(parent_class));
+#if ABI_COMPATIBILITY_VERSION >= 701
+  /* A variable template specialization has its template arguments written
+     after its name; when they are dependent it is an <unresolved-name>. */
+  a_template_arg_ptr  var_template_args = variable_template_arguments(scp,
+                                                                       kind);
+  a_boolean  dependent_var_template = var_template_args != NULL &&
+                      ((a_variable_ptr)scp)->is_nonreal;
+
+  if (parent_class != NULL && dependent_var_template) use_sr = TRUE;
+#endif /* ABI_COMPATIBILITY_VERSION >= 701 */
 
   if (add_address_of) {
     add_str_to_mangled_name("ad", mctl);
@@ -4180,8 +4257,17 @@ add mangling for an eok_address_of operation.
       step.is_global_qualified_name = FALSE;
       step.variant.scp_kind.scp     = &parent_class->source_corresp;
       step.variant.scp_kind.kind    = iek_type;
-      mangled_scope_resolution(&step, &need_close, /*nesting_level=*/1, mctl);
-      if (need_close) add_to_mangled_name('E', mctl);
+#if ABI_COMPATIBILITY_VERSION >= 701
+      if (gnu_scope_resolution_applies(&step)) {
+        mangled_gnu_scope_resolution(&step, mctl);
+      } else
+#endif /* ABI_COMPATIBILITY_VERSION >= 701 */
+      /* Do not insert code here. */
+      {
+        mangled_scope_resolution(&step, &need_close, /*nesting_level=*/1,
+                                 mctl);
+        if (need_close) add_to_mangled_name('E', mctl);
+      }  /* if */
     } else
 #endif /* ABI_COMPATIBILITY_VERSION >= 402 */
     /* Do not insert code here. */
@@ -4255,6 +4341,13 @@ add mangling for an eok_address_of operation.
       } else {
         /* Not a routine of any kind. */
         mangled_name_with_length(unmangled_or_fabricated_name_of(scp), mctl);
+#if ABI_COMPATIBILITY_VERSION >= 701
+        if (var_template_args != NULL) {
+          mangled_template_arguments(var_template_args, /*partial_spec=*/FALSE,
+                                     /*old_form=*/FALSE,
+                                     (a_name_reference_ptr)NULL, mctl);
+        }  /* if */
+#endif /* ABI_COMPATIBILITY_VERSION >= 701 */
       }  /* if */
       close_ia64_nested_name(need_nested_name_close, discriminator_scp, mctl);
     }  /* if */
@@ -4282,6 +4375,13 @@ add mangling for an eok_address_of operation.
     mangled_simple_id(scp, rinfo->template_arg_list,
                       (a_name_reference_ptr)NULL, /*include_length=*/FALSE,
                       mctl);
+#if ABI_COMPATIBILITY_VERSION >= 701
+  } else if (dependent_var_template) {
+    /* A dependent variable template specialization that is not a class
+       member is mangled as <unresolved-name>, as g++ and clang do. */
+    mangled_simple_id(scp, var_template_args, (a_name_reference_ptr)NULL,
+                      /*include_length=*/FALSE, mctl);
+#endif /* ABI_COMPATIBILITY_VERSION >= 701 */
   } else {
     /* Use a name as a literal instead of "sr", because the parent class
        is not dependent or the entity is not a class member. */
@@ -4322,6 +4422,13 @@ add mangling for an eok_address_of operation.
                             force_individuation,
                             /*base_name_offset=*/(sizeof_t *)NULL,
                             mctl);
+#if ABI_COMPATIBILITY_VERSION >= 701
+    } else if (var_template_args != NULL) {
+      /* A variable template specialization: its name, template arguments
+         and substitutions are those of the variable's own mangling. */
+      mangled_variable_name_with_possible_qualification((a_variable_ptr)scp,
+                                                        mctl);
+#endif /* ABI_COMPATIBILITY_VERSION >= 701 */
     } else {
       /* Not a routine. */
       /* Add a parent qualifier for a member if needed. */
@@ -5720,12 +5827,20 @@ the caller.
       nesting_level++;
     }  /* if */
 #endif /* !IA64_ABI */
-    mangled_scope_resolution(&step, &need_close, nesting_level, mctl);
+#if IA64_ABI && ABI_COMPATIBILITY_VERSION >= 701
+    if (gnu_scope_resolution_applies(&step)) {
+      mangled_gnu_scope_resolution(&step, mctl);
+    } else
+#endif /* IA64_ABI && ABI_COMPATIBILITY_VERSION >= 701 */
+    /* Do not insert code here. */
+    {
+      mangled_scope_resolution(&step, &need_close, nesting_level, mctl);
 #if IA64_ABI
-    if (need_close) {
-      add_to_mangled_name('E', mctl);
-    }  /* if */
+      if (need_close) {
+        add_to_mangled_name('E', mctl);
+      }  /* if */
 #endif /* IA64_ABI */
+    }  /* if */
   }  /* if */
 #if !IA64_ABI
   if (dtor_type != NULL) {
@@ -13958,7 +14073,10 @@ to the mangled name.
     }  /* if */
 #endif /* IA64_ABI && ABI_COMPATIBILITY_VERSION >= 510 */
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
-    if (kind == iek_variable && cir_internal_name_marker_needed(scp)) {
+    if (kind == iek_variable && cir_internal_name_marker_needed(scp) &&
+        !(gnu_mode && !clang_mode &&
+          ((a_variable_ptr)scp)->is_template_variable)) {
+      /* (g++ gives an internal variable template instance no L.) */
       add_to_mangled_name('L', mctl);
     }  /* if */
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */

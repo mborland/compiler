@@ -9,8 +9,10 @@
 # Environment (the host variables of doc/cookbook.md; nothing is required):
 #   EDG_CIR_HOST       user@host, default matt@clang4.cpp.al
 #   EDG_CIR_SSH_KEY    identity file, default ~/.ssh/id_rsa
-#   EDG_BOX_SOCKET     ssh ControlPath of an open master connection; used
-#                      only when set
+#   EDG_CIR_SSH_SOCKET ssh ControlPath of an open master connection; used
+#                      only when set (the same name as cir-config and cir-lib)
+#   EDG_CIR_JOBS       job cap exported into the container of `run`, default
+#                      48; a script's parallel jobs must not exceed it
 #   EDG_CIR_SG_DOCKER  non-empty and not 0: run docker through `sg docker -c`
 #                      (not needed on clang4)
 #   BOX_TREE           directory under $HOME on the host, default edg-cir-writer
@@ -20,8 +22,8 @@ host=${EDG_CIR_HOST:-matt@clang4.cpp.al}
 key=${EDG_CIR_SSH_KEY:-$HOME/.ssh/id_rsa}; key=${key/#\~/$HOME}
 tree=${BOX_TREE:-edg-cir-writer}
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=20 -i "$key")
-if [ -n "${EDG_BOX_SOCKET:-}" ]; then
-  SSH+=(-o ControlPath="${EDG_BOX_SOCKET/#\~/$HOME}" -o ControlMaster=no)
+if [ -n "${EDG_CIR_SSH_SOCKET:-}" ]; then
+  SSH+=(-o ControlPath="${EDG_CIR_SSH_SOCKET/#\~/$HOME}" -o ControlMaster=no)
 fi
 dock() {
   if [ -n "${EDG_CIR_SG_DOCKER:-}" ] && [ "$EDG_CIR_SG_DOCKER" != 0 ]; then
@@ -42,7 +44,9 @@ case $cmd in
       "$repo/" "$host:$tree/" ;;
   run)
     log=$1; script=$2
-    inner=$(dock "edg-exec --img cir-env -- bash $script")
+    # nice runs inside the container: the one on the docker client does not
+    # reach the container's processes.
+    inner=$(dock "edg-exec --img cir-env -- nice -n 10 env EDG_CIR_JOBS=${EDG_CIR_JOBS:-48} bash $script")
     exec "${SSH[@]}" "$host" "cd ~/$tree && rm -f ~/$log.exit && mkdir -p ~/tmp && nohup bash -c 'export TMPDIR=\$HOME/tmp PATH=\$PWD/dev_tools/bin:\$PATH PYTHONPATH=\$PWD/dev_tools/pylibs; nice -n 10 $inner > ~/$log.log 2>&1; echo \$? > ~/$log.exit' > /dev/null 2>&1 &" ;;
   wait)
     until "${SSH[@]}" "$host" "test -f ~/$1.exit"; do sleep 10; done

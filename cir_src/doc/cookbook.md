@@ -10,16 +10,19 @@ state, decisions and process are in `project.md`.
 - Ubuntu 26.04, 172 cores, 251 GB RAM, ~430 GB free at planning; matt is in `docker`, no sudo; shared host.
 - Never touch `~/cerastes-m4.5d1` or other people's containers. Old box 192.168.1.167: retired for CIR.
 - Trees `~/edg-cir-{config,writer,lib}`; checkpoint trees `~/edg-cir-config/<tree>`; `~/edg-cir-config/llvm-project` at the pin.
-- Settings: `EDG_CIR_HOST` (default `matt@clang4.cpp.al`), `EDG_CIR_SSH_KEY` (default `~/.ssh/id_rsa`); the ControlPath socket is optional.
+- Settings: `EDG_CIR_HOST` (default `matt@clang4.cpp.al`), `EDG_CIR_SSH_KEY` (default `~/.ssh/id_rsa`); optional ControlPath socket
+  `EDG_CIR_SSH_SOCKET` (the old `EDG_BOX_SOCKET` is ignored); `EDG_CIR_HOSTNAME` (default clang4): checkpoint and record
+  stop unless `ssh HOST hostname -s` says so, before any `--delete` sync or copy-back; `EDG_DOCKER_NICE=N`: edgdocker
+  runs every container command under `nice -n N` (the gate and record set 10).
 - `docker` works directly for matt; the tools run it without `sg docker` (set `EDG_CIR_SG_DOCKER=1` to bring it back).
 - Upload from the Mac runs at about 1 MB/s (a full tree took 25 min): never upload `build/`, `tests/runs/` or `.tmp/`; seed a new
   tree on clang4 by copying a built one (`cp -a ~/edg-cir-config/m5-int ~/edg-cir-<agent>`), then rsync deltas (`-z`).
 - `/tmp` on clang4 is tmpfs (RAM): set `TMPDIR` to a directory on disk for image builds and large jobs.
-- `edg-docker-test --jobs N` caps the build and edgy jobs; without it a run uses all 172 CPUs (the gate and `edg-cir-record` pass it).
+- `edg-docker-test --jobs N` caps the build and edgy jobs; without it a run uses all 172 CPUs (the gate and `edg-cir-record` pass it); the gate's ctest runs lit with `LIT_OPTS=-jN`.
 - Never record goldens or expectations on the Mac; record on clang4 (same cir-env image).
 - Mac-only loops: `macos-arm-clang-debug-cir` (writer, aarch64 triple, not authoritative), `cir-format-only` (no LLVM).
 - Sync a tree: `rsync -a --checksum --no-times` (what `edg-cir-checkpoint` does); see §7 for why.
-- `cir_src/scripts/box.sh ssh|sync|run JOB CMD|chown|test JOB` (`EDG_CIR_HOST`, `EDG_CIR_SSH_KEY`, optional `EDG_BOX_SOCKET`, `EDG_CIR_SG_DOCKER`, `EDG_BOX_TREE`; run names `cir-lib-JOB-pid`)
+- `cir_src/scripts/box.sh ssh|sync|run JOB CMD|chown|test JOB` (`EDG_CIR_HOST`, `EDG_CIR_SSH_KEY`, optional `EDG_CIR_SSH_SOCKET`, `EDG_CIR_JOBS` (default 48; ninja and lit), `EDG_CIR_SG_DOCKER`, `EDG_BOX_TREE`; run names `cir-lib-JOB-pid`)
 - `cir_src/test/writer/tools/box.sh ssh|sync|run LOG SCRIPT|wait LOG [N]|fetch REMOTE DIR` (same variables plus `BOX_TREE`; detached via nohup + `~/LOG.exit`; `run` sets `TMPDIR=$HOME/tmp` and `nice -n 10`)
 - `cmp_run.sh`, `rt_run.sh`, `cmp_box.sh`, `rt_box.sh` read `BOX_TREE` (default edg-cir-writer)
 
@@ -57,27 +60,34 @@ state, decisions and process are in `project.md`.
 - Per-program timeout is 120 s (edgtest exec default); posture timeout 300 s; the comment at `edg-docker-test:268` still says 60 s (stale).
 - Slice: `edg-cir-checkpoint --tree T --lean AREAS --lean-base REF [--detach] [--jobs 48]` (areas checked against `git diff REF` + untracked before any sync; uncovered or empty set refused; `--allow-empty-change-set`, `--no-area-check` need a stated reason)
 - Quick: `--quick` (build, smoke, cpp-smoke). Default steps: build identity smoke corpus asm-diff writer-stress cpp-smoke cpp-writer-stress crash-sweep ctest.
-- Milestone: `edg-cir-checkpoint --milestone --tree m51-int --jobs 48 --detach` (about 3.5 h on clang4, perf about 90 min; `--stress-timeout` defaults to 3600 s: the 20000-rung else-if ladder takes about 1400 s there): every step, `--perf-realworld pinned --perf-levels 0,2 --perf-targets s1`, plus the day baseline. The day baseline is the link `day-base/baseline-64`.
+- Milestone: `edg-cir-checkpoint --milestone --tree m51-int --jobs 48 --detach` (about 3.5 h on clang4, perf about 90 min; `--stress-timeout` defaults to 3600 s: the 20000-rung else-if ladder takes about 1400 s there): every step, `--perf-realworld pinned --perf-levels 0,2 --perf-targets s1` (`edg-cir-gate-evidence --milestone` applies
+  these itself; a given option wins), plus the day baselines. The day baseline is the link `day-base/baseline-64`.
 - Re-run one step on the same evidence: `--extra '--only STEP --out <evidence dir>'`; resume with `--out`; `--force` re-runs PASSed steps; `--steps-for AREAS` prints the set.
 - Direct (on clang4 as matt, no sg): `edg-cir-gate-evidence --tree T --lean AREAS | --milestone | --steps ...`; `--with-cpp`, `--with-m4`, `--smoke-all-pass`, `--allow-status-changes`, `--jobs 48`.
 - Time bounds: `--command-timeout` (7200 s default), `--step-timeout STEP=SECONDS`; a timeout kills the process group and stops containers by `edg.job` label (names `cir-config-<tree>-<step>-*` via `EDG_DOCKER_NAME_PREFIX`). `EDG_CIR_STRESS_TIMEOUT`, `EDG_CIR_STRESS_STACK_KB` (256 KB cpp-stress, 8 MB cpp-stress-asan).
 - Crash rules: library crash always fails; FE crash excused only if the reference has the same class and no `ecil_*`/`cir_be*` frame (`tests/.edgy/filters/cir-excused-crashes.txt`); kill and timeout always fail.
-- Triage files (`tests/.edgy/filters/`): `cir-status-triage.txt`, `cir-opt-triage.txt`, `cir-lazy-triage.txt`, `cir-attr-known.txt`, `cir-documented-gaps.txt`, `cir-eh-probes-skip.txt`; a line for a case that did not regress is stale and fails.
+- Triage files (`tests/.edgy/filters/`): `cir-status-triage.txt`, `cir-opt-triage.txt`, `cir-lazy-triage.txt`, `cir-attr-known.txt`, `cir-documented-gaps.txt`, `cir-eh-probes-skip.txt`, `cir-identity-allowed.txt`; a line for a case that did not regress is stale and fails.
+- `cir-attr-known.txt` rows: `category | level | detail [symbol=GLOB] [unit=GLOB] | reason`; category and position may be globs
+  (`param*`); a checked row's reason is `accepted, checked YYYY-MM-DD: why`.
+- `cir-identity-allowed.txt`: preprocessed-output differences allowed in the `identity` step (M5.1b: `src/lower_name.c`,
+  `src/macro.c`, the approved ungated changes that `day` covers); delete the entries when the identity baseline moves past them.
 - Baselines (clang4, `~/edg-cir-config`, taken 2026-11-06 at `991737c19a`, code = M5; each has `<name>.images.txt`):
   `identity-m0c` (`--identity-baseline`, captured at the M0 commit `fee14b0c21`), `day-base/baseline-64` (`edg_x86_64`,
-  `_cp`; the `day` step) and `day-base/baseline-32` (`edg_x86_32`, `_32_cp`, run with `@posture32.json`), `m5-base-asm`
+  `_cp`; the `day` step) and `day-base/baseline-32` (`edg_x86_32`, `_32_cp`; the `day32` step, posture `tests/.edgy/postures/day32.json`, by hand
+  `edg-docker-test --posture @tests/.edgy/postures/day32.json`), `m5-base-asm`
   (`--asm-baseline`), `m5-base-cpp-asm`, `m5-base-status` (`c_*`, `cpp_*`; `--status-baseline`, `--opt-baseline-status`),
   `m5-base-perf.json` (`--perf-baseline`, regression), `m5a-base-perf.json` (`--perf-targets-baseline`, S1 targets, built
   from `77a24448fa`); raw data `m5-base-rss.txt`, `m5-base-chunk-rss.json`, `m5-base-attr-diff/`. Boost headers 1.92.0
   in `m5-int/.tmp/boost-inc`. Images: dev-env `1c1cf78d322b` (`:cir-1c1cf78d322b`), llvm-cir `e92da938d7cc`, cir-env
   `cd5c7f63e579`; a comparison against a baseline taken with other images says so (`IMAGES`).
   asm baseline: `edg-cir-compare-modes @tests/.edgy/filters/cir-c-corpus.txt --types rp,lp -j 12 --save-asm D --in-process-only` (C++: `--cxx @...cir-cpp-corpus.txt`) in a built tree of the baseline commit. Identity: `edg-macro-identity-check configure|capture --binaries|compare` (docstring recipe) at `fee14b0c21`.
-  A missing or unusable baseline stops the gate (status 2) unless `--allow-missing-baselines`; `edg-cir-checkpoint --check-baselines` lists what the selected steps need.
+  A missing or unusable baseline stops the gate (status 2) unless `--allow-missing-baselines` (refused with
+  `--milestone`; otherwise a WARNING banner opens summary.md); `edg-cir-checkpoint --check-baselines` lists what the selected steps need.
 - `edg-cir-summary <run>` buckets a run (overall and CIR-specific vs `tests/expectations/edg_x86_64`); `edg-cir-rto-diff --auto [--documented]` attributes status changes.
 - Record C++/CIR expectations: `edg-cir-record --tree T ...` (-W on clang4, 100 KB rule, fetch back; `research/test_plumbing.md` §11.3); then `edg-cir-rto-diff --auto`.
 - Writer goldens: `tests/tests/cir/writer` (`//script:edg-cir-ecil-dump`, `//require:BACK_END_TYPE 3`); cirgen run tests `tests/tests/cir/cirgen`; ctest/lit `cir_src/test/lit.cfg.py`, `capi_tests`.
 - Tools self-test (no box, no Docker): `python3 dev_tools/bin/edg-cir-tools-test [-v]`; on both hosts.
-- Prune: `edg-cir-checkpoint --prune N | --prune-only | --prune-evidence`; it keeps trees with a KEEP file, entries under 6 h, and `PROTECTED_TREES` (`day-base`, `m5-int`); the default tree is `m51-int`.
+- Prune: `edg-cir-checkpoint --prune N | --prune-only | --prune-evidence`; it keeps trees with a KEEP file, entries under 6 h, and `PROTECTED_TREES` (`day-base`, `m5-int`); the default tree is `m51-int`. A protected tree is synced without `--delete`.
 
 ### Harnesses and box scripts (each has a usage header)
 - `edg-cir-perf` (cachegrind Ir; `--only cxx`, `--stream KIND:N`, `--targets s1`), `edg-cir-rss` (`--generate-cxx-functions N -o big.cpp`, `--fe-build`), `edg-cir-stress`, `edg-cir-writer-stress[ --cxx]`, `edg-cir-compare-modes [--cxx] [--opt-level N]`, `edg-cir-check-isolation`, `edg-cir-poison-check`.
@@ -101,14 +111,15 @@ Read from `AREA_STEPS` in `edg-cir-gate-evidence` (about line 392); `build` is a
 | fe-options / linkage | release-smoke / symbols mixed-tu |
 | eccp | cir-suite corpus cpp-corpus opt-corpus mixed-tu |
 | tests / tests-triage / tests-crashes | cir-suite corpus cpp-corpus / opt-corpus / crash-sweep |
-| tests-smoke / tests-reference | smoke cpp-smoke opt-corpus release-smoke / day |
-| tooling / pylibs / twop | tools-test / smoke day / smoke cpp-smoke modes cpp-modes |
+| tests-smoke / tests-reference | smoke cpp-smoke opt-corpus release-smoke / day day32 |
+| tooling / pylibs / twop | tools-test / smoke day day32 / smoke cpp-smoke modes cpp-modes |
 | goldens / summary | cir-suite / smoke cpp-smoke cir-suite corpus cpp-corpus |
 | toolchain | ctest smoke cpp-smoke cir-suite corpus cpp-corpus opt-corpus asm-diff cpp-asm-diff mixed-tu symbols eh-probes m4-stress cpp-stress crash-sweep perf rss stress release-smoke (TOOLCHAIN_SKIPS for the rest) |
-| shared-src | identity isolation day |
+| shared-src | identity isolation day day32 |
 | lazy / chunk / names / attr / crashes | lazy-identity / chunk-identity chunk-rss slow-below-threshold / names-check / attr-diff codequality / crash-sweep |
-| speed | perf rss stress cpp-stress m4-stress crash-sweep |
-Declared, not derived: lazy speed crashes attr chunk names. Expensive steps (crash-sweep perf rss stress cpp-stress m4-stress) run at toolchain and milestone gates only; say in the report why a slice cannot affect them. File -> area rules: `AREA_RULES`; an unmapped file fails the check (add a rule). Step lists: `--with-cpp` = CPP_STEPS, `--with-m4` = M4_STEPS, `--milestone` = both.
+| speed / perf | perf rss stress cpp-stress m4-stress crash-sweep / perf |
+Declared, not derived: lazy speed perf crashes attr chunk names. The `prebuild.py` scripts map to `tooling` (the IMAGES
+check catches a rebuilt image). Expensive steps (crash-sweep perf rss stress cpp-stress m4-stress) run at toolchain and milestone gates only; say in the report why a slice cannot affect them. File -> area rules: `AREA_RULES`; an unmapped file fails the check (add a rule). Step lists: `--with-cpp` = CPP_STEPS, `--with-m4` = M4_STEPS, `--milestone` = both.
 
 ## 3. Host hygiene and lessons
 
@@ -121,6 +132,7 @@ Declared, not derived: lazy speed crashes attr chunk names. Expensive steps (cra
 - rsync mtime pitfall: `-a`/`--delete` keeps Mac mtimes, so ninja may see "no work" and test old code. Use `--checksum --no-times` or wipe `build/cir*`, `build/gcc-cir`, `build/gcc-release-cir`; `touch` after a revert. Each checkpoint records and compares a tree fingerprint (src, cir_src, dev_tools/bin, tests/.edgy, cmake).
 - Disk: each checkpoint tree is 10-15 GB (ENOSPC killed a run once); prune `build/` and `tests/runs/`, keep `.tmp` evidence.
 - ASan: quarantine distorts RSS; measure with `linux-gcc-release-cir` or `ASAN_OPTIONS=quarantine_size_mb=0`. LeakSanitizer "Unable to get registers from thread" is ptrace noise; real reports start `ERROR: AddressSanitizer`. Run `linux-cir-asan` ctest for every library change.
+- Never import `dev_tools/bin/edg-docker-test` from Python: it runs `main` at import (a real day run); tests use `--dry-run`.
 - Mac zsh/BSD: no word splitting of a quoted list, `sed -i ''`, no `timeout`; unquoted globs error (`no matches found`); put nested commands in a script and scp it; `echo =====` fails in zsh (use printf).
 - Measure the release FE, not only debug (test-feature pins cost 5.7% FE instructions). CHECKING is TRUE in every build.
 - Wait for the implementer's "tree green" before a checkpoint sync; review on a frozen `build/review-snap-*`.

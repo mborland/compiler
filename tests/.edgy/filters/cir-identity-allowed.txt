@@ -1,0 +1,30 @@
+# Files whose preprocessed output may differ from the identity baseline (the
+# step identity of dev_tools/bin/edg-cir-gate-evidence).  The baseline is the
+# M0 capture (identity-m0c): everything that the CIR project added to the
+# shared front end is under BACK_END_TYPE_CIR or a CIR macro and preprocesses
+# away in the four non-CIR presets, so the capture is identical.  An entry here
+# is an approved change that is not CIR-gated; the `day` step (the day suite in
+# the four configurations) is what shows that it changes no test result.
+#
+# One entry per line: <glob> | <reason>.  The glob is over the name of a
+# captured file (<target>/src/<file>.i.gz, the output of -E -P of one
+# translation unit of one target).  Rules (the step refuses a file that breaks
+# them): a comment line directly above every entry, a reason of at least 8
+# characters, no entry twice, and none that explains nothing in a run (a stale
+# entry fails: delete the entry when the baseline is taken again, as
+# identity-m51b is at the M5.1b commit).
+
+# M5.1 session 2 (W3): the Itanium mangler under ABI_COMPATIBILITY_VERSION
+# >= 701 writes dependent variable templates as unresolved names, adds the
+# arguments of non-dependent variable templates and, in GNU mode, the parent
+# class's type encoding to scope resolution; the names match g++ 15 and clang
+# 22 byte for byte (tests/tests/edg/).  Approved for M5.1 session 2 (project.md
+# section 6, W3).
+*/src/lower_name.c.i.gz | the mangler changes of W3 (variable templates and GNU-mode scope resolution, ABI_COMPATIBILITY_VERSION >= 701), ungated and approved; the day suite shows only the attributed name changes
+
+# M5.1 session 2 (W4): __has_builtin(__builtin_operator_new) and
+# __has_builtin(__builtin_operator_delete) return 201802L in clang mode and
+# 201802 in GNU mode (g++ 15 and clang agree; today it returns 1), so
+# libstdc++ uses the builtins.  Approved for M5.1 session 2 (project.md section
+# 6, W4).
+*/src/macro.c.i.gz | the __has_builtin values of W4 for __builtin_operator_new and _delete (201802L in clang mode, 201802 in GNU mode), ungated and approved; the day suite shows only the attributed changes

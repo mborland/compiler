@@ -9,8 +9,8 @@
 
 Run it on the Mac, from the repository root.  The host is $EDG_CIR_HOST
 (default matt@clang4.cpp.al), the ssh key $EDG_CIR_SSH_KEY (default
-~/.ssh/id_rsa); an SSH master socket is used only if $EDG_BOX_SOCKET names
-it; docker runs through `sg docker -c` only with EDG_CIR_SG_DOCKER=1.  The
+~/.ssh/id_rsa); an SSH master socket is used only if $EDG_CIR_SSH_SOCKET
+names it; docker runs through `sg docker -c` only with EDG_CIR_SG_DOCKER=1.  The
 tree on the box (default ~/edg-cir-config/m51-int) must be built and synced
 (edg-cir-checkpoint --steps build does that).  For the selected tests and
 configurations it
@@ -59,7 +59,9 @@ from typing import List
 
 BOX = os.environ.get('EDG_CIR_HOST', 'matt@clang4.cpp.al')
 SSH_KEY = os.environ.get('EDG_CIR_SSH_KEY', '~/.ssh/id_rsa')
-SOCKET = os.environ.get('EDG_BOX_SOCKET', '')
+SOCKET = os.environ.get('EDG_CIR_SSH_SOCKET', '')
+# The host name that the box must report before the copy back with --delete.
+EXPECTED_HOSTNAME = os.environ.get('EDG_CIR_HOSTNAME', 'clang4')
 SG_DOCKER = os.environ.get('EDG_CIR_SG_DOCKER', '') not in ('', '0')
 
 # Runs on the box in the tree: delete the large recordings and print the
@@ -132,7 +134,7 @@ for suite in set(removed) | set(added):
 
 def ssh_options() -> List[str]:
   '''The ssh options: batch mode and the key, and the master socket if
-  EDG_BOX_SOCKET names one.'''
+  EDG_CIR_SSH_SOCKET names one.'''
   options = ['-o', 'BatchMode=yes', '-i', str(Path(SSH_KEY).expanduser())]
   if SOCKET:
     options += ['-o', f"ControlPath={Path(SOCKET).expanduser()}",
@@ -153,6 +155,18 @@ def ssh(command: str, stdin: str = '', capture: bool = True
     stdout = subprocess.PIPE if capture else None,
     stderr = subprocess.STDOUT if capture else None
   )
+
+
+def hostname_problem(reported: str) -> str:
+  '''"" if `reported` (the box's `hostname -s`) is the expected host, else
+  the message: the copy back deletes files of this tree, and a stale ssh
+  ControlPath can send a command to another host whatever name was given.'''
+  reported = (reported.strip().splitlines() or [''])[-1]
+  if reported == EXPECTED_HOSTNAME:
+    return ''
+  return (f"the host answers as {reported!r}, not "
+          f"{EXPECTED_HOSTNAME!r} (EDG_CIR_HOST={BOX}; a stale ssh "
+          f"ControlPath? EDG_CIR_HOSTNAME names another expected host)")
 
 
 def main() -> None:
@@ -183,6 +197,10 @@ def main() -> None:
                              'recording, no deletion of large files')
   args = parser.parse_args()
 
+  problem = hostname_problem(ssh('hostname -s').stdout)
+  if problem:
+    print(problem, file = sys.stderr)
+    sys.exit(2)
   tree = f"~/edg-cir-config/{args.tree}"
   marker = f".tmp/record-{int(time.time())}"
   if args.copy_only:
@@ -191,7 +209,7 @@ def main() -> None:
     ssh(f"cd {tree} && mkdir -p .tmp && touch {marker}")
     time.sleep(1)
   env = ("export PATH=$PWD/dev_tools/bin:$PATH "
-         "PYTHONPATH=$PWD/dev_tools/pylibs; ")
+         "PYTHONPATH=$PWD/dev_tools/pylibs EDG_DOCKER_NICE=10; ")
   filter_arg = shlex.quote(args.filter)
   for config in ([] if args.copy_only else args.configs.split(',')):
     print(f"recording {config} ...", flush = True)
@@ -246,4 +264,5 @@ def main() -> None:
   print('review: git status --short tests/ | head; git diff --stat tests/')
 
 
-main()
+if __name__ == '__main__':
+  main()

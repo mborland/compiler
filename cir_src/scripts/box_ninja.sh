@@ -5,4 +5,4 @@
 lit_arg=
 [ -f /lit/lit.py ] && lit_arg=-DEDG_CIR_LIT=/lit/lit.py
 (cd cir_src && cmake --preset linux-cir-relwithdebinfo $lit_arg > /dev/null)
-ninja -C build/cir -k 0 "$@" 2>&1 | grep -v "^\[" | head -${LINES_MAX:-100}
+ninja -C build/cir -j"${EDG_CIR_JOBS:-48}" -k 0 "$@" 2>&1 | grep -v "^\[" | head -${LINES_MAX:-100}

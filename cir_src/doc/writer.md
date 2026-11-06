@@ -1123,7 +1123,14 @@ ECIL 1.2, spec 12.4 (`FUNC_EH_SPEC`), 12.5 (`TRY_BEGIN`, `CATCH_BEGIN`,
   `exceptions_enabled` (`ecil_has_exceptions`; `--no_exceptions` turns it off, and
   nothing in the environment changes it): every function and call may
   throw unless marked, and the `eh` and `all` cleanups M3 sent are live. `DECL_FUNC
-  NOTHROW` comes from `is_non_throwing_routine` only and is kept by every
+  NOTHROW` comes from `is_non_throwing_routine` and the library table, in C and
+  with `--no_exceptions` too (M5.1 W1; clangir marks no other declaration nounwind,
+  probed at the pin for C and for C++ with and without exceptions): without
+  exceptions the front end's answer (`is_non_throwing_routine`, through `is_nothrow_type`) is
+  "everything", so the stream has
+  the library table, the nothrow attribute, a written noexcept or throw() of the prototype
+  (`routine_has_nothrow_spec`, C++; a destructor declaration has none: unmarked,
+  the safe direction) and the definitions; it is kept by every
   re-issue (`emit_func_decl_if_changed`); a `CALL_INDIRECT` and a `PM_CALL` have it
   from `is_nothrow_type` of the call's function type; a direct call needs none.
 * **`FUNC_EH_SPEC`** (`emit_func_eh_spec`), after the PARAMs of every definition
@@ -1585,8 +1592,16 @@ ECIL 1.2, spec 12.4 (`FUNC_EH_SPEC`), 12.5 (`TRY_BEGIN`, `CATCH_BEGIN`,
       end (their `ak_cold` and `ak_hot` have no apply function), so the writer
       looks for the attribute in the routine's attribute list
       (`find_attribute`; both spellings, and a later declaration adds it).
-      always_inline without the inline specifier is dropped by the front end
-      (as gcc 4.7 and later do) and not sent. cold and hot exclude each other
+      always_inline without the inline specifier does not make the routine
+      inline (gcc 4.7 and later), and the front end used to drop the attribute
+      there; under the CIR back end it keeps the bit and leaves the attribute
+      recognized, without the warning (`apply_always_inline_attr`, M5.1 W2), so
+      that it is sent for the members of class templates that are defined in the
+      class and are neither inline nor constexpr (libstdc++'s
+      `_GLIBCXX20_CONSTEXPR` members in C++17), for the instances of function
+      templates, and for functions that are not inline, as clang does; golden
+      `writer-cxx-always-inline-class-template`.
+      cold and hot exclude each other
       (LLVM's verifier rejects both, the front end does not diagnose the pair):
       only the one written first is sent, as gcc does, and the one sent first
       stays across declarations (golden `writer-cxx-cold-hot-conflict`). 299
@@ -1613,7 +1628,7 @@ ECIL 1.2, spec 12.4 (`FUNC_EH_SPEC`), 12.5 (`TRY_BEGIN`, `CATCH_BEGIN`,
       corpus streams change. Goldens `writer-noreturn-library` and
       `writer-cxx-noreturn-library`.
     * **NOTHROW of the library functions** that Clang's table marks nothrow
-      (the letter n), in C++ streams (a C stream has no exceptions): the
+      (the letter n), in every stream, C included (M5.1 W1): the
       `NOTHROW` flag of `DECL_FUNC`, under the rule of pure and const (C
       language linkage, library name and signature; a signature may end in
       the ellipsis, and a `va_list` is not checked). The set is the 231 names

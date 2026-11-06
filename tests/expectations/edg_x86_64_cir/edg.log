@@ -28,6 +28,8 @@ cmeerw/gnats-24564-run/test.mft.cpp:rp:-DTEST_NUMBER=4 --ms_c++17 --microsoft_ve
 cmeerw/gnats-24564-run/test.mft.cpp:rp:-DTEST_NUMBER=5 --ms_c++17 --microsoft_version 1936:REQUIREMENTS NOT MET:
 cmeerw/gnats-26621-run.sft.cpp:rp:-DTEST_NUMBER=1 --c++20 --no_exceptions --set_flag=no_checking_pragmas:FAIL(COMPILE):
 cmeerw/gnats-27181-run.sft.cpp:rp:-DTEST_NUMBER=1 --ms_c++20 --microsoft_version 1936 --target linux_aarch64:REQUIREMENTS NOT MET:
+cmeerw/unresolved-name-mangling.sft.cpp:fp:-DTEST_NUMBER=1 --gnu_version 150200:REQUIREMENTS NOT MET:
+cmeerw/unresolved-name-mangling.sft.cpp:fp:-DTEST_NUMBER=2 --clang_version 220000:REQUIREMENTS NOT MET:
 daveed/d00001e.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:Ordinary designators
 daveed/d00042a.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:Microsoft mode bit fields in union allocation
 daveed/d00108a/test.mft.cpp:rp:-DTEST_NUMBER=1:CATASTROPHE(COMPILE):Match correspondences across translation units

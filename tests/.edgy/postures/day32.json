@@ -1,0 +1,17 @@
+{
+  "builds": [
+    {
+      "cmake_preset": "linux-i686-gcc-debug",
+      "build_path": "build/gcc-i686",
+      "targets": ["all"],
+      "test_configs": ["edg_x86_32", "edg_x86_32_cp"],
+      "edg_base": "bases/docker/dev-env/gcc-i686"
+    }
+  ],
+  "keep_test_results": true,
+  "test_timeout_seconds": 600,
+  "record_tests": false,
+  "slow_tests": false,
+  "meticulous": false,
+  "test_filters": ""
+}

@@ -6365,6 +6365,14 @@ to it and return the entity.
 
   check_assertion(entity_kind == iek_routine && gnu_mode);
   if (!rp->is_inline && gnu_version >= 40700) {
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+    /* The CIR back end wants the attribute, as gcc and clang keep it on a
+       routine that is not "inline" (and a member of a class template that is
+       defined in the class is not marked "inline" yet): there is no warning,
+       the attribute stays recognized, so that the instances of a function
+       template get it, and the routine does not become inline. */
+    rp->always_inline = TRUE;
+#else /* BACK_END_TYPE != BACK_END_TYPE_CIR */
     /* Later GNU versions give a warning and don't mark the routine as
        "inline". */
     if (ap->on_primary_declaration) {
@@ -6372,6 +6380,7 @@ to it and return the entity.
       pos_warning(ec_always_inline_requires_inline, &ap->position);
     }  /* if */
     make_attr_unrecognized(ap);
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
   } else {
     /* Early versions of GNU simply implied "inline" in cases where it
        wasn't already specified. */

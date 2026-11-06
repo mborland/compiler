@@ -4,8 +4,9 @@
 #
 #   EDG_CIR_HOST=user@host       default matt@clang4.cpp.al
 #   EDG_CIR_SSH_KEY=~/.ssh/id_rsa     identity file (a leading ~/ is expanded)
-#   EDG_BOX_SOCKET=              optional ssh ControlMaster socket; used only
+#   EDG_CIR_SSH_SOCKET=          optional ssh ControlMaster socket; used only
 #                                when set (no default)
+#   EDG_CIR_JOBS=48              job cap for ninja and lit inside the container
 #   EDG_CIR_SG_DOCKER=1          run docker through `sg docker -c` (off by
 #                                default; not needed on clang4)
 #   EDG_BOX_TREE=edg-cir-lib     the host tree (holds cir_src/ and build/)
@@ -24,8 +25,8 @@ KEY=${KEY/#\~/$HOME}
 TREE=${EDG_BOX_TREE:-edg-cir-lib}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=20 -i "$KEY")
-if [ -n "${EDG_BOX_SOCKET:-}" ]; then
-  SSH+=(-o ControlPath="${EDG_BOX_SOCKET/#\~/$HOME}" -o ControlMaster=no)
+if [ -n "${EDG_CIR_SSH_SOCKET:-}" ]; then
+  SSH+=(-o ControlPath="${EDG_CIR_SSH_SOCKET/#\~/$HOME}" -o ControlMaster=no)
 fi
 # dock CMD: CMD, wrapped in `sg docker -c` only when EDG_CIR_SG_DOCKER is set.
 dock() {
@@ -42,7 +43,7 @@ case "$cmd" in
               "$HOST:$TREE/cir_src/" ;;
   run)  job=$1; shift
         # (the remote shell expands $(id -u), $HOME and $$)
-        exec "${SSH[@]}" "$HOST" "$(dock "docker run --rm --user \$(id -u):\$(id -g) -e HOME=/tmp --name cir-lib-$job-\$\$ -v \$HOME/$TREE:/edg/workspace -v \$HOME/edg-cir-config/llvm-project/llvm/utils/lit:/lit:ro -w /edg/workspace edgcpp/cir-env:latest $*")" ;;
+        exec "${SSH[@]}" "$HOST" "$(dock "docker run --rm --user \$(id -u):\$(id -g) -e HOME=/tmp -e EDG_CIR_JOBS=${EDG_CIR_JOBS:-48} --name cir-lib-$job-\$\$ -v \$HOME/$TREE:/edg/workspace -v \$HOME/edg-cir-config/llvm-project/llvm/utils/lit:/lit:ro -w /edg/workspace edgcpp/cir-env:latest nice -n 10 $*")" ;;
   chown) exec "${SSH[@]}" "$HOST" "$(dock "docker run --rm -v \$HOME/$TREE:/w edgcpp/cir-env:latest chown -R \$(id -u):\$(id -g) /w/build")" ;;
   test) job=$1
         "$0" sync

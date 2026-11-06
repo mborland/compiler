@@ -66,10 +66,10 @@ in the table; `--steps-for AREAS` only prints the set and exits.  The mapping
   tests-smoke      the smoke lists: smoke, cpp-smoke, opt-corpus,
                    release-smoke
   tests-reference  the expectations of the reference configurations
-                   (edg_x86_64*, not the CIR ones): day
+                   (edg_x86_64*, not the CIR ones): day, day32
   tooling    dev_tools only: tools-test (the self-tests of the tools)
   pylibs     dev_tools/pylibs (edgdocker and edgtest run every step): smoke,
-             day (with tooling for the self-tests)
+             day, day32 (with tooling for the self-tests)
   twop       the two-process front end cpfe-cir-2p (with eccp and tooling):
              smoke, cpp-smoke, modes, cpp-modes
   goldens    edg-cir-ecil-dump, used by every writer golden (with tooling):
@@ -86,16 +86,17 @@ in the table; `--steps-for AREAS` only prints the set and exits.  The mapping
              A pin bump that also changes cir_src files declares
              toolchain,library (the library adds modes and cpp-modes)
   shared-src a change in a src/ file that every back end compiles (not
-             CIR-gated): identity, isolation, day
+             CIR-gated): identity, isolation, day, day32
 
-Six areas are declared by the slices that need them and are not derived from
+Seven areas are declared by the slices that need them and are not derived from
 files (but the known-differences file of attr-diff maps to `attr`): `lazy`
 (lazy-identity: S1, lazy emission), `speed` (perf, rss, stress, cpp-stress,
 m4-stress, crash-sweep: S1 and S3 change memory, speed and recursion),
 `crashes` (crash-sweep: S2), `attr` (attr-diff and the codequality report:
 S2, optimization facts), `chunk` (chunk-identity, chunk-rss,
-slow-below-threshold: S3, chunked lowering) and `names` (names-check: the full
-late-name check of the writer on the large units, for S4 checkpoints).
+slow-below-threshold: S3, chunked lowering), `names` (names-check: the full
+late-name check of the writer on the large units, for S4 checkpoints) and
+`perf` (perf alone: the instruction counts against the baseline).
 
 The cheap, relevant steps belong to the areas; the expensive ones
 (crash-sweep, perf, rss, stress, cpp-stress, m4-stress) run at toolchain and
@@ -135,6 +136,7 @@ eccp, for instance, but not shared-src).  The rules:
                                                           -crashes, -smoke
   tests/.edgy/config.json, tests/tests/ outside cir/ (the day
       suite runs the primary suites)                     tests, tests-reference
+  tests/.edgy/postures/ (the day32 posture)              tests-reference
   expectations of every configuration but edg_x86_64_cir* tests-reference
   other tests (the CIR expectations and tests, filters)   tests
   documentation and Changes files                      none
@@ -151,7 +153,10 @@ Steps (names for --only/--skip):
   build      build cir_src (build/cir), cpfe-cir (build/gcc-cir) and the
              non-ASan cpfe-cir (build/gcc-release-cir) and the util tools
   identity   cpfe, cpfe-cp, cdisp and util preprocessed output and
-             --dump_configuration identical to the M0 capture (4 presets)
+             --dump_configuration identical to the M0 capture (4 presets),
+             except the preprocessed output of the files on the allow-list
+             tests/.edgy/filters/cir-identity-allowed.txt (approved
+             ungated changes, each with its reason; a stale entry fails)
   isolation  edg-cir-check-isolation
   smoke      cir-c-smoke is 100% PASS in edg_x86_64_cir and edg_x86_64_cir_2p
   cir-suite  tests/tests/cir (writer goldens, cirgen run tests) in both CIR
@@ -302,6 +307,10 @@ Steps (names for --only/--skip):
              a ceiling (RSS_CEILINGS_MB) that it may not exceed
   day        the default full day suite (edg_x86_64, edg_x86_64_cp) has the same
              test statuses as the M0 baseline run
+  day32      the same for the 32-bit configurations (edg_x86_32,
+             edg_x86_32_cp: the i686 build, posture file
+             tests/.edgy/postures/day32.json, --day32-posture) against
+             day-base/baseline-32 (--day32-baseline-run)
   ctest      the cir_src tests in every cir_src preset, each built from
              scratch (its build directory is wiped first, unless
              --keep-ctest-builds): ninja decides what to rebuild by file
@@ -386,7 +395,8 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 STEPS = ('build', 'identity', 'isolation', 'smoke', 'cir-suite', 'corpus',
          'modes',
-         'stress', 'writer-stress', 'rss', 'day', 'ctest', 'asm-diff', 'perf',
+         'stress', 'writer-stress', 'rss', 'day', 'day32', 'ctest', 'asm-diff',
+         'perf',
          'cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
          'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
          'cpp-asm-diff', 'crash-sweep', 'abi-diff', 'symbols', 'mixed-tu',
@@ -419,9 +429,9 @@ AREA_STEPS = {
   'tests-triage': ('opt-corpus',),
   'tests-crashes': ('crash-sweep',),
   'tests-smoke': ('smoke', 'cpp-smoke', 'opt-corpus', 'release-smoke'),
-  'tests-reference': ('day',),
+  'tests-reference': ('day', 'day32'),
   'tooling': ('tools-test',),
-  'pylibs': ('smoke', 'day'),
+  'pylibs': ('smoke', 'day', 'day32'),
   'twop': ('smoke', 'cpp-smoke', 'modes', 'cpp-modes'),
   'goldens': ('cir-suite',),
   'summary': ('smoke', 'cpp-smoke', 'cir-suite', 'corpus', 'cpp-corpus'),
@@ -430,7 +440,7 @@ AREA_STEPS = {
                 'mixed-tu', 'symbols', 'eh-probes', 'm4-stress',
                 'cpp-stress', 'crash-sweep', 'perf', 'rss', 'stress',
                 'release-smoke'),
-  'shared-src': ('identity', 'isolation', 'day'),
+  'shared-src': ('identity', 'isolation', 'day', 'day32'),
   # Declared by the slices that need them, not derived from files:
   'lazy': ('lazy-identity',),
   'speed': ('perf', 'rss', 'stress', 'cpp-stress', 'm4-stress',
@@ -439,12 +449,14 @@ AREA_STEPS = {
   'attr': ('attr-diff', 'codequality'),
   'chunk': ('chunk-identity', 'chunk-rss', 'slow-below-threshold'),
   'names': ('names-check',),
+  'perf': ('perf',),
 }
 # Why the steps that a new toolchain pin does not need are skipped (used
 # when `toolchain` is the only area of a lean gate).
 TOOLCHAIN_SKIPS = {
   'identity': 'no front end change', 'isolation': 'no front end change',
-  'day': 'no front end change', 'poison': 'no front end or writer change',
+  'day': 'no front end change', 'day32': 'no front end change',
+  'poison': 'no front end or writer change',
   'writer-stress': 'no writer change',
   'cpp-writer-stress': 'no writer change',
   'modes': "covered by opt-corpus's compare-modes over both smoke lists at "
@@ -462,6 +474,11 @@ TOOLCHAIN_SKIPS = {
 # check.
 AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
   ('cir_src/LLVM_REVISION', ('toolchain',)),
+  # The image build scripts: what an image holds changes with its Dockerfile,
+  # the pin or the build script of LLVM (toolchain); the prebuild scripts only
+  # tag, name and stage, and a gate does not build images (tooling).
+  ('dev_tools/docker/llvm-cir/prebuild.py', ('tooling',)),
+  ('dev_tools/docker/cir-env/prebuild.py', ('tooling',)),
   ('dev_tools/docker/llvm-cir/', ('toolchain',)),
   ('dev_tools/docker/cir-env/', ('toolchain',)),
   ('dev_tools/bin/edg-build-llvm-cir', ('toolchain',)),
@@ -491,6 +508,7 @@ AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
   ('dev_tools/', ('tooling',)),
   ('tests/.edgy/filters/cir-opt-triage.txt', ('tests-triage',)),
   ('tests/.edgy/filters/cir-attr-known.txt', ('attr',)),
+  ('tests/.edgy/filters/cir-identity-allowed.txt', ('shared-src',)),
   ('tests/.edgy/filters/cir-lazy-triage.txt', ('lazy',)),
   ('tests/.edgy/filters/cir-excused-crashes.txt', ('tests-crashes',)),
   ('tests/.edgy/filters/cir-*-smoke.txt', ('tests-smoke',)),
@@ -499,6 +517,8 @@ AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
   # not run); the expectations of every configuration but the CIR ones are
   # the reference's.
   ('tests/.edgy/config.json', ('tests', 'tests-reference')),
+  # The 32-bit day posture (the day32 step).
+  ('tests/.edgy/postures/', ('tests-reference',)),
   ('tests/expectations/edg_x86_64_cir', ('tests',)),
   ('tests/expectations/', ('tests-reference',)),
   ('tests/tests/cir/', ('tests',)),
@@ -524,6 +544,8 @@ BUILD_JOBS = 12  # overridden by --jobs
 # The day suite of the baseline commit: a link to its tests/runs/<timestamp>
 # in the day-base tree (the 32-bit run is baseline-32 next to it).
 DEFAULT_DAY_BASELINE = '~/edg-cir-config/day-base/baseline-64'
+DEFAULT_DAY32_BASELINE = '~/edg-cir-config/day-base/baseline-32'
+DEFAULT_DAY32_POSTURE = 'tests/.edgy/postures/day32.json'
 # The jobs of slow-below-threshold: it counts instructions under valgrind and
 # flaked at 16 under load (the edg-cir runs time out), so it is not run wide.
 SLOW_JOBS = 2
@@ -554,15 +576,39 @@ class Context:
       print('WARNING: EDG_CPFE_DEFAULT_OPTIONS is set in the environment; '
             'it is ignored (removed) for this gate run', file = sys.stderr)
     self.env['PATH'] = f"{self.tree / 'dev_tools/bin'}:{self.env['PATH']}"
+    # edgdocker runs the command of every container under this nice value
+    # (the host is shared; nice on the docker client does not reach the
+    # container): an operator's own value is kept.
+    self.env.setdefault('EDG_DOCKER_NICE', CONTAINER_NICE)
     self.env['PYTHONPATH'] = str(self.tree / 'dev_tools/pylibs')
     # The commands of a step that were stopped at their time limit.
     self.timed_out: Dict[str, List[str]] = {}
+
+
+# The perf options of a milestone gate for the options that were not given
+# (the checkpoint passes the same ones: MILESTONE_OPTIONS in
+# edg-cir-checkpoint): the pinned real-world units at -O0 and -O2 and the S1
+# targets.  Without --milestone the defaults are none, 0 and none.
+MILESTONE_PERF = {'perf_realworld': 'pinned', 'perf_levels': '0,2',
+                  'perf_targets': 's1'}
+PLAIN_PERF = {'perf_realworld': '', 'perf_levels': '0', 'perf_targets': ''}
+
+
+def resolve_perf_options(args: argparse.Namespace) -> None:
+  '''Fill in the perf options that were not given (None): the milestone
+  ones with --milestone, else the plain ones.'''
+  defaults = MILESTONE_PERF if args.milestone else PLAIN_PERF
+  for name, value in defaults.items():
+    if getattr(args, name, None) is None:
+      setattr(args, name, value)
 
 
 # The time limit of one command of a step (seconds): a command that hangs is
 # stopped, its container with it, and the step fails.  The normal times are a
 # small fraction of these; --command-timeout changes the default.
 COMMAND_TIMEOUT = 7200
+# The nice value of the commands that run in containers (EDG_DOCKER_NICE).
+CONTAINER_NICE = '10'
 STEP_TIMEOUTS = {
   'isolation': 900, 'writer-stress': 1800, 'cpp-writer-stress': 1800,
   'cpp-stress': 1800, 'cpp-stress-asan': 3600, 'abi-diff': 1800,
@@ -771,6 +817,83 @@ def step_build(ctx: Context) -> Tuple[bool, str]:
     if not failed else f"failed: {failed[0]}"
 
 
+IDENTITY_ALLOW = 'tests/.edgy/filters/cir-identity-allowed.txt'
+
+
+def read_identity_allowlist(path: str) -> Tuple[List[Tuple[str, str]],
+                                                List[str]]:
+  '''(the entries, the problems) of the identity allow-list: lines
+  `<glob> | <reason>`, the glob over the name of a captured file
+  (`cpfe/src/lower_name.c.i.gz`: the preprocessed output of one translation
+  unit of one target), the reason at least 8 characters, a comment line
+  directly above every entry; no duplicate.  A missing file is an empty
+  list.'''
+  entries: List[Tuple[str, str]] = []
+  problems: List[str] = []
+  previous = ''
+  if path and Path(path).exists():
+    for number, raw in enumerate(Path(path).read_text().splitlines(), 1):
+      line = raw.strip()
+      if line and not line.startswith('#'):
+        pattern, _, reason = (p.strip() for p in line.partition('|'))
+        where = f"{path}:{number}"
+        if not pattern or len(reason) < 8 or reason.lower() in (
+            'none', 'todo', 'tbd'):
+          problems.append(f"{where}: not `glob | reason` with a real reason")
+        if not previous.startswith('#'):
+          problems.append(f"{where}: no comment line directly above the "
+                          f"entry")
+        if any(pattern == e[0] for e in entries):
+          problems.append(f"{where}: listed twice ({pattern})")
+        entries.append((pattern, reason))
+      previous = line
+  return entries, problems
+
+
+# The lines of `edg-macro-identity-check compare` that name a file.
+IDENTITY_PROBLEM_RE = re.compile(
+  r'^(?P<preset>\S+): (?P<kind>preprocessed output differs|'
+  r'generated header differs|dump differs beyond allowed changes|'
+  r'only in before|only in after): (?P<name>\S+)$', re.M)
+
+
+def judge_identity(output: str, code: int, allowed: List[Tuple[str, str]]
+                   ) -> Tuple[bool, str, List[str]]:
+  '''(passes, detail, the allow-list globs used) of the identity compare.
+  Beyond an exit status of 0, a run passes if every problem is the
+  preprocessed output of a file that an allow-list glob names (an approved
+  change of a file that every back end compiles): the detail then says which
+  files differ and why.  A glob that matches no problem is stale and fails.'''
+  last = output.strip().splitlines()[-1] if output.strip() else ''
+  if code == 0:
+    return not allowed, last if not allowed else (
+      f"{last}; but the allow-list has {len(allowed)} entr"
+      f"{'y' if len(allowed) == 1 else 'ies'} that explain nothing (stale): "
+      f"{allowed[0][0]}"), []
+  match = re.search(r'(\d+) problem\(s\)$', last)
+  total = int(match.group(1)) if match else -1
+  hits: Dict[str, List[str]] = {}
+  for found in IDENTITY_PROBLEM_RE.finditer(output):
+    if found.group('kind') != 'preprocessed output differs':
+      continue
+    name = found.group('name')
+    for pattern, _ in allowed:
+      if fnmatch.fnmatchcase(name, pattern):
+        hits.setdefault(pattern, []).append(f"{found.group('preset')}:{name}")
+        break
+  explained = sum(len(v) for v in hits.values())
+  if total < 0 or explained != total:
+    return False, f"{last} ({explained} of the problems are on the " \
+      f"allow-list)", list(hits)
+  stale = [e[0] for e in allowed if e[0] not in hits]
+  reasons = {e[0]: e[1] for e in allowed}
+  detail = (f"{last} -- all {total} on the allow-list: " + '; '.join(
+    f"{', '.join(v)} ({reasons[k][:60]})" for k, v in hits.items()))
+  if stale:
+    return False, f"{detail}; STALE allow-list entry: {stale[0]}", list(hits)
+  return True, detail, list(hits)
+
+
 def step_identity(ctx: Context) -> Tuple[bool, str]:
   baseline = ctx.args.identity_baseline
   if not baseline:
@@ -796,8 +919,13 @@ def step_identity(ctx: Context) -> Tuple[bool, str]:
     text = True
   )
   (ctx.out / 'identity' / 'compare.txt').write_text(proc.stdout)
-  last = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ''
-  return proc.returncode == 0, last
+  allow_path = ctx.args.identity_allow
+  allowed, problems = read_identity_allowlist(
+    str(ctx.tree / allow_path) if allow_path else '')
+  if problems:
+    return False, 'the identity allow-list is not valid: ' + problems[0]
+  passed, detail, _ = judge_identity(proc.stdout, proc.returncode, allowed)
+  return passed, detail
 
 
 def step_isolation(ctx: Context) -> Tuple[bool, str]:
@@ -1934,41 +2062,85 @@ def _status_lines(run: Path, suites: Optional[List[str]] = None
   return data
 
 
-def step_day(ctx: Context) -> Tuple[bool, str]:
-  baseline = ctx.args.day_baseline_run
+def drop_stale_builds(ctx: Context, posture: str) -> List[str]:
+  '''Remove the build directories of the day posture (the built-in one, or
+  the posture file `posture`) whose CMake cache has another EDG_BASE than the
+  posture's.  The identity step configures every preset (for the compile
+  commands) with the default EDG_BASE; edg-docker-test only builds a directory
+  that exists, so the i686 build would keep the x86-64 base (the runtime
+  library then fails to compile).  Returns the directories removed.'''
+  if posture:
+    builds = json.loads((ctx.tree / posture).read_text())['builds']
+  else:
+    builds = [{'build_path': 'build/gcc',
+               'edg_base': 'bases/docker/dev-env/gcc'}]
+  removed = []
+  for build in builds:
+    directory = ctx.tree / build['build_path']
+    cache = directory / 'CMakeCache.txt'
+    wanted = f"EDG_BASE:STRING=/edg/workspace/{build['edg_base']}"
+    if cache.exists() and wanted not in cache.read_text().splitlines():
+      shutil.rmtree(directory)
+      removed.append(build['build_path'])
+  return removed
+
+
+def _day_step(ctx: Context, step: str, baseline: str, configs: Tuple[str, ...],
+              posture: str = '') -> Tuple[bool, str]:
+  '''Run the day suite (edg-docker-test; with `posture` a posture file of
+  the tree, else the built-in day posture) and compare the status lines of
+  `configs` with the day suite `baseline` of the baseline commit.'''
   if not baseline:
-    return False, '--day-baseline-run is required'
+    return False, f"--{step}-baseline-run is required"
+  (ctx.out / step).mkdir(parents = True, exist_ok = True)
+  for removed in drop_stale_builds(ctx, posture):
+    with open(ctx.out / step / 'log.txt', 'a') as log:
+      log.write(f"[removed {removed}: its CMake cache has another EDG_BASE]\n")
   before = runs_before(ctx)
   day_command = [str(ctx.tree / 'dev_tools/bin/edg-docker-test'),
                  '--non-interactive', '--jobs', str(BUILD_JOBS)]
+  if posture:
+    day_command += ['--posture', f"@{posture}"]
   suites = None
   if ctx.args.day_filter:
     # A partial run (for testing the script): compare only those suites.
     day_command.append(ctx.args.day_filter)
     suites = sorted({f.split('/')[0] for f in ctx.args.day_filter.split(',')})
-  run_logged(ctx, 'day', docker_argv(day_command))
+  run_logged(ctx, step, docker_argv(day_command))
   run = newest_run(ctx, before)
   if run is None:
     return False, 'no run produced'
   base_lines = _status_lines(Path(baseline).resolve(), suites)
   new_lines = _status_lines(run, suites)
   problems = []
-  for config in ('edg_x86_64', 'edg_x86_64_cp'):
+  for config in configs:
     if base_lines.get(config) != new_lines.get(config):
       problems.append(config)
       only_old = set(base_lines.get(config, [])) - set(new_lines.get(config, []))
       only_new = set(new_lines.get(config, [])) - set(base_lines.get(config, []))
-      with open(ctx.out / 'day' / 'diff.txt', 'a') as diff:
+      with open(ctx.out / step / 'diff.txt', 'a') as diff:
         diff.write(f"== {config}\n")
         diff.writelines(f"- {l}\n" for l in sorted(only_old))
         diff.writelines(f"+ {l}\n" for l in sorted(only_new))
   executed = {c: len((run / c / 'executed.elist').read_text().splitlines())
-              for c in ('edg_x86_64', 'edg_x86_64_cp')
-              if (run / c / 'executed.elist').exists()}
+              for c in configs if (run / c / 'executed.elist').exists()}
   detail = f"run {run.name}; executed {executed}; "
   return not problems, detail + (
     f"statuses differ in {problems} (diff.txt)" if problems else
     'statuses identical to the baseline')
+
+
+def step_day(ctx: Context) -> Tuple[bool, str]:
+  return _day_step(ctx, 'day', ctx.args.day_baseline_run,
+                   ('edg_x86_64', 'edg_x86_64_cp'))
+
+
+def step_day32(ctx: Context) -> Tuple[bool, str]:
+  '''The day suite of the 32-bit configurations (edg_x86_32, edg_x86_32_cp:
+  the i686 build, the posture file tests/.edgy/postures/day32.json) against
+  baseline-32 of the day-base tree.'''
+  return _day_step(ctx, 'day32', ctx.args.day32_baseline_run,
+                   ('edg_x86_32', 'edg_x86_32_cp'), ctx.args.day32_posture)
 
 
 def step_ctest(ctx: Context) -> Tuple[bool, str]:
@@ -1989,7 +2161,10 @@ def step_ctest(ctx: Context) -> Tuple[bool, str]:
       f"cmake --build {binary} -j{BUILD_JOBS}",
       f"ctest --test-dir {binary} --output-on-failure -j{BUILD_JOBS}"
     ]
-    codes = [in_cir_env(ctx, 'ctest', c) for c in commands]
+    # The lit test of the preset would use every CPU of the box otherwise.
+    codes = [in_cir_env(ctx, 'ctest', c,
+                        extra_env = {'LIT_OPTS': f"-j{BUILD_JOBS}"})
+             for c in commands]
     ran.append(name)
     if any(codes):
       failures.append(name)
@@ -2624,23 +2799,27 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
   print(proc.stdout, flush = True)
   if proc.returncode != 0:
     return False, 'could not print the table'
-  if not baseline:
-    if ctx.args.perf_measure_only:
-      return True, 'measured (--perf-measure-only: no baseline, no limit)'
+  after = json.loads(new_json.read_text())
+  problems: List[str] = []
+  if baseline:
+    if not Path(baseline).exists():
+      return False, f"the perf baseline {baseline} does not exist"
+    limit = ctx.args.perf_max_regression
+    before = json.loads(Path(baseline).read_text())
+    worst, compared, problems = perf_worst_change(before, after)
+    detail = (f"largest instruction count change {worst:+.2f}% over "
+              f"{compared} rows (limit {limit}%; table.md)")
+    if compared == 0:
+      problems.append('no row of the perf run could be compared with the '
+                      'baseline')
+    passes = limit is None or worst <= limit
+  elif ctx.args.perf_measure_only:
+    # No regression check, but the targets below are still evaluated.
+    detail = 'measured (--perf-measure-only: no baseline, no limit)'
+    passes = True
+  else:
     return False, ('no --perf-baseline: nothing to compare with (give one, '
                    'or --perf-measure-only to only measure)')
-  if not Path(baseline).exists():
-    return False, f"the perf baseline {baseline} does not exist"
-  limit = ctx.args.perf_max_regression
-  after = json.loads(new_json.read_text())
-  before = json.loads(Path(baseline).read_text())
-  worst, compared, problems = perf_worst_change(before, after)
-  detail = (f"largest instruction count change {worst:+.2f}% over {compared} "
-            f"rows (limit {limit}%; table.md)")
-  if compared == 0:
-    problems.append('no row of the perf run could be compared with the '
-                    'baseline')
-  passes = limit is None or worst <= limit
   if ctx.args.perf_targets:
     # The targets of a slice are against their own baseline (S1: the M5a
     # run), not against the regression baseline.
@@ -3458,13 +3637,28 @@ IMAGE_REFS = ('edgcpp/dev-env:latest', 'edgcpp/llvm-cir:latest',
               'edgcpp/cir-env:latest')
 
 
+def image_inspect_ref(ref: str) -> str:
+  '''The reference that `docker image inspect` gets for an IMAGE_REFS entry:
+  the dev-env image that the runs use is the pinned one (edgdocker), not
+  whatever edgcpp/dev-env:latest is on this host; the records keep the name
+  of the entry.'''
+  if ref == 'edgcpp/dev-env:latest':
+    try:
+      import edgdocker
+      return edgdocker.get_latest_image_tag('dev-env')
+    except ImportError:
+      pass
+  return ref
+
+
 def image_ids() -> Dict[str, str]:
   '''The image ID of every IMAGE_REFS entry ("missing" if the image is not
   on this host).'''
   ids: Dict[str, str] = {}
   for ref in IMAGE_REFS:
     proc = subprocess.run(
-      docker_argv(['docker', 'image', 'inspect', '--format', '{{.Id}}', ref]),
+      docker_argv(['docker', 'image', 'inspect', '--format', '{{.Id}}',
+                   image_inspect_ref(ref)]),
       stdout = subprocess.PIPE, stderr = subprocess.DEVNULL, text = True)
     ids[ref] = proc.stdout.strip() if proc.returncode == 0 and \
       proc.stdout.strip() else 'missing'
@@ -3511,14 +3705,30 @@ def image_note(baseline: str, current: Dict[str, str]) -> str:
           f"{'; '.join(differ)})" if differ else '')
 
 
-# The options of the baselines that a step reads.
+# The options of the baselines that a step reads (see step_baseline_options
+# for perf, which reads fewer in some runs).
 STEP_BASELINES = {
   'identity': ('identity_baseline',), 'day': ('day_baseline_run',),
+  'day32': ('day32_baseline_run',),
   'asm-diff': ('asm_baseline',), 'cpp-asm-diff': ('cpp_asm_baseline',),
   'corpus': ('status_baseline',), 'cpp-corpus': ('status_baseline',),
   'opt-corpus': ('opt_baseline_status',),
   'perf': ('perf_baseline', 'perf_targets_baseline'),
 }
+
+
+def step_baseline_options(args: argparse.Namespace, step: str
+                          ) -> Tuple[str, ...]:
+  '''The options of the baselines that `step` reads in this run: perf reads
+  the regression baseline unless it only measures, and the targets baseline
+  only with --perf-targets (the same rule as baseline_requirements).'''
+  options = STEP_BASELINES.get(step, ())
+  if step == 'perf':
+    options = tuple(
+      o for o in options
+      if (o == 'perf_baseline' and not args.perf_measure_only) or
+      (o == 'perf_targets_baseline' and args.perf_targets))
+  return options
 
 
 def baseline_requirements(args: argparse.Namespace, steps: List[str]
@@ -3540,6 +3750,8 @@ def baseline_requirements(args: argparse.Namespace, steps: List[str]
       add(step, 'identity-baseline', 'dir')
     elif step == 'day':
       add(step, 'day-baseline-run', 'dir')
+    elif step == 'day32':
+      add(step, 'day32-baseline-run', 'dir')
     elif step == 'asm-diff':
       add(step, 'asm-baseline', 'manifest')
     elif step == 'cpp-asm-diff':
@@ -3644,7 +3856,7 @@ STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'cpp-modes': step_cpp_modes, 'cpp-writer-stress': step_cpp_writer_stress,
   'cir-suite': step_cir_suite, 'poison': step_poison, 'release-smoke': step_release_smoke, 'cpp-stress': step_cpp_stress, 'cpp-stress-asan': step_cpp_stress_asan,
   'rss': step_rss,
-  'day': step_day, 'ctest': step_ctest, 'asm-diff': step_asm_diff,
+  'day': step_day, 'day32': step_day32, 'ctest': step_ctest, 'asm-diff': step_asm_diff,
   'cpp-asm-diff': step_cpp_asm_diff,
   'tools-test': step_tools_test, 'lazy-identity': step_lazy_identity,
   'attr-diff': step_attr_diff, 'codequality': step_codequality,
@@ -3706,10 +3918,24 @@ def main() -> None:
                       default = '~/edg-cir-config/identity-m0c',
                       help = 'identity capture of the M0 commit (a '
                              'edg-macro-identity-check capture tree)')
+  parser.add_argument('--identity-allow', default = IDENTITY_ALLOW,
+                      help = 'the allow-list of the identity step (a file of '
+                             'the tree: the files whose preprocessed output '
+                             'may differ from the baseline, each with its '
+                             'reason; "" for none)')
   parser.add_argument('--day-baseline-run',
                       default = DEFAULT_DAY_BASELINE,
                       help = 'tests/runs/<ts> of a full day suite of the '
                              'baseline commit (day-base tree)')
+  parser.add_argument('--day32-baseline-run',
+                      default = DEFAULT_DAY32_BASELINE,
+                      help = 'tests/runs/<ts> of a full 32-bit day suite '
+                             '(edg_x86_32, edg_x86_32_cp) of the baseline '
+                             'commit (day-base/baseline-32; step day32)')
+  parser.add_argument('--day32-posture', default = DEFAULT_DAY32_POSTURE,
+                      help = 'the posture file of the day32 step (a path in '
+                             'the tree: the i686 build and the two 32-bit '
+                             'configurations)')
   parser.add_argument('--day-filter', default = '',
                       help = 'run only these suites in the day step (for '
                              'trying the script; the gate run has none)')
@@ -3747,10 +3973,11 @@ def main() -> None:
                       help = 'perf.json that --perf-targets compares with '
                              '(S1: the M5a run, which has the real-world '
                              'section)')
-  parser.add_argument('--perf-levels', default = '0',
+  parser.add_argument('--perf-levels', default = None,
                       help = 'optimization levels of the big files of the '
                              'perf step (0,2 adds the -O2 rows big_O2 and '
-                             'big_cxx_O2; the default is the M4 set)')
+                             'big_cxx_O2; the default is 0, the M4 set, and '
+                             '0,2 with --milestone)')
   parser.add_argument('--perf-measure-only', action = 'store_true',
                       help = 'step perf may run without a baseline (pass '
                              '--perf-baseline "" and this); it then only '
@@ -3760,16 +3987,18 @@ def main() -> None:
                       help = 'step perf fails if an instruction count grows '
                              'by more than this many percent (default '
                              f"{DEFAULT_PERF_MAX_REGRESSION})")
-  parser.add_argument('--perf-realworld', default = '', metavar = 'UNITS',
+  parser.add_argument('--perf-realworld', default = None, metavar = 'UNITS',
                       help = 'the perf step also measures these real-world '
                              'units (`pinned`: the pinned list, at the '
                              '--perf-levels), for the S1 targets; needs '
-                             '--boost-include for the Boost units')
-  parser.add_argument('--perf-targets', default = '', metavar = 'NAME',
+                             '--boost-include for the Boost units (default: '
+                             'none, `pinned` with --milestone)')
+  parser.add_argument('--perf-targets', default = None, metavar = 'NAME',
                       help = 'the perf step also checks the targets of a '
                              'slice (edg-cir-perf --targets; `s1`) against '
                              '--perf-targets-baseline, which needs the same '
-                             'sections (the M5a one has the real-world one)')
+                             'sections (the M5a one has the real-world one; '
+                             'default: none, `s1` with --milestone)')
   parser.add_argument('--boost-include', default = '.tmp/boost-inc',
                       help = 'the Boost headers (merged into one tree, '
                              'inside the tree) for the pinned Boost units '
@@ -3865,7 +4094,9 @@ def main() -> None:
                              'the corpus and cpp-corpus steps fail on a '
                              'PASS->not PASS case unless '
                              'tests/.edgy/filters/cir-status-triage.txt has '
-                             'a line for it ("" turns the check off)')
+                             'a line for it (an empty value is a setup '
+                             'error, status 2; --allow-missing-baselines '
+                             'turns the check off)')
   parser.add_argument('--opt-baseline-status',
                       default = '~/edg-cir-config/m5-base-status',
                       help = 'directory with the -O0 statuses of both '
@@ -3932,6 +4163,10 @@ def main() -> None:
       sys.exit(0)
     args.only = ','.join(lean_set)
 
+  resolve_perf_options(args)
+  if args.milestone and args.allow_missing_baselines:
+    parser.error('--allow-missing-baselines turns the status checks off and '
+                 'is refused with --milestone')
   global BUILD_JOBS
   BUILD_JOBS = args.jobs
   if args.record_images:
@@ -3946,6 +4181,10 @@ def main() -> None:
   selected = [s for s in STEPS if s in only and s not in skip]
   # A baseline that is missing or empty is a failure, not a silent skip.
   baselines_ok, baseline_lines = check_baselines(args, selected)
+  baseline_problems = [
+    f"{cells[0]} {cells[1]}: {cells[2][6:]}" for cells in
+    ([c.strip() for c in l.split('|')[1:-1]] for l in baseline_lines)
+    if len(cells) == 5 and cells[2].startswith('FAIL:')]
   if args.check_baselines or not baselines_ok:
     print('\n'.join(baseline_lines))
   if args.check_baselines:
@@ -3988,7 +4227,7 @@ def main() -> None:
       passed, detail = False, f"script error: {error!r}"
     seconds = time.time() - started
     notes = []
-    for option in STEP_BASELINES.get(step, ()):
+    for option in step_baseline_options(args, step):
       note = image_note(str(getattr(args, option, '')), images)
       if note and note not in notes:
         notes.append(note)
@@ -4015,6 +4254,12 @@ def main() -> None:
   summary = ('Images: ' + ', '.join(
     f"{ref.split('/')[-1]} {i[7:19]}" for ref, i in images.items()) +
     '\n\n' + summary)
+  if args.allow_missing_baselines:
+    summary = ('WARNING: --allow-missing-baselines: ' + (
+      f"{len(baseline_problems)} baseline(s) were unusable and the status "
+      f"checks that read them are OFF ({'; '.join(baseline_problems)})"
+      if baseline_problems else 'every baseline was usable') +
+      '\n\n' + summary)
   (ctx.out / 'summary.md').write_text(summary + '\n')
   print('\n' + summary)
   failed = [t for t in table if t[1] == 'FAIL']

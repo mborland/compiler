@@ -14,8 +14,9 @@
 - `gen_enums.sh BUILD OUT.json` — enumerator names for "the operator N"
   style reasons.
 - `box.sh` — sync/run/wait/fetch helpers for the x86-64 host (clang4); optional
-  `EDG_CIR_HOST`, `EDG_CIR_SSH_KEY`, `EDG_BOX_SOCKET`, `EDG_CIR_SG_DOCKER`,
-  `BOX_TREE` (nothing is required; see the header of the script).
+  `EDG_CIR_HOST`, `EDG_CIR_SSH_KEY`, `EDG_CIR_SSH_SOCKET`, `EDG_CIR_JOBS`,
+  `EDG_CIR_SG_DOCKER`, `BOX_TREE` (nothing is required; see the header of
+  the script).
 
 Typical loop: `box.sh sync`, `box.sh run sweep tools-script` where the script
 builds (`cmake --build build/gcc-cir --target cpfe-cir`) and calls

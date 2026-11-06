@@ -28,25 +28,25 @@ frame REGION supp
   TY_FUNC 6 1 1 [5, 5]
   STR 5 "wrap_sprintf"
   DECL_FUNC 7 6 0 2 5 supp{16: true}
-  DECL_FUNC 7 6 0 19 5 supp{16: true}
+  DECL_FUNC 7 6 0 147 5 supp{16: true}
   STR 6 "buf"
   STR 7 "fmt"
   STR 8 "sprintf"
-  DECL_FUNC 8 6 0 0 8
-  DECL_FUNC 7 6 0 50 5 supp{13: "the builtin function __builtin_va_arg_pack", 16: true}
+  DECL_FUNC 8 6 0 128 8
+  DECL_FUNC 7 6 0 178 5 supp{13: "the builtin function __builtin_va_arg_pack", 16: true}
 frame REGION supp
   TY_FUNC 9 1 1 [1, 5]
   STR 9 "wrap_len"
   DECL_FUNC 10 9 0 2 9 supp{16: true}
-  DECL_FUNC 10 9 0 19 9 supp{16: true}
+  DECL_FUNC 10 9 0 147 9 supp{16: true}
   STR 10 "fd"
   STR 11 "path"
-  DECL_FUNC 10 9 0 50 9 supp{13: "the builtin function __builtin_va_arg_pack_len", 16: true}
+  DECL_FUNC 10 9 0 178 9 supp{13: "the builtin function __builtin_va_arg_pack_len", 16: true}
 frame REGION
   TY_FUNC 11 1 0 [5, 1]
   STR 12 "use"
   DECL_FUNC 12 11 0 0 12
-  DECL_FUNC 12 11 0 1 12
+  DECL_FUNC 12 11 0 129 12
   STR 13 "b"
   STR 14 "x"
   TY_ARRAY 13 4 3 0

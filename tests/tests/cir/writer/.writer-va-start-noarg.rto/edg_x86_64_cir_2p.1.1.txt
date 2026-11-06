@@ -27,9 +27,9 @@ frame REGION supp
   TY_FUNC 5 4 1 []
   STR 5 "f"
   DECL_FUNC 6 5 0 0 5
-  DECL_FUNC 6 5 0 1 5
+  DECL_FUNC 6 5 0 129 5
   TY_FUNC 7 1 2 []
-  DECL_FUNC 6 5 0 32 5 supp{13: "__builtin_c23_va_start without an argument"}
+  DECL_FUNC 6 5 0 160 5 supp{13: "__builtin_c23_va_start without an argument"}
 frame GLOBALS
 frame END
   END 3 0

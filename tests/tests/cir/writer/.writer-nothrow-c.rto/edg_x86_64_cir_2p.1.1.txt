@@ -1,0 +1,91 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c11 --gnu_version=150200 Test_name.c
+ecil 1.3 features=0x00000012
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 0 201112 0
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION
+  TY_FUNC 4 1 0 [1]
+  STR 5 "defined"
+  DECL_FUNC 5 4 0 0 5
+  DECL_FUNC 5 4 0 129 5
+  STR 6 "x"
+  STR 7 "user_decl"
+  DECL_FUNC 6 4 0 0 7
+  STR 8 "user_nothrow"
+  DECL_FUNC 7 4 0 128 8
+  FUNC_BEGIN 5 0
+  PARAM 1 1 1 6 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CALL 6 4 1 0
+  LREF 1
+  LOAD 0
+  CALL 7 4 1 0
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  TY_INT 8 8 true 1 1
+  TY_PTR 9 8
+  TY_FUNC 10 1 0 [9, 9]
+  STR 9 "use"
+  DECL_FUNC 11 10 0 0 9
+  DECL_FUNC 11 10 0 129 9
+  STR 10 "a"
+  STR 11 "b"
+  TY_VOID 12
+  TY_PTR 13 12
+  TY_FUNC 14 1 0 [13, 13, 2]
+  STR 12 "memcmp"
+  DECL_FUNC 15 14 0 0 12
+  TY_FUNC 16 2 0 [9]
+  STR 13 "strlen"
+  DECL_FUNC 17 16 0 128 13
+  TY_FUNC 18 1 1 [9]
+  STR 14 "printf"
+  DECL_FUNC 19 18 0 0 14
+  TY_ARRAY 20 8 3 0
+  STR 15 ".str"
+  DECL_VAR 21 20 2 11 0 15
+  C_STRING 20 "%d\x00"
+  VAR_INIT 21
+  FUNC_BEGIN 11 0
+  PARAM 1 9 9 10 0
+  PARAM 2 9 9 11 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  CAST 11 13
+  LREF 2
+  LOAD 0
+  CAST 11 13
+  LREF 1
+  LOAD 0
+  CALL 17 16 1 0
+  CALL 15 14 3 0
+  GREF 21
+  ADDR
+  ADDR_OFFSET 9 0
+  CONST_INT 1 1
+  CALL 5 4 1 0
+  CALL 19 18 2 1
+  ADD 1
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame END
+  END 4 0

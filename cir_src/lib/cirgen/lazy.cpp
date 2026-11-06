@@ -202,16 +202,28 @@ Emit a deferred body from its saved records.  The location of the stream
   return ok && session_.status == EDG_CIR_OK;
 }  /* a_emitter::replay_function */
 
-bool a_emitter::inline_only_declaration(const a_entity &e) const
+bool a_emitter::inline_only_keeps_body(const a_entity &e) const
 /*
-A C99 inline-only function that stays a declaration: at -O0, and a
-`noinline` one (at -O1 and up the body of another is kept as an
-available_externally definition, for the inliner; a trivially recursive one
-is dropped at finish, see finish_entities).
+Whether a C99 or gnu_inline inline-only function keeps its body, as an
+available_externally definition for the inliner (clang's shouldEmitFunction):
+not a `noinline` one (it wins over always_inline), and at -O0 only an
+`always_inline` one (the AlwaysInliner runs at -O0), at -O1 and up every
+other.  A trivially recursive body is dropped later, see finish_entities
+(calls_own_symbol).  The lazy replay and finish_entities share this rule.
 */
 {
-  return (session_.opt_level <= 0 || e.no_inline) &&
-         (e.flags & ECIL_DECL_FUNC_INLINE_ONLY) != 0;
+  return (e.flags & ECIL_DECL_FUNC_INLINE_ONLY) != 0 && !e.no_inline &&
+         (session_.opt_level >= 1 || e.always_inline);
+}  /* a_emitter::inline_only_keeps_body */
+
+bool a_emitter::inline_only_declaration(const a_entity &e) const
+/*
+A C99 inline-only function that stays a declaration: its definition lives in
+another translation unit and its body is not kept (inline_only_keeps_body).
+*/
+{
+  return (e.flags & ECIL_DECL_FUNC_INLINE_ONLY) != 0 &&
+         !inline_only_keeps_body(e);
 }  /* a_emitter::inline_only_declaration */
 
 bool a_emitter::lazy_finish()
@@ -419,9 +431,8 @@ declaration) that finish_entities and lazy_erase_dropped dispose of.
     session_.stats.lazy_resolve_ns += stats_now_ns() - start;
   /* Replay the reachable bodies in stream order. */
   for (a_deferred_fn &d : deferred_) {
-    /* At -O0 an inline-only function stays a declaration, as clang makes
-       it (the body would only be an available_externally definition for
-       the inliner). */
+    /* An inline-only function that does not keep its body (at -O0 one that
+       is not always_inline) stays a declaration, as clang makes it. */
     if (ok && live.count(d.entity) != 0 &&
         !inline_only_declaration(*d.entity))
       ok = replay_function(d);
@@ -522,8 +533,8 @@ internal error.  Runs at the end of finish_entities, when the names are final.
     bool is_function = dropped_functions.count(candidate) != 0;
 
     if (named_dead && live.count(candidate) != 0) {
-      /* (An inline-only function at -O0 is a declaration that reachable
-         code legitimately names.) */
+      /* (An inline-only function without a body is a declaration that
+         reachable code legitimately names.) */
       if (is_function && !inline_only_declaration(*candidate))
         ok = internal("lazy emission missed an edge to '" +
                       std::string(mlir::cast<mlir::SymbolOpInterface>(

@@ -1,6 +1,6 @@
 # The ECIL writer (what the code does today)
 
-Status: M4 (C and C++, ECIL 1.2; sections 9.16 to 9.19 and 10 are M4). This document describes the
+Status: M5 slice S4 (C and C++, ECIL 1.3; sections 9.16 to 9.19 are M4, section 10 covers 1.0 to 1.3, section 11 is M5 S4). This document describes the
 implementation in `src/ecil_*.c`, `src/cir_be.c` and the front-end hooks. The
 format is `ecil_format.md`; the design rationale is `design.md`; this file is
 what a reviewer should check the code against. File:function names, not line

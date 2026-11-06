@@ -1,9 +1,12 @@
 # EDG ClangIR back end — design (Phase R synthesis)
 
-Status: **v0.2** (gate R blockers R1–R8 addressed; see section 8). Owner: orchestrator. The binding
-requirements are in `cir_design_guidance.md` (repo root), and the approved
-plan is `~/.claude/plans/we-want-to-add-pure-snowflake.md`. The evidence
-for this document is in `research/`:
+Status: reference for the components (§1, §2, §4, §5) and the design log
+of each milestone (§10–§15). Owner: orchestrator. The binding requirements
+are in `brief.md`; the current state, the decisions in force and the
+process are in `project.md`, which wins where the two differ. §3 records
+the Phase R decisions as taken; rows marked *superseded* point to
+`project.md`. §6, §7 and §9 are history (gates R to M2). The Phase R
+evidence is in `research/`:
 
 | Document | Author | Contents |
 | --- | --- | --- |
@@ -18,7 +21,7 @@ The stream format is specified in `ecil_format.md`. Its normative contract
 is `cir_src/include/edg_cir/ecil_format.h`; the library API is
 `cir_src/include/edg_cir/edg_cir.h`.
 
-## 1. Requirement traceability (cir_design_guidance.md)
+## 1. Requirement traceability (brief.md)
 
 | # | Requirement | How it is met |
 | --- | --- | --- |
@@ -27,35 +30,65 @@ is `cir_src/include/edg_cir/ecil_format.h`; the library API is
 | 3 | Fast builds; a CIR library behind a minimal shim; FE changes don't rebuild CIR | `cir_src` is a standalone CMake project. The FE includes only `cir_src/include/edg_cir/{ecil_format.h,edg_cir.h}` and links `libedg_cir.so` (dev) through an 8-function C API. `cir_src` includes nothing from `src/`; `edg-cir-check-isolation` enforces this. |
 | 4 | Optimized CIR library with debug info, even for debug FE builds | `cir_src` presets are `RelWithDebInfo` (`-O2 -g`). LLVM is built `-O2 -gline-tables-only` with assertions. The shared library has no ASan, so a debug ASan FE loads it unchanged. |
 | 5 | Own config header and source directory | `cir_src/config/cir_config.h`, with a tripwire against FE headers. Target and language facts arrive in the stream, never through FE macros. |
-| 6 | New streamable IL write/read; no `il_def.h` edits; no pointers; skippable supplementary data with presence bits; non-recursive traversal; act on packed data in place; prefer speed | ECIL (`ecil_format.md`): length-prefixed frames; little-endian fixed-width tags like MessagePack; post-order and bracketed encoding; heap work stacks on both sides; a zero-copy cursor; `supp` blobs and `EXT` records; feature and frame presence bits; an ID→mangled-name table (`NAME_BIND`) for the ODR stretch goal. The mechanism is in v0, but supp data is only produced and consumed from M5. |
-| 7 | Standard C++ first; GNU/MSVC later | v0 is C11 (M2). v1 is core C++ (M3). v2 adds virtuals, RTTI and EH (M4). GNU/MSVC extensions are deferred. Ignorable attributes and library builtins are still accepted in v0 (follow-up P2); other extensions produce an "unsupported in CIR back end" diagnostic (spec 8.11). |
+| 6 | New streamable IL write/read; no `il_def.h` edits; no pointers; skippable supplementary data with presence bits; non-recursive traversal; act on packed data in place; prefer speed | ECIL (`ecil_format.md`): length-prefixed frames; little-endian fixed-width tags like MessagePack; post-order and bracketed encoding; heap work stacks on both sides; a zero-copy cursor; `supp` blobs and `EXT` records; feature and frame presence bits; an ID→mangled-name table (`NAME_BIND`) for the ODR stretch goal. The mechanism is in v0; supp keys are produced and consumed since M3.1 (key 13). |
+| 7 | Standard C++ first; GNU/MSVC later | v0 is C11 (M2). ECIL 1.0 is core C++ (M3). ECIL 1.2 adds virtuals, RTTI and EH (M4). GNU/MSVC extensions are deferred. Ignorable attributes and library builtins are still accepted in v0 (follow-up P2); other extensions produce an "unsupported in CIR back end" diagnostic (spec 8.11). |
 | 8 | Stream functions out at region discard; leave room for concurrency | Hook at `check_for_done_with_memory_region` (`writer_hooks.md` 1.2/1.8): stream, then free if the keep tests pass. The sink API (acquire/submit/finish/abort, with the buffer owned by the sink after submit) admits double buffering, threads, sockets and io_uring later; none are built now. |
 | 9 | `BACK_END_TYPE` enumeration, not a new `BACK_END_IS_*` | `src/back_end_type.h` (M0): `BACK_END_TYPE_{EXTERNAL,C_GEN,CP_GEN,CIR}`. `BACK_END_IS_*` are derived as `TRUE`/`FALSE`, because `il_def.h` still uses them. |
 
 ## 2. Components and data flow
 
 ```
-cpfe-cir (C++14 FE, any build type)            libedg_cir (C++17, -O2 -g)
-  parse ─► non-lowered IL                         lib/format:  frame splitter, cursor,
-  pop_scope ─► check_for_done_with_memory_region      validator, ID tables (LLVM-free)
-     └► ecil_hand_off_region ─► ecil_write.c      lib/cirgen:  EDG-CIRGen frame machine
-          heap work stack, decl+body buffers           (ModuleEmitter, TypeConverter,
-          └► sink.submit(frame) ───────────────►       FunctionEmitter, Expr/Const/Agg,
-  fe_wrapup: F_GLOBALS, F_NAMES, F_END                 BuiltinEmitter; ItaniumABI in M4)
-  error path: F_ABORT                             lib/driver:  C API, big-stack worker,
-  cir_be.c back_end(): finish session              runCIRToCIRPasses → lowerDirectly…
-                                                   → GlobalDCE → TargetMachine → .s/.o
-sinks: file | stdout/pipe | in-process (edg_cir_session_consume)
-tools: edg-cir (secondary process), ecil-dump, ecil-asm (LLVM-free)
+cpfe-cir (C++14 FE, any build type)          libedg_cir (C++17, -O2 -g)
+  parse -> non-lowered IL                       lib/format: frame splitter, reader and
+  pop_scope -> ecil_hand_off_region               validator, ID tables, text dump
+     -> ecil_write.c (heap work stack,          lib/cirgen: EDG-CIRGen frame machine
+        decl+body buffers) -> sink.submit          (a_emitter: types, globals, function/expr,
+  fe_wrapup: F_GLOBALS, F_NAMES, F_END             classes, eh, rtti, members, signature facts);
+  error path: F_ABORT                              lazy.cpp defers self-defined bodies, replays
+  cir_be.c back_end(): finish session              the reachable ones at finish (S1)
+                                                lib/abi: LLVM-free ports of clang's vtable,
+sinks: file | stdout/pipe |                        VTT and RTTI builders, a demangler; checks
+  in-process (edg_cir_session_consume)             the FE's class facts
+tools: edg-cir (secondary process), ecil-dump,  lib/driver: C API 2 (capi.cpp), session,
+  ecil-asm (LLVM-free)                             pipeline.cpp (CIR passes, lower_to_llvm_ir,
+                                                   GlobalDCE, optimizer, TargetMachine -> .s/.o),
+                                                   chunk.cpp (chunked lowering), crash guard
 ```
+
+- `lib/format` validates every frame (brackets, ids, class facts, flag
+  masks, the stream minor) before the emitter or the lazy replay sees it.
+  Dropped lazy bodies are checked by the reader only; `--eager-bodies`
+  keeps the emitter checks exercised.
+- Emission is non-recursive (a frame stack plus value and attribute
+  stacks). `lazy_finish`, first in `finish`, computes reachability over
+  symbol uses, replays the reachable bodies in stream order and erases the
+  rest; a missed edge is an error. `REFS` is specified but unused.
+- `lib/abi` builds vtables, VTTs, construction vtables and typeinfo from the
+  FE's facts and checks them against the facts; it has no LLVM dependency
+  (`abi_tests`).
+- `lib/driver` runs consume and finish on a persistent big-stack worker
+  under a crash guard (a signal handler on an alternate stack; a crash is a
+  diagnosed stage failure, never a host abort). Verify, passes and print
+  run on that worker.
+- Lowering: the CIR passes, then `lower_to_llvm_ir` (upstream's direct
+  lowering), or above the chunk threshold a globals chunk plus
+  `chunk_functions` bodies per chunk, lowered and linked into one
+  `llvm::Module`. GlobalDCE, the optimizer and code generation run on the
+  merged module.
+- C API 2 (`EDG_CIR_API_VERSION 2`): the flags `EAGER_BODIES` and
+  `NO_LLVM_PASSES`, the fields `chunk_functions` and `chunk_threshold`; an
+  API 1 caller gets the defaults.
+- The writer's library-function facts (pure, const, noreturn, the 231
+  NOTHROW names) come from `src/builtin_libc_attrs.h`, generated from
+  clang's `Builtins.inc` at the pin.
 
 ## 3. Decisions (Phase R)
 
 | Topic | Decision | Evidence |
 | --- | --- | --- |
-| LLVM pin | `894bfff5ca9f…` (main, 2026-10-09), validated with `check-clang-cir` on the box | plan; cir-config |
+| LLVM pin | `894bfff5ca9f…` (main, 2026-10-09), validated with `check-clang-cir` on the box. *Superseded: the pin is 2d6f180e (`project.md` §0, decision 38).* | plan; cir-config |
 | Name mangling | `MANGLE_ALL_NAMES=0`, `NEED_NAME_MANGLING=1` explicit. The non-mutating getters (already in the `cpfe-cp` binary) are used and copied at once. C uses source or `asm` names; static locals use `<fn>.<var>` | `writer_hooks.md` 2 |
-| Needed flags | `MAINTAIN_NEEDED_FLAGS=0`: every region is freed at pop. Dead internal functions are removed by LLVM `GlobalDCE`, which the consumer always runs before codegen. REFS-driven lazy decode is an M5 optimization | `writer_hooks.md` 4 |
+| Needed flags | `MAINTAIN_NEEDED_FLAGS=0`: every region is freed at pop. Dead internal functions are removed by LLVM `GlobalDCE`, which the consumer always runs before codegen. REFS-driven lazy decode is an M5 optimization. *Superseded: lazy emission is library-side finish-only replay; `REFS` is unused (`project.md` decision 12).* | `writer_hooks.md` 4 |
 | Entity IDs | An `ecil_id` slot in the IL entry prefix (`mem_tables.h`, CIR-gated, `static_assert` on size). It is reset by `clear_il_entry_prefix`, so recycled blocks cannot carry stale IDs | `writer_hooks.md` 3 |
 | Stream vs free | These are separate steps. Kept regions (constexpr, `do_not_free_memory_region`, debug keep) are streamed once; a bitmap indexed by `function_def_number` prevents re-streaming | `writer_hooks.md` 1 |
 | Late bodies | Re-check regions from `finish_function_processing_for_function_def` and from closure completion, using the `pch.c:1782` `depth_in_scope_stack` pattern (C++, M3) | `writer_hooks.md` 1.5 |
@@ -75,8 +108,8 @@ tools: edg-cir (secondary process), ecil-dump, ecil-asm (LLVM-free)
 | Supp presence | Signalled by the stream feature bit `SUPP`, the frame flag `HAS_SUPP` and the tag check C7–C9. The plan's per-record "flags bit 7" was dropped, because per-record flags operands vary by opcode. | gate R |
 | Unprototyped calls | `CALL`/`CALL_INDIRECT` carry the call-site function type. A non-matching or `no_proto` call becomes a bitcast to a zero-fixed-parameter variadic type, then an indirect call (clang x86-64 behavior; avoids CallConvLowering failures and asserts at the pin) | gate R C1 |
 | Falling off the end | C: return the uninitialized `__retval`; C++: trap + unreachable; `main`: return 0 | gate R C2 |
-| C99 inline | Every inline body is streamed. The final `inline_only` status is re-issued in `F_GLOBALS`, and the consumer drops the bodies of inline-only functions | gate R C3 |
-| Unsupported constructs | Drop the body, keep the declaration section, re-issue `DECL_FUNC(unsupported)`, warn. An error only if a definition references it and it is internal. `TY_OPAQUE` for types that cannot be expressed | gate R C4 |
+| C99 inline | Every inline body is streamed. The final `inline_only` status is re-issued in `F_GLOBALS`, and the consumer drops the bodies of inline-only functions. *Superseded: they are available_externally at -O1 and up (`archive/handoff_4.md` §1.2).* | gate R C3 |
+| Unsupported constructs | Drop the body, keep the declaration section, re-issue `DECL_FUNC(unsupported)`, warn. An error only if a definition references it and it is internal. `TY_OPAQUE` for types that cannot be expressed. *Superseded: `project.md` decision 16.* | gate R C4 |
 | Stack stress | Two-process: the FE runs with a large stack and writes `.ecil`; `edg-cir` reads it under a 256 KB limit. The writer is non-recursive by construction (call-graph cycle check plus a debug stack watermark) | `writer_hooks.md` 8 |
 
 ## 4. Configuration of `cpfe-cir` (M1)
@@ -225,7 +258,7 @@ at the M3 gate). The research behind it:
 
 ## 11. M3.1: the re-look items (session 3)
 
-Gate M3.1 settles each "Needs re-look" item of `handoff_2.md` §5 in one of
+Gate M3.1 settles each "Needs re-look" item of `archive/handoff_2.md` §5 in one of
 three ways. It is fixed with a test, or it is measured and moved to a later
 milestone with numbers (`research/m31_reassessment.md`), or it is decided. The
 writer-side rules are in `writer.md`. The contract additions are ECIL 1.1
@@ -289,7 +322,7 @@ The contract is `ecil_format.md` §12 (ECIL 1.2). The research behind it:
 
 ## 13. M4.1: the M4 follow-ups and -O (session 4)
 
-Gate M4.1 settles the small items of `handoff_3.md` §8 item 4 and plumbs the
+Gate M4.1 settles the small items of `archive/handoff_3.md` §8 item 4 and plumbs the
 optimization level into ClangIR, which the user moved into this gate. After
 the first -O2 baseline, the user also put three fixes for failures caused by
 our IR into it. The writer-side rules are in `writer.md` §10 ("1.3"). The
@@ -336,17 +369,17 @@ M5a). No local llvm-project patch is used.
 ## 15. M5: speed, bounded memory and optimization facts (session 4)
 
 The M5 design, its targets and the trade-offs are in `research/m5_design.md`;
-the results, the gate evidence and the open items are in `handoff_4.md`. This
+the results, the gate evidence and the open items are in `archive/handoff_4.md`. This
 table keeps the decisions that later work must respect.
 
 | Topic | Decision | Evidence |
 | --- | --- | --- |
 | Lazy emission (S1, user) | The library defers the bodies that every TU defines itself (internal, private, `linkonce_odr`, INLINE_ONLY), keeps their records validated, and replays the reachable ones at finish only. A missed reachability edge is an internal error, never an undefined reference. `EDG_CIR_FLAG_EAGER_BODIES` turns it off; tools that compare every body run eager. | `lazy-identity` gate step: lazy and eager output identical on both corpora and the pinned units; `lazy-*` lit tests |
 | Verifier off in lowering | The per-pass verifiers run only under `EDG_CIR_FLAG_VERIFY_EACH`. `lowering-drift.test` compares our lowering with upstream's `lowerDirectlyFromCIRToLLVMIR`, so a pin bump that changes it fails. | -26% on the lowering stage, identical asm |
-| Optimization facts (S2, user) | Parity with clangir at the pin on the high-value attributes (nounwind, noundef, nonnull, dereferenceable, align, memory, mustprogress, noreturn, builtin, inlinehint, alwaysinline); the rest is reported, not gated. LLVM `nounwind` and "cannot throw" (`nothrow`, no invoke) are different: noexcept gives `nothrow`, GNU pure/const give `nounwind`. | `attr-diff` gate step; `s2-*` lit tests; `handoff_4.md` §4.1 |
+| Optimization facts (S2, user) | Parity with clangir at the pin on the high-value attributes (nounwind, noundef, nonnull, dereferenceable, align, memory, mustprogress, noreturn, builtin, inlinehint, alwaysinline); the rest is reported, not gated. LLVM `nounwind` and "cannot throw" (`nothrow`, no invoke) are different: noexcept gives `nothrow`, GNU pure/const give `nounwind`. | `attr-diff` gate step; `s2-*` lit tests; `archive/handoff_4.md` §4.1 |
 | Library facts (S2) | pure, const, noreturn and nothrow of C library functions come from clang's `Builtins.inc` at the pin (letters U, c, r, n; unconditional only), generated into `src/builtin_libc_attrs.h`. `fprintf`, `vprintf` and `vfprintf` are not nothrow (cancellation points). | `dev_tools/builtins/generate-libc-builtins.py` |
 | Allocation elision (user) | `builtin` on new-expression calls of the replaceable allocation functions, as clang; the -O2 tests that depend on non-elision are triaged. | `cir-opt-triage.txt` |
 | Chunked lowering (S3, user) | Design (a): after lazy replay and the CIR passes, a module with at least `chunk_threshold` emitted bodies is lowered in chunks of `chunk_functions` (default 500) and linked with `llvm::Linker` into one LLVM module; optimization and code generation stay whole-module. Default threshold **4000**, raised from 2000 after the gate without re-measurement (user). A chunk failure is a diagnosed error. | `chunk-identity` (output identical at one body per chunk), `chunk-rss` (c12000 at 52.3% of the M5p peak) |
 | Writer speed (S4) | TU-local memo, inline record helpers that keep the CHECKING checks, `enk_field` as a pure leaf (volatile is never pure), and a sampled name check (`ECIL_NAME_CHECK_ALL` 2000, `ECIL_NAME_CHECK_STRIDE` 16, `ECIL_CHECK_ALL_NAMES` for all). | writer share of release-FE Ir: C -2.15 points, C++ -4.09 points |
 | ECIL 1.3, C API 2 | 1.3 is frozen at this gate (`ecil_format.md` §13). API 2 adds `EAGER_BODIES`, `NO_LLVM_PASSES`, `chunk_functions` and `chunk_threshold`; API 1 callers get the defaults. | `capi_tests` |
-| Gates (user) | Lean gates for slices; the full gate (`--milestone`) only at milestones. | `handoff_4.md` §3 |
+| Gates (user) | Lean gates for slices; the full gate (`--milestone`) only at milestones. | `archive/handoff_4.md` §3 |

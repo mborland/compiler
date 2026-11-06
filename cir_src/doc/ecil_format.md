@@ -1,6 +1,6 @@
 # ECIL — EDG CIR IL stream format
 
-Status: **v1.3** (session 4: section 13 lists the 1.3 additions of gates M4.1, M5a and M5). 1.3 is frozen at the M5 gate (2026-10-20). **v1.2** (gate M4a, session 3: section 12: virtual functions, virtual bases, RTTI, exceptions and pointers to members). 1.2 is frozen at the M4 gate; additions and corrections found while implementing it (for example `NEW_ARRAY_SIZE_THROW`) are part of 1.2 until then. **v1.1** (gate M3.1, session 3: section 11.12). **v1.0** was frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
+Status: **v1.3** (session 4: section 13 lists the 1.3 additions of gates M4.1, M5a and M5). 1.3 is frozen at the M5 gate (2026-10-20). **v1.2** (gate M4a, session 3: section 12: virtual functions, virtual bases, RTTI, exceptions and pointers to members). 1.2 was frozen at the M4 gate; the additions and corrections found while implementing it (for example `NEW_ARRAY_SIZE_THROW`) are part of 1.2. **v1.1** (gate M3.1, session 3: section 11.12). **v1.0** was frozen at the M3 gate (2026-10-11). Version 1.0 is C (sections 1–10) plus core C++ (section 11). Every rule that 0.x introduced "from minor 7" applies unconditionally, and 0.x pre-release streams are rejected by the major-version check (section 9). History of the 0.x minors: (header minor 8 declares every C++ (v1) record and flag, specified in section 11; minor 7 makes the `FOR_BEGIN` init scope span the whole loop (8.3, 8.4) and adds these rules: for streams of every minor, the reader id limit and effective-name ownership (7); for streams of minor 7 or later, writer density (7), scope regions, no nested function bodies (8.3) and case-label placement (8.4); minor 6 adds the float-classification builtins and the `CMP` kinds `one`/`uno`; minor 5 adds builtin ids; minor 4: adds the clarifications made during M1, namely END n_frames, HDR_LANG std, one G-id per symbol, feature-gated records, CALL result, and the layout rules). Owner: the
 orchestrator.
 
 - **Normative source.** The definitions live in
@@ -74,8 +74,8 @@ frame   := u32 payload_len | u8 kind | u8 flags | u16 reserved(=0) | payload
 | 2 | `REFS` | ignorable | `F_REGION` frames end with a `REFS` record |
 | 3 | `LATE_NAMES` | ignorable | `NAME_BIND` records may appear |
 | 4 | `INLINE_HINTS` (1.3) | ignorable | `DECL_FUNC` carries `INLINE_HINT` exactly. The consumer takes `inlinehint` from `INLINE_HINT`, and from `INLINE` when the bit is clear (13). |
-| 5–15 | — | ignorable | Reserved; 0 in v0 |
-| 16–31 | — | required | Reserved; 0 in v0 |
+| 5–15 | — | ignorable | Reserved; 0 through 1.3 |
+| 16–31 | — | required | Reserved; 0 through 1.3 |
 
 A record whose feature bit is clear is a format error. That covers `LOC`
 without `LOCATIONS`, `REFS` without `REFS`, and `NAME_BIND` without
@@ -316,7 +316,7 @@ Its value is `true`.
   Itanium-mangled name, so G-ids from several streams can be resolved by
   name.
 
-## 8. Opcodes (v0.2 = C subset)
+## 8. Opcodes
 
 The table of record is `ECIL_OPCODES(X)` in `ecil_format.h`: name, value and
 arity.
@@ -751,7 +751,7 @@ D2                             TERN_END                [-> int]
 
 `ecil-asm` regenerates this example in M1 as a golden test.
 
-## 11. C++ (v1)
+## 11. C++ (ECIL 1.0)
 
 ECIL 1.0 contains every record and flag in this section (`ecil_format.h`),
 frozen at the M3 gate. During development these were 0.8–0.x minors.

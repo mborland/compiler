@@ -6,7 +6,7 @@ member pointers.  Nothing here is part of the build or the tests; the results
 and verdicts are in `doc/research/m4_cir_shapes.md`.
 
 Run inside the cir-env image from the repository root (box: see
-`handoff_2.md` section 3):
+`cir_src/doc/project.md` §3):
 
     bash cir_src/spike/m4/spike.sh k1_vtables
     bash cir_src/spike/m4/spike.sh k4c_eh_spec -S c++14

@@ -12,7 +12,7 @@ Run it inside the cir-env image from the repository root, after building
 build/gcc-release-cir (the front end, no ASan) and build/cir (edg-cir):
 
   edg-exec --img cir-env -- python3 dev_tools/bin/edg-cir-chunk-rss \\
-      --json curve.json [--baseline m5a-base-rss-curve.json]
+      --json curve.json [--target c12000=0.55] [--pinned]
 
 It generates C files of 3000, 6000 and 12000 functions and a C++ file of 6000
 functions (edg-cir-rss's generators), makes their ECIL streams with the
@@ -27,12 +27,12 @@ three modes:
              contract: 0 means the library default for both, so forcing is
              a threshold of 1; --force-threshold and --chunk-size change them)
 
-The table is the curve of peak MB against the number of functions per mode.
---baseline (a JSON file of an earlier run, e.g. the M5a one, measured with
---modes default) adds the ratio of every mode to the baseline's default peak
-of the same case, and --target CASE=RATIO (for example c12000=0.55, the S3
-target against M5p) fails the run if the forced mode's peak is above RATIO
-times the baseline's.  The pinned real-world units (--pinned, with
+The table is the curve of peak MB against the number of functions per mode,
+with the ratio of the forced peak to the unchunked peak of the same case in
+the same run (no recorded baseline: the comparison is made on one host at one
+time).  --target CASE=RATIO (for example c12000=0.55, the S3 target) fails
+the run if the forced mode's peak is above RATIO times the unchunked peak,
+or if either was not measured.  The pinned real-world units (--pinned, with
 --boost-include) are measured in the same modes for information: the report
 shows the peak of every unit and which one is the largest.
 
@@ -126,16 +126,17 @@ def measure(tool: str, stream: Path, flags: List[str], runs: int,
           'chunk_size': chunks[1] if chunks else None}
 
 
-def judge(curve: Dict[str, Dict[str, dict]], baseline: Optional[dict],
-          targets: Dict[str, float], modes: List[str]
-          ) -> Tuple[bool, List[str]]:
+def judge(curve: Dict[str, Dict[str, dict]], targets: Dict[str, float],
+          modes: List[str]) -> Tuple[bool, List[str]]:
   '''(passes, report lines): the curve table, the non-vacuity of the forced
-  runs and the targets against the baseline.'''
+  and unchunked runs and the targets against the unchunked peak of the same
+  run.'''
   lines: List[str] = []
   passes = True
+  both = 'unchunked' in modes and 'forced' in modes
   header = f"{'case':<10}" + ''.join(f"{m:>12}" for m in modes)
-  if baseline:
-    header += f"{'forced/base':>13}"
+  if both:
+    header += f"{'forced/unch':>13}"
   lines.append(header)
   for case, by_mode in curve.items():
     cells = []
@@ -144,9 +145,9 @@ def judge(curve: Dict[str, Dict[str, dict]], baseline: Optional[dict],
       cells.append(f"{row['peak_mb']:>12.1f}" if 'peak_mb' in row
                    else f"{'n/a':>12}")
     ratio = ''
-    base = (baseline or {}).get(case, {}).get('default', {}).get('peak_mb')
+    base = by_mode.get('unchunked', {}).get('peak_mb')
     forced = by_mode.get('forced', {}).get('peak_mb')
-    if baseline:
+    if both:
       ratio = f"{forced / base:>13.2f}" if forced and base else f"{'-':>13}"
     lines.append(f"{case:<10}" + ''.join(cells) + ratio)
     for mode in modes:
@@ -164,16 +165,17 @@ def judge(curve: Dict[str, Dict[str, dict]], baseline: Optional[dict],
                      f"(0 expected)")
   for case, limit in targets.items():
     forced = curve.get(case, {}).get('forced', {}).get('peak_mb')
-    base = (baseline or {}).get(case, {}).get('default', {}).get('peak_mb')
+    base = curve.get(case, {}).get('unchunked', {}).get('peak_mb')
     if not forced or not base:
       passes = False
-      lines.append(f"FAIL target {case}: not measured or no baseline")
+      lines.append(f"FAIL target {case}: the forced or the unchunked peak "
+                   f"was not measured")
       continue
     ratio = forced / base
     ok = ratio <= limit
     passes = passes and ok
     lines.append(f"{'ok  ' if ok else 'FAIL'} target {case}: forced "
-                 f"{forced:.1f} MB is {100 * ratio:.1f}% of the baseline's "
+                 f"{forced:.1f} MB is {100 * ratio:.1f}% of the unchunked "
                  f"{base:.1f} MB (limit {100 * limit:.0f}%)")
   return passes, lines
 
@@ -219,12 +221,10 @@ def main() -> None:
                       help = 'runs per measurement (the minimum counts)')
   parser.add_argument('--force-threshold', type = int, default = 1)
   parser.add_argument('--chunk-size', type = int, default = 500)
-  parser.add_argument('--baseline', default = '',
-                      help = 'JSON of an earlier run (--json)')
   parser.add_argument('--target', action = 'append', default = [],
                       metavar = 'CASE=RATIO',
                       help = 'the forced peak of CASE (c12000, cxx6000, ...) '
-                             'at most RATIO of the baseline default peak')
+                             'at most RATIO of the unchunked peak')
   parser.add_argument('--pinned', action = 'store_true',
                       help = 'also measure the pinned real-world units '
                              '(for information)')
@@ -251,10 +251,6 @@ def main() -> None:
   for item in args.target:
     case, _, ratio = item.partition('=')
     targets[case] = float(ratio)
-  baseline = None
-  if args.baseline:
-    data = json.loads(Path(args.baseline).read_text())
-    baseline = data.get('curve', data)
   work = Path(tempfile.mkdtemp(prefix = 'edg-cir-chunk-rss.'))
   curve: Dict[str, Dict[str, dict]] = {}
   try:
@@ -290,7 +286,7 @@ def main() -> None:
                                    args.chunk_size), args.runs, args.timeout)
       stream.unlink()
     passes, lines = judge({c: m for c, m in curve.items()
-                           if '/' not in c}, baseline, targets, modes)
+                           if '/' not in c}, targets, modes)
     pinned = {c: m for c, m in curve.items() if '/' in c}
     if pinned:
       lines.append('pinned real-world units (information):')

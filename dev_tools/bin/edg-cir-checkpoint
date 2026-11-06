@@ -7,17 +7,20 @@
 
 '''Run a slice checkpoint of the CIR back end on the x86-64 box.
 
-Run it on the Mac, from the repository root, with the SSH master socket to the
-box open (see the box-docker-workflow notes); without the socket
-(~/.ssh/cm-edgbox) it uses a plain batch-mode ssh, which works while the
-key is available:
+Run it on the Mac, from the repository root.  The host is $EDG_CIR_HOST
+(default matt@clang4.cpp.al) and the ssh key $EDG_CIR_SSH_KEY (default
+~/.ssh/id_rsa); ssh and rsync run with -o BatchMode=yes -i <key>.  An open SSH
+master socket is used only if $EDG_BOX_SOCKET names it.  Docker runs directly
+(the user is in the docker group); set EDG_CIR_SG_DOCKER=1 to run it through
+`sg docker -c` as the old box needed:
 
   edg-cir-checkpoint                # sync, clean build, the default steps
   edg-cir-checkpoint --quick        # build, smoke, cpp-smoke only
   edg-cir-checkpoint --steps build,ctest --detach
-  edg-cir-checkpoint --lean toolchain --lean-base HEAD --tree m5p-int
-  edg-cir-checkpoint --milestone --tree m5-int --detach
-  edg-cir-checkpoint --tree m5-int --prune 3 --quick
+  edg-cir-checkpoint --lean toolchain --lean-base HEAD --tree m51-int
+  edg-cir-checkpoint --milestone --tree m51-int --detach
+  edg-cir-checkpoint --milestone --check-baselines   # list what it needs
+  edg-cir-checkpoint --tree m51-int --prune 3 --quick
 
 It does, in this order:
 
@@ -25,11 +28,11 @@ It does, in this order:
      --prune N, deletes all but the newest N of the tests/runs/* and
      .tmp/checkpoint-* directories of the tree (--prune-only does just that;
      --prune-evidence adds .tmp/gate-{evidence,asm,cpp-asm,identity,perf}/*).
-     Never pruned: the trees m3-final, m4-final, m41-int and m5p-int, a tree
-     with a file KEEP, an entry with a file KEEP, an entry younger than 6
+     Never pruned: the trees day-base and m5-int (the baselines and the
+     evidence they came from), a tree with a file KEEP, an entry with a file KEEP, an entry younger than 6
      hours or one that a process uses.
   1. rsync --checksum --no-times of the working tree to ~/edg-cir-config/<tree>
-     on the box (default tree m5-int; build/, tests/runs/, .tmp/ and .git/
+     on the box (default tree m51-int; build/, tests/runs/, .tmp/ and .git/
      are not touched).  --no-times gives changed files the time of the
      transfer: with `rsync -a` a changed source can keep a time older than
      the objects of an earlier build, and ninja then rebuilds nothing.
@@ -45,8 +48,8 @@ The default steps are:
   cpp-writer-stress crash-sweep ctest
 
 that is the C smoke and corpus (statuses against the recorded expectations),
-the C assembly against the M5p baseline (--asm-baseline, default
-~/edg-cir-config/m5p-base-asm: every difference is listed with its class and
+the C assembly against the M5 baseline (--asm-baseline, default
+~/edg-cir-config/m5-base-asm: every difference is listed with its class and
 cause; the frame description directives (.cfi_*) are ignored from S1 on,
 when every function gets unwind tables: --no-asm-normalize-cfi shows them;
 personality, lsda and escape directives stay visible), the ASan
@@ -58,7 +61,7 @@ have are gated, against the allowlist tests/.edgy/filters/
 cir-excused-crashes.txt), and the four cir_src presets from clean build
 directories.  About 25 minutes.  Day, stress, rss, perf, modes, cpp-corpus,
 cpp-modes and cpp-asm-diff (the C++ assembly against --cpp-asm-baseline,
-default ~/edg-cir-config/m5p-base-cpp-asm, made with the corpus filter
+default ~/edg-cir-config/m5-base-cpp-asm, made with the corpus filter
 that includes eh/ and rtti/) are left for the gates; name them
 with --steps (they exist in the gate tool).
 
@@ -94,15 +97,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
-BOX = 'mborland@192.168.1.167'
-SOCKET = Path.home() / '.ssh' / 'cm-edgbox'
-DEFAULT_TREE = 'm5-int'
+BOX = os.environ.get('EDG_CIR_HOST', 'matt@clang4.cpp.al')
+SSH_KEY = os.environ.get('EDG_CIR_SSH_KEY', '~/.ssh/id_rsa')
+SOCKET = os.environ.get('EDG_BOX_SOCKET', '')
+SG_DOCKER = os.environ.get('EDG_CIR_SG_DOCKER', '') not in ('', '0')
+# The default tree is wiped and rebuilt by every checkpoint; the trees that
+# hold baselines or the evidence they came from are not (see PROTECTED_TREES).
+DEFAULT_TREE = 'm51-int'
 LOW_DISK_GB = 40
 DEFAULT_STEPS = ('build,identity,smoke,corpus,asm-diff,writer-stress,'
                  'cpp-smoke,cpp-writer-stress,crash-sweep,ctest')
 QUICK_STEPS = 'build,smoke,cpp-smoke'
 EXCLUDES = ['/build/', '/tests/runs/', '/.tmp/', '/cmake-build-debug/',
             '/.idea/', '/.mypy_cache/', '/dev-pref.json', '/.git/',
+            '/boost-bug-*.md', '/monthly_report/', '/*.int.c', '/*.ti',
             '__pycache__/', '.DS_Store']
 
 
@@ -141,17 +149,30 @@ def local_fingerprint(root: Path) -> str:
 
 
 def ssh_options() -> List[str]:
-  '''The ssh options: through the master socket if it exists, else plain.'''
-  if SOCKET.exists():
-    return ['-o', f"ControlPath={SOCKET}", '-o', 'ControlMaster=no',
-            '-o', 'BatchMode=yes']
-  return ['-o', 'BatchMode=yes']
+  '''The ssh options: batch mode and the key, and the master socket if
+  EDG_BOX_SOCKET names one.'''
+  options = ['-o', 'BatchMode=yes', '-i', str(Path(SSH_KEY).expanduser())]
+  if SOCKET:
+    options += ['-o', f"ControlPath={Path(SOCKET).expanduser()}",
+                '-o', 'ControlMaster=no']
+  return options
+
+
+def ssh_command() -> str:
+  '''The ssh command for rsync's -e.'''
+  return shlex.join(['ssh', *ssh_options()])
+
+
+def docker_wrap(command: str) -> str:
+  '''The shell command that runs `command` as a user that can run docker:
+  directly, or through `sg docker -c` with EDG_CIR_SG_DOCKER=1.'''
+  return f"sg docker -c {shlex.quote(command)}" if SG_DOCKER else command
 
 
 def box_reachable() -> bool:
   '''Whether the box answers (the master socket's check, or a plain ssh).'''
-  if SOCKET.exists():
-    command = ['ssh', '-O', 'check', '-o', f"ControlPath={SOCKET}", BOX]
+  if SOCKET:
+    command = ['ssh', '-O', 'check', *ssh_options(), BOX]
   else:
     command = ['ssh', *ssh_options(), '-o', 'ConnectTimeout=15', BOX, 'true']
   return subprocess.run(command, stdout = subprocess.DEVNULL,
@@ -166,7 +187,7 @@ EVIDENCE_DIRS = ('.tmp/gate-evidence', '.tmp/gate-asm', '.tmp/gate-cpp-asm',
                  '.tmp/gate-identity', '.tmp/gate-perf')
 # Trees that are never pruned (the gate evidence is kept in them); any tree
 # or entry that holds a file named KEEP is not pruned either.
-PROTECTED_TREES = ('m3-final', 'm4-final', 'm41-int', 'm5p-int')
+PROTECTED_TREES = ('day-base', 'm5-int')
 RECENT_MINUTES = 360
 
 
@@ -201,19 +222,30 @@ def headroom_gb(text: str) -> int:
   return int(digits) if digits else -1
 
 
-MILESTONE_DAY_BASELINE = ('~/edg-cir-config/day-base/tests/runs/'
-                          '2026.10.12-13.13.25')
-MILESTONE_PERF_BASELINE = '~/edg-cir-config/m5a-base-perf.json'
-MILESTONE_OPTIONS = (
-  ('--perf-realworld', 'pinned'), ('--perf-levels', '0,2'),
-  ('--perf-targets', 's1'), ('--day-baseline-run', MILESTONE_DAY_BASELINE))
+# The day suite of the baseline commit (a link to its tests/runs/<ts> in the
+# day-base tree; the same as the gate's default) and the perf baselines: the
+# regression one is the M5 run (--perf-baseline), the S1 targets are against
+# the M5a run.
+DAY_BASELINE = '~/edg-cir-config/day-base/baseline-64'
+PERF_BASELINE = '~/edg-cir-config/m5-base-perf.json'
+PERF_TARGETS_BASELINE = '~/edg-cir-config/m5a-base-perf.json'
+# The perf step measures the pinned real-world units at -O0 and -O2 whenever
+# it runs: its baseline has those rows, and a run without them would lack
+# rows of the baseline (which fails).
+PERF_OPTIONS = (('--perf-realworld', 'pinned'), ('--perf-levels', '0,2'))
+MILESTONE_OPTIONS = (*PERF_OPTIONS, ('--perf-targets', 's1'))
 
 
 def milestone_extra(extra: str) -> str:
   '''The extra arguments of a milestone run: the pinned real-world units and
-  the S1 targets in the perf step, both levels, the baseline run of the day
-  step, each unless `extra` already has the option.'''
-  added = [f"{name} {value}" for name, value in MILESTONE_OPTIONS
+  the S1 targets in the perf step, both levels, each unless `extra` already
+  has the option.'''
+  return with_options(MILESTONE_OPTIONS, extra)
+
+
+def with_options(options: tuple, extra: str) -> str:
+  '''`extra` with each (name, value) of `options` that it lacks put first.'''
+  added = [f"{name} {value}" for name, value in options
            if name not in extra.split()]
   return ' '.join([*added, extra]).strip()
 
@@ -283,8 +315,9 @@ def main() -> None:
                       help = 'the full milestone gate (edg-cir-gate-evidence '
                              '--milestone: every step, lazy, attr, chunk, '
                              'names, speed and crash-sweep included) against '
-                             'the M5p baselines and m5a-base-perf.json, with '
-                             'the perf and day options of milestone_extra')
+                             'the m5-base-* baselines, with the perf options of '
+                             'milestone_extra and the S1 targets against '
+                             'm5a-base-perf.json')
   parser.add_argument('--quick', action = 'store_true',
                       help = f"only {QUICK_STEPS}")
   parser.add_argument('--prune', type = int, nargs = '?', const = 3,
@@ -306,9 +339,9 @@ def main() -> None:
   parser.add_argument('--no-sync', action = 'store_true',
                       help = 'do not rsync (the tree is up to date)')
   parser.add_argument('--asm-baseline', default = '~/edg-cir-config/'
-                      'm5p-base-asm')
+                      'm5-base-asm')
   parser.add_argument('--cpp-asm-baseline', default = '~/edg-cir-config/'
-                      'm5p-base-cpp-asm')
+                      'm5-base-cpp-asm')
   parser.add_argument('--asm-normalize-cfi', action = 'store_true',
                       default = True,
                       help = 'asm-diff steps ignore .cfi_* directives '
@@ -318,8 +351,19 @@ def main() -> None:
                       help = 'asm-diff steps compare .cfi_* directives too')
   parser.add_argument('--identity-baseline',
                       default = '~/edg-cir-config/identity-m0c')
-  parser.add_argument('--perf-baseline',
-                      default = '~/edg-cir-config/m5p-base-perf.json')
+  parser.add_argument('--perf-baseline', default = PERF_BASELINE,
+                      help = 'the perf regression baseline (the M5 run)')
+  parser.add_argument('--perf-targets-baseline',
+                      default = PERF_TARGETS_BASELINE,
+                      help = 'the baseline of --perf-targets (the M5a run)')
+  parser.add_argument('--day-baseline-run', default = DAY_BASELINE,
+                      help = 'the day suite of the baseline commit')
+  parser.add_argument('--check-baselines', action = 'store_true',
+                      help = 'list the baselines that the selected steps '
+                             'need (path, whether it exists and is not '
+                             'empty, whether the images match) and exit '
+                             '(1 if one is missing); syncs first, since it '
+                             'runs the gate tool of the box tree')
   parser.add_argument('--smoke-all-pass', action = 'store_true',
                       help = 'cpp-smoke fails unless every test passes')
   parser.add_argument('--jobs', type = int, default = 12)
@@ -334,9 +378,9 @@ def main() -> None:
     print('run it from the repository root', file = sys.stderr)
     sys.exit(2)
   if not box_reachable():
-    print('the box does not answer: the SSH master socket is not open and a '
-          'plain batch-mode ssh fails (ask the user to reopen the socket)',
-          file = sys.stderr)
+    print(f"the host {BOX} does not answer (EDG_CIR_HOST, EDG_CIR_SSH_KEY, "
+          f"EDG_BOX_SOCKET): check `ssh -o BatchMode=yes -i {SSH_KEY} "
+          f"{BOX} true`", file = sys.stderr)
     sys.exit(2)
 
   steps = QUICK_STEPS if args.quick else args.steps
@@ -411,8 +455,8 @@ def main() -> None:
       print(f"syncing to {args.tree} ..." + (
         f" (again: the tree changed while syncing)" if attempt else ''),
             flush = True)
-      command = ['rsync', '-a', '--checksum', '--no-times', '--delete',
-                 '-e', 'ssh ' + ' '.join(ssh_options())]
+      command = ['rsync', '-az', '--checksum', '--no-times', '--delete',
+                 '-e', ssh_command()]
       for exclude in EXCLUDES:
         command += ['--exclude', exclude]
       command += ['./', f"{BOX}:edg-cir-config/{args.tree}/"]
@@ -446,9 +490,9 @@ def main() -> None:
   selection = ['--only', steps]
   if args.milestone:
     selection = ['--milestone']
-    if args.perf_baseline == parser.get_default('perf_baseline'):
-      args.perf_baseline = MILESTONE_PERF_BASELINE
     args.extra = milestone_extra(args.extra)
+  elif 'perf' in steps.split(','):
+    args.extra = with_options(PERF_OPTIONS, args.extra)
   if args.lean:
     # The gate picks the steps itself (and records why the others are
     # skipped); it checks the areas again against the list of changed files.
@@ -469,7 +513,9 @@ def main() -> None:
     '--identity-baseline', args.identity_baseline,
     '--asm-baseline', args.asm_baseline,
     '--cpp-asm-baseline', args.cpp_asm_baseline,
-    '--perf-baseline', args.perf_baseline
+    '--perf-baseline', args.perf_baseline,
+    '--perf-targets-baseline', args.perf_targets_baseline,
+    '--day-baseline-run', args.day_baseline_run
   ]
   if args.smoke_all_pass:
     gate.append('--cpp-smoke-all-pass')
@@ -478,15 +524,24 @@ def main() -> None:
   gate_command = ' '.join(
     a if a == '$T' or a.startswith('~') else shlex.quote(a) for a in gate
   ) + (f" {args.extra}" if args.extra else '')
+  if args.check_baselines:
+    # The gate tool of the box tree lists what the selected steps need (the
+    # box is where the baselines and the images are).
+    check = ssh(f"T=$(cd {tree} && pwd); cd $T; "
+                f"export PATH=$T/dev_tools/bin:$PATH "
+                f"PYTHONPATH=$T/dev_tools/pylibs; "
+                f"{gate_command} --check-baselines", capture = True)
+    print(check.stdout.rstrip())
+    sys.exit(check.returncode)
   wipe = '' if args.incremental else (
     'rm -rf build/cir build/cir-* build/gcc-cir build/gcc-cir-nopoison '
     'build/gcc-release-cir; ')
   script = (
     f"T=$(cd {tree} && pwd); cd $T; mkdir -p .git/hooks .tmp; "
     f"export PATH=$T/dev_tools/bin:$PATH PYTHONPATH=$T/dev_tools/pylibs; "
-    f"[ -f dev-pref.json ] || sg docker -c 'python3 dev-init.py docker' "
+    f"[ -f dev-pref.json ] || {docker_wrap('python3 dev-init.py docker')} "
     f">/dev/null 2>&1; {wipe}rm -f {done}; "
-    f"{gate_command} > {log} 2>&1; echo $? > {done}"
+    f"nice -n 10 {gate_command} > {log} 2>&1; echo $? > {done}"
   )
   started = time.time()
   ssh(f"nohup bash -c {shlex.quote(script)} > /dev/null 2>&1 &")

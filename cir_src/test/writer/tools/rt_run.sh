@@ -2,7 +2,7 @@
 # Build and run imported GCC tests through the CIR pipeline on the box.
 # usage: rt_run.sh 'path.sft.c:options' ...   (paths relative to
 # tests/tests/imported/gnu/c).  Prints compile diagnostics and "run rc=N".
-# Run `box.sh sync` and build cpfe-cir first.  Needs BOX_HOST.
+# Run `box.sh sync` and build cpfe-cir first.  Host settings: see box.sh.
 here=$(cd "$(dirname "$0")" && pwd)
 box=$here/box.sh
 tree=${BOX_TREE:-edg-cir-writer}

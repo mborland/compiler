@@ -1261,24 +1261,31 @@ class CheckpointTest(unittest.TestCase):
                           'prunetest_old3'], directory)
 
   def test_protected_trees(self) -> None:
-    for tree in ('m3-final', 'm4-final', 'm41-int', 'm5p-int'):
+    # the trees that hold the baselines and the evidence they came from
+    for tree in ('day-base', 'm5-int'):
       self.assertIn(tree, checkpoint.PROTECTED_TREES)
 
   def test_default_tree_is_not_stale(self) -> None:
     # The default tree is wiped and rebuilt by every checkpoint, so it may
     # not be one of the protected trees that hold gate evidence.
-    self.assertEqual(checkpoint.DEFAULT_TREE, 'm5-int')
+    self.assertEqual(checkpoint.DEFAULT_TREE, 'm51-int')
     self.assertNotIn(checkpoint.DEFAULT_TREE, checkpoint.PROTECTED_TREES)
 
-  def test_default_baselines_are_the_m5p_ones(self) -> None:
+  def test_default_baselines_are_the_m5_ones(self) -> None:
     text = (BIN / 'edg-cir-checkpoint').read_text()
-    for name in ('m5p-base-asm', 'm5p-base-cpp-asm', 'm5p-base-perf.json'):
+    for name in ('m5-base-asm', 'm5-base-cpp-asm', 'm5-base-perf.json',
+                 'm5a-base-perf.json', 'day-base/baseline-64'):
       self.assertIn(name, text)
+    self.assertNotIn('m5p-base', text)
     self.assertNotIn('m4-base', text)
     gate_text = (BIN / 'edg-cir-gate-evidence').read_text()
-    self.assertIn("~/edg-cir-config/m5p-base-perf.json", gate_text)
-    self.assertIn("~/edg-cir-config/m5p-base-status", gate_text)
-    self.assertNotIn("~/edg-cir-config/m4-base", gate_text)
+    for name in ('m5-base-perf.json', 'm5-base-status', 'm5-base-asm',
+                 'm5-base-cpp-asm', 'm5a-base-perf.json',
+                 'day-base/baseline-64'):
+      self.assertIn(f"~/edg-cir-config/{name}", gate_text)
+    self.assertNotIn('m5p-base-status', gate_text)
+    self.assertNotIn('~/edg-cir-config/m4-base', gate_text)
+    self.assertEqual(checkpoint.DAY_BASELINE, gate.DEFAULT_DAY_BASELINE)
 
 
 class RssCeilings(unittest.TestCase):
@@ -2584,53 +2591,49 @@ def curve(c12000_default = 800.0, c12000_forced = 400.0, chunks = 25):
               'forced': row(150.0, 7)}}
 
 
-BASE = {'c12000': {'default': {'peak_mb': 810.0}},
-        'c3000': {'default': {'peak_mb': 205.0}}}
-
-
 class ChunkRss(unittest.TestCase):
   modes = ['default', 'unchunked', 'forced']
 
-  def test_the_target_is_met(self):
-    ok, lines = chunk_rss.judge(curve(), BASE, {'c12000': 0.55}, self.modes)
+  def test_the_target_is_met_against_the_same_runs_unchunked_peak(self):
+    ok, lines = chunk_rss.judge(curve(), {'c12000': 0.55}, self.modes)
     self.assertTrue(ok, lines)
-    self.assertTrue(any(l.startswith('ok   target c12000') and '49.4%' in l
-                        for l in lines))
-    self.assertIn('forced/base', lines[0])
+    self.assertTrue(any(l.startswith('ok   target c12000') and '50.0%' in l
+                        and 'unchunked 800.0' in l for l in lines))
+    self.assertIn('forced/unch', lines[0])
 
   def test_the_target_is_missed(self):
-    ok, lines = chunk_rss.judge(curve(c12000_forced = 500.0), BASE,
+    ok, lines = chunk_rss.judge(curve(c12000_forced = 500.0),
                                 {'c12000': 0.55}, self.modes)
     self.assertFalse(ok)
     self.assertTrue(any(l.startswith('FAIL target c12000') for l in lines))
 
   def test_a_forced_run_that_did_not_chunk_fails(self):
-    ok, lines = chunk_rss.judge(curve(chunks = 1), BASE, {}, self.modes)
+    ok, lines = chunk_rss.judge(curve(chunks = 1), {}, self.modes)
     self.assertFalse(ok)
     self.assertTrue(any('vacuous' in l for l in lines))
 
   def test_an_unchunked_run_that_chunked_fails(self):
     data = curve()
     data['c3000']['unchunked']['chunks'] = 4
-    self.assertFalse(chunk_rss.judge(data, BASE, {}, self.modes)[0])
+    self.assertFalse(chunk_rss.judge(data, {}, self.modes)[0])
 
   def test_a_failed_measurement_fails(self):
     data = curve()
     data['c3000']['forced'] = {'error': 'exit status 1'}
-    ok, lines = chunk_rss.judge(data, BASE, {}, self.modes)
+    ok, lines = chunk_rss.judge(data, {}, self.modes)
     self.assertFalse(ok)
     self.assertTrue(any('c3000 forced: exit status 1' in l for l in lines))
 
-  def test_a_target_without_a_baseline_fails(self):
-    self.assertFalse(chunk_rss.judge(curve(), None, {'c12000': 0.55},
-                                     self.modes)[0])
-    self.assertFalse(chunk_rss.judge(curve(), {}, {'c12000': 0.55},
-                                     self.modes)[0])
+  def test_a_target_needs_the_unchunked_and_the_forced_peak(self):
+    data = curve()
+    del data['c12000']['unchunked']
+    self.assertFalse(chunk_rss.judge(data, {'c12000': 0.55}, self.modes)[0])
+    self.assertFalse(chunk_rss.judge(curve(), {'c99': 0.55}, self.modes)[0])
 
-  def test_the_baseline_mode_only_needs_the_default_run(self):
-    data = {'c12000': {'default': {'peak_mb': 810.0, 'chunks': None}}}
-    ok, lines = chunk_rss.judge(data, None, {}, ['default'])
-    self.assertTrue(ok, lines)
+  def test_the_tool_has_no_baseline_file(self):
+    text = (BIN / 'edg-cir-chunk-rss').read_text()
+    self.assertNotIn('--baseline', text)
+    self.assertNotIn('rss-curve', (BIN / 'edg-cir-gate-evidence').read_text())
 
   def test_the_gate_judges_the_report(self):
     ok_text = ('case  default unchunked forced forced/base\n'
@@ -2833,11 +2836,17 @@ class StatusRegressions(unittest.TestCase):
       self.assertEqual(len(problems), 1)
       text = (ctx.out / 'cpp-corpus' / 'status-regressions.txt').read_text()
       self.assertIn('a.cpp', text)
-      # the check is off with an empty option
+      # an empty option is a problem, not a skipped check ...
       off = self.ctx(tmp, '')
       off.out = Path(tmp) / 'out2'
-      self.assertEqual(gate.status_check(off, 'cpp-corpus', 'cpp',
-                                         'edg_x86_64_cir', after), ([], ''))
+      self.assertTrue(gate.status_check(off, 'cpp-corpus', 'cpp',
+                                        'edg_x86_64_cir', after)[0])
+      # ... unless --allow-missing-baselines says so (and the note says so)
+      off.args.allow_missing_baselines = True
+      problems, note = gate.status_check(off, 'cpp-corpus', 'cpp',
+                                         'edg_x86_64_cir', after)
+      self.assertEqual(problems, [])
+      self.assertIn('OFF', note)
       # a baseline without the file fails
       missing = self.ctx(tmp, str(Path(tmp) / 'nowhere'))
       missing.out = Path(tmp) / 'out3'
@@ -3044,7 +3053,7 @@ class Milestone(unittest.TestCase):
   def test_the_milestone_options_fill_in_what_is_missing(self):
     extra = checkpoint.milestone_extra('')
     for option in ('--perf-realworld pinned', '--perf-levels 0,2',
-                   '--perf-targets s1', '--day-baseline-run'):
+                   '--perf-targets s1'):
       self.assertIn(option, extra)
     self.assertEqual(checkpoint.milestone_extra(
       '--perf-levels 0 --perf-targets s1').count('--perf-levels'), 1)
@@ -3054,10 +3063,18 @@ class Milestone(unittest.TestCase):
                      checkpoint.milestone_extra('--perf-levels 0'))
     self.assertTrue(checkpoint.milestone_extra('--foo').endswith('--foo'))
 
-  def test_the_milestone_baselines_are_the_m5a_perf_and_the_day_run(self):
-    self.assertEqual(checkpoint.MILESTONE_PERF_BASELINE,
+  def test_the_perf_baselines_are_the_m5_run_and_the_m5a_targets(self):
+    self.assertEqual(checkpoint.PERF_BASELINE,
+                     '~/edg-cir-config/m5-base-perf.json')
+    self.assertEqual(checkpoint.PERF_TARGETS_BASELINE,
                      '~/edg-cir-config/m5a-base-perf.json')
-    self.assertIn('day-base', checkpoint.MILESTONE_DAY_BASELINE)
+    self.assertIn('day-base', checkpoint.DAY_BASELINE)
+
+  def test_a_perf_step_gets_the_measuring_options_of_its_baseline(self):
+    extra = checkpoint.with_options(checkpoint.PERF_OPTIONS, '')
+    self.assertIn('--perf-realworld pinned', extra)
+    self.assertIn('--perf-levels 0,2', extra)
+    self.assertNotIn('--perf-targets', extra)
 
   def test_milestone_runs_every_step(self):
     steps = gate.default_steps(True, True)
@@ -3082,14 +3099,213 @@ class Milestone(unittest.TestCase):
     self.assertEqual(raised.exception.code, 2)
 
 
+class HostSettings(unittest.TestCase):
+  def test_the_defaults_name_clang4_and_the_key(self):
+    self.assertEqual(checkpoint.BOX, 'matt@clang4.cpp.al')
+    self.assertEqual(checkpoint.SSH_KEY, '~/.ssh/id_rsa')
+    self.assertEqual(checkpoint.SOCKET, '')
+    self.assertFalse(checkpoint.SG_DOCKER)
+
+  def test_ssh_options_have_batch_mode_and_the_key(self):
+    saved = checkpoint.SOCKET
+    checkpoint.SOCKET = ''
+    try:
+      options = checkpoint.ssh_options()
+    finally:
+      checkpoint.SOCKET = saved
+    self.assertEqual(options[:2], ['-o', 'BatchMode=yes'])
+    self.assertEqual(options[2], '-i')
+    self.assertTrue(options[3].endswith('/.ssh/id_rsa'))
+    self.assertNotIn('ControlPath', ' '.join(options))
+
+  def test_the_socket_is_used_only_when_set(self):
+    saved = checkpoint.SOCKET
+    checkpoint.SOCKET = '/tmp/cm-test'
+    try:
+      options = ' '.join(checkpoint.ssh_options())
+    finally:
+      checkpoint.SOCKET = saved
+    self.assertIn('ControlPath=/tmp/cm-test', options)
+    self.assertIn('ControlMaster=no', options)
+
+  def test_docker_runs_directly_unless_sg_docker_is_asked_for(self):
+    saved = checkpoint.SG_DOCKER
+    try:
+      checkpoint.SG_DOCKER = False
+      self.assertEqual(checkpoint.docker_wrap('docker ps'), 'docker ps')
+      checkpoint.SG_DOCKER = True
+      self.assertEqual(checkpoint.docker_wrap('docker ps'),
+                       "sg docker -c 'docker ps'")
+    finally:
+      checkpoint.SG_DOCKER = saved
+
+
+class Baselines(unittest.TestCase):
+  def args(self, **kw):
+    import types
+    values = dict(
+      identity_baseline = 'i', day_baseline_run = 'd', asm_baseline = 'a',
+      cpp_asm_baseline = 'ca', status_baseline = 's',
+      opt_baseline_status = 'o', perf_baseline = 'p',
+      perf_targets_baseline = 't', perf_measure_only = False,
+      perf_targets = '', cpp_configs = 'edg_x86_64_cir,edg_x86_64_cir_2p')
+    values.update(kw)
+    return types.SimpleNamespace(**values)
+
+  def need(self, steps, **kw):
+    return {(o, k): used for o, _, k, used in
+            gate.baseline_requirements(self.args(**kw), steps)}
+
+  def test_each_step_names_its_baselines(self):
+    got = self.need(['identity', 'day', 'asm-diff', 'cpp-asm-diff', 'corpus',
+                     'cpp-corpus', 'perf'])
+    self.assertEqual(got[('identity-baseline', 'dir')], 'identity')
+    self.assertEqual(got[('day-baseline-run', 'dir')], 'day')
+    self.assertEqual(got[('asm-baseline', 'manifest')], 'asm-diff')
+    self.assertEqual(got[('cpp-asm-baseline', 'manifest')], 'cpp-asm-diff')
+    self.assertEqual(got[('perf-baseline', 'json')], 'perf')
+    self.assertNotIn(('perf-targets-baseline', 'json'), got)
+    status = [k for (o, k) in got if o == 'status-baseline']
+    self.assertEqual(len(status), 1)
+    for name in ('c_edg_x86_64_cir.json', 'cpp_edg_x86_64_cir.json',
+                 'cpp_edg_x86_64_cir_2p.json'):
+      self.assertIn(name, status[0])
+
+  def test_the_targets_and_measure_only_change_the_perf_baselines(self):
+    got = self.need(['perf'], perf_targets = 's1')
+    self.assertIn(('perf-targets-baseline', 'json'), got)
+    got = self.need(['perf'], perf_measure_only = True)
+    self.assertEqual(got, {})
+
+  def test_opt_corpus_needs_the_o0_statuses_only_without_the_corpora(self):
+    self.assertIn(('opt-baseline-status',
+                   'status:c_edg_x86_64_cir.json,cpp_edg_x86_64_cir.json'),
+                  self.need(['opt-corpus']))
+    self.assertEqual(self.need(['opt-corpus', 'corpus', 'cpp-corpus']).keys()
+                     & {('opt-baseline-status', 'x')}, set())
+    names = [o for (o, _) in self.need(['opt-corpus', 'corpus',
+                                        'cpp-corpus'])]
+    self.assertNotIn('opt-baseline-status', names)
+
+  def test_steps_without_a_baseline_need_none(self):
+    self.assertEqual(self.need(['build', 'smoke', 'ctest', 'chunk-rss']), {})
+
+  def test_the_state_of_a_baseline(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = Path(tmp)
+      self.assertFalse(gate.baseline_state('', 'dir')[0])
+      self.assertEqual(gate.baseline_state(str(root / 'no'), 'dir'),
+                       (False, 'MISSING'))
+      empty = root / 'empty'
+      empty.mkdir()
+      self.assertFalse(gate.baseline_state(str(empty), 'dir')[0])
+      self.assertFalse(gate.baseline_state(str(empty), 'manifest')[0])
+      (empty / 'manifest.json').write_text('')
+      self.assertFalse(gate.baseline_state(str(empty), 'manifest')[0])
+      (empty / 'manifest.json').write_text('{"a": 1}')
+      self.assertTrue(gate.baseline_state(str(empty), 'manifest')[0])
+      self.assertTrue(gate.baseline_state(str(empty), 'dir')[0])
+      perf = root / 'perf.json'
+      self.assertFalse(gate.baseline_state(str(perf), 'json')[0])
+      perf.write_text('')
+      self.assertFalse(gate.baseline_state(str(perf), 'json')[0])
+      perf.write_text('{"rows": {}}')
+      self.assertTrue(gate.baseline_state(str(perf), 'json')[0])
+      status = root / 'status'
+      status.mkdir()
+      kind = 'status:c_edg_x86_64_cir.json'
+      self.assertFalse(gate.baseline_state(str(status), kind)[0])
+      (status / 'c_edg_x86_64_cir.json').write_text(
+        json.dumps({'edg_x86_64_cir': []}))
+      self.assertFalse(gate.baseline_state(str(status), kind)[0])
+      (status / 'c_edg_x86_64_cir.json').write_text(
+        json.dumps({'edg_x86_64_cir': [{'path': 'a'}]}))
+      self.assertTrue(gate.baseline_state(str(status), kind)[0])
+
+  def test_check_baselines_fails_for_a_missing_one(self):
+    saved = gate.image_ids
+    gate.image_ids = lambda: {'edgcpp/cir-env:latest': 'sha256:' + 'a' * 64}
+    try:
+      with tempfile.TemporaryDirectory() as tmp:
+        ok, lines = gate.check_baselines(
+          self.args(perf_baseline = str(Path(tmp) / 'none.json')), ['perf'])
+        self.assertFalse(ok)
+        self.assertIn('FAIL: MISSING', '\n'.join(lines))
+        perf = Path(tmp) / 'perf.json'
+        perf.write_text('{"rows": {"a": 1}}')
+        ok, lines = gate.check_baselines(
+          self.args(perf_baseline = str(perf)), ['perf'])
+        self.assertTrue(ok, lines)
+        self.assertIn('none recorded', '\n'.join(lines))
+        ok, lines = gate.check_baselines(self.args(), ['build'])
+        self.assertTrue(ok)
+    finally:
+      gate.image_ids = saved
+
+  def test_the_image_note(self):
+    ids = {ref: 'sha256:' + c * 64
+           for ref, c in zip(gate.IMAGE_REFS, 'abc')}
+    with tempfile.TemporaryDirectory() as tmp:
+      base = Path(tmp) / 'm5-base-asm'
+      base.mkdir()
+      self.assertIn('no image record', gate.image_note(str(base), ids))
+      record = gate.image_record_path(str(base))
+      self.assertEqual(record.name, 'm5-base-asm.images.txt')
+      record.write_text(''.join(f"{r} {i}\n" for r, i in ids.items()))
+      self.assertEqual(gate.image_note(str(base), ids), '')
+      other = dict(ids)
+      other['edgcpp/cir-env:latest'] = 'sha256:' + 'd' * 64
+      note = gate.image_note(str(base), other)
+      self.assertIn('IMAGES DIFFER', note)
+      self.assertIn('cir-env', note)
+      self.assertEqual(gate.image_note('', ids), '')
+
+  def test_no_command_uses_sg_docker_unless_asked_for(self):
+    saved = os.environ.pop('EDG_CIR_SG_DOCKER', None)
+    try:
+      self.assertEqual(gate.docker_argv(['docker', 'ps']), ['docker', 'ps'])
+      os.environ['EDG_CIR_SG_DOCKER'] = '1'
+      self.assertEqual(gate.docker_argv(['docker', 'ps', '-q']),
+                       ['sg', 'docker', '-c', 'docker ps -q'])
+    finally:
+      os.environ.pop('EDG_CIR_SG_DOCKER', None)
+      if saved is not None:
+        os.environ['EDG_CIR_SG_DOCKER'] = saved
+
+
+class PerfTargetsBaseline(unittest.TestCase):
+  def test_measure_only_compares_with_no_baseline(self):
+    import types
+    args = types.SimpleNamespace(perf_baseline = '~/x/m5-base-perf.json',
+                                 perf_measure_only = False)
+    self.assertTrue(gate.perf_baseline_path(args).endswith(
+      '/x/m5-base-perf.json'))
+    self.assertNotIn('~', gate.perf_baseline_path(args))
+    args.perf_measure_only = True
+    self.assertEqual(gate.perf_baseline_path(args), '')
+    args.perf_measure_only = False
+    args.perf_baseline = ''
+    self.assertEqual(gate.perf_baseline_path(args), '')
+
+  def test_the_targets_have_their_own_baseline_option(self):
+    text = (BIN / 'edg-cir-gate-evidence').read_text()
+    self.assertIn("'--perf-targets-baseline'", text)
+    self.assertIn('m5a-base-perf.json', text)
+    import inspect
+    source = inspect.getsource(gate.step_perf)
+    self.assertIn('perf_targets_baseline', source)
+    # the targets are not checked against the regression baseline
+    self.assertIn('json.loads(targets_file.read_text())', source)
+
+
 class MilestonePreparation(unittest.TestCase):
-  def test_the_status_triage_has_pr101373_for_both_configs_only(self):
+  def test_the_status_triage_is_empty_against_the_m5_baseline(self):
+    # pr101373 failed in the M5p baseline, not in the M5 one (it fails in
+    # both); a triage line for a case that did not regress is stale.
     triage, problems = gate.read_status_triage(
       BIN.parent.parent / gate.STATUS_TRIAGE)
     self.assertEqual(problems, [])
-    self.assertEqual(sorted(k[:3] for k in triage), [
-      ('imported/gnu/cpp/torture/pr101373.sft.cpp', '-DTEST_NUMBER=1', '*')])
-    self.assertFalse(any('pr100382' in k[0] for k in triage))
+    self.assertEqual(list(triage), [])
 
   def test_slow_below_threshold_runs_with_two_jobs(self):
     import inspect

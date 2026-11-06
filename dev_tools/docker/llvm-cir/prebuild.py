@@ -16,6 +16,10 @@
 #   EDG_LLVM_CIR_INSTALL_DIR  Use an existing installed prefix as-is and skip
 #                             the build.
 #   EDG_LLVM_CIR_CHECK        If set, also run ninja check-clang-cir.
+#   EDG_LLVM_CIR_JOBS         Parallel compile jobs (default: all CPUs, which
+#                             is too many on a shared host such as clang4;
+#                             the project limit there is 64).  If set, the
+#                             build also runs under `nice -n 10`.
 
 import os
 import shutil
@@ -23,6 +27,7 @@ import subprocess
 
 import edgtools
 
+from edgdocker import tag_dev_env_for_cir
 from pathlib import Path
 
 LLVM_GIT_URL = 'https://github.com/llvm/llvm-project.git'
@@ -64,13 +69,15 @@ def fetch_llvm_project(dest: Path) -> None:
 
 def build_toolchain(work_dir: Path, install_dir: Path) -> None:
   '''Build and install the toolchain inside edgcpp/dev-env.'''
+  tag_dev_env_for_cir()
   src_dir = work_dir / 'llvm-project'
   build_dir = work_dir / 'build'
   fetch_llvm_project(src_dir)
   build_dir.mkdir(exist_ok = True)
   install_dir.mkdir(exist_ok = True)
+  jobs = os.environ.get('EDG_LLVM_CIR_JOBS')
   command = [
-    'docker', 'run', '--rm',
+    'docker', 'run', '--rm', '--name', 'cir-config-llvm-build',
     '--user', f"{os.getuid()}:{os.getgid()}",
     '-e', 'HOME=/tmp',
     '-v', f"{src_dir}:/src/llvm-project:ro",
@@ -78,8 +85,11 @@ def build_toolchain(work_dir: Path, install_dir: Path) -> None:
     '-v', f"{install_dir}:/edg/llvm-cir",
     '-v', f"{BUILD_SCRIPT}:/usr/local/bin/edg-build-llvm-cir:ro",
     BUILD_IMAGE,
+    *(['nice', '-n', '10'] if jobs else []),
     'edg-build-llvm-cir'
   ]
+  if jobs:
+    command.extend(['--jobs', jobs])
   if 'EDG_LLVM_CIR_CHECK' in os.environ:
     command.append('--check')
   command.extend(['/src/llvm-project', '/build', '/edg/llvm-cir'])

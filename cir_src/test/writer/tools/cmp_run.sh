@@ -4,7 +4,7 @@
 # the programs may #include the system headers of the container)
 # A program prints what it wants to compare; the script reports SAME or DIFF
 # (with the first differing lines) for each file.  Set CMP_OPTIONS for
-# extra eccp options and CMP_GCC_OPTIONS extra gcc options.  Needs BOX_HOST (see box.sh).
+# extra eccp options and CMP_GCC_OPTIONS extra gcc options.  Host settings: see box.sh.
 here=$(cd "$(dirname "$0")" && pwd)
 box=$here/box.sh
 tree=${BOX_TREE:-edg-cir-writer}

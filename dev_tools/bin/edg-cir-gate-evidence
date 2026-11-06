@@ -7,12 +7,15 @@
 
 '''Produce the gate evidence of the CIR back end in one go.
 
-Run it on the machine that runs the docker images (the x86-64 box), from any
-directory, as a user that can run docker (`sg docker -c "..."`):
+Run it on the machine that runs the docker images (the x86-64 host clang4),
+from any directory, as a user that can run docker (directly on clang4; the old
+box needed `sg docker -c "..."`):
 
-  edg-cir-gate-evidence --tree ~/edg-cir-config/m1-tree \\
-      --identity-baseline ~/edg-cir-config/identity-m0c \\
-      --day-baseline-run ~/edg-cir-config/baseline-tree/tests/runs/<ts>
+  edg-cir-gate-evidence --tree ~/edg-cir-config/m5-int --milestone
+  edg-cir-gate-evidence --tree ~/edg-cir-config/m5-int --lean writer \\
+      --lean-base HEAD
+  edg-cir-gate-evidence --tree ~/edg-cir-config/m5-int --milestone \\
+      --check-baselines          # list the baselines the steps need
 
 The evidence goes into a dated directory (default
 <tree>/.tmp/gate-evidence/<timestamp>), one subdirectory per step with the full
@@ -25,6 +28,18 @@ Milestone gates: `--milestone` runs every step (--with-cpp and --with-m4),
 so a full gate, the M5 gate in particular, always runs lazy-identity (lazy
 against eager emission over both corpora and the pinned units) with the C++,
 ABI, EH, optimization, attribute and chunking steps.
+
+Baselines: the steps compare with baselines in ~/edg-cir-config (the defaults
+of the --*-baseline options: m5-base-asm, m5-base-cpp-asm, m5-base-status,
+m5-base-perf.json, m5a-base-perf.json for --perf-targets, identity-m0c,
+day-base).  A missing, empty or unreadable baseline is a failure, never a
+silent skip: before the first step the gate lists the baselines of the
+selected steps and stops (status 2) if one is unusable; --check-baselines only
+prints that list (status 1 if one is unusable) and --allow-missing-baselines
+runs anyway, with the status checks off.  --record-images BASELINE writes the
+IDs of the dev-env, llvm-cir and cir-env images next to a new baseline
+(BASELINE.images.txt); a step that compares with a baseline made with other
+images, or with no record, says so in its detail.
 
 Lean gates: `--lean AREAS` (a comma separated list of the areas that the
 change set touches) runs only the steps that those areas can affect, prints
@@ -152,12 +167,13 @@ Steps (names for --only/--skip):
              and
              no difference from the recorded edg_x86_64_cir expectations
              (unless --allow-status-changes), and no PASS->not PASS case
-             against the statuses of --status-baseline (default the M5p
-             gate's) that tests/.edgy/filters/cir-status-triage.txt does not
+             against the statuses of --status-baseline (default the M5 run's)
+             that tests/.edgy/filters/cir-status-triage.txt does not
              list with a reason (a line for a case that did not regress is
              stale and fails); cpp-corpus has the same check
   modes      in-process and two-process output identical over the corpus
-  stress     edg-cir-stress (deep nesting through the two-process path)
+  stress     edg-cir-stress (deep nesting through the two-process path,
+             each case within --stress-timeout, 3600 s)
   abi-diff   (--with-m4 or --only) edg-cir-abi-diff batch --vbases over
              dev_tools/cir-abi-cases/{s1,s2} and the clang vtable-layout and
              thunk tests (copied from --llvm-project): passes iff no block
@@ -221,8 +237,9 @@ Steps (names for --only/--skip):
              on c3000, c6000, c12000 and cxx6000 (minimum of 3 runs) by
              default, unchunked and with chunking forced on; passes iff the
              forced peak of c12000 is at most --chunk-target (0.55) of the
-             baseline's (--chunk-baseline, the M5a curve) and every forced run
-             chunked; the pinned units are reported
+             unchunked peak (`--chunk-threshold=4294967295`) of the same run,
+             every forced run chunked into 2 or more chunks and every
+             unchunked one into none; the pinned units are reported
   names-check  (--with-m4 or --only) edg-cir-names-check: the front end
              (the checking build build/gcc-cir) on the pinned real-world units
              and generated 6000-function C and C++ files with
@@ -316,7 +333,7 @@ Steps (names for --only/--skip):
              have no CIR expectations) are not gated
   perf       edg-cir-perf (instruction counts, CPU time and RSS of a big
              generated file and of the whole corpus) and, with --perf-baseline
-             (the JSON of an earlier run, default the M5p gate's; a step
+             (the JSON of an earlier run, default the M5 run's; a step
              without one fails unless --perf-measure-only), the before/after
              table;
              --perf-max-regression PERCENT (default
@@ -327,7 +344,8 @@ Steps (names for --only/--skip):
              instructions join the rows above; --boost-include for Boost)
              and --perf-targets s1 the S1 targets (library instructions of
              every pinned unit at most 70%, of the generated C++ unit at -O0
-             at most 90% of the baseline: edg-cir-perf --targets)
+             at most 90% of --perf-targets-baseline, the M5a run:
+             edg-cir-perf --targets)
 
 For the step asm-diff, the baseline of a commit is made with this tree's
 scripts on a tree of that commit (a `git archive` of it will do):
@@ -503,9 +521,21 @@ CPP_STRESS_ASAN_CASES = ('cxx_locals:500 cxx_temps:1000 cxx_meminit:500 '
 PRESETS = ('linux-gcc-debug', 'linux-gcc-release', 'linux-clang-debug',
            'linux-i686-gcc-debug')
 BUILD_JOBS = 12  # overridden by --jobs
+# The day suite of the baseline commit: a link to its tests/runs/<timestamp>
+# in the day-base tree (the 32-bit run is baseline-32 next to it).
+DEFAULT_DAY_BASELINE = '~/edg-cir-config/day-base/baseline-64'
 # The jobs of slow-below-threshold: it counts instructions under valgrind and
 # flaked at 16 under load (the edg-cir runs time out), so it is not run wide.
 SLOW_JOBS = 2
+
+
+def docker_argv(command: List[str]) -> List[str]:
+  '''The command line that runs `command` as a user that can run docker:
+  as it is (the user is in the docker group on clang4), or through
+  `sg docker -c` if EDG_CIR_SG_DOCKER is set (the old box needed it).'''
+  if os.environ.get('EDG_CIR_SG_DOCKER', '') in ('', '0'):
+    return list(command)
+  return ['sg', 'docker', '-c', ' '.join(shlex.quote(c) for c in command)]
 
 
 class Context:
@@ -572,14 +602,14 @@ def stop_containers(ctx: Context, prefix: str) -> List[str]:
   return their ids.'''
   try:
     listing = subprocess.run(
-      ['sg', 'docker', '-c',
-       f"docker ps -q --filter {container_filter(prefix)}"],
+      docker_argv(['docker', 'ps', '-q', '--filter',
+                   container_filter(prefix)]),
       stdout = subprocess.PIPE, stderr = subprocess.DEVNULL, text = True)
   except OSError:
     return []
   ids = listing.stdout.split()
   for identifier in ids:
-    subprocess.run(['sg', 'docker', '-c', f"docker stop -t 10 {identifier}"],
+    subprocess.run(docker_argv(['docker', 'stop', '-t', '10', identifier]),
                    stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL)
   return ids
 
@@ -643,7 +673,7 @@ def _edg_exec_command(ctx: Context, image: str, command: str,
   if wdir:
     edg_exec += ['--wdir', wdir]
   edg_exec += ['--', 'bash -c ' + shlex.quote(command)]
-  return ['sg', 'docker', '-c', ' '.join(shlex.quote(a) for a in edg_exec)]
+  return docker_argv(edg_exec)
 
 
 def in_cir_env(ctx: Context, step: str, command: str,
@@ -712,13 +742,13 @@ def edgy_run(ctx: Context, step: str, config: str, filters: str,
   before = runs_before(ctx)
   command = [
     str(ctx.tree / 'dev_tools/bin/edg-docker-test'), '--non-interactive',
-    '--posture', posture, '--only-configs', config, '-T', str(timeout)
+    '--posture', posture, '--only-configs', config, '-T', str(timeout),
+    '--jobs', str(BUILD_JOBS)
   ]
   if types:
     command += ['--types', types]
   command.append(filters)
-  run_logged(ctx, step, ['sg', 'docker', '-c', ' '.join(
-    shlex.quote(c) for c in command)], extra_env = extra_env)
+  run_logged(ctx, step, docker_argv(command), extra_env = extra_env)
   return newest_run(ctx, before)
 
 
@@ -989,15 +1019,11 @@ def judge_chunk_rss(text: str, code: int) -> Tuple[bool, str]:
 def step_chunk_rss(ctx: Context) -> Tuple[bool, str]:
   directory = ctx.out / 'chunk-rss'
   directory.mkdir(parents = True, exist_ok = True)
-  baseline = Path(ctx.args.chunk_baseline).expanduser()
-  if not baseline.exists():
-    return False, f"the curve baseline {baseline} does not exist"
-  shutil.copy2(baseline, directory / 'baseline.json')
   out = rel(ctx, directory)
   boost = shlex.quote(ctx.args.boost_include)
   code = in_cir_env(
     ctx, 'chunk-rss',
-    f"python3 dev_tools/bin/edg-cir-chunk-rss --baseline {out}/baseline.json "
+    f"python3 dev_tools/bin/edg-cir-chunk-rss "
     f"--target c12000={ctx.args.chunk_target} --pinned "
     f"--boost-include {boost} --json {out}/curve.json "
     f"> {out}/report.txt 2>&1")
@@ -1372,14 +1398,16 @@ def judge_status_regressions(label: str, before: List[dict],
 def load_status_baseline(ctx: Context, prefix: str, config: str
                          ) -> Optional[List[dict]]:
   '''The results of a corpus in the baseline directory (--status-baseline:
-  <prefix>_<config>.json, the summary JSON with its one config key); None if
-  the option is off (empty).'''
-  if not ctx.args.status_baseline:
-    return None
-  directory = Path(ctx.args.status_baseline).expanduser()
-  path = directory / f"{prefix}_{config}.json"
-  if not path.exists():
-    return []
+  <prefix>_<config>.json, the summary JSON with its one config key).  A
+  missing baseline (no option, no directory, no file) gives [], which the
+  caller reports as a problem; only --allow-missing-baselines turns the
+  check off (None).'''
+  allow = getattr(ctx.args, 'allow_missing_baselines', False)
+  option = ctx.args.status_baseline
+  path = Path(option).expanduser() / f"{prefix}_{config}.json" if option \
+    else None
+  if path is None or not path.exists():
+    return None if allow else []
   data = json.loads(path.read_text())
   return data.get(config) or next(iter(data.values()), [])
 
@@ -1390,7 +1418,7 @@ def status_check(ctx: Context, step: str, prefix: str, config: str,
   statuses and the triage file (empty problems if the check is off).'''
   before = load_status_baseline(ctx, prefix, config)
   if before is None:
-    return [], ''
+    return [], 'status check OFF (--allow-missing-baselines)'
   triage, triage_problems = read_status_triage(ctx.tree / STATUS_TRIAGE)
   if triage_problems:
     return triage_problems, ''
@@ -1711,7 +1739,8 @@ def step_cpp_writer_stress(ctx: Context) -> Tuple[bool, str]:
 
 
 def step_stress(ctx: Context) -> Tuple[bool, str]:
-  code = in_cir_env(ctx, 'stress', 'python3 dev_tools/bin/edg-cir-stress')
+  code = in_cir_env(ctx, 'stress', 'python3 dev_tools/bin/edg-cir-stress '
+                    f"--timeout {ctx.args.stress_timeout}")
   text = (ctx.out / 'stress' / 'log.txt').read_text()
   match = re.search(r'RESULT: .*', text)
   return code == 0, match.group(0) if match else 'no result line'
@@ -1911,14 +1940,13 @@ def step_day(ctx: Context) -> Tuple[bool, str]:
     return False, '--day-baseline-run is required'
   before = runs_before(ctx)
   day_command = [str(ctx.tree / 'dev_tools/bin/edg-docker-test'),
-                 '--non-interactive']
+                 '--non-interactive', '--jobs', str(BUILD_JOBS)]
   suites = None
   if ctx.args.day_filter:
     # A partial run (for testing the script): compare only those suites.
     day_command.append(ctx.args.day_filter)
     suites = sorted({f.split('/')[0] for f in ctx.args.day_filter.split(',')})
-  run_logged(ctx, 'day', ['sg', 'docker', '-c', ' '.join(
-    shlex.quote(c) for c in day_command)])
+  run_logged(ctx, 'day', docker_argv(day_command))
   run = newest_run(ctx, before)
   if run is None:
     return False, 'no run produced'
@@ -2539,6 +2567,15 @@ def collections_counter(items) -> Dict[str, int]:
 DEFAULT_PERF_MAX_REGRESSION = 2.0
 
 
+def perf_baseline_path(args: argparse.Namespace) -> str:
+  '''The perf regression baseline ("" for none).  --perf-measure-only
+  measures and compares with nothing, whatever --perf-baseline says (its
+  default names a file that may not exist yet).'''
+  if not args.perf_baseline or args.perf_measure_only:
+    return ''
+  return str(Path(args.perf_baseline).expanduser())
+
+
 def step_perf(ctx: Context) -> Tuple[bool, str]:
   work = ctx.tree / '.tmp' / 'gate-perf' / ctx.out.name
   work.mkdir(parents = True, exist_ok = True)
@@ -2578,8 +2615,7 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
   table_command = [sys.executable,
                    str(ctx.tree / 'dev_tools/bin/edg-cir-perf'),
                    '--table-only', '--json', str(new_json)]
-  baseline = str(Path(ctx.args.perf_baseline).expanduser()) \
-    if ctx.args.perf_baseline else ''
+  baseline = perf_baseline_path(ctx.args)
   if baseline:
     table_command += ['--baseline', str(Path(baseline).resolve())]
   proc = subprocess.run(table_command, env = ctx.env, text = True,
@@ -2606,12 +2642,20 @@ def step_perf(ctx: Context) -> Tuple[bool, str]:
                     'baseline')
   passes = limit is None or worst <= limit
   if ctx.args.perf_targets:
+    # The targets of a slice are against their own baseline (S1: the M5a
+    # run), not against the regression baseline.
+    targets_file = Path(ctx.args.perf_targets_baseline).expanduser() \
+      if ctx.args.perf_targets_baseline else None
+    if targets_file is None or not targets_file.exists():
+      return False, (f"the targets baseline {targets_file} does not exist "
+                     f"(--perf-targets-baseline)")
     perf = _load_tool('edg-cir-perf')
-    targets_ok, report = perf.check_targets(before, after,
-                                            ctx.args.perf_targets)
+    targets_ok, report = perf.check_targets(
+      json.loads(targets_file.read_text()), after, ctx.args.perf_targets)
     (ctx.out / 'perf' / 'targets.txt').write_text('\n'.join(report) + '\n')
     missed = [l for l in report if l.startswith('FAIL')]
-    detail += (f" | targets {ctx.args.perf_targets}: "
+    detail += (f" | targets {ctx.args.perf_targets} against "
+               f"{targets_file.name}: "
                f"{'met' if targets_ok else 'MISSED'} ({len(report)} rows"
                f"{'; ' + missed[0] if missed else ''}; targets.txt)")
     passes = passes and targets_ok
@@ -3337,6 +3381,11 @@ def step_opt_corpus(ctx: Context) -> Tuple[bool, str]:
                'cpp': 'cpp_edg_x86_64_cir.json'}
   before = {key: _o0_statuses(ctx, key, baselines[key])
             for key in ('c', 'cpp')}
+  absent = [baselines[k] for k in ('c', 'cpp') if not before[k]]
+  if absent and not getattr(ctx.args, 'allow_missing_baselines', False):
+    return False, (f"no -O0 statuses to compare with: {', '.join(absent)} "
+                   f"neither in this evidence directory (corpus, cpp-corpus) "
+                   f"nor in --opt-baseline-status {ctx.args.opt_baseline_status}")
   all_lists: Dict[str, Dict[str, list]] = {}
   for key in ('c', 'cpp'):
     mine = {k: v for k, v in triage.items() if k in before[key]}
@@ -3402,6 +3451,190 @@ def step_opt_corpus(ctx: Context) -> Tuple[bool, str]:
 
 
 
+# The images the evidence was made with.  A baseline records them in a sidecar
+# file (<baseline>.images.txt, see --record-images); a comparison against a
+# baseline made with other images says so in the step's detail.
+IMAGE_REFS = ('edgcpp/dev-env:latest', 'edgcpp/llvm-cir:latest',
+              'edgcpp/cir-env:latest')
+
+
+def image_ids() -> Dict[str, str]:
+  '''The image ID of every IMAGE_REFS entry ("missing" if the image is not
+  on this host).'''
+  ids: Dict[str, str] = {}
+  for ref in IMAGE_REFS:
+    proc = subprocess.run(
+      docker_argv(['docker', 'image', 'inspect', '--format', '{{.Id}}', ref]),
+      stdout = subprocess.PIPE, stderr = subprocess.DEVNULL, text = True)
+    ids[ref] = proc.stdout.strip() if proc.returncode == 0 and \
+      proc.stdout.strip() else 'missing'
+  return ids
+
+
+def image_record_path(baseline: str) -> Path:
+  '''The sidecar file with the image IDs of a baseline.'''
+  path = Path(baseline).expanduser()
+  return path.with_name(path.name + '.images.txt')
+
+
+def write_image_record(baseline: str) -> Path:
+  '''Write the current image IDs next to a baseline.'''
+  path = image_record_path(baseline)
+  path.write_text(''.join(f"{ref} {i}\n" for ref, i in image_ids().items()))
+  return path
+
+
+def read_image_record(path: Path) -> Dict[str, str]:
+  '''The image IDs of a record file ({} if it does not exist).'''
+  records: Dict[str, str] = {}
+  if path.exists():
+    for line in path.read_text().splitlines():
+      parts = line.split()
+      if len(parts) == 2:
+        records[parts[0]] = parts[1]
+  return records
+
+
+def image_note(baseline: str, current: Dict[str, str]) -> str:
+  '''"" if the baseline was made with the current images, else the note
+  for the step detail (different images, or no record).'''
+  if not baseline or not Path(baseline).expanduser().exists():
+    return ''
+  recorded = read_image_record(image_record_path(baseline))
+  if not recorded:
+    return f"IMAGES: {Path(baseline).name} has no image record"
+  differ = [f"{ref.split('/')[-1].split(':')[0]} "
+            f"{recorded.get(ref, 'none')[7:19]} -> "
+            f"{current.get(ref, 'none')[7:19]}" for ref in IMAGE_REFS
+            if recorded.get(ref) != current.get(ref)]
+  return (f"IMAGES DIFFER from the baseline's ({Path(baseline).name}: "
+          f"{'; '.join(differ)})" if differ else '')
+
+
+# The options of the baselines that a step reads.
+STEP_BASELINES = {
+  'identity': ('identity_baseline',), 'day': ('day_baseline_run',),
+  'asm-diff': ('asm_baseline',), 'cpp-asm-diff': ('cpp_asm_baseline',),
+  'corpus': ('status_baseline',), 'cpp-corpus': ('status_baseline',),
+  'opt-corpus': ('opt_baseline_status',),
+  'perf': ('perf_baseline', 'perf_targets_baseline'),
+}
+
+
+def baseline_requirements(args: argparse.Namespace, steps: List[str]
+                          ) -> List[Tuple[str, str, str, str]]:
+  '''(option, path, kind, steps) of every baseline that the selected steps
+  read.  The kinds: `dir` (a directory with files), `manifest` (a directory
+  with a manifest.json), `json` (a file with a JSON document) and
+  `status:A,B` (a directory with these status JSON files, each with
+  results).  The same option and path are listed once.'''
+  rows: Dict[Tuple[str, str, str], List[str]] = {}
+
+  def add(step: str, option: str, kind: str) -> None:
+    key = (option, str(getattr(args, option.replace('-', '_'), '')), kind)
+    rows.setdefault(key, []).append(step)
+
+  configs = [c for c in args.cpp_configs.split(',') if c]
+  for step in steps:
+    if step == 'identity':
+      add(step, 'identity-baseline', 'dir')
+    elif step == 'day':
+      add(step, 'day-baseline-run', 'dir')
+    elif step == 'asm-diff':
+      add(step, 'asm-baseline', 'manifest')
+    elif step == 'cpp-asm-diff':
+      add(step, 'cpp-asm-baseline', 'manifest')
+    elif step == 'corpus':
+      add(step, 'status-baseline', 'status:c_edg_x86_64_cir.json')
+    elif step == 'cpp-corpus':
+      add(step, 'status-baseline',
+          'status:' + ','.join(f"cpp_{c}.json" for c in configs))
+    elif step == 'opt-corpus' and not (
+        'corpus' in steps and 'cpp-corpus' in steps):
+      add(step, 'opt-baseline-status',
+          'status:c_edg_x86_64_cir.json,cpp_edg_x86_64_cir.json')
+    elif step == 'perf':
+      if not args.perf_measure_only:
+        add(step, 'perf-baseline', 'json')
+      if args.perf_targets:
+        add(step, 'perf-targets-baseline', 'json')
+  merged: Dict[Tuple[str, str], Tuple[List[str], List[str]]] = {}
+  for (option, path, kind), names in rows.items():
+    kinds, used = merged.setdefault((option, path), ([], []))
+    kinds.append(kind)
+    used.extend(n for n in names if n not in used)
+  result = []
+  for (option, path), (kinds, used) in merged.items():
+    files = sorted({f for k in kinds if k.startswith('status:')
+                    for f in k[7:].split(',')})
+    kind = ('status:' + ','.join(files)) if files else kinds[0]
+    result.append((option, path, kind, ','.join(used)))
+  return result
+
+
+def baseline_state(path: str, kind: str) -> Tuple[bool, str]:
+  '''(usable, what is wrong or the size) of one baseline.'''
+  if not path:
+    return False, 'no path (option not set)'
+  target = Path(path).expanduser()
+  if not target.exists():
+    return False, 'MISSING'
+
+  def readable(file: Path) -> Tuple[bool, str]:
+    if not file.is_file() or file.stat().st_size == 0:
+      return False, f"{file.name} missing or empty"
+    try:
+      data = json.loads(file.read_text())
+    except ValueError:
+      return False, f"{file.name} is not JSON"
+    if not data:
+      return False, f"{file.name} has no content"
+    if kind.startswith('status:') and not any(
+        isinstance(v, list) and v for v in data.values()):
+      return False, f"{file.name} has no results"
+    return True, ''
+
+  if kind == 'json':
+    ok, why = readable(target)
+    return ok, why or f"{target.stat().st_size} bytes"
+  if not target.is_dir():
+    return False, 'not a directory'
+  if kind == 'manifest':
+    ok, why = readable(target / 'manifest.json')
+    return ok, why or f"{len(list(target.iterdir()))} entries"
+  if kind.startswith('status:'):
+    for name in kind[7:].split(','):
+      ok, why = readable(target / name)
+      if not ok:
+        return False, why
+    return True, kind[7:]
+  count = sum(1 for _ in target.iterdir())
+  return count > 0, f"{count} entries" if count else 'EMPTY'
+
+
+def check_baselines(args: argparse.Namespace, steps: List[str]
+                    ) -> Tuple[bool, List[str]]:
+  '''(all usable, table lines): the baselines that the steps need, with
+  path, state and whether the images match the current ones.'''
+  rows = baseline_requirements(args, steps)
+  current = image_ids() if rows else {}
+  lines = ['| option | path | state | images | steps |',
+           '| --- | --- | --- | --- | --- |']
+  ok = True
+  for option, path, kind, used in rows:
+    usable, state = baseline_state(path, kind)
+    ok = ok and usable
+    note = image_note(path, current) if path else ''
+    images = ('same' if not note else
+              'none recorded' if 'no image record' in note else 'DIFFER')
+    lines.append(f"| --{option} | {path} | "
+                 f"{'ok: ' if usable else 'FAIL: '}{state} | "
+                 f"{images if usable else '-'} | {used} |")
+  if not rows:
+    lines.append('| (no selected step reads a baseline) | | | | |')
+  return ok, lines
+
+
 STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'build': step_build, 'identity': step_identity,
   'isolation': step_isolation, 'smoke': step_smoke, 'corpus': step_corpus,
@@ -3459,22 +3692,36 @@ def main() -> None:
                              'and exit')
   parser.add_argument('--force', action = 'store_true',
                       help = 're-run steps that already PASSed')
-  parser.add_argument('--identity-baseline', default = '',
+  parser.add_argument('--check-baselines', action = 'store_true',
+                      help = 'print the baselines that the selected steps '
+                             'need, with their state, and exit (1 if one is '
+                             'missing or empty)')
+  parser.add_argument('--allow-missing-baselines', action = 'store_true',
+                      help = 'run although a baseline is unusable: the status '
+                             'checks are then off (the detail says so)')
+  parser.add_argument('--record-images', default = '', metavar = 'BASELINE',
+                      help = 'write the image IDs next to BASELINE '
+                             '(BASELINE.images.txt) and exit')
+  parser.add_argument('--identity-baseline',
+                      default = '~/edg-cir-config/identity-m0c',
                       help = 'identity capture of the M0 commit (a '
                              'edg-macro-identity-check capture tree)')
-  parser.add_argument('--day-baseline-run', default = '',
-                      help = 'tests/runs/<ts> of a full day suite of the M0 '
-                             'commit')
+  parser.add_argument('--day-baseline-run',
+                      default = DEFAULT_DAY_BASELINE,
+                      help = 'tests/runs/<ts> of a full day suite of the '
+                             'baseline commit (day-base tree)')
   parser.add_argument('--day-filter', default = '',
                       help = 'run only these suites in the day step (for '
                              'trying the script; the gate run has none)')
-  parser.add_argument('--asm-baseline', default = '',
+  parser.add_argument('--asm-baseline',
+                      default = '~/edg-cir-config/m5-base-asm',
                       help = 'directory of the corpus assembly of the '
                              'baseline commit (step asm-diff)')
   parser.add_argument('--asm-new', default = '',
                       help = 'compare this --save-asm directory instead of '
                              'compiling the corpus (step asm-diff)')
-  parser.add_argument('--cpp-asm-baseline', default = '',
+  parser.add_argument('--cpp-asm-baseline',
+                      default = '~/edg-cir-config/m5-base-cpp-asm',
                       help = 'directory of the C++ corpus assembly of the '
                              'baseline commit (step cpp-asm-diff)')
   parser.add_argument('--cpp-asm-new', default = '',
@@ -3491,9 +3738,15 @@ def main() -> None:
                       help = 'asm-diff passes if files differ only in the '
                              'order of their lines')
   parser.add_argument('--perf-baseline',
-                      default = '~/edg-cir-config/m5p-base-perf.json',
-                      help = 'perf.json of the baseline commit (step perf; '
-                             'default: the M5p gate\'s)')
+                      default = '~/edg-cir-config/m5-base-perf.json',
+                      help = 'perf.json of the baseline commit for the '
+                             'regression check (step perf; default: the M5 '
+                             'run\'s)')
+  parser.add_argument('--perf-targets-baseline',
+                      default = '~/edg-cir-config/m5a-base-perf.json',
+                      help = 'perf.json that --perf-targets compares with '
+                             '(S1: the M5a run, which has the real-world '
+                             'section)')
   parser.add_argument('--perf-levels', default = '0',
                       help = 'optimization levels of the big files of the '
                              'perf step (0,2 adds the -O2 rows big_O2 and '
@@ -3515,19 +3768,16 @@ def main() -> None:
   parser.add_argument('--perf-targets', default = '', metavar = 'NAME',
                       help = 'the perf step also checks the targets of a '
                              'slice (edg-cir-perf --targets; `s1`) against '
-                             'the baseline, which needs the same sections '
-                             '(the baseline of M5a has the real-world one)')
+                             '--perf-targets-baseline, which needs the same '
+                             'sections (the M5a one has the real-world one)')
   parser.add_argument('--boost-include', default = '.tmp/boost-inc',
                       help = 'the Boost headers (merged into one tree, '
                              'inside the tree) for the pinned Boost units '
                              'of the perf step and the lazy-identity step')
-  parser.add_argument('--chunk-baseline',
-                      default = '~/edg-cir-config/m5a-base-rss-curve.json',
-                      help = 'the peak-memory curve of the baseline (step '
-                             'chunk-rss; copied into the evidence)')
   parser.add_argument('--chunk-target', type = float, default = 0.55,
                       help = 'the forced-chunking peak of c12000 may be at '
-                             'most this share of the baseline\'s (S3)')
+                             'most this share of the unchunked peak of the '
+                             'same run (S3)')
   parser.add_argument('--perf-only', default = 'cxx',
                       help = 'extra measurements of the perf step: cxx (a '
                              'generated 6000-function C++ file, with the C '
@@ -3553,6 +3803,12 @@ def main() -> None:
                              'step: it is killed, the step\'s containers '
                              'stop and the step fails (STEP_TIMEOUTS has '
                              'shorter limits for some steps)')
+  parser.add_argument('--stress-timeout', type = int, default = 3600,
+                      help = 'per-case limit of edg-cir-stress in the stress '
+                             'step (the 20000-rung else-if ladder takes '
+                             'about 24 minutes on clang4 and 3 minutes on '
+                             'the old box: it is quadratic and latency '
+                             'bound)')
   parser.add_argument('--step-timeout', action = 'append', default = [],
                       metavar = 'STEP=SECONDS',
                       help = 'a time limit for the commands of one step')
@@ -3603,7 +3859,7 @@ def main() -> None:
   parser.add_argument('--smoke-filter',
                       default = '@tests/.edgy/filters/cir-c-smoke.txt')
   parser.add_argument('--status-baseline',
-                      default = '~/edg-cir-config/m5p-base-status',
+                      default = '~/edg-cir-config/m5-base-status',
                       help = 'directory with the statuses of the baseline '
                              '(c_edg_x86_64_cir.json, cpp_<config>.json): '
                              'the corpus and cpp-corpus steps fail on a '
@@ -3611,7 +3867,7 @@ def main() -> None:
                              'tests/.edgy/filters/cir-status-triage.txt has '
                              'a line for it ("" turns the check off)')
   parser.add_argument('--opt-baseline-status',
-                      default = '~/edg-cir-config/m5p-base-status',
+                      default = '~/edg-cir-config/m5-base-status',
                       help = 'directory with the -O0 statuses of both '
                              'corpora (c_edg_x86_64_cir.json, '
                              'cpp_edg_x86_64_cir.json) for the opt-corpus '
@@ -3678,14 +3934,33 @@ def main() -> None:
 
   global BUILD_JOBS
   BUILD_JOBS = args.jobs
-  ctx = Context(args)
-  ctx.out.mkdir(parents = True, exist_ok = True)
+  if args.record_images:
+    print(f"wrote {write_image_record(args.record_images)}")
+    sys.exit(0)
   only = [s for s in args.only.split(',') if s] or default_steps(
     args.with_cpp or args.milestone, args.with_m4 or args.milestone)
   skip = set(s for s in args.skip.split(',') if s)
   unknown = [s for s in [*only, *skip] if s not in STEPS]
   if unknown:
     parser.error(f"unknown step(s): {', '.join(unknown)}")
+  selected = [s for s in STEPS if s in only and s not in skip]
+  # A baseline that is missing or empty is a failure, not a silent skip.
+  baselines_ok, baseline_lines = check_baselines(args, selected)
+  if args.check_baselines or not baselines_ok:
+    print('\n'.join(baseline_lines))
+  if args.check_baselines:
+    sys.exit(0 if baselines_ok else 1)
+  if not baselines_ok and not args.allow_missing_baselines:
+    print('a baseline that a selected step needs is missing or empty '
+          '(--allow-missing-baselines runs anyway, with the checks off)',
+          file = sys.stderr)
+    sys.exit(2)
+  ctx = Context(args)
+  ctx.out.mkdir(parents = True, exist_ok = True)
+  (ctx.out / 'baselines.txt').write_text('\n'.join(baseline_lines) + '\n')
+  images = image_ids()
+  (ctx.out / 'images.txt').write_text(
+    ''.join(f"{ref} {i}\n" for ref, i in images.items()))
 
   print(f"evidence directory: {ctx.out}")
   table: List[Tuple[str, str, str, float]] = []
@@ -3712,6 +3987,13 @@ def main() -> None:
     except Exception as error:  # a broken step must not hide the others
       passed, detail = False, f"script error: {error!r}"
     seconds = time.time() - started
+    notes = []
+    for option in STEP_BASELINES.get(step, ()):
+      note = image_note(str(getattr(args, option, '')), images)
+      if note and note not in notes:
+        notes.append(note)
+    if notes:
+      detail = f"{detail} | {'; '.join(notes)}"
     if step in ctx.timed_out:
       passed = False
       detail = (f"TIMEOUT: {len(ctx.timed_out[step])} command(s) stopped at "
@@ -3730,6 +4012,9 @@ def main() -> None:
   summary = '\n'.join(lines)
   if args.tree_fingerprint:
     summary = f"Tree fingerprint: {args.tree_fingerprint}\n\n" + summary
+  summary = ('Images: ' + ', '.join(
+    f"{ref.split('/')[-1]} {i[7:19]}" for ref, i in images.items()) +
+    '\n\n' + summary)
   (ctx.out / 'summary.md').write_text(summary + '\n')
   print('\n' + summary)
   failed = [t for t in table if t[1] == 'FAIL']

@@ -118,6 +118,30 @@ def has_image_tagged(image_name: str) -> bool:
   )
   return process.returncode == 0
 
+def tag_dev_env_for_cir() -> str:
+  '''Give the dev-env image that the CIR images are built from its CIR tags
+  and return the provenance tag.
+
+  The llvm-cir and cir-env builds start FROM edgcpp/dev-env:latest, which an
+  image pulled by its pinned digest does not have, so it gets that tag, and
+  edgcpp/dev-env:cir-<first 12 hex digits of its image ID>, which names the
+  base that a CIR image or baseline was made with (the gate evidence records
+  the image IDs).  The image is pulled if it is not on this host.'''
+  reference = get_latest_image_tag('dev-env')
+  inspect = ['docker', 'image', 'inspect', '--format', '{{.Id}}', reference]
+  process = subprocess.run(inspect, stdout = subprocess.PIPE,
+                           stderr = subprocess.DEVNULL, text = True)
+  if process.returncode != 0:
+    ensure_edg_docker_image_present('dev-env')
+    process = subprocess.run(inspect, stdout = subprocess.PIPE, text = True,
+                             check = True)
+  short = process.stdout.strip().split(':')[-1][:12]
+  provenance = f"docker.io/edgcpp/dev-env:cir-{short}"
+  for tag in (provenance, 'docker.io/edgcpp/dev-env:latest'):
+    subprocess.run(['docker', 'tag', reference, tag], check = True)
+  return provenance
+
+
 def ensure_edg_docker_image_present(image_name: str) -> None:
   if has_image_tagged(image_name):
     return

@@ -66,6 +66,17 @@ def parse_args() -> argparse.Namespace:
     )
   )
   parser.add_argument(
+    '-j',
+    '--jobs',
+    dest = 'jobs',
+    default = 0,
+    type = int,
+    help = (
+      'cap the parallel build jobs and the concurrent tests (default: '
+      'the build tool\'s and edgy\'s, which use every CPU of the host)'
+    )
+  )
+  parser.add_argument(
     '-W',
     '--record',
     dest = 'record_mode',
@@ -151,7 +162,11 @@ class TestRunPosture:
                acknowledg_api_host: Optional[str],
                replay_mode: Optional[str] = None,
                image: str = edgdocker.DEFAULT_IMAGE,
-               test_types: str = '', only_configs: str = '') -> None:
+               test_types: str = '', only_configs: str = '',
+               jobs: int = 0) -> None:
+    # The cap of the build jobs (cmake --build -j) and of edgy's concurrent
+    # tests (--jobs); 0 leaves both at their defaults.
+    self.jobs = jobs
     # Passed to edgy as --types and --config (restricting the posture's
     # configs) when not empty.
     self.test_types = test_types
@@ -387,6 +402,8 @@ def _configure_posture(args: argparse.Namespace) -> TestRunPosture:
     posture.test_types = args.test_types
   if args.only_configs:
     posture.only_configs = args.only_configs
+  if args.jobs:
+    posture.jobs = args.jobs
   if args.discard_test_results:
     posture.keep_test_results = False
   if args.replay is not None:
@@ -463,6 +480,8 @@ def update_build(src_dir: Path, posture: TestRunPosture, *,
     if build_target_str != 'all':
       # cmake takes several targets after a single --target.
       build_cmd += f" --target {build_target_str}"
+    if posture.jobs:
+      build_cmd += f" -j{posture.jobs}"
     if verbose:
       build_cmd = f"{build_cmd} --verbose"
     cmd_args = [
@@ -498,6 +517,8 @@ def _build_edgy_args(posture: TestRunPosture, *, verbose: bool) -> str:
 
   if posture.test_timeout_seconds != 0:
     arg_str += f" --timeout={posture.test_timeout_seconds}"
+  if posture.jobs:
+    arg_str += f" --jobs={posture.jobs}"
   if posture.record_tests:
     arg_str += ' --record'
   if not posture.keep_test_results:

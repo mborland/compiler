@@ -1,0 +1,85 @@
+{
+  "gate": "M5.1",
+  "evidence": "/home/matt/edg-cir-config/m51-int/.tmp/checkpoint-20261106-180208",
+  "config": "edg_x86_64_cir",
+  "corpora": [
+    {
+      "name": "C corpus",
+      "kind": "run and link tests",
+      "total": 2561,
+      "pass": 1663,
+      "cir_only": 396,
+      "ref_fail": 502
+    },
+    {
+      "name": "C++ corpus",
+      "kind": "run and link tests",
+      "total": 1823,
+      "pass": 1472,
+      "cir_only": 158,
+      "ref_fail": 193
+    }
+  ],
+  "reasons": [
+    {
+      "label": "Vector types and builtins",
+      "c": 95,
+      "cpp": 31
+    },
+    {
+      "label": "Inline assembly",
+      "c": 86,
+      "cpp": 15
+    },
+    {
+      "label": "Initializers, conversions, other",
+      "c": 17,
+      "cpp": 42
+    },
+    {
+      "label": "GNU attributes",
+      "c": 19,
+      "cpp": 23
+    },
+    {
+      "label": "Atomic builtins",
+      "c": 35,
+      "cpp": 1
+    },
+    {
+      "label": "Other GNU extensions",
+      "c": 27,
+      "cpp": 8
+    },
+    {
+      "label": "_Complex",
+      "c": 26,
+      "cpp": 6
+    },
+    {
+      "label": "Other unmapped builtins",
+      "c": 19,
+      "cpp": 9
+    },
+    {
+      "label": "_BitInt, other parameter types",
+      "c": 16,
+      "cpp": 4
+    },
+    {
+      "label": "Variable-length arrays",
+      "c": 13,
+      "cpp": 7
+    },
+    {
+      "label": "Other floating-point formats",
+      "c": 17,
+      "cpp": 2
+    },
+    {
+      "label": "Not diagnosed: link or run",
+      "c": 26,
+      "cpp": 10
+    }
+  ]
+}

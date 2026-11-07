@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="350" viewBox="0 0 1200 350">
+<rect x="8.0" y="13.0" width="20" height="20" rx="4" fill="#3987E5"/>
+<text x="38.0" y="30.0" font-size="22" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">Pass</text>
+<rect x="118.0" y="13.0" width="20" height="20" rx="4" fill="#D95926"/>
+<text x="148.0" y="30.0" font-size="22" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">Fails only with CIR</text>
+<rect x="393.0" y="13.0" width="20" height="20" rx="4" fill="#6B7C86"/>
+<text x="423.0" y="30.0" font-size="22" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">Fails in the reference too</text>
+<text x="8.0" y="110.0" font-size="26" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">C corpus</text>
+<text x="140.4" y="110.0" font-size="22" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">2,561 run and link tests</text>
+<text x="1192.0" y="110.0" font-size="24" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="bold">80.8% of the tests the reference passes</text>
+<path fill="#3987E5" d="M12.0,128.0 H774.2 Q774.2,128.0 774.2,128.0 V188.0 Q774.2,188.0 774.2,188.0 H12.0 Q8.0,188.0 8.0,184.0 V132.0 Q8.0,128.0 12.0,128.0 Z"/>
+<text x="20.0" y="166.0" font-size="24" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">1,663</text>
+<path fill="#D95926" d="M776.2,128.0 H958.7 Q958.7,128.0 958.7,128.0 V188.0 Q958.7,188.0 958.7,188.0 H776.2 Q776.2,188.0 776.2,188.0 V128.0 Q776.2,128.0 776.2,128.0 Z"/>
+<text x="788.2" y="166.0" font-size="24" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">396</text>
+<path fill="#6B7C86" d="M960.7,128.0 H1188.0 Q1192.0,128.0 1192.0,132.0 V184.0 Q1192.0,188.0 1188.0,188.0 H960.7 Q960.7,188.0 960.7,188.0 V128.0 Q960.7,128.0 960.7,128.0 Z"/>
+<text x="972.7" y="166.0" font-size="24" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">502</text>
+<text x="8.0" y="240.0" font-size="26" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">C++ corpus</text>
+<text x="169.0" y="240.0" font-size="22" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">1,823 run and link tests</text>
+<text x="1192.0" y="240.0" font-size="24" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="bold">90.3% of the tests the reference passes</text>
+<path fill="#3987E5" d="M12.0,258.0 H960.8 Q960.8,258.0 960.8,258.0 V318.0 Q960.8,318.0 960.8,318.0 H12.0 Q8.0,318.0 8.0,314.0 V262.0 Q8.0,258.0 12.0,258.0 Z"/>
+<text x="20.0" y="296.0" font-size="24" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">1,472</text>
+<path fill="#D95926" d="M962.8,258.0 H1065.1 Q1065.1,258.0 1065.1,258.0 V318.0 Q1065.1,318.0 1065.1,318.0 H962.8 Q962.8,318.0 962.8,318.0 V258.0 Q962.8,258.0 962.8,258.0 Z"/>
+<text x="974.8" y="296.0" font-size="24" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">158</text>
+<path fill="#6B7C86" d="M1067.1,258.0 H1188.0 Q1192.0,258.0 1192.0,262.0 V314.0 Q1192.0,318.0 1188.0,318.0 H1067.1 Q1067.1,318.0 1067.1,318.0 V258.0 Q1067.1,258.0 1067.1,258.0 Z"/>
+<text x="1079.1" y="296.0" font-size="24" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">193</text>
+</svg>

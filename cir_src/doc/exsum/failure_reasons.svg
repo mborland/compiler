@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="582" viewBox="0 0 1200 582">
+<text x="440.0" y="34.0" font-size="26" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">C</text>
+<text x="468.3" y="34.0" font-size="22" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">396 CIR-specific failures</text>
+<line x1="440.0" y1="66" x2="440.0" y2="576" stroke="#22333C" stroke-width="1"/>
+<text x="830.0" y="34.0" font-size="26" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="bold">C++</text>
+<text x="886.9" y="34.0" font-size="22" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">158 CIR-specific failures</text>
+<line x1="830.0" y1="66" x2="830.0" y2="576" stroke="#22333C" stroke-width="1"/>
+<text x="400.0" y="97.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">Vector types and builtins</text>
+<path fill="#D95926" d="M440.0,78.0 H749.5 Q753.5,78.0 753.5,82.0 V98.0 Q753.5,102.0 749.5,102.0 H440.0 Q440.0,102.0 440.0,102.0 V78.0 Q440.0,78.0 440.0,78.0 Z"/>
+<text x="763.5" y="97.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">95</text>
+<path fill="#D95926" d="M830.0,78.0 H928.3 Q932.3,78.0 932.3,82.0 V98.0 Q932.3,102.0 928.3,102.0 H830.0 Q830.0,102.0 830.0,102.0 V78.0 Q830.0,78.0 830.0,78.0 Z"/>
+<text x="942.3" y="97.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">31</text>
+<text x="400.0" y="137.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">Inline assembly</text>
+<path fill="#D95926" d="M440.0,118.0 H719.8 Q723.8,118.0 723.8,122.0 V138.0 Q723.8,142.0 719.8,142.0 H440.0 Q440.0,142.0 440.0,142.0 V118.0 Q440.0,118.0 440.0,118.0 Z"/>
+<text x="733.8" y="137.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">86</text>
+<path fill="#D95926" d="M830.0,118.0 H875.5 Q879.5,118.0 879.5,122.0 V138.0 Q879.5,142.0 875.5,142.0 H830.0 Q830.0,142.0 830.0,142.0 V118.0 Q830.0,118.0 830.0,118.0 Z"/>
+<text x="889.5" y="137.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">15</text>
+<text x="400.0" y="177.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">Initializers, conversions, other</text>
+<path fill="#D95926" d="M440.0,158.0 H492.1 Q496.1,158.0 496.1,162.0 V178.0 Q496.1,182.0 492.1,182.0 H440.0 Q440.0,182.0 440.0,182.0 V158.0 Q440.0,158.0 440.0,158.0 Z"/>
+<text x="506.1" y="177.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">17</text>
+<path fill="#D95926" d="M830.0,158.0 H964.6 Q968.6,158.0 968.6,162.0 V178.0 Q968.6,182.0 964.6,182.0 H830.0 Q830.0,182.0 830.0,182.0 V158.0 Q830.0,158.0 830.0,158.0 Z"/>
+<text x="978.6" y="177.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">42</text>
+<text x="400.0" y="217.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">GNU attributes</text>
+<path fill="#D95926" d="M440.0,198.0 H498.7 Q502.7,198.0 502.7,202.0 V218.0 Q502.7,222.0 498.7,222.0 H440.0 Q440.0,222.0 440.0,222.0 V198.0 Q440.0,198.0 440.0,198.0 Z"/>
+<text x="512.7" y="217.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">19</text>
+<path fill="#D95926" d="M830.0,198.0 H901.9 Q905.9,198.0 905.9,202.0 V218.0 Q905.9,222.0 901.9,222.0 H830.0 Q830.0,222.0 830.0,222.0 V198.0 Q830.0,198.0 830.0,198.0 Z"/>
+<text x="915.9" y="217.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">23</text>
+<text x="400.0" y="257.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">Atomic builtins</text>
+<path fill="#D95926" d="M440.0,238.0 H551.5 Q555.5,238.0 555.5,242.0 V258.0 Q555.5,262.0 551.5,262.0 H440.0 Q440.0,262.0 440.0,262.0 V238.0 Q440.0,238.0 440.0,238.0 Z"/>
+<text x="565.5" y="257.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">35</text>
+<path fill="#D95926" d="M830.0,238.0 H831.6 Q833.3,238.0 833.3,239.6 V260.4 Q833.3,262.0 831.6,262.0 H830.0 Q830.0,262.0 830.0,262.0 V238.0 Q830.0,238.0 830.0,238.0 Z"/>
+<text x="843.3" y="257.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">1</text>
+<text x="400.0" y="297.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">Other GNU extensions</text>
+<path fill="#D95926" d="M440.0,278.0 H525.1 Q529.1,278.0 529.1,282.0 V298.0 Q529.1,302.0 525.1,302.0 H440.0 Q440.0,302.0 440.0,302.0 V278.0 Q440.0,278.0 440.0,278.0 Z"/>
+<text x="539.1" y="297.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">27</text>
+<path fill="#D95926" d="M830.0,278.0 H852.4 Q856.4,278.0 856.4,282.0 V298.0 Q856.4,302.0 852.4,302.0 H830.0 Q830.0,302.0 830.0,302.0 V278.0 Q830.0,278.0 830.0,278.0 Z"/>
+<text x="866.4" y="297.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">8</text>
+<text x="400.0" y="337.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">_Complex</text>
+<path fill="#D95926" d="M440.0,318.0 H521.8 Q525.8,318.0 525.8,322.0 V338.0 Q525.8,342.0 521.8,342.0 H440.0 Q440.0,342.0 440.0,342.0 V318.0 Q440.0,318.0 440.0,318.0 Z"/>
+<text x="535.8" y="337.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">26</text>
+<path fill="#D95926" d="M830.0,318.0 H845.8 Q849.8,318.0 849.8,322.0 V338.0 Q849.8,342.0 845.8,342.0 H830.0 Q830.0,342.0 830.0,342.0 V318.0 Q830.0,318.0 830.0,318.0 Z"/>
+<text x="859.8" y="337.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">6</text>
+<text x="400.0" y="377.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">Other unmapped builtins</text>
+<path fill="#D95926" d="M440.0,358.0 H498.7 Q502.7,358.0 502.7,362.0 V378.0 Q502.7,382.0 498.7,382.0 H440.0 Q440.0,382.0 440.0,382.0 V358.0 Q440.0,358.0 440.0,358.0 Z"/>
+<text x="512.7" y="377.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">19</text>
+<path fill="#D95926" d="M830.0,358.0 H855.7 Q859.7,358.0 859.7,362.0 V378.0 Q859.7,382.0 855.7,382.0 H830.0 Q830.0,382.0 830.0,382.0 V358.0 Q830.0,358.0 830.0,358.0 Z"/>
+<text x="869.7" y="377.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">9</text>
+<text x="400.0" y="417.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">_BitInt, other parameter types</text>
+<path fill="#D95926" d="M440.0,398.0 H488.8 Q492.8,398.0 492.8,402.0 V418.0 Q492.8,422.0 488.8,422.0 H440.0 Q440.0,422.0 440.0,422.0 V398.0 Q440.0,398.0 440.0,398.0 Z"/>
+<text x="502.8" y="417.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">16</text>
+<path fill="#D95926" d="M830.0,398.0 H839.2 Q843.2,398.0 843.2,402.0 V418.0 Q843.2,422.0 839.2,422.0 H830.0 Q830.0,422.0 830.0,422.0 V398.0 Q830.0,398.0 830.0,398.0 Z"/>
+<text x="853.2" y="417.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">4</text>
+<text x="400.0" y="457.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">Variable-length arrays</text>
+<path fill="#D95926" d="M440.0,438.0 H478.9 Q482.9,438.0 482.9,442.0 V458.0 Q482.9,462.0 478.9,462.0 H440.0 Q440.0,462.0 440.0,462.0 V438.0 Q440.0,438.0 440.0,438.0 Z"/>
+<text x="492.9" y="457.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">13</text>
+<path fill="#D95926" d="M830.0,438.0 H849.1 Q853.1,438.0 853.1,442.0 V458.0 Q853.1,462.0 849.1,462.0 H830.0 Q830.0,462.0 830.0,462.0 V438.0 Q830.0,438.0 830.0,438.0 Z"/>
+<text x="863.1" y="457.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">7</text>
+<text x="400.0" y="497.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#E7EFF2" font-weight="normal">Other floating-point formats</text>
+<path fill="#D95926" d="M440.0,478.0 H492.1 Q496.1,478.0 496.1,482.0 V498.0 Q496.1,502.0 492.1,502.0 H440.0 Q440.0,502.0 440.0,502.0 V478.0 Q440.0,478.0 440.0,478.0 Z"/>
+<text x="506.1" y="497.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">17</text>
+<path fill="#D95926" d="M830.0,478.0 H833.3 Q836.6,478.0 836.6,481.3 V498.7 Q836.6,502.0 833.3,502.0 H830.0 Q830.0,502.0 830.0,502.0 V478.0 Q830.0,478.0 830.0,478.0 Z"/>
+<text x="846.6" y="497.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">2</text>
+<line x1="8" y1="525.0" x2="1192" y2="525.0" stroke="#22333C" stroke-width="1"/>
+<text x="400.0" y="555.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end" fill="#A3B1B9" font-weight="normal">Not diagnosed: link or run</text>
+<path fill="#D95926" d="M440.0,536.0 H521.8 Q525.8,536.0 525.8,540.0 V556.0 Q525.8,560.0 521.8,560.0 H440.0 Q440.0,560.0 440.0,560.0 V536.0 Q440.0,536.0 440.0,536.0 Z"/>
+<text x="535.8" y="555.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">26</text>
+<path fill="#D95926" d="M830.0,536.0 H859.0 Q863.0,536.0 863.0,540.0 V556.0 Q863.0,560.0 859.0,560.0 H830.0 Q830.0,560.0 830.0,560.0 V536.0 Q830.0,536.0 830.0,536.0 Z"/>
+<text x="873.0" y="555.0" font-size="21" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="normal">10</text>
+</svg>

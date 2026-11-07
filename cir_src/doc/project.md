@@ -58,6 +58,7 @@ the §8 answers before M6 is planned (§6). The baselines live on clang4
 | Writer sources | `src/ecil_*.{c,h}`, `src/cir_be.{c,h}`, CIR-gated hooks (§7) |
 | How to build, run, test and gate | `cookbook.md` |
 | Gate tooling | `dev_tools/bin/edg-cir-*`, filters `tests/.edgy/filters/cir-*.txt` |
+| Executive summary deck (refresh after each milestone gate) | `exsum/` (`exsum/README.md`) |
 
 ## 2. Decisions
 

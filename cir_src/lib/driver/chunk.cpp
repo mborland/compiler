@@ -500,19 +500,45 @@ lower and link them in that order, and put the merged module right.
 
 }  /* anonymous namespace */
 
-bool chunking_wanted(const an_edg_cir_session &session, uint64_t bodies)
+uint64_t chunk_limit(const an_edg_cir_session &session, bool &by_bodies)
 /*
-Whether the module is lowered in chunks: it has at least chunk_threshold
-function bodies (1 forces chunking whenever there is one; UINT32_MAX never
-chunks).  The count is the emitter's (no walk over the module: below the
-threshold chunking costs nothing).
+The threshold of the chunking decision: an explicit chunk_threshold is a
+number of function bodies; 0 (the default) is a number of bytes.  Test hook
+EDG_CIR_TEST_CHUNK_BYTES=<n> replaces the default byte threshold.
 */
 {
-  uint32_t threshold = session.chunk_threshold == 0
-                           ? k_default_chunk_threshold
-                           : session.chunk_threshold;
+  uint64_t limit = session.chunk_threshold;
 
-  return threshold != k_chunk_never && bodies >= threshold;
+  by_bodies = session.chunk_threshold != 0;
+  if (!by_bodies) {
+    limit = k_default_chunk_bytes;
+#if EDG_CIR_TEST_HOOKS
+    if (const char *hook = std::getenv("EDG_CIR_TEST_CHUNK_BYTES"))
+      limit = std::strtoull(hook, nullptr, 10);
+#endif
+  }
+  return limit;
+}  /* chunk_limit */
+
+bool chunking_wanted(const an_edg_cir_session &session, uint64_t bodies,
+                     uint64_t body_bytes, uint64_t limit, bool by_bodies)
+/*
+Whether the module is lowered in chunks, for the threshold chunk_limit gave
+(limit, by_bodies).  With an explicit chunk_threshold: the module has at least
+that many function bodies (1 forces chunking whenever there is one,
+UINT32_MAX never chunks).  By default: it has a body and body_bytes (the
+stream bytes emitted as code, see k_default_chunk_bytes) reach the byte
+threshold.  The counters are the emitter's and the reader's (no walk over the
+module: below the threshold chunking costs nothing).
+*/
+{
+  bool wanted = false;
+
+  if (by_bodies)
+    wanted = session.chunk_threshold != k_chunk_never && bodies >= limit;
+  else
+    wanted = bodies != 0 && body_bytes >= limit;
+  return wanted;
 }  /* chunking_wanted */
 
 std::unique_ptr<llvm::Module> lower_in_chunks(

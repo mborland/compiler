@@ -41,7 +41,11 @@ It does, in this order:
      the objects of an earlier build, and ninja then rebuilds nothing.  The
      sync deletes files of the box tree that this tree lacks (--delete),
      except in a protected tree (see PROTECTED_TREES: day-base, m5-int) and in
-     a tree with a KEEP file, which are only added to.
+     a tree with a KEEP file, which are only added to.  A protected tree is
+     also never synced into or wiped (step 2) unless --allow-protected: a
+     sync overwrites its sources, the wipe removes its CIR build directories,
+     and it holds the baselines and the evidence they came from (use
+     --no-sync --incremental to run in it as it is).
   2. wipes the CIR build directories (build/cir, build/cir-*, build/gcc-cir,
      build/gcc-release-cir), unless --incremental.
   3. runs edg-cir-gate-evidence there with the chosen steps, in the
@@ -211,6 +215,29 @@ EVIDENCE_DIRS = ('.tmp/gate-evidence', '.tmp/gate-asm', '.tmp/gate-cpp-asm',
 # Trees that are never pruned (the gate evidence is kept in them); any tree
 # or entry that holds a file named KEEP is not pruned either.
 PROTECTED_TREES = ('day-base', 'm5-int')
+
+
+def protected_refusal(tree: str, protected: bool, no_sync: bool,
+                      incremental: bool, allowed: bool,
+                      prune_only: bool = False,
+                      check_baselines: bool = False) -> str:
+  '''Why this run must not touch the protected tree `tree` ('' if it may):
+  a sync overwrites its sources (even without --delete) and, unless
+  `incremental`, the run removes its CIR build directories; both need
+  `allowed` (--allow-protected).  A pruning run and a run in an unprotected
+  tree are never refused; --check-baselines wipes nothing.'''
+  actions = []
+  if protected and not allowed and not prune_only:
+    if not no_sync:
+      actions.append('overwrite its sources (rsync)')
+    if not incremental and not check_baselines:
+      actions.append('remove its build/cir* directories')
+  if not actions:
+    return ''
+  return (f"{tree} is a protected tree (it holds baselines or the evidence "
+          f"they came from): this run would {' and '.join(actions)}; "
+          f"--allow-protected says that is meant, or use --no-sync "
+          f"--incremental to run in it as it is")
 
 
 def rsync_command(tree: str, protected: bool) -> List[str]:
@@ -390,6 +417,10 @@ def main() -> None:
                              'tree\'s (the evidence then says so)')
   parser.add_argument('--incremental', action = 'store_true',
                       help = 'keep the CIR build directories')
+  parser.add_argument('--allow-protected', action = 'store_true',
+                      help = 'sync into, and wipe the CIR build directories '
+                             'of, a protected tree (PROTECTED_TREES or a '
+                             'KEEP marker); refused otherwise')
   parser.add_argument('--no-sync', action = 'store_true',
                       help = 'do not rsync (the tree is up to date)')
   parser.add_argument('--asm-baseline', default = '~/edg-cir-config/'
@@ -404,7 +435,7 @@ def main() -> None:
                       action = 'store_false',
                       help = 'asm-diff steps compare .cfi_* directives too')
   parser.add_argument('--identity-baseline',
-                      default = '~/edg-cir-config/identity-m0c')
+                      default = '~/edg-cir-config/identity-m51b')
   parser.add_argument('--perf-baseline', default = PERF_BASELINE,
                       help = 'the perf regression baseline (the M5 run)')
   parser.add_argument('--perf-targets-baseline',
@@ -490,6 +521,12 @@ def main() -> None:
   ssh(f"mkdir -p {tree}")
   protected = args.tree in PROTECTED_TREES or ssh(
     f"test -e {tree}/KEEP", capture = True).returncode == 0
+  refusal = protected_refusal(args.tree, protected, args.no_sync,
+                              args.incremental, args.allow_protected,
+                              args.prune_only, args.check_baselines)
+  if refusal:
+    print(refusal, file = sys.stderr)
+    sys.exit(2)
   if protected and not args.no_sync:
     print(f"{args.tree} is a protected tree: synced without --delete (a file "
           f"removed here stays there, and the fingerprint check says so)",

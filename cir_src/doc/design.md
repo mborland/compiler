@@ -379,7 +379,19 @@ table keeps the decisions that later work must respect.
 | Optimization facts (S2, user) | Parity with clangir at the pin on the high-value attributes (nounwind, noundef, nonnull, dereferenceable, align, memory, mustprogress, noreturn, builtin, inlinehint, alwaysinline); the rest is reported, not gated. LLVM `nounwind` and "cannot throw" (`nothrow`, no invoke) are different: noexcept gives `nothrow`, GNU pure/const give `nounwind`. | `attr-diff` gate step; `s2-*` lit tests; `archive/handoff_4.md` §4.1 |
 | Library facts (S2) | pure, const, noreturn and nothrow of C library functions come from clang's `Builtins.inc` at the pin (letters U, c, r, n; unconditional only), generated into `src/builtin_libc_attrs.h`. `fprintf`, `vprintf` and `vfprintf` are not nothrow (cancellation points). | `dev_tools/builtins/generate-libc-builtins.py` |
 | Allocation elision (user) | `builtin` on new-expression calls of the replaceable allocation functions, as clang; the -O2 tests that depend on non-elision are triaged. | `cir-opt-triage.txt` |
-| Chunked lowering (S3, user) | Design (a): after lazy replay and the CIR passes, a module with at least `chunk_threshold` emitted bodies is lowered in chunks of `chunk_functions` (default 500) and linked with `llvm::Linker` into one LLVM module; optimization and code generation stay whole-module. Default threshold **4000**, raised from 2000 after the gate without re-measurement (user). A chunk failure is a diagnosed error. | `chunk-identity` (output identical at one body per chunk), `chunk-rss` (c12000 at 52.3% of the M5p peak) |
+| Chunked lowering (S3, user) | Design (a): after lazy replay and the CIR passes, a module with at least `chunk_threshold` emitted bodies is lowered in chunks of `chunk_functions` (default 500) and linked with `llvm::Linker` into one LLVM module; optimization and code generation stay whole-module. Default threshold **4000**, raised from 2000 after the gate without re-measurement (user). M5.1 replaced this default with a size rule, 1,250,000 emitted-body bytes (`project.md` decision 14); an explicit value is still a body count. A chunk failure is a diagnosed error. | `chunk-identity` (output identical at one body per chunk), `chunk-rss` (c12000 at 52.3% of the M5p peak) |
 | Writer speed (S4) | TU-local memo, inline record helpers that keep the CHECKING checks, `enk_field` as a pure leaf (volatile is never pure), and a sampled name check (`ECIL_NAME_CHECK_ALL` 2000, `ECIL_NAME_CHECK_STRIDE` 16, `ECIL_CHECK_ALL_NAMES` for all). | writer share of release-FE Ir: C -2.15 points, C++ -4.09 points |
 | ECIL 1.3, C API 2 | 1.3 is frozen at this gate (`ecil_format.md` §13). API 2 adds `EAGER_BODIES`, `NO_LLVM_PASSES`, `chunk_functions` and `chunk_threshold`; API 1 callers get the defaults. | `capi_tests` |
 | Gates (user) | Lean gates for slices; the full gate (`--milestone`) only at milestones. | `archive/handoff_4.md` §3 |
+
+## 16. M5.1: the M5 follow-ups (three sessions)
+
+State and decisions live in `project.md` (§0, §2); this table records what
+changed in the design.
+
+| Item | Decision | Evidence |
+| --- | --- | --- |
+| -O0 always_inline (L2) | An `AlwaysInlinerPass` runs at -O0 after the chunk merge, and an always_inline body is kept for it; test hook `EDG_CIR_TEST_NO_ALWAYS_INLINE` restores the M5 behavior. | `project.md` §9 (M5.1 asm attribution) |
+| Default chunk decision (L3) | Size-based: chunk when the emitted-body bytes (reader offset minus the bytes lazy emission dropped) reach 1,250,000; an explicit `chunk_threshold` is a body count (decision 14). No API change. | `chunk-bytes*.test`, `lazy-chunk-bytes*.test`, `chunk-rss`, S1 |
+| Guard worker at exit | The detached worker is a leaked, never-destroyed handle and is not woken at process exit: waking it raced `exit` (load-dependent instruction counts under valgrind). Its state already lived in never-destroyed static slots. | `slow-below-threshold` |
+| Mangler, `__has_builtin`, CWG2387 | The ungated FE changes (decisions 6, 28) and CWG2387 under CIR only (decision 28a). | `day`, `identity` |

@@ -40,17 +40,28 @@ struct an_edg_cir_session;
 
 namespace edg_cir {
 
-/* The defaults of an_edg_cir_options::chunk_functions and chunk_threshold
-   (0 selects them). */
+/* The default of an_edg_cir_options::chunk_functions (0 selects it). */
 constexpr uint32_t k_default_chunk_functions = 500;
-constexpr uint32_t k_default_chunk_threshold = 4000;
+/* The default of chunk_threshold (0 selects it): the module is lowered in
+   chunks when the bytes of the stream that were emitted as code (the stream
+   offset minus the bytes of the lazily dropped bodies) reach this.  The
+   unchunked peak memory is linear in them (about 0.17 MB per KB for C and 0.12
+   for C++); 1.25 MB is about 220 MB unchunked. */
+constexpr uint64_t k_default_chunk_bytes = 1250000;
 constexpr uint32_t k_chunk_never = UINT32_MAX;
 
 /* Lowers one CIR module (the whole module, or one chunk) to LLVM IR. */
 typedef std::function<std::unique_ptr<llvm::Module>(mlir::ModuleOp)>
     a_lower_function;
 
-bool chunking_wanted(const an_edg_cir_session &session, uint64_t bodies);
+/* The threshold chunking_wanted uses: a body count when the session has an
+   explicit chunk_threshold (by_bodies), else the byte count above. */
+uint64_t chunk_limit(const an_edg_cir_session &session, bool &by_bodies);
+
+/* Whether to chunk, given the limit and by_bodies that chunk_limit returned
+   (computed once by the caller, which also records them for --stats). */
+bool chunking_wanted(const an_edg_cir_session &session, uint64_t bodies,
+                     uint64_t body_bytes, uint64_t limit, bool by_bodies);
 
 std::unique_ptr<llvm::Module> lower_in_chunks(
     an_edg_cir_session &session, mlir::ModuleOp module,

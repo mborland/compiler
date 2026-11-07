@@ -169,10 +169,16 @@ typedef struct an_edg_cir_options {
   uint32_t      chunk_functions; /* API 2: function bodies per chunk when
                                     the module is lowered in chunks; 0 =
                                     the library default. */
-  uint32_t      chunk_threshold; /* API 2: lower in chunks only when the
-                                    translation unit has at least this many
-                                    emitted function bodies; 0 = the library
-                                    default, UINT32_MAX = never. */
+  uint32_t      chunk_threshold; /* API 2: when the module is lowered in
+                                    chunks.  0 = the library default: when
+                                    the stream bytes that became code (the
+                                    stream offset minus the bodies lazy
+                                    emission dropped) reach 1,250,000, which
+                                    bounds the peak memory of the lowering.
+                                    Otherwise a number of emitted function
+                                    bodies: chunks when the translation unit
+                                    has at least that many; 1 = whenever it
+                                    has a body, UINT32_MAX = never. */
 } an_edg_cir_options;
 
 /* An opaque session that consumes one ECIL stream. */

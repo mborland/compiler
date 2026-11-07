@@ -102,6 +102,7 @@ struct a_session_stats {
   uint64_t lazy_namers = 0;     /* ... the dead entities erased for that. */
   uint64_t lazy_vars = 0;       /* Variables erased with the dropped bodies. */
   uint64_t lazy_bytes = 0;      /* Bytes held for deferred bodies. */
+  uint64_t lazy_dropped_bytes = 0;  /* ... of the bodies never emitted. */
   uint64_t lazy_resolve_ns = 0; /* The reachability closure. */
   uint64_t lazy_replay_ns = 0;  /* Replay of the reachable bodies. */
   /* Chunked lowering: the chunks the module was lowered in (the globals
@@ -109,6 +110,13 @@ struct a_session_stats {
      function bodies at most in one. */
   uint64_t chunks = 0;
   uint64_t chunk_size = 0;
+  /* The chunking decision (chunking_wanted): the emitted-body bytes it saw,
+     the threshold it used and whether that was a body count (an explicit
+     chunk_threshold) or a byte count (the default). */
+  bool     chunk_decided = false;
+  bool     chunk_by_bodies = false;
+  uint64_t chunk_body_bytes = 0;
+  uint64_t chunk_limit = 0;
   /* Peak resident memory (KiB, the process's maximum so far) at the end of
      each stage: the growth between two of them is what the stage added.  The
      module is resident from emit to the end. */

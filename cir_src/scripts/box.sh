@@ -10,9 +10,13 @@
 #   EDG_CIR_SG_DOCKER=1          run docker through `sg docker -c` (off by
 #                                default; not needed on clang4)
 #   EDG_BOX_TREE=edg-cir-lib     the host tree (holds cir_src/ and build/)
+#   EDG_CIR_HOSTNAME=clang4      the name (`hostname -s`) the host must report
+#                                before a sync (rsync --delete); as
+#                                dev_tools/bin/edg-cir-checkpoint
 #
 #   box.sh ssh CMD...            run a command on the box
-#   box.sh sync                  rsync cir_src/ to the box tree
+#   box.sh sync                  rsync cir_src/ to the box tree (refused
+#                                unless the host reports EDG_CIR_HOSTNAME)
 #   box.sh run JOB CMD...        run CMD in a cir-env container named
 #                                cir-lib-JOB-<pid> at the tree root
 #   box.sh chown                 give build/ back to the box user (the posture's
@@ -36,10 +40,26 @@ dock() {
     printf "%s" "$*"
   fi
 }
+EXPECTED_HOSTNAME=${EDG_CIR_HOSTNAME:-clang4}
+# check_host: stop unless the box answers as EXPECTED_HOSTNAME.  A stale ssh
+# ControlPath sends a command to another host whatever name was given, and
+# the sync deletes files.  The last line of `hostname -s` is compared.
+check_host() {
+  local reported
+  reported=$("${SSH[@]}" "$HOST" hostname -s | tail -n 1 | tr -d '[:space:]') ||
+    reported=
+  if [ "$reported" != "$EXPECTED_HOSTNAME" ]; then
+    echo "box.sh: the host answers as '$reported', not '$EXPECTED_HOSTNAME'" \
+         "(EDG_CIR_HOST=$HOST; a stale ssh ControlPath? EDG_CIR_HOSTNAME" \
+         "names another expected host)" >&2
+    exit 2
+  fi
+}
 cmd=$1; shift
 case "$cmd" in
   ssh)  exec "${SSH[@]}" "$HOST" "$@" ;;
-  sync) rsync -a --delete -e "${SSH[*]}" "$ROOT/cir_src/" \
+  sync) check_host
+        rsync -a --delete -e "${SSH[*]}" "$ROOT/cir_src/" \
               "$HOST:$TREE/cir_src/" ;;
   run)  job=$1; shift
         # (the remote shell expands $(id -u), $HOME and $$)

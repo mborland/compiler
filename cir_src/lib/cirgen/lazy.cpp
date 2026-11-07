@@ -212,8 +212,17 @@ other.  A trivially recursive body is dropped later, see finish_entities
 (calls_own_symbol).  The lazy replay and finish_entities share this rule.
 */
 {
+  bool always_inline = e.always_inline;
+
+#if EDG_CIR_TEST_HOOKS
+  /* Test hook: EDG_CIR_TEST_NO_ALWAYS_INLINE restores the rule before the
+     -O0 AlwaysInliner (M5): at -O0 no inline-only function keeps a body. */
+  if ((e.flags & ECIL_DECL_FUNC_INLINE_ONLY) != 0 &&
+      std::getenv("EDG_CIR_TEST_NO_ALWAYS_INLINE") != nullptr)
+    always_inline = false;
+#endif
   return (e.flags & ECIL_DECL_FUNC_INLINE_ONLY) != 0 && !e.no_inline &&
-         (session_.opt_level >= 1 || e.always_inline);
+         (session_.opt_level >= 1 || always_inline);
 }  /* a_emitter::inline_only_keeps_body */
 
 bool a_emitter::inline_only_declaration(const a_entity &e) const
@@ -441,6 +450,7 @@ declaration) that finish_entities and lazy_erase_dropped dispose of.
     if (d.replayed)
       continue;
     session_.stats.lazy_dropped += 1;
+    session_.stats.lazy_dropped_bytes += d.bytes.size();
     /* A variable that only dropped bodies named (a string literal, a static
        local, a temporary of the function) is dead with them. */
     for (uint32_t g : d.refs) {

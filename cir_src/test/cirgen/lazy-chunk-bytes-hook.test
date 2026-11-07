@@ -1,0 +1,18 @@
+; The byte threshold of the default chunking decision, set between the two
+; counts of lazy-chunk-bytes.test (EDG_CIR_TEST_CHUNK_BYTES=500; the stream of
+; lazy-basic.test is 509 bytes, 485 of them code when lazy emission drops two
+; bodies): the eager run chunks, the lazy one does not, the assembly is the
+; same.  Raising the stream (or its header) needs the numbers redone.
+; REQUIRES: test-hooks
+; RUN: cat %S/Inputs/header11_supp.txt %S/lazy-basic.test > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: env EDG_CIR_TEST_CHUNK_BYTES=500 %edg-cir --eager-bodies --stats --chunk-functions=1 --emit=asm -o %t.e.s %t.ecil 2> %t.e.err
+; RUN: env EDG_CIR_TEST_CHUNK_BYTES=500 %edg-cir --stats --chunk-functions=1 --emit=asm -o %t.l.s %t.ecil 2> %t.l.err
+; RUN: %FileCheck %s --check-prefix=EAGER < %t.e.err
+; RUN: %FileCheck %s --check-prefix=LAZY < %t.l.err
+; RUN: cmp %t.e.s %t.l.s
+
+; EAGER: stats: chunked lowering: {{[2-9]|[1-9][0-9]+}} chunks of at most 1 functions
+; EAGER-NEXT: stats: chunk decision: 509 body bytes, threshold 500{{$}}
+; LAZY: stats: chunked lowering: 0 chunks of at most 1 functions
+; LAZY-NEXT: stats: chunk decision: 485 body bytes, threshold 500{{$}}

@@ -51,7 +51,9 @@ state, decisions and process are in `project.md`.
 - Two-process: `cpfe-cir --c++17 --ecil_output=x.ecil x.cpp`, then `edg-cir [-o out] [--emit=cir|cir-lowered|llvm|bc|asm|obj] [-O0..-O3] x.ecil`; `dev_tools/bin/cpfe-cir-2p` does both for the `_2p` config (takes `--cir_opt_level=N` as `-ON`).
 - edg-cir flags: `--verify-each --keep-going --stats --trace --llvm-arg=ARG --triple=T --version`;
   `--lazy-symbols` (list deferred bodies: replayed/dropped); `--eager-bodies` (disable lazy emission; oracle for `lazy-identity`);
-  `--no-llvm-passes` (CIR -> LLVM only; `edg-cir-attr-diff` uses it); `--chunk-functions=N` (default 500); `--chunk-threshold=N` (default 4000 bodies; 1 forces; 4294967295 never).
+  `--no-llvm-passes` (CIR -> LLVM only; `edg-cir-attr-diff` uses it); `--chunk-functions=N` (default 500); `--chunk-threshold=N` (N emitted bodies; 1 forces; 4294967295 never; by default
+  the size rule of project.md decision 14: 1,250,000 emitted-body bytes; `--stats` prints a `chunk decision:` line;
+  test hook `EDG_CIR_TEST_CHUNK_BYTES`).
 - Peak memory: the `peak RSS KiB` line of `edg-cir --stats --emit=asm` (forced: `--chunk-functions=500 --chunk-threshold=1`).
 - Inspect: `ecil-dump x.ecil` (validates); `cir_src/test/writer/tools/stackcheck.py`; `edg-cir-ecil-dump` (goldens).
 - eccp in a scratch tree: export the `edg-scrape-compiler` variables, `CPFE=$CPFE_CIR`, `EDG_BASE=bases/docker/cir-env/gcc`, `EDG_USE_SYSTEM_HEADERS=1`, then `util/eccp.sh -O2 --g++ file.cpp`.
@@ -69,11 +71,19 @@ state, decisions and process are in `project.md`.
 - Triage files (`tests/.edgy/filters/`): `cir-status-triage.txt`, `cir-opt-triage.txt`, `cir-lazy-triage.txt`, `cir-attr-known.txt`, `cir-documented-gaps.txt`, `cir-eh-probes-skip.txt`, `cir-identity-allowed.txt`; a line for a case that did not regress is stale and fails.
 - `cir-attr-known.txt` rows: `category | level | detail [symbol=GLOB] [unit=GLOB] | reason`; category and position may be globs
   (`param*`); a checked row's reason is `accepted, checked YYYY-MM-DD: why`.
-- `cir-identity-allowed.txt`: preprocessed-output differences allowed in the `identity` step (M5.1b: `src/lower_name.c`,
-  `src/macro.c`, the approved ungated changes that `day` covers); delete the entries when the identity baseline moves past them.
-- Baselines (clang4, `~/edg-cir-config`, taken 2026-11-06 at `991737c19a`, code = M5; each has `<name>.images.txt`):
-  `identity-m0c` (`--identity-baseline`, captured at the M0 commit `fee14b0c21`), `day-base/baseline-64` (`edg_x86_64`,
-  `_cp`; the `day` step) and `day-base/baseline-32` (`edg_x86_32`, `_32_cp`; the `day32` step, posture `tests/.edgy/postures/day32.json`, by hand
+- `cir-identity-allowed.txt`: preprocessed-output differences allowed in the `identity` step (an approved ungated change
+  that `day` covers); delete the entries when the identity baseline moves past them (M5.1 session 3 deleted the M5.1b
+  `lower_name.c` and `macro.c` entries with the move to `identity-m51b`).
+- M5.1 baselines (M6's comparison points, taken from the gate tree `m51-int` after the M5.1 commit; the tool defaults
+  still name `m5-base-*` until M6 switches them): `m51-base-asm`, `m51-base-cpp-asm`, `m51-base-status`,
+  `m51-base-perf.json`, `identity-m51` (equal to `identity-m51b`, and the day-base still describes the commit, when
+  `git diff 4902ad4e5e HEAD -- src ':(exclude)src/pending_changes'` is empty: pending Changes entries are not compiled).
+- Baselines (clang4, `~/edg-cir-config`, taken 2026-11-06 at `991737c19a`, code = M5, except where an entry says
+  otherwise; each has `<name>.images.txt`):
+  `identity-m51b` (`--identity-baseline` default from M5.1 session 3; captured at the M5.1b commit `4902ad4e5e`, source
+  tree `id-m51b-src`, 0 problems against that commit), `identity-m0c` (the M0 capture at `fee14b0c21`, the default
+  before), `day-base/baseline-64` (re-taken in M5.1 session 3 at
+  `4902ad4e5e`, as is baseline-32; the old runs are kept beside them; `edg_x86_64`, `_cp`; the `day` step) and `day-base/baseline-32` (`edg_x86_32`, `_32_cp`; the `day32` step, posture `tests/.edgy/postures/day32.json`, by hand
   `edg-docker-test --posture @tests/.edgy/postures/day32.json`), `m5-base-asm`
   (`--asm-baseline`), `m5-base-cpp-asm`, `m5-base-status` (`c_*`, `cpp_*`; `--status-baseline`, `--opt-baseline-status`),
   `m5-base-perf.json` (`--perf-baseline`, regression), `m5a-base-perf.json` (`--perf-targets-baseline`, S1 targets, built
@@ -87,7 +97,9 @@ state, decisions and process are in `project.md`.
 - Record C++/CIR expectations: `edg-cir-record --tree T ...` (-W on clang4, 100 KB rule, fetch back; `research/test_plumbing.md` §11.3); then `edg-cir-rto-diff --auto`.
 - Writer goldens: `tests/tests/cir/writer` (`//script:edg-cir-ecil-dump`, `//require:BACK_END_TYPE 3`); cirgen run tests `tests/tests/cir/cirgen`; ctest/lit `cir_src/test/lit.cfg.py`, `capi_tests`.
 - Tools self-test (no box, no Docker): `python3 dev_tools/bin/edg-cir-tools-test [-v]`; on both hosts.
-- Prune: `edg-cir-checkpoint --prune N | --prune-only | --prune-evidence`; it keeps trees with a KEEP file, entries under 6 h, and `PROTECTED_TREES` (`day-base`, `m5-int`); the default tree is `m51-int`. A protected tree is synced without `--delete`.
+- Prune: `edg-cir-checkpoint --prune N | --prune-only | --prune-evidence`; it keeps trees with a KEEP file, entries under 6 h, and `PROTECTED_TREES` (`day-base`, `m5-int`); the default tree is `m51-int`. A protected tree (or one with a KEEP file) is refused (exit 2) before any sync or
+  `build/cir*` wipe: run it as it is with `--no-sync --incremental`, or override with `--allow-protected`
+  (`--prune-only` is exempt; `--check-baselines` needs `--no-sync`).
 
 ### Harnesses and box scripts (each has a usage header)
 - `edg-cir-perf` (cachegrind Ir; `--only cxx`, `--stream KIND:N`, `--targets s1`), `edg-cir-rss` (`--generate-cxx-functions N -o big.cpp`, `--fe-build`), `edg-cir-stress`, `edg-cir-writer-stress[ --cxx]`, `edg-cir-compare-modes [--cxx] [--opt-level N]`, `edg-cir-check-isolation`, `edg-cir-poison-check`.
@@ -97,7 +109,10 @@ state, decisions and process are in `project.md`.
 
 ### Debugging variables
 - Library: `EDG_CIR_TEE=<file>`, `EDG_CIR_NO_VERIFY=1`, `EDG_CIR_DEBUG_NOTES=1`, `EDG_CIR_NO_GUARD`, `EDG_CIR_WORKER_STACK_MB`, `EDG_CIR_CHUNK_DUMP`.
-- Test hooks (only in builds with `EDG_CIR_TEST_HOOKS`): `EDG_CIR_TEST_LAZY_MISS=<sym>` (lazy-missed-edge.test), `EDG_CIR_TEST_CHUNK_FAIL=N` (chunk-failure.test), also `EDG_CIR_TEST_CRASH`, `_CONSUME_CRASH`, `_NO_WORKER`, `_UPSTREAM_LOWERING`.
+- Test hooks (only in builds with `EDG_CIR_TEST_HOOKS`): `EDG_CIR_TEST_LAZY_MISS=<sym>` (lazy-missed-edge.test), `EDG_CIR_TEST_CHUNK_FAIL=N` (chunk-failure.test), `EDG_CIR_TEST_CHUNK_BYTES=N` (replaces the default chunk byte threshold; chunk-bytes-hook.test),
+  `EDG_CIR_TEST_NO_ALWAYS_INLINE=1` (-O0 as before M5.1b L2: no AlwaysInliner, the old inline-only rule; used to
+  attribute asm differences to L2), also `EDG_CIR_TEST_CRASH`, `_CONSUME_CRASH`, `_NO_WORKER`, `_UPSTREAM_LOWERING`.
+  edg-exec does not forward `EDG_CIR_TEST_*`: export them inside the container command.
 - Writer: `ECIL_GID_STRESS=1` (move and poison the G-id table), `ECIL_CHECK_ALL_NAMES=1` (full late-name check; default samples 2000 + 1 in 16), `edg-cir --stats`, ASan poisons pooled FE regions.
 
 ## 2. Lean gates: area → steps

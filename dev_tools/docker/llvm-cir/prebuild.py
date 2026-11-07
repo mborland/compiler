@@ -18,8 +18,10 @@
 #   EDG_LLVM_CIR_CHECK        If set, also run ninja check-clang-cir.
 #   EDG_LLVM_CIR_JOBS         Parallel compile jobs (default: all CPUs, which
 #                             is too many on a shared host such as clang4;
-#                             the project limit there is 64).  If set, the
-#                             build also runs under `nice -n 10`.
+#                             the project limit there is 64).
+#
+# The build and the strip containers always run under `nice -n 10` (the
+# project hosts are shared), with or without EDG_LLVM_CIR_JOBS.
 
 import os
 import shutil
@@ -31,6 +33,7 @@ from edgdocker import tag_dev_env_for_cir
 from pathlib import Path
 
 LLVM_GIT_URL = 'https://github.com/llvm/llvm-project.git'
+NICE = ['nice', '-n', '10']
 REPO_DIR = edgtools.get_tools_dir().parent
 LLVM_REVISION_FILE = REPO_DIR / 'cir_src' / 'LLVM_REVISION'
 BUILD_SCRIPT = edgtools.get_tools_dir() / 'bin' / 'edg-build-llvm-cir'
@@ -83,7 +86,7 @@ def build_toolchain(work_dir: Path, install_dir: Path, image: str) -> None:
     '-v', f"{install_dir}:/edg/llvm-cir",
     '-v', f"{BUILD_SCRIPT}:/usr/local/bin/edg-build-llvm-cir:ro",
     image,
-    *(['nice', '-n', '10'] if jobs else []),
+    *NICE,
     'edg-build-llvm-cir'
   ]
   if jobs:
@@ -114,6 +117,7 @@ def strip_executables(prefix: Path, image: str) -> None:
       '--user', f"{os.getuid()}:{os.getgid()}",
       '-v', f"{prefix}:/prefix",
       image,
+      *NICE,
       'sh', '-c', script
     ],
     check = True

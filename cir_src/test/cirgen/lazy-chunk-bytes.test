@@ -1,0 +1,22 @@
+; The default chunking decision measures the stream bytes that became code:
+; the reader's bytes minus the bytes of the bodies lazy emission dropped
+; (project.md decision 14).  The stream of lazy-basic.test has two dropped
+; bodies, so the lazy run counts fewer body bytes than the stream has, and the
+; eager run (--eager-bodies, nothing dropped) counts all of them.  The two
+; stats outputs go to one FileCheck: the eager `chunk decision` line repeats the
+; stream's byte count, the lazy one must not.  (Without the subtraction the
+; lazy run would report the stream's bytes too.)  The threshold between the
+; two counts is lazy-chunk-bytes-hook.test.
+; RUN: cat %S/Inputs/header11_supp.txt %S/lazy-basic.test > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --eager-bodies --stats --emit=llvm -o %t.e.ll %t.ecil 2> %t.err
+; RUN: %edg-cir --stats --emit=llvm -o %t.l.ll %t.ecil 2>> %t.err
+; RUN: %FileCheck %s < %t.err
+
+; CHECK: stats: {{.*}} frames, {{.*}} records, [[TOTAL:[0-9]+]] bytes
+; CHECK: stats: chunk decision: [[TOTAL]] body bytes, threshold 1250000{{$}}
+; CHECK: stats: {{.*}} frames, {{.*}} records, [[TOTAL]] bytes
+; The lazy run's decision line is the rest of the file (a CHECK-NOT that is
+; followed by a positive check would not see the line that check matches); that
+; it exists and its number are in lazy-chunk-bytes-hook.test.
+; CHECK-NOT: stats: chunk decision: [[TOTAL]] body bytes

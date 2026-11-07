@@ -1,0 +1,26 @@
+; The test hook EDG_CIR_TEST_NO_ALWAYS_INLINE (EDG_CIR_TEST_HOOKS builds only)
+; makes -O0 behave as before the AlwaysInliner (M5): an always_inline
+; inline-only function keeps no body (an external declaration, as every other
+; inline-only function at -O0) and no pass inlines it, so the call stays.  It
+; is for asm-diff runs that attribute output differences to the AlwaysInliner.
+; The stream is the one of s2-always-inline-o0.test.  Without the hook the
+; function is inlined (that test); at -O1 and up the hook changes nothing.
+; REQUIRES: test-hooks
+; RUN: cat %S/Inputs/header11_supp.txt %S/s2-always-inline-o0.test > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: env EDG_CIR_TEST_NO_ALWAYS_INLINE=1 %edg-cir --verify-each --emit=llvm %t.ecil | %FileCheck %s --check-prefix=HOOK --implicit-check-not=available_externally --implicit-check-not=ai_unused
+; RUN: env EDG_CIR_TEST_NO_ALWAYS_INLINE=1 %edg-cir --verify-each --chunk-threshold=1 --chunk-functions=1 --emit=llvm %t.ecil | %FileCheck %s --check-prefix=HOOK --implicit-check-not=available_externally --implicit-check-not=ai_unused
+; RUN: env EDG_CIR_TEST_NO_ALWAYS_INLINE=1 %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYM
+; RUN: %edg-cir --emit=llvm %t.ecil | %FileCheck %s --check-prefix=OFF --implicit-check-not=@ai
+; RUN: env EDG_CIR_TEST_NO_ALWAYS_INLINE=1 %edg-cir -O1 --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s --check-prefix=O1
+
+; HOOK-DAG: declare noundef i32 @ai(i32 noundef)
+; HOOK-DAG: declare noundef i32 @plain(i32 noundef)
+; HOOK-DAG: declare noundef i32 @nin(i32 noundef)
+; HOOK-DAG: declare noundef i32 @rec(i32 noundef)
+; HOOK-DAG: call {{.*}}@ai(
+; SYM-DAG: U ai
+; SYM-DAG: T main
+; OFF: define {{.*}}@main
+; O1-DAG: define available_externally {{.*}}@ai(

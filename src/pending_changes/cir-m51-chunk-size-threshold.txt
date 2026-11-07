@@ -1,0 +1,23 @@
+//allowed_words: UINT
+[]
+CIR back end: the default decision to lower in chunks depends on size
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+CIR library, which lowers a very large translation unit in chunks of function
+bodies to bound its peak memory, now decides by default by size and not by
+the number of bodies.  It lowers in chunks when the bytes of the stream that
+were emitted as code (the stream offset minus the bodies that lazy emission
+dropped) reach 1,250,000.  The peak memory without chunking is proportional
+to those bytes: about 220 MB for a C unit and about 150 MB for a C++ unit at
+that size.  The default was 4000 emitted function bodies.  A unit of more
+than 4000 small bodies but fewer than 1,250,000 bytes (a generated C++ unit
+of 6000 functions, about 5400 emitted bodies, for instance) is now compiled
+in one piece, which takes fewer instructions, and a unit with fewer, larger
+bodies than that is chunked where it was not; the real-world units that the
+project measures (libstdc++ and Boost headers, at most 309 bodies) were
+never chunked and are not now.  An explicit threshold (the chunk_threshold
+option of the library API, --chunk-threshold of edg-cir) is still a number of
+function bodies, 1 still chunks whenever there is a body and UINT32_MAX never.
+The code that is generated is the same either way, except that at -O2 the
+numeric suffixes that LLVM gives to local data of the same name (.1, .2) can
+differ.  The other configurations are not affected.

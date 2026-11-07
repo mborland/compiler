@@ -1,0 +1,27 @@
+; The byte threshold of the default chunking decision (chunk-bytes.test) can
+; be replaced for testing: EDG_CIR_TEST_CHUNK_BYTES=<n>, under
+; EDG_CIR_TEST_HOOKS.  Small tiny-module streams then chunk by bytes (n = 1,
+; with the default 500 functions per chunk and with one per chunk), the output
+; is the same as the whole module's, a big n does not chunk, and an explicit
+; --chunk-threshold (a body count) is not affected by the hook.
+; REQUIRES: test-hooks
+; RUN: cat %S/Inputs/header.txt %S/chunk-lowering.test > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --emit=llvm -o %t.whole.ll %t.ecil
+; RUN: env EDG_CIR_TEST_CHUNK_BYTES=1 %edg-cir --stats --emit=llvm -o %t.1.ll %t.ecil 2>&1 | %FileCheck %s --check-prefix=TWO
+; RUN: diff %t.whole.ll %t.1.ll
+; RUN: env EDG_CIR_TEST_CHUNK_BYTES=1 %edg-cir --stats --chunk-functions=1 --emit=llvm -o %t.2.ll %t.ecil 2>&1 | %FileCheck %s --check-prefix=FIVE
+; RUN: diff %t.whole.ll %t.2.ll
+; RUN: env EDG_CIR_TEST_CHUNK_BYTES=1 %edg-cir --stats --emit=obj -o %t.o %t.ecil 2>&1 | %FileCheck %s --check-prefix=TWO
+; RUN: gcc %t.o -o %t.exe
+; RUN: %t.exe
+; RUN: env EDG_CIR_TEST_CHUNK_BYTES=100000000 %edg-cir --stats --emit=llvm %t.ecil 2>&1 >/dev/null | %FileCheck %s --check-prefix=BIG
+; RUN: env EDG_CIR_TEST_CHUNK_BYTES=1 %edg-cir --stats --chunk-threshold=5 --emit=llvm %t.ecil 2>&1 >/dev/null | %FileCheck %s --check-prefix=EXPLICIT
+; TWO: stats: chunked lowering: 2 chunks of at most 500 functions
+; TWO-NEXT: stats: chunk decision: {{[1-9][0-9]*}} body bytes, threshold 1{{$}}
+; FIVE: stats: chunked lowering: 5 chunks of at most 1 functions
+; FIVE-NEXT: stats: chunk decision: {{[1-9][0-9]*}} body bytes, threshold 1{{$}}
+; BIG: stats: chunked lowering: 0 chunks
+; BIG-NEXT: stats: chunk decision: {{[1-9][0-9]*}} body bytes, threshold 100000000{{$}}
+; EXPLICIT: stats: chunked lowering: 0 chunks
+; EXPLICIT-NEXT: stats: chunk decision: {{[1-9][0-9]*}} body bytes, threshold 5 bodies{{$}}

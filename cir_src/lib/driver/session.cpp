@@ -546,6 +546,15 @@ notes.
                 static_cast<double>(t.codegen_ns) / 1e6);
   report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
   print_chunk_line();
+  if (t.chunk_decided) {
+    /* (A separate line: five tools parse the one above.) */
+    std::snprintf(line, sizeof line,
+                  "stats: chunk decision: %llu body bytes, threshold %llu%s",
+                  static_cast<unsigned long long>(t.chunk_body_bytes),
+                  static_cast<unsigned long long>(t.chunk_limit),
+                  t.chunk_by_bodies ? " bodies" : "");
+    report(EDG_CIR_SEVERITY_NOTE, edc_stats, line);
+  }
   std::snprintf(line, sizeof line,
                 "stats: lazy bodies: %llu deferred, %llu replayed, %llu "
                 "dropped",

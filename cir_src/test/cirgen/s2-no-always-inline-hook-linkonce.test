@@ -1,0 +1,28 @@
+; The test hook EDG_CIR_TEST_NO_ALWAYS_INLINE (EDG_CIR_TEST_HOOKS builds only),
+; pipeline half: there is no AlwaysInliner at -O0, as in M5.  The stream is
+; the one of s2-always-inline-linkonce-o0.test, an always_inline linkonce_odr
+; function that has a body, so (unlike the inline-only function of
+; s2-no-always-inline-hook.test, whose body the lazy.cpp half of the hook
+; drops) only the pass decides: with the hook the call stays and the object
+; defines the function (a weak symbol); without it the function is inlined and
+; erased (the other test).
+; REQUIRES: test-hooks
+; RUN: sed 's/features=0x00000000/features=0x00000002/' %S/Inputs/header12_cxx_eh.txt > %t.h
+; RUN: cat %t.h %S/s2-always-inline-linkonce-o0.test > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: env EDG_CIR_TEST_NO_ALWAYS_INLINE=1 %edg-cir --verify-each --emit=llvm %t.ecil | %FileCheck %s
+; RUN: env EDG_CIR_TEST_NO_ALWAYS_INLINE=1 %edg-cir --verify-each --chunk-threshold=1 --chunk-functions=1 --emit=llvm %t.ecil | %FileCheck %s
+; RUN: env EDG_CIR_TEST_NO_ALWAYS_INLINE=1 %edg-cir --emit=obj -o %t.o %t.ecil
+; RUN: nm %t.o | %FileCheck %s --check-prefix=SYM
+; RUN: %edg-cir --emit=obj -o %t.off.o %t.ecil
+; RUN: nm %t.off.o | %FileCheck %s --check-prefix=OFF --implicit-check-not=_ZN2ns2aiEi
+
+; (The calls are main's: neither function calls itself or the other.)
+; CHECK-DAG: call {{.*}}@_ZN2ns2aiEi
+; CHECK-DAG: call {{.*}}@_ZN2ns4keptEi
+; CHECK-DAG: define linkonce_odr {{.*}}@_ZN2ns2aiEi(
+; SYM-DAG: W _ZN2ns2aiEi
+; SYM-DAG: W _ZN2ns4keptEi
+; SYM-DAG: T main
+; OFF-DAG: W _ZN2ns4keptEi
+; OFF-DAG: T main

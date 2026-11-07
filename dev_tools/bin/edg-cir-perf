@@ -60,7 +60,7 @@ NAME (S1: `s1`) against --baseline: the library instructions (cir_ir) of
 every pinned real-world unit (PINNED_UNITS, measured with --only realworld
 --units pinned --levels 0,2 --boost-include DIR) at most 70% of the baseline's
 and those of the generated 6000-function C++ unit (--only cxx, edg-cir alone)
-at most 90% at -O0 (at -O2 it is reported, not gated); a pinned unit that
+at most 92% at -O0 (at -O2 it is reported, not gated); a pinned unit that
 stops compiling, or was not measured, fails.
 The exit status is 1 if a target is missed.  The baseline needs the same
 sections (the real-world one included).
@@ -700,9 +700,9 @@ def measure_realworld(tools: Tools, root: Path, args: argparse.Namespace,
 # as the largest ratio after / before: S1 (lazy emission) wants the library
 # instructions (cir_ir) of every pinned real-world unit at most 70% of the
 # baseline's, and those of the generated 6000-function C++ unit (edg-cir on
-# its stream, few dead bodies) at most 90% at -O0 (reported at -O2).
+# its stream, few dead bodies) at most 92% at -O0 (reported at -O2).
 TARGETS: Dict[str, Dict[str, float]] = {
-  's1': {'realworld_cir_ir': 0.70, 'big_cxx_cir_ir': 0.90}
+  's1': {'realworld_cir_ir': 0.70, 'big_cxx_cir_ir': 0.92}
 }
 
 

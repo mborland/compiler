@@ -310,8 +310,20 @@ LLVM-level output.  Sets session.status on failure.
   {
     bool verify = (session.flags & EDG_CIR_FLAG_VERIFY_EACH) != 0;
     uint64_t bodies = session.emitter ? session.emitter->emitted_bodies() : 0;
+    /* The stream bytes that became code: the reader's offset without the
+       bodies that lazy emission dropped. */
+    uint64_t consumed = session.reader ? session.reader->offset() : 0;
+    uint64_t body_bytes = consumed > session.stats.lazy_dropped_bytes
+                              ? consumed - session.stats.lazy_dropped_bytes
+                              : 0;
+    bool by_bodies = false;
+    uint64_t limit = chunk_limit(session, by_bodies);
 
-    if (chunking_wanted(session, bodies))
+    session.stats.chunk_decided = true;
+    session.stats.chunk_by_bodies = by_bodies;
+    session.stats.chunk_body_bytes = body_bytes;
+    session.stats.chunk_limit = limit;
+    if (chunking_wanted(session, bodies, body_bytes, limit, by_bodies))
       lowered = lower_in_chunks(
           session, module, llvm_context,
           [&](mlir::ModuleOp chunk) {
@@ -355,9 +367,19 @@ LLVM-level output.  Sets session.status on failure.
          the merged module: with chunked lowering a callee can be in another
          chunk).  The functions that were inlined everywhere and are
          discardable are erased by the pass itself. */
-      if ((session.flags & EDG_CIR_FLAG_NO_LLVM_PASSES) == 0)
-        order_always_inline_uses(*lowered);
-      mpm.addPass(llvm::AlwaysInlinerPass(/*InsertLifetimeIntrinsics=*/false));
+      bool always_inliner = true;
+
+#if EDG_CIR_TEST_HOOKS
+      /* Test hook: EDG_CIR_TEST_NO_ALWAYS_INLINE runs -O0 as M5 did, with
+         no AlwaysInliner (see also inline_only_keeps_body in lazy.cpp). */
+      always_inliner = std::getenv("EDG_CIR_TEST_NO_ALWAYS_INLINE") == nullptr;
+#endif
+      if (always_inliner) {
+        if ((session.flags & EDG_CIR_FLAG_NO_LLVM_PASSES) == 0)
+          order_always_inline_uses(*lowered);
+        mpm.addPass(
+            llvm::AlwaysInlinerPass(/*InsertLifetimeIntrinsics=*/false));
+      }
       /* Dead internal functions of streamed regions must go even at -O0. */
       mpm.addPass(llvm::GlobalDCEPass());
     } else {
@@ -623,15 +645,21 @@ mapping) per frame cost 25 us each, 3% of a 6000-function translation unit.
 The body runs under its own crash recovery context on that thread, as
 CrashRecoveryContext::RunSafelyOnThread would run it on a fresh one.
 
-Nothing here waits at process exit: the thread is detached and its state is
-never destroyed (a static destructor, an exit() from the front end's error
-path or from the worker itself must not block on it); the handle's destructor
-only tells an idle worker to leave.
+Nothing here waits at process exit: the thread is detached and neither it nor
+its state is ever woken or destroyed at exit (a static destructor, an exit()
+from the front end's error path or from the worker itself must not block on
+it).  The one handle is a leaked heap object (guard_worker), so no destructor
+runs: waking the idle worker at exit would let it run its thread-exit work
+(tcache flush, arena release, thread_local destructors, about 68K
+instructions) in a race with exit(), and under valgrind's serialized threads
+the instruction count of a compile then varied by that much from run to run
+(the "-j flake" of the slow-below-threshold step); and destroying the mutex
+and condition variable while the worker may still wait on them is undefined.
+Both are avoided by leaving the parked thread to the process exit (the state
+is in static storage that is never destroyed).  stop() remains for a change of
+stack size.
 */
 public:
-  ~a_guard_worker()
-  { stop(); }
-
   void forget()
   /* After fork(): the child has no worker thread, so the next section starts
      one (the old state is leaked). */
@@ -673,10 +701,8 @@ public:
       completed = context.RunSafelyOnThread(wrapped,
                                             stack_mb * 1024u * 1024u);
     } else {
-      /* The state is used through a local pointer, not through state_: an
-         exit() on the worker destroys this handle (stop() clears state_ and
-         wakes this thread) while this thread still waits, and the wait's
-         predicate must not read the cleared member. */
+      /* The state is used through a local pointer, not through state_, so
+         that the wait's predicate never reads a member that stop() clears. */
       a_state *state = state_;
       std::unique_lock<std::mutex> lock(state->mutex);
 
@@ -787,11 +813,15 @@ private:
 };  /* a_guard_worker */
 
 a_guard_worker &guard_worker()
-/* The one worker of the process (a guarded section holds guard_mutex). */
+/*
+The one worker of the process (a guarded section holds guard_mutex).  The
+handle is leaked on purpose (reachable from this static, so leak checking
+stays quiet): its destructor would wake the worker at exit, see a_guard_worker.
+*/
 {
-  static a_guard_worker worker;
+  static a_guard_worker *worker = new a_guard_worker;
 
-  return worker;
+  return *worker;
 }  /* guard_worker */
 
 void a_guard_worker::after_fork()

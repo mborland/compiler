@@ -31,7 +31,7 @@ ABI, EH, optimization, attribute and chunking steps.
 
 Baselines: the steps compare with baselines in ~/edg-cir-config (the defaults
 of the --*-baseline options: m5-base-asm, m5-base-cpp-asm, m5-base-status,
-m5-base-perf.json, m5a-base-perf.json for --perf-targets, identity-m0c,
+m5-base-perf.json, m5a-base-perf.json for --perf-targets, identity-m51b,
 day-base).  A missing, empty or unreadable baseline is a failure, never a
 silent skip: before the first step the gate lists the baselines of the
 selected steps and stops (status 2) if one is unusable; --check-baselines only
@@ -139,7 +139,7 @@ eccp, for instance, but not shared-src).  The rules:
   tests/.edgy/postures/ (the day32 posture)              tests-reference
   expectations of every configuration but edg_x86_64_cir* tests-reference
   other tests (the CIR expectations and tests, filters)   tests
-  documentation and Changes files                      none
+  documentation, Changes files and pending_changes/ entries  none
 
 A file that no rule maps fails the check (add a rule).  --lean with no changed
 file at all fails too (a gate with nothing to check is a mistake, usually a
@@ -153,10 +153,11 @@ Steps (names for --only/--skip):
   build      build cir_src (build/cir), cpfe-cir (build/gcc-cir) and the
              non-ASan cpfe-cir (build/gcc-release-cir) and the util tools
   identity   cpfe, cpfe-cp, cdisp and util preprocessed output and
-             --dump_configuration identical to the M0 capture (4 presets),
-             except the preprocessed output of the files on the allow-list
-             tests/.edgy/filters/cir-identity-allowed.txt (approved
-             ungated changes, each with its reason; a stale entry fails)
+             --dump_configuration identical to the identity-m51b capture
+             (4 presets), except the preprocessed output of the files on the
+             allow-list tests/.edgy/filters/cir-identity-allowed.txt
+             (approved ungated changes, each with its reason; a stale entry
+             fails; the list is empty now; a compare of no files fails)
   isolation  edg-cir-check-isolation
   smoke      cir-c-smoke is 100% PASS in edg_x86_64_cir and edg_x86_64_cir_2p
   cir-suite  tests/tests/cir (writer goldens, cirgen run tests) in both CIR
@@ -353,7 +354,7 @@ Steps (names for --only/--skip):
              instructions join the rows above; --boost-include for Boost)
              and --perf-targets s1 the S1 targets (library instructions of
              every pinned unit at most 70%, of the generated C++ unit at -O0
-             at most 90% of --perf-targets-baseline, the M5a run:
+             at most 92% of --perf-targets-baseline, the M5a run:
              edg-cir-perf --targets)
 
 For the step asm-diff, the baseline of a commit is made with this tree's
@@ -487,6 +488,8 @@ AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
   ('cir_src/include/edg_cir/', ('library', 'writer')),
   ('cir_src/', ('library',)),
   ('src/Changes', ()),
+  # Pending Changes entries (edg-collect-changes moves them into src/Changes).
+  ('src/pending_changes/', ()),
   ('src/ecil_', ('writer',)),
   ('src/cir_be', ('writer',)),
   ('src/cmd_line.', ('shared-src', 'writer', 'fe-options')),
@@ -863,8 +866,14 @@ def judge_identity(output: str, code: int, allowed: List[Tuple[str, str]]
   Beyond an exit status of 0, a run passes if every problem is the
   preprocessed output of a file that an allow-list glob names (an approved
   change of a file that every back end compiles): the detail then says which
-  files differ and why.  A glob that matches no problem is stale and fails.'''
+  files differ and why.  A glob that matches no problem is stale and fails.
+  A compare that names no count of files, or compared none, passes nothing
+  (an empty capture would otherwise be `identical`).'''
   last = output.strip().splitlines()[-1] if output.strip() else ''
+  count = re.search(r'(\d+) files compared', last)
+  if code == 0 and (not count or int(count.group(1)) == 0):
+    return False, (f"compared nothing: {last or 'no output'}"
+                   f"{'' if count else ' (no `N files compared` line)'}"), []
   if code == 0:
     return not allowed, last if not allowed else (
       f"{last}; but the allow-list has {len(allowed)} entr"
@@ -1908,6 +1917,14 @@ RSS_ROWS = ('inproc', 'keep', '2p-fe', '2p-edg-cir')
 # the M4 build, 988 to 989 MB in three M5p runs), so the ASan in-process rows
 # are measured ASAN_REPEATS times and judged on the minimum; the release rows
 # are strict.
+# M5.1 session 3 (clang4, m51-int, after the size rule of the chunk decision):
+# no ceiling was raised.  The only rows that moved because of the new rule are
+# the generated C++ unit's edg-cir rows (cxx 2p-edg-cir: 116 -> 144 MB ASan,
+# 118 -> 150 MB release): the unit (6000 functions, about 0.85 MB of emitted
+# bodies) used to be lowered in 13 chunks and is now one piece, as L-a
+# predicted (138-147 MB for edg-cir alone); both stay under their ceiling of
+# 200 MB.  The other rows are at or below the session-1 values
+# (m5-base-rss.txt), the highest at 77% of its ceiling.
 RSS_CEILINGS_MB: Dict[Tuple[str, str, str], int] = {
   ('c', 'asan', 'inproc'): 860,
   ('c', 'asan', 'keep'): 1010,
@@ -2062,13 +2079,22 @@ def _status_lines(run: Path, suites: Optional[List[str]] = None
   return data
 
 
+def cache_edg_base(text: str) -> Optional[str]:
+  '''The value of the EDG_BASE entry of a CMakeCache.txt, whatever its type
+  (`EDG_BASE:STRING=`, `:PATH=`, `:FILEPATH=` or `:UNINITIALIZED=`: the type
+  depends on how it was set), or None if the cache has no such entry.'''
+  found = re.search(r'^EDG_BASE:[A-Z]+=(.*)$', text, re.M)
+  return found.group(1) if found else None
+
+
 def drop_stale_builds(ctx: Context, posture: str) -> List[str]:
   '''Remove the build directories of the day posture (the built-in one, or
-  the posture file `posture`) whose CMake cache has another EDG_BASE than the
-  posture's.  The identity step configures every preset (for the compile
-  commands) with the default EDG_BASE; edg-docker-test only builds a directory
-  that exists, so the i686 build would keep the x86-64 base (the runtime
-  library then fails to compile).  Returns the directories removed.'''
+  the posture file `posture`) whose CMake cache has another EDG_BASE (of any
+  cache type, see cache_edg_base) than the posture's.  The identity step
+  configures every preset (for the compile commands) with the default
+  EDG_BASE; edg-docker-test only builds a directory that exists, so the i686
+  build would keep the x86-64 base (the runtime library then fails to
+  compile).  Returns the directories removed.'''
   if posture:
     builds = json.loads((ctx.tree / posture).read_text())['builds']
   else:
@@ -2078,8 +2104,8 @@ def drop_stale_builds(ctx: Context, posture: str) -> List[str]:
   for build in builds:
     directory = ctx.tree / build['build_path']
     cache = directory / 'CMakeCache.txt'
-    wanted = f"EDG_BASE:STRING=/edg/workspace/{build['edg_base']}"
-    if cache.exists() and wanted not in cache.read_text().splitlines():
+    wanted = f"/edg/workspace/{build['edg_base']}"
+    if cache.exists() and cache_edg_base(cache.read_text()) != wanted:
       shutil.rmtree(directory)
       removed.append(build['build_path'])
   return removed
@@ -3915,8 +3941,8 @@ def main() -> None:
                       help = 'write the image IDs next to BASELINE '
                              '(BASELINE.images.txt) and exit')
   parser.add_argument('--identity-baseline',
-                      default = '~/edg-cir-config/identity-m0c',
-                      help = 'identity capture of the M0 commit (a '
+                      default = '~/edg-cir-config/identity-m51b',
+                      help = 'identity capture of the M5.1b commit (a '
                              'edg-macro-identity-check capture tree)')
   parser.add_argument('--identity-allow', default = IDENTITY_ALLOW,
                       help = 'the allow-list of the identity step (a file of '

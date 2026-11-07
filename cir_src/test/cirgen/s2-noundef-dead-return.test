@@ -13,16 +13,18 @@
 ; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s
 ; RUN: %edg-cir --verify-each --chunk-threshold=1 --chunk-functions=1 --emit=llvm %t.ecil | %FileCheck %s
 
-; CHECK-DAG: define {{.*}}noundef i32 @after_die(i32 noundef %0)
-; CHECK-DAG: define {{.*}}i32 @reachable(i32 noundef %0)
+; (The define lines have no wildcard before `i32`: `define dso_local i32 @f`
+; does not match a result with `noundef`, nor the other way round.)
+; CHECK-DAG: define dso_local noundef i32 @after_die(i32 noundef %0)
+; CHECK-DAG: define dso_local i32 @reachable(i32 noundef %0)
 ; CHECK-DAG: declare void @die()
 ; CHECK-LABEL: define {{.*}}noundef i32 @main()
 ; CHECK: call noundef i32 @after_die(i32 noundef 1)
 ; CHECK: call i32 @reachable(i32 noundef 2)
 ; CHECK: call i32 @after_label(i32 noundef 3)
 ; CHECK: call i32 @after_case(i32 noundef 4)
-; CHECK-DAG: define {{.*}}i32 @after_label(i32 noundef %0)
-; CHECK-DAG: define {{.*}}i32 @after_case(i32 noundef %0)
+; CHECK-DAG: define dso_local i32 @after_label(i32 noundef %0)
+; CHECK-DAG: define dso_local i32 @after_case(i32 noundef %0)
 
 frame DECLS
   STR 100 "die"

@@ -11,6 +11,10 @@
 #   EDG_CIR_SSH_KEY    identity file, default ~/.ssh/id_rsa
 #   EDG_CIR_SSH_SOCKET ssh ControlPath of an open master connection; used
 #                      only when set (the same name as cir-config and cir-lib)
+#   EDG_CIR_HOSTNAME   the name `hostname -s` must report on the host before
+#                      `sync` deletes anything, default clang4 (as
+#                      edg-cir-checkpoint: a stale ControlPath would send
+#                      rsync --delete to another machine; exit status 2)
 #   EDG_CIR_JOBS       job cap exported into the container of `run`, default
 #                      48; a script's parallel jobs must not exceed it
 #   EDG_CIR_SG_DOCKER  non-empty and not 0: run docker through `sg docker -c`
@@ -21,6 +25,7 @@ repo=$(cd "$(dirname "$0")/../../../.." && pwd)
 host=${EDG_CIR_HOST:-matt@clang4.cpp.al}
 key=${EDG_CIR_SSH_KEY:-$HOME/.ssh/id_rsa}; key=${key/#\~/$HOME}
 tree=${BOX_TREE:-edg-cir-writer}
+expected_hostname=${EDG_CIR_HOSTNAME:-clang4}
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=20 -i "$key")
 if [ -n "${EDG_CIR_SSH_SOCKET:-}" ]; then
   SSH+=(-o ControlPath="${EDG_CIR_SSH_SOCKET/#\~/$HOME}" -o ControlMaster=no)
@@ -36,6 +41,14 @@ cmd=$1; shift
 case $cmd in
   ssh) exec "${SSH[@]}" "$host" "$@" ;;
   sync)
+    reported=$("${SSH[@]}" "$host" hostname -s 2>/dev/null | tail -n 1)
+    if [ "$reported" != "$expected_hostname" ]; then
+      echo "box.sh: the host answers as '$reported', not" \
+        "'$expected_hostname' (EDG_CIR_HOST=$host; a stale ssh" \
+        "ControlPath? EDG_CIR_HOSTNAME names another expected host);" \
+        "nothing synced" >&2
+      exit 2
+    fi
     exec rsync -a --checksum --no-times --delete -e "${SSH[*]}" \
       --exclude=/build/ --exclude=/.git/ \
       --exclude=/tests/runs/ --exclude=/.tmp/ --exclude='/.tmp-*/' \

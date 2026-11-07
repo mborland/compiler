@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 from pathlib import Path, PurePosixPath
@@ -1227,9 +1228,20 @@ class CheckpointTest(unittest.TestCase):
       tree = Path(tmp)
       self.make_tree(tree)
       # A process that uses prunetest_old3: its name is on a command line.
-      user = subprocess.Popen(['bash', '-c', 'sleep 20; : prunetest_old3 '
-                              'checkpoint-prunetest_old3'])
+      # (read, not sleep: the helper must outlast a slow loaded host, and
+      # killing the shell must end it.)
+      user = subprocess.Popen(
+        ['bash', '-c', 'read -t 300 _; : prunetest_old3 '
+         'checkpoint-prunetest_old3'], stdin = subprocess.PIPE)
+      self.addCleanup(user.stdin.close)
       self.addCleanup(user.kill)
+      # On a loaded host the shell may not have started yet: wait until the
+      # name is on a command line (pgrep -f is what prune_command asks).
+      for _ in range(100):
+        if subprocess.run(['pgrep', '-f', '--', 'prunetest_old3'],
+                          stdout = subprocess.DEVNULL).returncode == 0:
+          break
+        time.sleep(0.1)
       proc = subprocess.run(
         ['bash', '-c', checkpoint.prune_command(1)], cwd = tree,
         stdout = subprocess.PIPE, text = True)
@@ -1368,6 +1380,8 @@ class LeanAreas(unittest.TestCase):
       'src/mem_manage.c': ('shared-src', 'writer'),
       'src/CMakeLists.txt': ('shared-src', 'writer'),
       'src/Changes': (),
+      'src/pending_changes/cir-m51-chunk-size-threshold.txt': (),
+      'src/pending_changes/.gitignore': (),
       'util/eccp.sh': ('eccp',),
       'bases/docker/cir-env/gcc/edg_eccp_config': ('eccp',),
       'dev_tools/cir-mixed-tu-cases/s3-x/a.cpp': ('linkage',),
@@ -2000,8 +2014,20 @@ class PerfTargets(unittest.TestCase):
     self.assertTrue(any(l.startswith('FAIL libstdcxx/chrono') for l in report))
 
   def test_s1_missed_on_the_generated_unit(self):
-    before, after = pinned_perf(ratio_cxx = 0.91)
+    before, after = pinned_perf(ratio_cxx = 0.93)
     self.assertFalse(perf.check_targets(before, after, 's1')[0])
+
+  def test_the_generated_unit_limit_is_92_percent(self):
+    # decision 37: the limit moved from 90% to 92% (the unchunked unit is
+    # 91.7% of M5a); 0.92 passes, 0.921 does not.
+    self.assertEqual(perf.TARGETS['s1']['big_cxx_cir_ir'], 0.92)
+    for ratio, passes in ((0.917, True), (0.92, True), (0.921, False)):
+      before, after = pinned_perf(ratio_cxx = ratio)
+      before['big_cxx']['2p-edg-cir']['ir'] = 1000000
+      after['big_cxx']['2p-edg-cir']['ir'] = int(1000000 * ratio)
+      ok, report = perf.check_targets(before, after, 's1')
+      self.assertEqual(ok, passes, (ratio, report))
+      self.assertTrue(any('limit 92%' in l for l in report), report)
 
   def test_the_generated_unit_is_gated_at_o0_only(self):
     before, after = pinned_perf()
@@ -3202,7 +3228,9 @@ class HostSettings(unittest.TestCase):
     def fake(command, capture = False):
       commands.append(command)
       text = 'clang4\n' if command == 'hostname -s' else 'F\n'
-      return subprocess.CompletedProcess([], 0, stdout = text)
+      # the tree has no KEEP marker (test -e fails)
+      code = 1 if command.startswith('test -e') else 0
+      return subprocess.CompletedProcess([], code, stdout = text)
     checkpoint.box_reachable = lambda: True
     checkpoint.ssh = fake
     checkpoint.local_fingerprint = lambda root: 'F'
@@ -3236,6 +3264,119 @@ class HostSettings(unittest.TestCase):
       self.assertIn('--checksum', command)
     self.assertIn('m5-int', checkpoint.PROTECTED_TREES)
     self.assertIn('day-base', checkpoint.PROTECTED_TREES)
+
+  def test_a_protected_tree_refuses_a_sync_and_a_wipe_without_the_flag(self):
+    refusal = checkpoint.protected_refusal
+    # an unprotected tree is never refused
+    self.assertEqual(refusal('m51-int', False, False, False, False), '')
+    # sync and wipe both named; --allow-protected, or running as it is
+    both = refusal('m5-int', True, False, False, False)
+    self.assertIn('overwrite its sources', both)
+    self.assertIn('remove its build/cir*', both)
+    self.assertIn('--allow-protected', both)
+    self.assertEqual(refusal('m5-int', True, False, False, True), '')
+    self.assertEqual(refusal('m5-int', True, True, True, False), '')
+    # one of the two is enough
+    sync_only = refusal('m5-int', True, False, True, False)
+    self.assertIn('overwrite', sync_only)
+    self.assertNotIn('remove its build', sync_only)
+    wipe_only = refusal('m5-int', True, True, False, False)
+    self.assertIn('remove its build/cir*', wipe_only)
+    self.assertNotIn('overwrite', wipe_only)
+    # pruning wipes nothing; --check-baselines only syncs
+    self.assertEqual(refusal('m5-int', True, False, False, False,
+                             prune_only = True), '')
+    only = refusal('m5-int', True, False, False, False,
+                   check_baselines = True)
+    self.assertIn('overwrite', only)
+    self.assertNotIn('remove its build', only)
+    self.assertEqual(refusal('m5-int', True, True, False, False,
+                             check_baselines = True), '')
+    # the trees of the baselines are the protected ones
+    for tree in checkpoint.PROTECTED_TREES:
+      self.assertIn(tree, ('day-base', 'm5-int'))
+
+  def protected_run(self, *argv, keep = False):
+    saved = (checkpoint.box_reachable, checkpoint.ssh,
+             checkpoint.local_fingerprint, checkpoint.subprocess, sys.argv,
+             os.getcwd())
+    commands: List[str] = []
+    def fake(command, capture = False):
+      commands.append(command)
+      if command == 'hostname -s':
+        text, code = 'clang4\n', 0
+      elif command.startswith('test -e') and command.endswith('/KEEP'):
+        text, code = '', 0 if keep else 1
+      else:
+        text, code = 'F\n', 0
+      return subprocess.CompletedProcess([], code, stdout = text)
+    synced: List[List[str]] = []
+    class Subprocess:
+      def __getattr__(self, name):
+        return getattr(subprocess, name)
+      def run(self, command, *a, **k):
+        synced.append(command)
+        return subprocess.CompletedProcess(command, 0)
+    checkpoint.box_reachable = lambda: True
+    checkpoint.ssh = fake
+    checkpoint.local_fingerprint = lambda root: 'F'
+    checkpoint.subprocess = Subprocess()
+    sys.argv = ['edg-cir-checkpoint', '--quick', '--detach', *argv]
+    os.chdir(BIN.parent.parent)
+    code = None
+    try:
+      with contextlib.redirect_stdout(io.StringIO()), \
+           contextlib.redirect_stderr(io.StringIO()) as err:
+        try:
+          checkpoint.main()
+        except SystemExit as raised:
+          code = raised.code
+    finally:
+      (checkpoint.box_reachable, checkpoint.ssh, checkpoint.local_fingerprint,
+       checkpoint.subprocess, sys.argv, directory) = saved
+      os.chdir(directory)
+    started = [c for c in commands if c.startswith('nohup')]
+    return code, synced, started, err.getvalue()
+
+  def test_a_protected_tree_is_not_synced_or_wiped_without_the_flag(self):
+    code, synced, started, err = self.protected_run('--tree', 'm5-int')
+    self.assertEqual(code, 2)
+    self.assertEqual((synced, started), ([], []))
+    self.assertIn('protected tree', err)
+    # a tree with a KEEP marker is protected too
+    code, synced, started, err = self.protected_run('--tree', 'scratch',
+                                                    keep = True)
+    self.assertEqual((code, synced, started), (2, [], []))
+    # a sync alone is refused with --incremental, a wipe alone with --no-sync
+    code, synced, started, err = self.protected_run(
+      '--tree', 'day-base', '--incremental')
+    self.assertEqual((code, synced, started), (2, [], []))
+    self.assertNotIn('remove its build', err)
+    code, synced, started, err = self.protected_run(
+      '--tree', 'day-base', '--no-sync')
+    self.assertEqual((code, synced, started), (2, [], []))
+    self.assertNotIn('overwrite', err)
+
+  def test_a_protected_tree_runs_as_it_is_or_with_the_flag(self):
+    code, synced, started, _ = self.protected_run(
+      '--tree', 'm5-int', '--no-sync', '--incremental')
+    self.assertIsNone(code)
+    self.assertEqual(synced, [])
+    self.assertEqual(len(started), 1)
+    self.assertNotIn('rm -rf build/cir', started[0])
+    code, synced, started, _ = self.protected_run(
+      '--tree', 'm5-int', '--allow-protected')
+    self.assertIsNone(code)
+    self.assertEqual(len(synced), 1)
+    self.assertNotIn('--delete', synced[0])
+    self.assertEqual(len(started), 1)
+    self.assertIn('rm -rf build/cir', started[0])
+
+  def test_an_unprotected_tree_is_synced_and_wiped_as_before(self):
+    code, synced, started, _ = self.protected_run('--tree', 'm51-int')
+    self.assertIsNone(code)
+    self.assertIn('--delete', synced[0])
+    self.assertIn('rm -rf build/cir', started[0])
 
   def test_ssh_options_have_batch_mode_and_the_key(self):
     saved = checkpoint.SOCKET
@@ -3845,6 +3986,35 @@ class Day32(unittest.TestCase):
         'EDG_BASE:STRING=/edg/workspace/bases/docker/dev-env/gcc\n')
       self.assertEqual(gate.drop_stale_builds(ctx, ''), [])
 
+  def test_the_edg_base_of_any_cache_type_is_compared(self):
+    self.assertEqual(gate.cache_edg_base('A:B=1\nEDG_BASE:PATH=/x\n'), '/x')
+    self.assertEqual(gate.cache_edg_base('EDG_BASE:FILEPATH=/y z\n'), '/y z')
+    self.assertEqual(gate.cache_edg_base('EDG_BASE:STRING=/s'), '/s')
+    self.assertIsNone(gate.cache_edg_base('NOT_EDG_BASE:STRING=/x\n'))
+    self.assertIsNone(gate.cache_edg_base('# EDG_BASE:STRING=/x\n'))
+    wanted = '/edg/workspace/bases/docker/dev-env/gcc'
+    for kind, value, removed in (
+        ('PATH', wanted, False), ('FILEPATH', wanted, False),
+        ('UNINITIALIZED', wanted, False), ('STRING', wanted, False),
+        ('PATH', '/edg/workspace/bases/docker/dev-env/gcc-i686', True),
+        ('FILEPATH', '/elsewhere', True)):
+      with tempfile.TemporaryDirectory() as tmp:
+        ctx = gate_context(tmp, tree = tmp)
+        directory = Path(tmp) / 'build/gcc'
+        directory.mkdir(parents = True)
+        (directory / 'CMakeCache.txt').write_text(
+          f"A:B=1\nEDG_BASE:{kind}={value}\nC:D=2\n")
+        self.assertEqual(gate.drop_stale_builds(ctx, ''),
+                         ['build/gcc'] if removed else [], (kind, value))
+        self.assertEqual(directory.exists(), not removed)
+    # a cache without the entry cannot be said to match
+    with tempfile.TemporaryDirectory() as tmp:
+      ctx = gate_context(tmp, tree = tmp)
+      directory = Path(tmp) / 'build/gcc'
+      directory.mkdir(parents = True)
+      (directory / 'CMakeCache.txt').write_text('A:B=1\n')
+      self.assertEqual(gate.drop_stale_builds(ctx, ''), ['build/gcc'])
+
   def day_run(self, tmp, base_lines, new_lines):
     from unittest import mock
     calls = []
@@ -3951,17 +4121,47 @@ class IdentityAllowList(unittest.TestCase):
     self.assertFalse(gate.judge_identity('crash\n', 1, self.ALLOWED)[0])
     self.assertFalse(gate.judge_identity('', 1, self.ALLOWED)[0])
 
-  def test_the_checked_in_list(self):
+  def test_the_checked_in_list_is_empty(self):
+    # The M5.1b entries went with the identity-m51b capture.
     path = BIN.parent.parent / gate.IDENTITY_ALLOW
     entries, problems = gate.read_identity_allowlist(str(path))
     self.assertEqual(problems, [])
-    self.assertEqual([e[0] for e in entries],
-                     ['*/src/lower_name.c.i.gz', '*/src/macro.c.i.gz'])
+    self.assertEqual(entries, [])
     self.assertEqual(gate.areas_of(gate.IDENTITY_ALLOW), ('shared-src',))
-    names = ('cpfe/src/lower_name.c.i.gz', 'cpfe-cp/src/macro.c.i.gz')
-    for name in names:
-      self.assertTrue(any(__import__('fnmatch').fnmatchcase(name, g)
-                          for g, _ in entries), name)
+
+  def test_an_empty_list_is_valid_and_judges_identical_output(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      path = Path(tmp) / 'allow.txt'
+      path.write_text('# only comments\n\n# and blank lines\n')
+      self.assertEqual(gate.read_identity_allowlist(str(path)), ([], []))
+    same = 'IDENTICAL: 180 files compared across 4 presets, 0 problem(s)\n'
+    ok, detail, used = gate.judge_identity(same, 0, [])
+    self.assertTrue(ok, detail)
+    self.assertEqual(used, [])
+    # a difference is a problem when nothing is allowed
+    ok, detail, _ = gate.judge_identity(self.OUT, 1, [])
+    self.assertFalse(ok)
+    self.assertIn('0 of the problems are on the allow-list', detail)
+
+  def test_a_compare_of_nothing_fails(self):
+    none = 'IDENTICAL: 0 files compared across 4 presets, 0 problem(s)\n'
+    ok, detail, _ = gate.judge_identity(none, 0, [])
+    self.assertFalse(ok)
+    self.assertIn('compared nothing', detail)
+    self.assertFalse(gate.judge_identity(none, 0, self.ALLOWED)[0])
+    # no output at all, or no count line, is no verdict either
+    self.assertFalse(gate.judge_identity('', 0, [])[0])
+    ok, detail, _ = gate.judge_identity('fine\n', 0, [])
+    self.assertFalse(ok)
+    self.assertIn('no `N files compared` line', detail)
+
+  def test_the_default_baseline_is_the_m51b_capture(self):
+    self.assertIn("default = '~/edg-cir-config/identity-m51b'",
+                  (BIN / 'edg-cir-checkpoint').read_text())
+    text = (BIN / 'edg-cir-gate-evidence').read_text()
+    self.assertIn("default = '~/edg-cir-config/identity-m51b'", text)
+    self.assertNotIn('identity-m0c', text)
+    self.assertNotIn('identity-m0c', (BIN / 'edg-cir-checkpoint').read_text())
 
   def test_the_list_is_checked_when_it_is_read(self):
     with tempfile.TemporaryDirectory() as tmp:
@@ -4059,6 +4259,63 @@ class DevEnvTag(unittest.TestCase):
     self.assertNotIn("'cir-config-llvm-strip'", text)
     self.assertIn('cir-config-llvm-build-{os.getpid()}', text)
     self.assertNotIn("'docker.io/edgcpp/dev-env:latest'", text)
+
+
+class PrebuildNice(unittest.TestCase):
+  '''The llvm-cir prebuild runs its containers under nice -n 10 with or
+  without EDG_LLVM_CIR_JOBS (the hosts are shared).'''
+
+  def docker_commands(self, jobs):
+    import runpy
+    from unittest import mock
+    sys.path.insert(0, str(BIN.parent / 'pylibs'))
+    try:
+      import edgdocker
+    finally:
+      sys.path.pop(0)
+    commands: List[List[str]] = []
+    def fake(argv, **kw):
+      commands.append(list(argv))
+      return subprocess.CompletedProcess(argv, 0, stdout = 'x\n')
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith('EDG_LLVM_CIR_')}
+    with tempfile.TemporaryDirectory() as tmp:
+      env['EDG_LLVM_CIR_WORKDIR'] = str(Path(tmp) / 'work')
+      if jobs:
+        env['EDG_LLVM_CIR_JOBS'] = jobs
+      (Path(tmp) / 'work' / 'install').mkdir(parents = True)
+      saved = os.getcwd()
+      os.chdir(tmp)
+      try:
+        with mock.patch.dict(os.environ, env, clear = True), \
+             mock.patch.object(subprocess, 'run', fake), \
+             mock.patch.object(edgdocker, 'tag_dev_env_for_cir',
+                               lambda: 'dev-env:cir-x'), \
+             mock.patch('shutil.copytree', lambda *a, **k: None):
+          sys.path.insert(0, str(BIN.parent / 'pylibs'))
+          try:
+            runpy.run_path(str(BIN.parent / 'docker/llvm-cir/prebuild.py'))
+          finally:
+            sys.path.pop(0)
+      finally:
+        os.chdir(saved)
+    return [c for c in commands if c[:2] == ['docker', 'run']]
+
+  def check(self, jobs):
+    docker = self.docker_commands(jobs)
+    self.assertEqual(len(docker), 2, docker)
+    build, strip = docker
+    self.assertEqual(build[build.index('dev-env:cir-x') + 1:][:4],
+                     ['nice', '-n', '10', 'edg-build-llvm-cir'], build)
+    self.assertEqual(strip[strip.index('dev-env:cir-x') + 1:][:3],
+                     ['nice', '-n', '10'], strip)
+    self.assertEqual('--jobs' in build, bool(jobs))
+
+  def test_without_jobs(self):
+    self.check('')
+
+  def test_with_jobs(self):
+    self.check('48')
 
 
 class OptCorpusBaselines(unittest.TestCase):

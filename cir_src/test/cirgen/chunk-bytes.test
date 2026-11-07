@@ -1,0 +1,22 @@
+; The chunking decision (S3, M5.1): with no chunk_threshold (the default) a
+; module is lowered in chunks when the stream bytes that became code (the
+; reader offset minus the lazily dropped bodies) reach 1,250,000, not after a
+; number of bodies; a module of a few bodies is never chunked by default.  An
+; explicit --chunk-threshold stays a body count (chunk-lowering.test: 4 bodies
+; here).  --stats prints the decision on its own line after the unchanged
+; "chunked lowering" one: the bytes seen and the threshold ("bodies" when it
+; is a body count).
+; RUN: cat %S/Inputs/header.txt %S/chunk-lowering.test > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --stats --emit=llvm %t.ecil 2>&1 >/dev/null | %FileCheck %s --check-prefix=DEFAULT
+; RUN: %edg-cir --stats --chunk-threshold=4 --emit=llvm %t.ecil 2>&1 >/dev/null | %FileCheck %s --check-prefix=COUNT
+; RUN: %edg-cir --stats --chunk-threshold=5 --emit=llvm %t.ecil 2>&1 >/dev/null | %FileCheck %s --check-prefix=COUNT5
+; RUN: %edg-cir --stats --chunk-threshold=4294967295 --emit=llvm %t.ecil 2>&1 >/dev/null | %FileCheck %s --check-prefix=NEVER
+; DEFAULT: stats: chunked lowering: 0 chunks of at most 500 functions
+; DEFAULT-NEXT: stats: chunk decision: {{[1-9][0-9]*}} body bytes, threshold 1250000{{$}}
+; COUNT: stats: chunked lowering: 2 chunks of at most 500 functions
+; COUNT-NEXT: stats: chunk decision: {{[1-9][0-9]*}} body bytes, threshold 4 bodies{{$}}
+; COUNT5: stats: chunked lowering: 0 chunks
+; COUNT5-NEXT: stats: chunk decision: {{[1-9][0-9]*}} body bytes, threshold 5 bodies{{$}}
+; NEVER: stats: chunked lowering: 0 chunks
+; NEVER-NEXT: stats: chunk decision: {{[1-9][0-9]*}} body bytes, threshold 4294967295 bodies{{$}}

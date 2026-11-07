@@ -1,0 +1,585 @@
+{
+ "schema": 1,
+ "section": "builtins",
+ "title": "Builtin functions",
+ "intro": "GCC and clang builtins, by family. A builtin the writer has no mapping for is diagnosed by name and the body that uses it is dropped (src/ecil_code.c, classify_routine); libc and libm builtins are ordinary calls of the library function.",
+ "groups": [
+  {
+   "id": "builtins",
+   "title": "Builtin functions",
+   "rows": [
+    {
+     "id": "builtins.libc",
+     "feature": "libc and libm builtins (__builtin_memcpy, strlen, printf, sqrt, ...)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Emitted as ordinary calls of the library function (decision 35); facts such as pure, const and nothrow come from clang's table. llvm.mem* intrinsics arrive in M6.5.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20020525-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c99-math-double-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "src/builtin_libc.h",
+      "src/builtin_libc_attrs.h"
+     ]
+    },
+    {
+     "id": "builtins.fp_classify",
+     "feature": "Floating-point classification and comparison (isnan, isinf, isfinite, signbit, fpclassify, isless, ...)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "fpclassify with a non-constant result operand and classification of a non-arithmetic value are diagnosed.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr110755.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c99-math-double-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/pr104389.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1516",
+      "src/ecil_code.c:1530"
+     ]
+    },
+    {
+     "id": "builtins.huge_val_nan",
+     "feature": "__builtin_huge_val, __builtin_inf, __builtin_nan",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-float-5.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c99-math-float-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "builtins.bswap",
+     "feature": "__builtin_bswap16, 32, 64, 128",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/builtin-bswap-5.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/builtin-bswap-11.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "builtins.popcount_ffs",
+     "feature": "__builtin_popcount, parity and ffs",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr50161.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/pr85859.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/pr89795.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "builtins.clz_ctz",
+     "feature": "__builtin_clz, ctz, clrsb, clzg and ctzg",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Mapped by the writer; no corpus test that runs under CIR uses them. clzg and ctzg with a non-constant second argument are diagnosed.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:1690",
+      "src/ecil_type.c:2500"
+     ]
+    },
+    {
+     "id": "builtins.overflow",
+     "feature": "Overflow arithmetic (__builtin_add_overflow, _sub_, _mul_, and the _p forms)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/builtin-arith-overflow-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/builtin-arith-overflow-2.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/pr82274-2.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:2502",
+      "src/ecil_type.c:2523"
+     ]
+    },
+    {
+     "id": "builtins.expect",
+     "feature": "__builtin_expect",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20030826-2.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/20031102-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "builtins.unreachable_trap",
+     "feature": "__builtin_unreachable and __builtin_trap",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr88676.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c23-unreachable-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/20000906-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "builtins.alloca",
+     "feature": "__builtin_alloca and __builtin_alloca_with_align",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr113596.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/strlenopt-17g.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "builtins.compile_time",
+     "feature": "Compile-time builtins (choose_expr, types_compatible_p, offsetof, classify_type)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Folded by the front end.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/builtin-choose-expr.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/field-merge-17.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "builtins.constant_p",
+     "feature": "__builtin_constant_p",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.2",
+     "note": "Diagnosed and the function dropped; it blocks libstdc++ algorithms, Boost algorithm and range, and the codequality sort kernel. Becomes llvm.is.constant.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:3265",
+      "src/ecil_code.c:1143",
+      "doc/project.md §4.4"
+     ]
+    },
+    {
+     "id": "builtins.object_size",
+     "feature": "__builtin_object_size and __builtin_dynamic_object_size",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.2",
+     "note": "Always folds to the unknown answer ((size_t)-1, or 0 for the minimum kinds), so no bound is ever checked. Becomes llvm.objectsize.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:3222",
+      "doc/project.md §4.3"
+     ]
+    },
+    {
+     "id": "builtins.va_list",
+     "feature": "va_start, va_arg, va_end and va_copy",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr23818.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/titype-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/union-2.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "builtins.va_arg_pack",
+     "feature": "__builtin_va_arg_pack and __builtin_va_arg_pack_len",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.2",
+     "note": "A gnu_inline wrapper that uses it (glibc's fortified printf, open, ...) cannot be written; it stays an inline-only declaration and the call goes to the library function.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/writer/writer-va-arg-pack-drop.sft.c",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:3224"
+     ]
+    },
+    {
+     "id": "builtins.launder",
+     "feature": "__builtin_launder",
+     "papers": [
+      "P0137R1"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "The writer treats it as the identity on the pointer.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/cpp/cpp1z/launder1.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:3242"
+     ]
+    },
+    {
+     "id": "builtins.atomic",
+     "feature": "__atomic_* builtins and __atomic_*_lock_free",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.3",
+     "note": "Diagnosed and the function dropped; <atomic>, <memory> and <regex> need them.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/atomic-op-1.sft.c",
+       "kind": "failing"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/atomic-fence.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1143"
+     ]
+    },
+    {
+     "id": "builtins.sync",
+     "feature": "__sync_* builtins",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.3",
+     "note": "Diagnosed and the function dropped.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/sync-2.sft.c",
+       "kind": "failing"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/ia64-sync-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1143"
+     ]
+    },
+    {
+     "id": "builtins.clear_padding",
+     "feature": "__builtin_clear_padding",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.3",
+     "note": "<atomic> needs it for compare-exchange on padded types.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:1143"
+     ]
+    },
+    {
+     "id": "builtins.ia32_addcarry",
+     "feature": "__builtin_ia32_addcarryx_u64 and _sbb_u64",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.3",
+     "note": "Needed by Boost multiprecision.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:1143",
+      "doc/project.md §4.4"
+     ]
+    },
+    {
+     "id": "builtins.ia32_intrinsics",
+     "feature": "Other __builtin_ia32_* builtins (SSE, AVX, <immintrin.h>)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "No mapping, and they need vector types, which are diagnosed.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:1143"
+     ]
+    },
+    {
+     "id": "builtins.vector_ops",
+     "feature": "Vector builtins (__builtin_shuffle, __builtin_shufflevector, __builtin_convertvector)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "Vector types are diagnosed (22 of the 528 C++ drop notes in H3).",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:1143",
+      "src/ecil_type.c:681"
+     ]
+    },
+    {
+     "id": "builtins.setjmp_family",
+     "feature": "setjmp, _setjmp, sigsetjmp and vfork (returns_twice functions)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.4a",
+     "note": "No returns_twice is set anywhere, and the calls are not diagnosed: an optimizing build may miscompile a function that calls them.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:1143",
+      "doc/project.md §4.1"
+     ]
+    },
+    {
+     "id": "builtins.builtin_setjmp",
+     "feature": "__builtin_setjmp and __builtin_longjmp",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "No mapping: diagnosed and the function dropped.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/setjmp-3.sft.c",
+       "kind": "failing"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/setjmp-4.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1143"
+     ]
+    },
+    {
+     "id": "builtins.prefetch_hints",
+     "feature": "__builtin_prefetch, __builtin_assume_aligned, __builtin_expect_with_probability, __builtin_unpredictable",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "No mapping: diagnosed and the function dropped. The M6.1a header sweep decides whether a standard header needs one (then it moves to M6.2).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/builtin-prefetch-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1143"
+     ]
+    },
+    {
+     "id": "builtins.frame_return_address",
+     "feature": "__builtin_return_address and __builtin_frame_address",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Not in the writer's name table, so a call is diagnosed unless the front end handles it itself; no run test.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:1143"
+     ]
+    },
+    {
+     "id": "builtins.apply",
+     "feature": "__builtin_apply, __builtin_apply_args and __builtin_return",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "No mapping: diagnosed and the function dropped.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/builtin-apply2.sft.c",
+       "kind": "failing"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/builtin-return-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1143"
+     ]
+    }
+   ]
+  }
+ ]
+}

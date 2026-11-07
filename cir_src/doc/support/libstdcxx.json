@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "section": "libstdcxx",
+  "title": "libstdc++ headers",
+  "intro": "One row per standard header, filled by the M6.1a header sweep (self-checking usage tests at -O0 and -O2). Until then the table is empty rather than guessed.",
+  "groups": [
+    {"id": "headers", "title": "libstdc++ headers", "rows": []}
+  ]
+}

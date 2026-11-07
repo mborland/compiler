@@ -73,7 +73,8 @@ html_theme_options = {
 }
 
 html_css_files = [
-  'custom.css'
+  'custom.css',
+  'cir_support.css'
 ]
 
 # Add any paths that contain custom static files (such as style sheets) here,

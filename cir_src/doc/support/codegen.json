@@ -1,0 +1,313 @@
+{
+ "schema": 1,
+ "section": "codegen",
+ "title": "Code generation and options",
+ "intro": "How the back end generates code and which command-line options reach it. cpfe-cir takes its own options (--cir_opt_level, --ecil_output, --no_exceptions, ...); eccp reports a gcc option it does not know as an error ('unknown option').",
+ "groups": [
+  {
+   "id": "codegen",
+   "title": "Code generation and options",
+   "rows": [
+    {
+     "id": "codegen.opt_levels",
+     "feature": "-O0, -O1, -O2, -O3 (and the __OPTIMIZE__ and __NO_INLINE__ macros)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M4.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/config/opt-level-macros-eccp-o2.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/config/opt-level-macros-eccp-o0.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/config/opt-level-macros-0.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/config/opt-level-canary.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/config/opt-level-canary-cpp.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/config/opt-level-option-1.sft.c",
+       "kind": "writer"
+      },
+      {
+       "path": "tests/tests/cir/config/opt-level-option-3.sft.c",
+       "kind": "writer"
+      }
+     ],
+     "refs": [
+      "util/eccp.sh:1329"
+     ]
+    },
+    {
+     "id": "codegen.opt_size_fast",
+     "feature": "-Os, -Oz and -Ofast",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M4.1",
+     "planned": null,
+     "note": "Approximated as levels 2, 2 and 3; -Ofast does not enable fast-math.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/config/opt-level-macros-eccp-os.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "util/eccp.sh:1329"
+     ]
+    },
+    {
+     "id": "codegen.debug_info",
+     "feature": "-g (debug information)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.8",
+     "note": "eccp accepts -g and hands it to the assembling gcc step only; no debug information of the source is generated. eccp warns from M6.4a; debug information is implemented in M6.8 and M6.9.",
+     "tests": [],
+     "refs": [
+      "util/eccp.sh:1464"
+     ]
+    },
+    {
+     "id": "codegen.exceptions_on",
+     "feature": "C++ exceptions (try, catch, throw, exception specifications)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M4",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/cpp/eh/cond1.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/cpp/eh/aggregate1.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "codegen.exceptions_off",
+     "feature": "Exceptions off (--no_exceptions)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M5.1",
+     "planned": null,
+     "note": "Calls are marked nothrow as clang does; destructor declarations keep NOTHROW unmarked (M6.5).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/cpp/pr61289.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/cpp/opt/unroll1.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/writer/writer-cxx-no-exceptions-nothrow.sft.cpp",
+       "kind": "writer"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "codegen.rtti_off",
+     "feature": "RTTI off (--no_rtti)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "typeid and dynamic_cast are diagnosed when RTTI is disabled; no run test uses the option.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/writer/writer-cxx-exc-no-rtti.sft.cpp",
+       "kind": "writer"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:4114",
+      "src/ecil_code.c:4280"
+     ]
+    },
+    {
+     "id": "codegen.two_process",
+     "feature": "Two-process mode (cpfe-cir --ecil_output, then edg-cir)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M2",
+     "planned": null,
+     "note": "Every test under tests/tests/cir also runs in the edg_x86_64_cir_2p configuration.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/cirgen/cxx-linkage.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/cirgen/c-always-inline-o0.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "dev_tools/bin/cpfe-cir-2p"
+     ]
+    },
+    {
+     "id": "codegen.emit_kinds",
+     "feature": "Output kinds (--emit=cir, cir-lowered, llvm, bc, asm, obj)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M2",
+     "planned": null,
+     "note": "Assembly is the default and what every test runs; the others are covered by library tests.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/cirgen/cxx-linkage.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "cir_src/test/lit/dump-roundtrip.test",
+       "kind": "lib"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "codegen.lazy_emission",
+     "feature": "Lazy emission of header inline functions",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M5",
+     "planned": null,
+     "note": "On by default; --eager-bodies is the oracle.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/cirgen/cxx-s5-lambdas.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "cir_src/test/cirgen/lazy-used.test",
+       "kind": "lib"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "codegen.chunked_lowering",
+     "feature": "Chunked lowering of large units",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Gated by edg-cir-chunk-identity and chunk-rss on real units (not tests under tests/); only library tests run it. M6.1a adds a run test with a forced chunk threshold.",
+     "tests": [
+      {
+       "path": "cir_src/test/cirgen/chunk-lowering.test",
+       "kind": "lib"
+      },
+      {
+       "path": "cir_src/test/cirgen/chunk-identity.test",
+       "kind": "lib"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "codegen.profiling",
+     "feature": "-p and -pg (profiling)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M7",
+     "note": "eccp passes them to the gcc step only: no mcount instrumentation is generated and nothing warns. eccp warns from M6.4a.",
+     "tests": [],
+     "refs": [
+      "util/eccp.sh:1524"
+     ]
+    },
+    {
+     "id": "codegen.fast_math",
+     "feature": "-ffast-math and the floating-point flags (-ffp-contract, -fno-math-errno, ...)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "after M7",
+     "note": "eccp rejects them as unknown options; no fast-math flags are carried in the stream.",
+     "tests": [],
+     "refs": [
+      "util/eccp.sh:2341"
+     ]
+    },
+    {
+     "id": "codegen.march",
+     "feature": "-march, -mtune and -m flags (-msse4.2, -mavx2, ...)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "after M7",
+     "note": "eccp rejects them; the target machine is the generic x86-64 CPU.",
+     "tests": [],
+     "refs": [
+      "util/eccp.sh:2341",
+      "cir_src/lib/driver/cir_module.cpp:109"
+     ]
+    },
+    {
+     "id": "codegen.pch",
+     "feature": "Precompiled headers (--create_pch, --use_pch)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "after M7",
+     "note": "Rejected with a front-end error: the IL is streamed and freed as it goes.",
+     "tests": [],
+     "refs": [
+      "src/cmd_line.c:11171"
+     ]
+    }
+   ]
+  }
+ ]
+}

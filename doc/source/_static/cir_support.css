@@ -1,0 +1,50 @@
+/* Cell colors of the CIR back end support table (cir_support.inc).  The
+   status label is always in the cell, so the color only reinforces it.
+   Shibuya marks its modes with the class "dark" or "light" on <html>; with
+   neither class, the browser's color scheme decides. */
+
+:root {
+  --cir-yes: #d6f0d6;
+  --cir-partial: #fdeec2;
+  --cir-unverified: #e4e9ec;
+  --cir-no: #fbdacb;
+  --cir-ignored: #f6cfcf;
+}
+
+html.dark {
+  --cir-yes: #173a1b;
+  --cir-partial: #43370f;
+  --cir-unverified: #2d383e;
+  --cir-no: #4c2c20;
+  --cir-ignored: #4d2121;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not(.light):not(.dark) {
+    --cir-yes: #173a1b;
+    --cir-partial: #43370f;
+    --cir-unverified: #2d383e;
+    --cir-no: #4c2c20;
+    --cir-ignored: #4d2121;
+  }
+}
+
+.sup-yes,
+.sup-partial,
+.sup-unverified,
+.sup-no,
+.sup-ignored {
+  font-weight: 600;
+}
+
+table.cir-support td:has(.sup-yes) { background-color: var(--cir-yes); }
+table.cir-support td:has(.sup-partial) { background-color: var(--cir-partial); }
+table.cir-support td:has(.sup-unverified) {
+  background-color: var(--cir-unverified);
+}
+table.cir-support td:has(.sup-no) { background-color: var(--cir-no); }
+table.cir-support td:has(.sup-ignored) { background-color: var(--cir-ignored); }
+
+/* The cells hold single lines; keep the macro names and gates unbroken
+   where they fit. */
+table.cir-support code { white-space: normal; overflow-wrap: anywhere; }

@@ -1,0 +1,1134 @@
+{
+ "schema": 1,
+ "section": "c",
+ "title": "C language",
+ "intro": "The C language by standard. A row is Yes only when a program compiled by cpfe-cir runs correctly. Evidence is a CIR test or a C corpus test (tests/.edgy/filters/cir-c-corpus.txt) that is not listed as failing in imported.log; corpus tests run in the importer's default (GNU) mode, so -std and dg-options are not applied unless the file's //options: line sets them (the c99-*, c11-* and c23-* tests do). A Failing test fails under CIR today because of the row's gap.",
+ "groups": [
+  {
+   "id": "c89",
+   "title": "C89/C90",
+   "rows": [
+    {
+     "id": "c89.control_flow",
+     "feature": "Statements: if, loops, switch, goto",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr17581-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/pr106073.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c89.aggregates",
+     "feature": "Structures, unions and bit-fields",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Bit-fields of a _BitInt type are diagnosed (see c23.bitint).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/union-2.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/bitfld-4.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/bf-no-ms-layout.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c89.enums",
+     "feature": "Enumerations",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/enum1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/range-test-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c89.long_double",
+     "feature": "long double (x87 80-bit) and the other floating types",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "_Float16, _Float128 and other float formats are diagnosed (see gnu_lang.float_formats).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c99-math-long-double-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/nextafter-2.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c89.volatile",
+     "feature": "volatile accesses",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20010822-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c89.stdarg",
+     "feature": "Variable argument lists (<stdarg.h>)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr23818.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/titype-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c23-stdarg-9.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c89.setjmp",
+     "feature": "<setjmp.h>: setjmp, longjmp",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.4a",
+     "note": "Calls of the libc functions are ordinary calls: the caller is not marked returns_twice, so an optimizing build may keep a value across setjmp in a register. __builtin_setjmp and __builtin_longjmp are diagnosed.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:1143",
+      "doc/project.md §4.1"
+     ]
+    },
+    {
+     "id": "c89.old_style_defs",
+     "feature": "K&R (old-style) function definitions",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "The front end turns them into prototyped functions; no CIR test runs one.",
+     "tests": [],
+     "refs": []
+    }
+   ]
+  },
+  {
+   "id": "c99",
+   "title": "C99",
+   "rows": [
+    {
+     "id": "c99.compound_literals",
+     "feature": "Compound literals",
+     "papers": [
+      "N716"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c99-complit-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c99.designated_init",
+     "feature": "Designated initializers",
+     "papers": [
+      "N494"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "≤M5.1",
+     "planned": "M6.6b",
+     "note": "Element designators after a wide string literal initializer are diagnosed. The run tests are GNU-mode: designators are accepted in every GNU mode.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20001023-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/field-merge-20.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c99-init-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:337"
+     ],
+     "mode_independent": true
+    },
+    {
+     "id": "c99.flexible_array",
+     "feature": "Flexible array members",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "≤M5.1",
+     "planned": "M6.6b",
+     "note": "A static initializer of the flexible array member is diagnosed; the member itself and sizeof work (C23-mode test).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-tag-alias-4.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:1712"
+     ]
+    },
+    {
+     "id": "c99.vla",
+     "feature": "Variable length and variably modified types",
+     "papers": [
+      "N683",
+      "N2778"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.6b",
+     "note": "The function or variable that uses one is dropped with a named reason.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/writer/writer-unsupported-negative.sft.c",
+       "kind": "negative"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/vla-14.sft.c",
+       "kind": "failing"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c23-empty-init-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:2014",
+      "src/ecil_code.c:10169"
+     ]
+    },
+    {
+     "id": "c99.complex",
+     "feature": "Complex types (_Complex, <complex.h>)",
+     "papers": [
+      "N815",
+      "N601",
+      "N620",
+      "N638",
+      "N657",
+      "N694",
+      "N809"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.6a",
+     "note": "Any use drops the function or variable with a named reason.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/writer/writer-regress-m2-negative.sft.c",
+       "kind": "negative"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c11-complex-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:683"
+     ]
+    },
+    {
+     "id": "c99.bool",
+     "feature": "_Bool and <stdbool.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c99-bool-3.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c99-bool-4.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c99.long_long",
+     "feature": "long long and <stdint.h> types",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/div-compare-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/nested-calls-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c99.mixed_decl",
+     "feature": "Declarations and statements in mixed order",
+     "papers": [
+      "N740"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c99-mixdecl-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c99.for_decl",
+     "feature": "Declaration in the init-statement of a for loop",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c99-fordecl-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c99.restrict",
+     "feature": "restrict pointers",
+     "papers": [
+      "N448"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Accepted; no noalias is emitted, which is always safe. The run test is GNU-mode; restrict is accepted in every mode.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr84877.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [],
+     "mode_independent": true
+    },
+    {
+     "id": "c99.inline",
+     "feature": "inline functions",
+     "papers": [
+      "N741"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr113596.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/cirgen/c-always-inline-o0.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c99.hex_float",
+     "feature": "Hexadecimal floating constants",
+     "papers": [
+      "N308"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c99-hexfloat-2.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c99.func_name",
+     "feature": "Predefined identifier __func__",
+     "papers": [
+      "N611"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c99-func-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c99-func-3.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c99.variadic_macros",
+     "feature": "Variadic macros and _Pragma",
+     "papers": [
+      "N707",
+      "N634"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Handled by the front end before the writer sees the code; no corpus test that runs under CIR exercises them.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "c99.math",
+     "feature": "<math.h> functions and classification macros",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Library calls and the isnan, isinf, signbit, fpclassify and comparison builtins (see the builtins section).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c99-math-double-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c99-math-float-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c99.fenv_access",
+     "feature": "Floating-point environment (<fenv.h>, FENV_ACCESS)",
+     "papers": [
+      "N631",
+      "N696"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "The writer sends no strict-floating-point information (no handling of the pragma in src/ecil_*); code that changes the rounding mode may be folded or reordered. Probe to decide between ignored and no.",
+     "tests": [],
+     "refs": []
+    }
+   ]
+  },
+  {
+   "id": "c11",
+   "title": "C11",
+   "rows": [
+    {
+     "id": "c11.generic",
+     "feature": "Generic selection (_Generic)",
+     "papers": [
+      "N1441"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c11-generic-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c11.atomic",
+     "feature": "Atomic types and operations (_Atomic, <stdatomic.h>)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.3",
+     "note": "An _Atomic type makes the function or variable that uses it dropped with a named reason.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/writer/writer-regress-m2-atomic-negative.sft.c",
+       "kind": "negative"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c2x-nullptr-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:780"
+     ]
+    },
+    {
+     "id": "c11.alignas",
+     "feature": "_Alignas and _Alignof",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c11-align-2.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c11-align-6.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c11.noreturn",
+     "feature": "_Noreturn and <stdnoreturn.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c11-noreturn-2.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c11.static_assert",
+     "feature": "_Static_assert",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Evaluated by the front end; the run test (C23 mode) also uses it.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-bool-2.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c11.anon_struct",
+     "feature": "Anonymous structures and unions",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-tag-5.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/20001012-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c11.unicode",
+     "feature": "char16_t, char32_t and u, U string literals",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c11-uni-string-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c11.thread_local",
+     "feature": "_Thread_local",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "The writer sends TLS variables (GNU __thread passes a corpus test); no C11-spelling test runs.",
+     "tests": [],
+     "refs": [
+      "src/ecil_type.c:1637"
+     ]
+    },
+    {
+     "id": "c11.threads",
+     "feature": "<threads.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Library functions only (glibc); no CIR test.",
+     "tests": [],
+     "refs": []
+    }
+   ]
+  },
+  {
+   "id": "c17",
+   "title": "C17",
+   "rows": [
+    {
+     "id": "c17.defect_fixes",
+     "feature": "C17: defect reports only (__STDC_VERSION__ is 201710L)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "C17 adds no language feature; the C11 rows apply. No corpus test that runs under CIR is in --c17 mode.",
+     "tests": [],
+     "refs": []
+    }
+   ]
+  },
+  {
+   "id": "c23",
+   "title": "C23",
+   "rows": [
+    {
+     "id": "c23.nullptr",
+     "feature": "nullptr and nullptr_t",
+     "papers": [
+      "N3042"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Tests that combine it with _Atomic are dropped (c2x-nullptr-1).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-nullptr-5.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c23.bool_keywords",
+     "feature": "bool, true and false as keywords",
+     "papers": [
+      "N2934",
+      "N2935"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-bool-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c23-bool-2.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c23.typeof",
+     "feature": "typeof",
+     "papers": [
+      "N2927"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "c23-typeof-1 is dropped only because it uses _Atomic.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-tag-composite-7.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c23-tag-alias-6.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c23.typeof_unqual",
+     "feature": "typeof_unqual",
+     "papers": [
+      "N2930"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "No test runs it.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "c23.empty_init",
+     "feature": "Empty initializers (= {})",
+     "papers": [
+      "N2900"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "An empty initializer of a variable length array is diagnosed with the VLA.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-empty-init-5.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/gnu11-empty-init-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c23.labels",
+     "feature": "Labels before declarations and at the end of blocks",
+     "papers": [
+      "N2508"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-labels-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c23.tag_compat",
+     "feature": "Compatibility of tagged types and tag redeclaration",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-tag-composite-7.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c23-tag-alias-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c23.stdarg_va_start",
+     "feature": "va_start without a second argument; unnamed parameters",
+     "papers": [
+      "N2975",
+      "N2480"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "≤M5.1",
+     "planned": "M6.6b",
+     "note": "__builtin_c23_va_start without a va_list operand is diagnosed (writer-va-start-noarg).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-stdarg-9.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:3487"
+     ]
+    },
+    {
+     "id": "c23.unreachable",
+     "feature": "unreachable() in <stddef.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-unreachable-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c23.stdckdint",
+     "feature": "<stdckdint.h> (ckd_add, ckd_sub, ckd_mul)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/stdckdint-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "c23.constexpr",
+     "feature": "constexpr objects",
+     "papers": [
+      "N3018"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "No corpus test that runs under CIR; c23-constexpr-1 is dropped (it uses _Complex and _Atomic).",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "c23.auto",
+     "feature": "Type inference in object definitions (auto)",
+     "papers": [
+      "N3007"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "c23-auto-2 fails under CIR because it uses a variable length array.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "c23.attributes",
+     "feature": "Standard attributes ([[deprecated]], [[nodiscard]], [[maybe_unused]], [[fallthrough]], [[noreturn]])",
+     "papers": [
+      "N2335",
+      "N2554",
+      "N2764",
+      "N2408",
+      "N2270",
+      "N2267",
+      "N2334"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Front-end only; no run test.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "c23.enum_fixed",
+     "feature": "Enumerations with fixed underlying types",
+     "papers": [
+      "N3029",
+      "N3030"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "c23-enum-6 fails under CIR because it uses _Atomic.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "c23.digit_separators",
+     "feature": "Digit separators",
+     "papers": [
+      "N2626"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "The corpus test also fails on the native x86-64 configuration (a front-end or test issue), so it is no evidence.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "c23.preprocessor",
+     "feature": "#elifdef, #elifndef, #warning, __has_include, __VA_OPT__",
+     "papers": [
+      "N2645",
+      "N2686",
+      "N2799",
+      "N3033"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Front-end only; no run test.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "c23.embed",
+     "feature": "#embed",
+     "papers": [
+      "N3017"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Front-end only; no run test, support in the front end not checked.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "c23.bitint",
+     "feature": "Bit-precise integer types (_BitInt)",
+     "papers": [
+      "N2763",
+      "N2775"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.6b",
+     "note": "Operations, parameters and bit-fields of _BitInt types are diagnosed (opaque type). The bitint-* corpus tests also fail on the native configuration, so they are no evidence.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/writer/writer-opaque-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1072",
+      "src/ecil_type.c:1934"
+     ]
+    },
+    {
+     "id": "c23.decimal_float",
+     "feature": "Decimal floating-point types (_Decimal32, _Decimal64, _Decimal128)",
+     "papers": [
+      "N2341"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "after M7",
+     "note": "Float formats other than the binary ones are diagnosed.",
+     "tests": [],
+     "refs": [
+      "src/ecil_const.c:850"
+     ]
+    },
+    {
+     "id": "c23.float_types",
+     "feature": "IEEE 754 interchange and extended types (_Float16, _Float128, ...)",
+     "papers": [
+      "N2601"
+     ],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "Reach the library as opaque types and are diagnosed.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr114907.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:850",
+      "doc/project.md §4.3"
+     ]
+    }
+   ]
+  }
+ ]
+}

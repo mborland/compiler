@@ -1,0 +1,238 @@
+{
+ "schema": 1,
+ "section": "platforms",
+ "title": "Targets, ABIs, runtimes, interoperability",
+ "intro": "What the back end targets and links with. The library supports x86-64 Linux only and rejects any other triple the writer sends.",
+ "groups": [
+  {
+   "id": "platforms",
+   "title": "Targets, ABIs and runtimes",
+   "rows": [
+    {
+     "id": "platforms.x86_64_linux",
+     "feature": "x86-64 Linux, System V calling convention",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M2",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/cirgen/cxx-abi-nua.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/cirgen/c-always-inline-o0.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "platforms.itanium_abi",
+     "feature": "Itanium C++ ABI (layout, mangling, vtables, RTTI, exception tables)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M4",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/cirgen/cxx-abi-empty.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/cirgen/cxx-abi-tailpad.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/cirgen/cxx-class-bases.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "platforms.link_gxx",
+     "feature": "Linking with g++-compiled objects",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M4",
+     "planned": null,
+     "note": "The gate step mixed-tu builds one half with cpfe-cir and the other with g++, links, runs and compares the output.",
+     "tests": [
+      {
+       "path": "dev_tools/cir-mixed-tu-cases/s2-iostream-like",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "dev_tools/cir-mixed-tu-cases/s1-class-typeinfo",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "dev_tools/cir-mixed-tu-cases/eh-incomplete-pointer-throw-catch",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "dev_tools/bin/edg-cir-mixed-tu"
+     ]
+    },
+    {
+     "id": "platforms.link_clang",
+     "feature": "Linking with clang-compiled objects",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M4",
+     "planned": null,
+     "note": "The same gate step with clang as the other half.",
+     "tests": [
+      {
+       "path": "dev_tools/cir-mixed-tu-cases/s1-covariant-thunks",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "dev_tools/cir-mixed-tu-cases/s1-structor-variants",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "dev_tools/bin/edg-cir-mixed-tu"
+     ]
+    },
+    {
+     "id": "platforms.libcxx",
+     "feature": "libc++ as the C++ library",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M7",
+     "note": "cir-env tests only libstdc++; eccp rejects -stdlib= as an unknown option.",
+     "tests": [],
+     "refs": [
+      "util/eccp.sh:2341"
+     ]
+    },
+    {
+     "id": "platforms.two_process_files",
+     "feature": "Two-process ECIL files (cpfe-cir to .ecil, then edg-cir)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M2",
+     "planned": null,
+     "note": "ECIL 1.3 is frozen; the library rejects a stream with a newer major version.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/cirgen/cxx-linkage.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "cir_src/test/format/format_tests.cpp",
+       "kind": "lib"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "platforms.libstdcxx",
+     "feature": "libstdc++ as the C++ library",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "6 of 15 real-world units compile (compile only, not run); __builtin_constant_p, __atomic_* and the add-with-carry builtins block the rest. The per-header rows come from the M6.1a sweep.",
+     "tests": [],
+     "refs": [
+      "dev_tools/cir-realworld/libstdcxx",
+      "doc/project.md §4.4"
+     ]
+    },
+    {
+     "id": "platforms.macos",
+     "feature": "macOS (Mach-O, arm64 and x86-64)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M7",
+     "note": "The library accepts the x86-64 Linux triple only; macOS universal and -static builds are M7.",
+     "tests": [
+      {
+       "path": "cir_src/test/lit/errors.test",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "cir_src/lib/driver/cir_module.cpp:71"
+     ]
+    },
+    {
+     "id": "platforms.aarch64",
+     "feature": "AArch64 targets",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M7",
+     "note": "The writer sends an aarch64 triple; the library rejects it. Waits on upstream CallConvLowering for the target.",
+     "tests": [
+      {
+       "path": "cir_src/test/lit/errors.test",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "cir_src/lib/driver/cir_module.cpp:71"
+     ]
+    },
+    {
+     "id": "platforms.x86_32",
+     "feature": "32-bit x86 (ilp32)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "after M7",
+     "note": "The writer sends an i386 triple; the library rejects it.",
+     "tests": [],
+     "refs": [
+      "cir_src/lib/driver/cir_module.cpp:71"
+     ]
+    },
+    {
+     "id": "platforms.windows",
+     "feature": "Windows and Microsoft mode",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M7",
+     "note": "Microsoft extensions are off in the cpfe-cir build, so a test that needs --microsoft_bugs reports REQUIREMENTS NOT MET; native Windows edgy is unsupported.",
+     "tests": [],
+     "refs": [
+      "cmake/macro-conf/default/cpfe-cir.cmakedef:39",
+      "cir_src/lib/driver/cir_module.cpp:71"
+     ]
+    }
+   ]
+  }
+ ]
+}

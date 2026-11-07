@@ -1,0 +1,771 @@
+{
+ "schema": 1,
+ "section": "gnu",
+ "title": "GNU extensions",
+ "intro": "GNU C and C++ extensions that the CIR back end meets in standard headers and real code. An extension is in M6 only when the standard headers need it or when it is silently ignored today (project.md decision 54); the others are Ext. Rows cover the extensions the EDG front end accepts. Ignored means accepted with no effect.",
+ "groups": [
+  {
+   "id": "gnu_lang",
+   "title": "GNU language extensions",
+   "rows": [
+    {
+     "id": "gnu_lang.typeof",
+     "feature": "typeof and __typeof__",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "The first two use typeof for run-time declarations; the third in typedefs.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/c23-tag-composite-7.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c23-tag-alias-6.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/builtin-choose-expr.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_lang.case_ranges",
+     "feature": "Case ranges (case 1 ... 5:)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/switch-warn-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/c2y-switch-3.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_lang.cond_elision",
+     "feature": "Conditional with omitted middle operand (a ?: b)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "The front end rewrites it; no CIR test runs it.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "gnu_lang.int128",
+     "feature": "__int128 and unsigned __int128",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr102207.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/pr108787.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/writer/writer-int128.sft.c",
+       "kind": "writer"
+      },
+      {
+       "path": "cir_src/test/cirgen/int128.test",
+       "kind": "lib"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_lang.tls",
+     "feature": "__thread",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "A thread-local variable with dynamic initialization or destruction at namespace scope is diagnosed (M6.7).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr114052-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/cirgen/cxx-s6-thread-local.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_lang.pragma_pack",
+     "feature": "#pragma pack and ms_struct layout",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "The front end computes the layout; the stream carries sizes and offsets.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr48784-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/bf-ms-layout.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_lang.asm_labels",
+     "feature": "Asm labels on declarations (int f(void) __asm__(\"name\"))",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "The symbol name is used (ecil_type.c ~2900); glibc redirects rely on it; only writer goldens cover it.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/writer/writer-cxx-asm-label-two-definitions-negative.sft.cpp",
+       "kind": "writer"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:2900"
+     ]
+    },
+    {
+     "id": "gnu_lang.range_designators",
+     "feature": "Range designators in initializers ([0 ... 3] = x)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Work in general; a range designator followed by more initializers is diagnosed. Ext (project.md §6).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/gnu89-init-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/gnu99-init-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:204"
+     ]
+    },
+    {
+     "id": "gnu_lang.statement_expr",
+     "feature": "Statement expressions (({ ... }))",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "The function that uses one is dropped with a named reason.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20030612-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:7232",
+      "src/ecil_code.c:10165"
+     ]
+    },
+    {
+     "id": "gnu_lang.computed_goto",
+     "feature": "Labels as values and computed goto",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "The function is dropped with a named reason.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr63186.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:10162"
+     ]
+    },
+    {
+     "id": "gnu_lang.inline_asm",
+     "feature": "Inline assembly (asm, __asm__)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "The function is dropped with a named reason; header inline functions that use it stay declarations.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20020219-1.sft.c",
+       "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/writer/writer-cxx-unsupported.sft.cpp",
+       "kind": "writer"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:10159"
+     ]
+    },
+    {
+     "id": "gnu_lang.vector_types",
+     "feature": "Vector types (vector_size)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "A vector type drops the function or variable that uses it (143 of the 528 C++ drop notes in H3).",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr29091.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:681"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "gnu_attr",
+   "title": "GNU and clang attributes",
+   "rows": [
+    {
+     "id": "gnu_attr.aligned",
+     "feature": "aligned",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/field-merge-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/bf-ms-layout-3.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.packed",
+     "feature": "packed",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/field-merge-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/field-merge-17.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.mode",
+     "feature": "mode (__mode__)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20001012-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.may_alias",
+     "feature": "may_alias",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "No TBAA is emitted, so aliasing is always treated conservatively.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr84503-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/pr84503-2.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.noinline",
+     "feature": "noinline",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M5",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20021018-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/20030721-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "cir_src/include/edg_cir/ecil_format.h:740"
+     ]
+    },
+    {
+     "id": "gnu_attr.always_inline",
+     "feature": "always_inline",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M5.1",
+     "planned": null,
+     "note": "At -O0 an AlwaysInliner pass inlines the body (M5.1b).",
+     "tests": [
+      {
+       "path": "tests/tests/cir/cirgen/c-always-inline-o0.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/pr113596.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.noreturn",
+     "feature": "noreturn",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20001108-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.cold_hot",
+     "feature": "cold and hot",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M5",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr56125.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.pure_const",
+     "feature": "pure and const",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr20100.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.used",
+     "feature": "used",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Sent as supp key 11 since M5 (library test only); no run test.",
+     "tests": [
+      {
+       "path": "cir_src/test/cirgen/s2-used.test",
+       "kind": "lib"
+      }
+     ],
+     "refs": [
+      "cir_src/include/edg_cir/ecil_format.h:734"
+     ]
+    },
+    {
+     "id": "gnu_attr.weak",
+     "feature": "weak",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "Weak linkage is written (elk_weak, extern_weak declarations); the corpus weak directory is outside the filter.",
+     "tests": [
+      {
+       "path": "cir_src/test/cirgen/unsupported-discardable-weak.test",
+       "kind": "lib"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:333"
+     ]
+    },
+    {
+     "id": "gnu_attr.hints",
+     "feature": "Hint attributes (unused, deprecated, format, malloc, warn_unused_result, nonnull, ...)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "≤M5.1",
+     "planned": "M6.5",
+     "note": "Accepted. GNU nonnull does not reach the nonnull mask and malloc is not sent: attr-diff rows (project.md §4.4). The run tests carry glibc declarations that use these attributes.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/20030711-1.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/20050826-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "doc/project.md §4.4"
+     ]
+    },
+    {
+     "id": "gnu_attr.noipa",
+     "feature": "noipa, noclone, flatten, optimize",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Accepted and ignored; they only restrict optimization, which cannot change the result.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/pr113596.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.section",
+     "feature": "section",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.4a",
+     "note": "Accepted and dropped: the entity lands in the default section. The writer defines the supp key (esk_section) but never sends it.",
+     "tests": [],
+     "refs": [
+      "cir_src/include/edg_cir/ecil_format.h:732",
+      "doc/project.md §4.2"
+     ]
+    },
+    {
+     "id": "gnu_attr.visibility",
+     "feature": "visibility (and #pragma GCC visibility)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.4a",
+     "note": "Accepted and dropped: every definition stays default-visible. libstdc++ uses it. The supp key esk_visibility is defined and never sent.",
+     "tests": [],
+     "refs": [
+      "cir_src/include/edg_cir/ecil_format.h:733",
+      "doc/project.md §6"
+     ]
+    },
+    {
+     "id": "gnu_attr.transparent_union",
+     "feature": "transparent_union",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.4a",
+     "note": "Accepted and dropped: the parameter is passed as a union, not as its first member; the calling convention differs from gcc's when the first member is floating point (SSE class), else it matches.",
+     "tests": [],
+     "refs": [
+      "doc/project.md §4.2"
+     ]
+    },
+    {
+     "id": "gnu_attr.ms_abi",
+     "feature": "ms_abi",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.4a",
+     "note": "Accepted and dropped: a call uses the System V convention regardless, which is wrong ABI. It is diagnosed from M6.4a (decision 18).",
+     "tests": [],
+     "refs": [
+      "doc/project.md §4.2"
+     ]
+    },
+    {
+     "id": "gnu_attr.x86_conv",
+     "feature": "regparm, stdcall, fastcall, thiscall",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "gcc and clang also ignore these on x86-64 (with a warning), so this is no gap if CIR behaves the same; no test shows it.",
+     "tests": [],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.trivial_abi",
+     "feature": "trivial_abi ([[clang::trivial_abi]])",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "The writer sends the NONTRIVIAL_ABI record flag from the front end's answer; golden and library tests cover the flag, no run test.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/writer/writer-cxx-empty-assign-nontrivial-abi.sft.cpp",
+       "kind": "writer"
+      },
+      {
+       "path": "cir_src/test/cirgen/cxx-s1-nontrivial-abi-thunk.test",
+       "kind": "lib"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:2426"
+     ]
+    },
+    {
+     "id": "gnu_attr.scalar_storage_order",
+     "feature": "scalar_storage_order",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "unverified",
+     "since": null,
+     "planned": "M6.1a",
+     "note": "No CIR code reads it; field-merge-1 passes but checks only self-consistent reads, not the byte order.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/field-merge-1.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "gnu_attr.constructor",
+     "feature": "constructor and destructor",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "The function is dropped with a named reason (an error, since the function is needed although nothing refers to it).",
+     "tests": [
+      {
+       "path": "tests/tests/cir/writer/writer-ctor-attribute-negative.sft.c",
+       "kind": "negative"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/constructor-1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:3044"
+     ]
+    },
+    {
+     "id": "gnu_attr.init_priority",
+     "feature": "init_priority",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "The variable is dropped with a named reason.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/initpri1.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:3069"
+     ]
+    },
+    {
+     "id": "gnu_attr.alias",
+     "feature": "alias, weakref and ifunc",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "The entity is dropped with a named reason.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/alias-5.sft.c",
+       "kind": "failing"
+      },
+      {
+       "path": "tests/tests/imported/gnu/c/attr-ifunc-3.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:3046",
+      "src/ecil_type.c:3066"
+     ]
+    },
+    {
+     "id": "gnu_attr.cleanup",
+     "feature": "cleanup",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "The variable's function is dropped with a named reason.",
+     "tests": [
+      {
+       "path": "tests/tests/imported/gnu/c/cleanup-2.sft.c",
+       "kind": "failing"
+      }
+     ],
+     "refs": [
+      "src/ecil_type.c:3064"
+     ]
+    },
+    {
+     "id": "gnu_attr.multiversioning",
+     "feature": "target, target_clones (function multiversioning)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "Ext",
+     "note": "Dropped with a named reason (64 of the 528 C++ drop notes in H3).",
+     "tests": [],
+     "refs": [
+      "src/ecil_type.c:3048"
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -26,6 +26,7 @@ C/C++ Front End Documentation
    utilities
    c_gen_be
    cp_gen_be
+   cir_be
    code_style
    testing
    :maxdepth: 3

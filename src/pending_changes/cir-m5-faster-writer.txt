@@ -1,0 +1,19 @@
+//allowed_words: ECIL
+[]
+CIR back end: faster ECIL writer
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+ECIL writer uses fewer instructions on large translation units.  The answer of
+FALSE of cir_entity_is_tu_local is remembered for the entities of the file
+scope before the names are final, the helpers that write records are inline
+(and still do their CHECKING work), and the check that mangles a function name
+again after it was sent (a CHECKING assertion) looks at a deterministic sample
+of a large translation unit instead of all of it (ECIL_CHECK_ALL_NAMES in the
+environment checks every name).  The writer's share of the front end's
+instructions on a file of 6000 C functions goes from 18.6% to 16.4%, and on a
+file of 6000 C++ functions from 24.4% to 20.4%.  A member selection no longer
+makes the right operand of a C++17 assignment spill into a temporary when both
+operands have no side effects, so some streams are shorter (for example
+"a = val;" in a constructor).  The comment of the region kept for a prototype
+instantiation says why (requires-expressions).  The other configurations are
+not affected.

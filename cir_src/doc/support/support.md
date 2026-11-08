@@ -10,7 +10,7 @@ What the ClangIR (CIR) back end supports, one table per language standard or fea
 - **No**: fails loudly (diagnosed, rejected, or a build error); never miscompiled
 - **Ignored**: accepted and silently ignored, or silently wrong output: a safety gap
 
-305 rows: 147 Yes, 13 Partial, 86 Unverified, 49 No, 10 Ignored.
+307 rows: 145 Yes, 15 Partial, 86 Unverified, 49 No, 12 Ignored.
 
 ## C++ core language
 
@@ -89,7 +89,7 @@ The C++ core-language features of each standard, in the order of cppreference's 
 | decltype(auto) | N3638 | `__cpp_decltype_auto` (201304L) | **Yes** · ≤M5.1 |  |
 | Relaxed constexpr functions | N3652 | `__cpp_constexpr` (201304L) | **Yes** · ≤M5.1 | The front end folds constant expressions, so the back end sees constants. |
 | Variable templates | N3651 | `__cpp_variable_templates` (201304L) | **Yes** · ≤M5.1 |  |
-| Aggregates with default member initializers | N3653 | `__cpp_aggregate_nsdmi` (201304L) | **Yes** · ≤M5.1 |  |
+| Aggregates with default member initializers | N3653 | `__cpp_aggregate_nsdmi` (201304L) | Partial · ≤M5.1 | Default member initializers work in constant initializations and when they do not name another member. A default member initializer that uses the implicit this in a non-constant aggregate initialization (a local, a new-expression, a return; designated or positional) is diagnosed ('a reference to a parameter by position') and the function is dropped. Complete in M6.7. |
 | Sized deallocation | N3778 | `__cpp_sized_deallocation` (201309L) | **Yes** · M4 |  |
 | Binary literals | N3472 | `__cpp_binary_literals` (201304L) | Unverified · M6.1a |  |
 | Digit separators | N3781 | `__cpp_digit_separators` (201309L) | Unverified · M6.1a |  |
@@ -146,7 +146,7 @@ The C++ core-language features of each standard, in the order of cppreference's 
 | Constexpr evaluation needed by decltype | P0859R0 | `__cpp_constexpr_in_decltype` (201711L) | Unverified · M6.1a |  |
 | constexpr dynamic allocation (new and delete in constant evaluation) | P0784R7 | `__cpp_constexpr_dynamic_alloc` (201907L) | Unverified · M6.1a |  |
 | constinit | P1143R2 | `__cpp_constinit` (201907L) | **Yes** · ≤M5.1 |  |
-| Designated initializers | P0329R4 | `__cpp_designated_initializers` (201707L) | **Yes** · ≤M5.1 |  |
+| Designated initializers | P0329R4 | `__cpp_designated_initializers` (201707L) | Partial · ≤M5.1 | A member skipped by the designators whose default member initializer uses the implicit this, in a non-constant initialization, is diagnosed and the function is dropped (see cxx14.aggregate_nsdmi). Since main's GH #260 a skipped member gets its default member initializer in GNU C++ before C++20. Complete in M6.7. |
 | Destroying operator delete | P0722R3 | `__cpp_impl_destroying_delete` (201806L) | Partial · M4 | Scalar destroying delete, also through a virtual destructor, works. A destroying delete of an array, or the one a new-expression records as its free function, is diagnosed. Complete in M6.7. |
 | Template parameter lists on generic lambdas | P0428R2 | `__cpp_generic_lambdas` (201707L) | Unverified · M6.1a |  |
 | Pack expansion in lambda init-captures | P0780R2 | `__cpp_init_captures` (201803L) | Unverified · M6.1a |  |
@@ -303,6 +303,7 @@ GNU C and C++ extensions that the CIR back end meets in standard headers and rea
 | Labels as values and computed goto |  |  | No · Ext | The function is dropped with a named reason. |
 | Inline assembly (asm, \_\_asm\_\_) |  |  | No · Ext | The function is dropped with a named reason; header inline functions that use it stay declarations. |
 | Vector types (vector_size) |  |  | No · Ext | A vector type drops the function or variable that uses it (143 of the 528 C++ drop notes in H3). |
+| GCC loop pragmas (unroll, ivdep, novector) |  |  | Ignored · M6.4a | Accepted and dropped: they are hints only, and the generated code is the same as without them. Covers C and C++. M6.4a decides between honoring them (clang lowers them to llvm.loop metadata) and documenting them as ignored by design; either way the row must stop being silent. |
 
 ### GNU and clang attributes
 
@@ -351,7 +352,8 @@ GCC and clang builtins, by family. A builtin the writer has no mapping for is di
 | Overflow arithmetic (\_\_builtin_add_overflow, \_sub\_, \_mul\_, and the \_p forms) |  |  | **Yes** · ≤M5.1 |  |
 | \_\_builtin_expect |  |  | **Yes** · ≤M5.1 |  |
 | \_\_builtin_unreachable and \_\_builtin_trap |  |  | **Yes** · ≤M5.1 |  |
-| \_\_builtin_alloca and \_\_builtin_alloca_with_align |  |  | **Yes** · ≤M5.1 |  |
+| \_\_builtin_alloca |  |  | **Yes** · ≤M5.1 |  |
+| \_\_builtin_alloca_with_align |  |  | Ignored · M6.2 | Accepted, but the alignment argument is dropped: the writer sends it as plain alloca and the library aligns to 16 whatever was asked. tests/tests/imported/gnu/c/pr78468.sft.c fails at -O2 (gcc and clang pass at -O0 and -O2). Silently wrong output, so the row must stop being silent by M6.4a. |
 | Compile-time builtins (choose_expr, types_compatible_p, offsetof, classify_type) |  |  | **Yes** · ≤M5.1 | Folded by the front end. |
 | \_\_builtin_constant_p |  |  | No · M6.2 | Diagnosed and the function dropped; it blocks libstdc++ algorithms, Boost algorithm and range, and the codequality sort kernel. Becomes llvm.is.constant. |
 | \_\_builtin_object_size and \_\_builtin_dynamic_object_size |  |  | Ignored · M6.2 | Always folds to the unknown answer ((size_t)-1, or 0 for the minimum kinds), so no bound is ever checked. Becomes llvm.objectsize. |

@@ -1,22 +1,18 @@
 # Files whose preprocessed output may differ from the identity baseline (the
 # step identity of dev_tools/bin/edg-cir-gate-evidence).  The baseline is the
-# identity-m51b capture (the M5.1b commit, 4902ad4e5e); it replaced the M0
-# capture (identity-m0c), which this list needed two entries for (the W3
-# mangler in lower_name.c and the W4 __has_builtin values in macro.c).
+# identity-m6r capture (the rebased branch at the M6.R gate); the earlier ones
+# (identity-m0c, identity-m51b) needed entries for the W3 mangler in
+# lower_name.c and the W4 __has_builtin values in macro.c.
 # Everything that the CIR project adds to the shared front end is under
 # BACK_END_TYPE_CIR or a CIR macro and preprocesses away in the four non-CIR
 # presets, so a capture of a later commit is identical.  An entry here is an
 # approved change that is not CIR-gated; the `day` step (the day suite in the
 # four configurations) is what shows that it changes no test result.
 #
-# The list is empty: any file that differs from identity-m51b is a problem.
-# An empty list is valid (comments only); the step still fails when the
-# compare reports no files compared.
-#
-# One entry per line: <glob> | <reason>.  The glob is over the name of a
-# captured file (<target>/src/<file>.i.gz, the output of -E -P of one
-# translation unit of one target).  Rules (the step refuses a file that breaks
-# them): a comment line directly above every entry, a reason of at least 8
-# characters, no entry twice, and none that explains nothing in a run (a stale
-# entry fails: delete the entry when the baseline is taken again, as
-# identity-m51b was taken at the M5.1b commit).
+# M6.R: the gate compared with identity-main, the capture of main, and needed
+# three entries (cmd_line.c: the BACK_END_TYPE line of --dump_configuration;
+# lower_name.c: the M5.1 mangler; macro.c: the __has_builtin values); they went
+# with the move to identity-m6r.
+# The list is empty: any file that differs from identity-m6r is a problem.  An
+# empty list is valid (comments only); the step still fails when the compare
+# reports no files compared.

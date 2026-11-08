@@ -1,0 +1,24 @@
+//allowed_words: ECIL ecil md
+[]
+Streaming of declarations and function bodies to the CIR back end
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it, the
+front end now writes the program to the back end as a stream of frames (the
+ECIL format described in cir_src/doc/ecil_format.md) instead of keeping the
+whole IL until the end of the translation unit.  Each C function is written
+when its body is complete and its memory region is then freed, so memory use
+grows with the largest function rather than with the translation unit; the
+file-scope declarations and the definitions of file-scope variables are
+written at the end.  A function that uses a construct the stream cannot yet
+express (for example variable length arrays, complex or vector types, inline
+assembly, or GNU alias and constructor attributes) is dropped with a
+cir_warning diagnostic naming the construct, and the back end then reports an
+error for the missing definition.  If the compilation has errors the stream is
+marked invalid.  The memory-region bookkeeping
+(check_for_done_with_memory_region, free_memory_region and the
+end-of-compilation sweep) is now controlled by the new macro
+IL_REGIONS_DISPOSED_INCREMENTALLY, which is true whenever
+IL_SHOULD_BE_WRITTEN_TO_FILE is true, so the other configurations behave as
+before.  In the CIR configuration the IL entry prefix has a 32-bit
+identification field that costs no space on hosts that align IL entries to
+8 bytes.

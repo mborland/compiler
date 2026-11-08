@@ -1280,19 +1280,19 @@ class CheckpointTest(unittest.TestCase):
   def test_default_tree_is_not_stale(self) -> None:
     # The default tree is wiped and rebuilt by every checkpoint, so it may
     # not be one of the protected trees that hold gate evidence.
-    self.assertEqual(checkpoint.DEFAULT_TREE, 'm51-int')
+    self.assertEqual(checkpoint.DEFAULT_TREE, 'm6r-int')
     self.assertNotIn(checkpoint.DEFAULT_TREE, checkpoint.PROTECTED_TREES)
 
-  def test_default_baselines_are_the_m5_ones(self) -> None:
+  def test_default_baselines_are_the_m6r_ones(self) -> None:
     text = (BIN / 'edg-cir-checkpoint').read_text()
-    for name in ('m5-base-asm', 'm5-base-cpp-asm', 'm5-base-perf.json',
+    for name in ('m6r-base-asm', 'm6r-base-cpp-asm', 'm6r-base-perf.json',
                  'm5a-base-perf.json', 'day-base/baseline-64'):
       self.assertIn(name, text)
     self.assertNotIn('m5p-base', text)
     self.assertNotIn('m4-base', text)
     gate_text = (BIN / 'edg-cir-gate-evidence').read_text()
-    for name in ('m5-base-perf.json', 'm5-base-status', 'm5-base-asm',
-                 'm5-base-cpp-asm', 'm5a-base-perf.json',
+    for name in ('m6r-base-perf.json', 'm6r-base-status', 'm6r-base-asm',
+                 'm6r-base-cpp-asm', 'm5a-base-perf.json',
                  'day-base/baseline-64'):
       self.assertIn(f"~/edg-cir-config/{name}", gate_text)
     self.assertNotIn('m5p-base-status', gate_text)
@@ -1302,8 +1302,16 @@ class CheckpointTest(unittest.TestCase):
 
 class RssCeilings(unittest.TestCase):
   def test_the_ceilings_are_the_m5p_measurements_plus_a_quarter(self) -> None:
-    measured = {('c', 'asan', 'inproc'): 682, ('tmpl', 'asan', 'inproc'): 988,
-                ('tmpl', 'asan', 'keep'): 1030, ('c', 'release', '2p-fe'): 68}
+    # The C rows are the M5.1 values (decision 56; the release in-process and
+    # keep rows the M6.R gate's), the others the M5p ones.
+    measured = {('c', 'asan', 'inproc'): 438, ('c', 'asan', 'keep'): 571,
+                ('c', 'asan', '2p-fe'): 113, ('c', 'asan', '2p-edg-cir'): 232,
+                ('c', 'release', 'inproc'): 253,
+                ('c', 'release', 'keep'): 344,
+                ('c', 'release', '2p-fe'): 65,
+                ('c', 'release', '2p-edg-cir'): 232,
+                ('tmpl', 'asan', 'inproc'): 988,
+                ('tmpl', 'asan', 'keep'): 1030}
     for key, megabytes in measured.items():
       ceiling = gate.RSS_CEILINGS_MB[key]
       self.assertGreaterEqual(ceiling, 1.25 * megabytes, key)
@@ -1315,10 +1323,10 @@ class RssCeilings(unittest.TestCase):
 
   def test_the_m5p_run_passes_its_own_ceilings(self) -> None:
     rows = {
-      ('c', 'asan'): (682, 801, 115, 410),
+      ('c', 'asan'): (438, 573, 113, 232),
       ('cxx', 'asan'): (299, 317, 109, 153),
       ('tmpl', 'asan'): (988, 1030, 502, 355),
-      ('c', 'release'): (448, 520, 68, 410),
+      ('c', 'release'): (253, 344, 65, 232),
       ('cxx', 'release'): (191, 204, 61, 153),
       ('tmpl', 'release'): (687, 711, 353, 355)}
     text = ''
@@ -1398,7 +1406,7 @@ class LeanAreas(unittest.TestCase):
       'tests/tests/imported/gnu/c/x.sft.c': ('tests', 'tests-reference'),
       'tests/expectations/edg_x86_64_cir/edg.log': ('tests',),
       'tests/expectations/edg_x86_64_cir_2p/edg.log': ('tests',),
-      'tests/expectations/edg_x86_64/edg.log': ('tests-reference',),
+      'tests/expectations/edg_x86_64/edg.log': ('tests', 'tests-reference'),
       'tests/expectations/edg_x86_64_cp/edg.log': ('tests-reference',),
       'tests/tests/cir/config/c-side-file/test.mft.cpp': ('tests',),
       'tests/.edgy/filters/cir-opt-triage.txt': ('tests-triage',),
@@ -1495,6 +1503,9 @@ class LeanAreas(unittest.TestCase):
       ['tests/.edgy/filters/cir-excused-crashes.txt'], ['tests-crashes']), [])
     self.assertTrue(gate.uncovered_areas(
       ['tests/expectations/edg_x86_64/edg.log'], ['tests']))
+    self.assertEqual(gate.uncovered_areas(
+      ['tests/expectations/edg_x86_64/edg.log'],
+      ['tests', 'tests-reference']), [])
 
   def test_the_two_process_front_end_needs_the_smoke_lists_and_modes(self):
     paths = ['dev_tools/bin/cpfe-cir-2p']
@@ -3096,9 +3107,9 @@ class Milestone(unittest.TestCase):
                      checkpoint.milestone_extra('--perf-levels 0'))
     self.assertTrue(checkpoint.milestone_extra('--foo').endswith('--foo'))
 
-  def test_the_perf_baselines_are_the_m5_run_and_the_m5a_targets(self):
+  def test_the_perf_baselines_are_the_m6r_run_and_the_m5a_targets(self):
     self.assertEqual(checkpoint.PERF_BASELINE,
-                     '~/edg-cir-config/m5-base-perf.json')
+                     '~/edg-cir-config/m6r-base-perf.json')
     self.assertEqual(checkpoint.PERF_TARGETS_BASELINE,
                      '~/edg-cir-config/m5a-base-perf.json')
     self.assertIn('day-base', checkpoint.DAY_BASELINE)
@@ -3496,7 +3507,8 @@ class Baselines(unittest.TestCase):
 
   def test_check_baselines_fails_for_a_missing_one(self):
     saved = gate.image_ids
-    gate.image_ids = lambda: {'edgcpp/cir-env:latest': 'sha256:' + 'a' * 64}
+    gate.image_ids = lambda: {
+      'ghcr.io/edgcpp/cir-env:latest': 'sha256:' + 'a' * 64}
     try:
       with tempfile.TemporaryDirectory() as tmp:
         ok, lines = gate.check_baselines(
@@ -3526,7 +3538,7 @@ class Baselines(unittest.TestCase):
       record.write_text(''.join(f"{r} {i}\n" for r, i in ids.items()))
       self.assertEqual(gate.image_note(str(base), ids), '')
       other = dict(ids)
-      other['edgcpp/cir-env:latest'] = 'sha256:' + 'd' * 64
+      other['ghcr.io/edgcpp/cir-env:latest'] = 'sha256:' + 'd' * 64
       note = gate.image_note(str(base), other)
       self.assertIn('IMAGES DIFFER', note)
       self.assertIn('cir-env', note)
@@ -3603,7 +3615,8 @@ def run_gate_main(argv: List[str], steps = None):
   the image lookup stubbed: (exit code, stderr).'''
   saved = (sys.argv, gate.image_ids, dict(gate.STEP_FUNCTIONS))
   sys.argv = ['edg-cir-gate-evidence', *argv]
-  gate.image_ids = lambda: {'edgcpp/cir-env:latest': 'sha256:' + 'a' * 64}
+  gate.image_ids = lambda: {
+    'ghcr.io/edgcpp/cir-env:latest': 'sha256:' + 'a' * 64}
   gate.STEP_FUNCTIONS.update(steps or {})
   try:
     with contextlib.redirect_stdout(io.StringIO()), \
@@ -3908,7 +3921,7 @@ class ContainerLimits(unittest.TestCase):
     self.assertNotRegex(plain, r'cmake --build \S+ -j\d')
     self.assertNotIn('--jobs=', plain)
     self.assertRegex(capped, r'cmake --build build/gcc -j7')
-    self.assertIn('edgy --run-timestamp', capped)
+    self.assertIn('exec edgy --config=', capped)
     self.assertIn('--jobs=7', capped)
 
 
@@ -4122,7 +4135,8 @@ class IdentityAllowList(unittest.TestCase):
     self.assertFalse(gate.judge_identity('', 1, self.ALLOWED)[0])
 
   def test_the_checked_in_list_is_empty(self):
-    # The M5.1b entries went with the identity-m51b capture.
+    # The M6.R entries (the files that the CIR project changes ungated, against
+    # identity-main) went with the identity-m6r capture.
     path = BIN.parent.parent / gate.IDENTITY_ALLOW
     entries, problems = gate.read_identity_allowlist(str(path))
     self.assertEqual(problems, [])
@@ -4155,11 +4169,11 @@ class IdentityAllowList(unittest.TestCase):
     self.assertFalse(ok)
     self.assertIn('no `N files compared` line', detail)
 
-  def test_the_default_baseline_is_the_m51b_capture(self):
-    self.assertIn("default = '~/edg-cir-config/identity-m51b'",
+  def test_the_default_baseline_is_the_m6r_capture(self):
+    self.assertIn("default = '~/edg-cir-config/identity-m6r'",
                   (BIN / 'edg-cir-checkpoint').read_text())
     text = (BIN / 'edg-cir-gate-evidence').read_text()
-    self.assertIn("default = '~/edg-cir-config/identity-m51b'", text)
+    self.assertIn("default = '~/edg-cir-config/identity-m6r'", text)
     self.assertNotIn('identity-m0c', text)
     self.assertNotIn('identity-m0c', (BIN / 'edg-cir-checkpoint').read_text())
 
@@ -4185,10 +4199,20 @@ class ImageRecords(unittest.TestCase):
       import edgdocker
     finally:
       sys.path.pop(0)
-    self.assertEqual(gate.image_inspect_ref('edgcpp/dev-env:latest'),
+    self.assertEqual(gate.image_inspect_ref('ghcr.io/edgcpp/dev-env:latest'),
                      edgdocker.get_latest_image_tag('dev-env'))
-    self.assertEqual(gate.image_inspect_ref('edgcpp/cir-env:latest'),
-                     'edgcpp/cir-env:latest')
+    self.assertEqual(gate.image_inspect_ref('ghcr.io/edgcpp/cir-env:latest'),
+                     'ghcr.io/edgcpp/cir-env:latest')
+
+  def test_a_record_from_before_the_move_to_ghcr_still_matches(self):
+    ids = {ref: 'sha256:' + c * 64
+           for ref, c in zip(gate.IMAGE_REFS, 'abc')}
+    with tempfile.TemporaryDirectory() as tmp:
+      base = Path(tmp) / 'm51-base-asm'
+      base.mkdir()
+      gate.image_record_path(str(base)).write_text(''.join(
+        f"{r.replace('ghcr.io/', '')} {i}\n" for r, i in ids.items()))
+      self.assertEqual(gate.image_note(str(base), ids), '')
 
   def test_the_record_keeps_the_name_of_the_entry(self):
     from unittest import mock
@@ -4199,7 +4223,7 @@ class ImageRecords(unittest.TestCase):
     with mock.patch.object(gate.subprocess, 'run', fake):
       ids = gate.image_ids()
     self.assertEqual(list(ids), list(gate.IMAGE_REFS))
-    self.assertNotEqual(asked[0], 'edgcpp/dev-env:latest')
+    self.assertNotEqual(asked[0], 'ghcr.io/edgcpp/dev-env:latest')
     self.assertEqual(asked[1:], list(gate.IMAGE_REFS[1:]))
 
 
@@ -4238,7 +4262,7 @@ class DevEnvTag(unittest.TestCase):
   def test_a_host_without_latest_gets_it(self):
     result, code, tags, _ = self.run_tag({'PIN': self.ID})
     self.assertIsNone(code)
-    self.assertEqual(result, 'docker.io/edgcpp/dev-env:cir-1c1cf78d322b')
+    self.assertEqual(result, 'ghcr.io/edgcpp/dev-env:cir-1c1cf78d322b')
     self.assertEqual(tags, [['PIN', result], ['PIN', 'LATEST']])
 
   def test_the_same_latest_is_left_alone(self):
@@ -4258,7 +4282,7 @@ class DevEnvTag(unittest.TestCase):
     self.assertNotIn("'cir-config-llvm-build'", text)
     self.assertNotIn("'cir-config-llvm-strip'", text)
     self.assertIn('cir-config-llvm-build-{os.getpid()}', text)
-    self.assertNotIn("'docker.io/edgcpp/dev-env:latest'", text)
+    self.assertNotIn("'ghcr.io/edgcpp/dev-env:latest'", text)
 
 
 class PrebuildNice(unittest.TestCase):
@@ -4498,6 +4522,84 @@ class AttrQualifiers(unittest.TestCase):
     self.assertIn('unit=GLOB', text)
     self.assertIn('accepted, checked', text)
 
+
+class ExpectationInheritance(unittest.TestCase):
+  '''The CIR tools read the expectations by main's rules: the default
+  configuration's lines under the configuration's own.'''
+
+  PARENT = ('a.cpp:rp:-DT=1:FAIL:\nb.cpp:rp:-DT=1:CATASTROPHE:\n'
+            'd.cpp:rp:-DT=1:SKIPPED:\n')
+  OWN = ('a.cpp:rp:-DT=1:PASS:\nc.cpp:rp:-DT=1:FAIL(COMPILE):\n'
+         'd.cpp:rp:-DT=1:FAIL:\n')
+
+  def make_tree(self, tmp):
+    for config, text in (('edg_x86_64', self.PARENT),
+                         ('edg_x86_64_cir', self.OWN)):
+      directory = Path(tmp) / 'tests' / 'expectations' / config
+      directory.mkdir(parents = True)
+      (directory / 'imported.log').write_text(text)
+    return Path(tmp) / 'tests' / 'expectations'
+
+  def test_the_reference_failures_are_the_effective_ones(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = self.make_tree(tmp)
+      cir = summary.load_reference_failures(root / 'edg_x86_64_cir')
+      self.assertEqual(dict(cir), {
+        'imported/b.cpp': {'-DT=1': 'CATASTROPHE'},
+        'imported/c.cpp': {'-DT=1': 'FAIL(COMPILE)'},
+        'imported/d.cpp': {'-DT=1': 'FAIL'}})
+      default = summary.load_reference_failures(root / 'edg_x86_64')
+      self.assertEqual(set(default),
+                       {'imported/a.cpp', 'imported/b.cpp', 'imported/d.cpp'})
+
+  def test_the_record_patch_writes_the_delta(self):
+    text = (BIN / 'edg-cir-record').read_text()
+    code = text.split('REMOTE_PATCH = r"""')[1].split('"""')[0]
+    with tempfile.TemporaryDirectory() as tmp:
+      root = self.make_tree(tmp)
+      # b.cpp now passes (its parent line is overridden), c.cpp changes,
+      # e.cpp fails where the parent expects a pass.
+      (Path(tmp) / 'run.log').write_text(
+        '- imported/b.cpp rp:-DT=1:CATASTROPHE:\n'
+        '- imported/c.cpp rp:-DT=1:FAIL(COMPILE):\n'
+        '+ imported/c.cpp rp:-DT=1:FAIL:\n'
+        '+ imported/e.cpp rp:-DT=1:FAIL:\n')
+      env = dict(os.environ, PYTHONPATH = str(BIN.parent / 'pylibs'))
+      subprocess.run([sys.executable, '-', 'edg_x86_64_cir', 'run.log'],
+                     input = code, text = True, cwd = tmp, env = env,
+                     check = True, stdout = subprocess.DEVNULL)
+      # The delta from the default configuration's lines: a and b are the
+      # explicit passes (the parent expects a failure), d and e differ
+      # from the parent, c has none there.
+      self.assertEqual(
+        (root / 'edg_x86_64_cir' / 'imported.log').read_text().splitlines(),
+        ['a.cpp:rp:-DT=1:PASS:', 'b.cpp:rp:-DT=1:PASS:',
+         'c.cpp:rp:-DT=1:FAIL:', 'd.cpp:rp:-DT=1:FAIL:',
+         'e.cpp:rp:-DT=1:FAIL:'])
+      self.assertEqual(
+        (root / 'edg_x86_64' / 'imported.log').read_text(), self.PARENT)
+
+  def test_the_cir_files_are_deltas_in_the_main_format(self):
+    # The CIR logs hold the differences from the default configuration's: an
+    # explicit PASS line only for a case of a type that a status-gated run
+    # executes (rp, lp) where the default configuration fails it, no line
+    # equal to the default configuration's, sorted, and no effective PASS
+    # line.  (No assertion depends on the default configuration's failures
+    # themselves: main may fix a case.)
+    root = BIN.parent.parent / 'tests' / 'expectations'
+    for config in ('edg_x86_64_cir', 'edg_x86_64_cir_2p'):
+      self.assertEqual((root / config / 'INHERITS').read_text(),
+                       'edg_x86_64\n')
+      for log in sorted((root / config).glob('*.log')):
+        parent = summary.read_log_lines(root / 'edg_x86_64' / log.name)
+        own = summary.read_log_lines(log)
+        self.assertEqual(own, sorted(own), log)
+        effective = summary.effective_expectation_lines(config, parent, own)
+        self.assertFalse([l for l in effective if ':PASS:' in l], log)
+        for line in own:
+          fields = line.split(':')
+          if fields[3] == 'PASS':
+            self.assertIn(fields[1], ('rp', 'lp'), line)
 
 if __name__ == '__main__':
   unittest.main()

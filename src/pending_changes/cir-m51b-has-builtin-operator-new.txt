@@ -1,0 +1,13 @@
+[]
+__has_builtin(__builtin_operator_new) and __builtin_operator_delete
+
+__has_builtin(__builtin_operator_new) and
+__has_builtin(__builtin_operator_delete) had the value 1.  They now have the
+value that g++ 15 gives, 201802, in the GNU dialect, and the value of clang,
+201802L, in the clang dialect (the value of the feature test macro for sized
+and aligned allocation functions); the value is still 0 when --gnu_version is
+less than 150000.  The standard library of g++ 15 (new_allocator.h) tests for
+>= 201802L, and used ::operator new and ::operator delete where it now uses the
+builtins.  The code that the C++ generating back end writes for these calls,
+__builtin_operator_new and __builtin_operator_delete, needs g++ 15 or later or
+clang to be compiled.

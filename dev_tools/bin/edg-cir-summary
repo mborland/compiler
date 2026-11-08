@@ -70,7 +70,14 @@ import tarfile
 
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
+
+# main's expectation helpers (the inheritance of the expectations of the
+# default configuration); edg-cir-rto-diff and edg-cir-gate-evidence load this
+# script and use them through it.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'pylibs'))
+from edgtest import expectations as _expectations  # noqa: E402
+from edgtest import runtest as _runtest  # noqa: E402
 
 BUCKETS = (
   'PASS', 'FE_CRASH', 'LIB_CRASH', 'LIB_ERROR', 'UNSUPPORTED', 'FE_DIAG',
@@ -665,19 +672,53 @@ def print_summary(config: str, results: List[TestResult], top: int) -> None:
                     if ref_counts[b]))
 
 
+def effective_expectation_lines(config: str, parent_lines: Iterable[str],
+                                own_lines: Iterable[str]) -> List[str]:
+  '''The effective expectation lines of a configuration, by main's rules
+  (edgtest.expectations): the lines of the default configuration, which every
+  other configuration inherits, overlaid with the configuration's own lines;
+  explicit PASS lines are dropped.  The default configuration itself has no
+  parent: parent_lines is ignored for it.'''
+  if _runtest.get_parent_config_name(config) is None:
+    parent_lines = []
+  return _expectations.overlay_expectations(parent_lines, own_lines)
+
+
+def read_log_lines(path: Path) -> List[str]:
+  '''The lines of an expectations log ([] if there is none).'''
+  return path.read_text(errors = 'replace').splitlines() \
+    if path.exists() else []
+
+
+def effective_suite_lines(expectations_dir: Path, suite: str) -> List[str]:
+  '''The effective expectation lines of one suite of the configuration
+  whose directory is expectations_dir (tests/expectations/<config>).'''
+  config = expectations_dir.name
+  parent = _runtest.get_parent_config_name(config)
+  parent_lines = read_log_lines(
+    expectations_dir.parent / parent / f"{suite}.log") if parent else []
+  return effective_expectation_lines(
+    config, parent_lines, read_log_lines(expectations_dir / f"{suite}.log"))
+
+
 def load_reference_failures(reference_dir: Path) -> Dict[str, Dict[str, str]]:
   '''Return the failing cases of a reference configuration.
 
-  reference_dir is a tests/expectations/<config> directory, whose <suite>.log
-  files list the cases whose status is not a plain pass.  The result maps
+  reference_dir is a tests/expectations/<config> directory.  Its effective
+  expectations (effective_suite_lines: for a configuration other than the
+  default one, its own lines on top of the default configuration's) list the
+  cases whose status is not a plain pass.  The result maps
   "<suite>/<path>", like the run's metadata, to the options of its failing
   cases (the third field of a line, like the case's "variant") with their
   status (the fourth field).
   '''
   failing: Dict[str, Dict[str, str]] = defaultdict(dict)
-  for log_file in reference_dir.glob('*.log'):
-    suite = log_file.stem
-    for line in log_file.read_text(errors = 'replace').splitlines():
+  suites = {p.stem for p in reference_dir.glob('*.log')}
+  parent = _runtest.get_parent_config_name(reference_dir.name)
+  if parent:
+    suites |= {p.stem for p in (reference_dir.parent / parent).glob('*.log')}
+  for suite in sorted(suites):
+    for line in effective_suite_lines(reference_dir, suite):
       parts = line.split(':')
       if len(parts) >= 4 and not parts[3].startswith('PASS'):
         failing[f"{suite}/{parts[0]}"][parts[2]] = parts[3]

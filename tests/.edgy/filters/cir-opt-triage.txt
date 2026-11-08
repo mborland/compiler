@@ -45,3 +45,8 @@ imported/gnu/cpp/init/new41.sft.cpp | -DTEST_NUMBER=1 | upstream | permitted all
 
 # The M5 milestone gate (tree m5-int): pr100382 passes at -O0 now (its call of a pure function that can throw is kept) and fails at -O2.
 imported/gnu/cpp/torture/pr100382.sft.cpp | -DTEST_NUMBER=1 | dg-option | needs -fno-delete-dead-exceptions (dg-additional-options, which the corpus no longer carries): g++ -O0 passes and g++ -O2 aborts without it, clang -O0 and -O2 abort too
+
+# M6.R (tree m6r-int): the gate runs on the rebased branch.  The case passed at
+# -O0 only now: with the M5.1 binary too, so not by a change of the front end.
+imported/gnu/c/pr78468.sft.c | -DTEST_NUMBER=1 | our-ir | __builtin_alloca_with_align: alignments above 16 bytes are dropped (the test's 256-bit calls; the (size, 32) call is 4 bytes, always met): -O0 assembly rounds the size to 16 and aligns nothing, -O2 fails the test's checks; gcc and clang -O0 and -O2 rc=0. The -O0 status depends on the stack pointer modulo 32: clang4 has kernel.randomize_va_space=0, so it is stable per environment (FAIL in the M5.1 gate, PASS now with the M5.1 and the M6.R binaries alike, 6 of 6 runs); -O2 failed in both
+

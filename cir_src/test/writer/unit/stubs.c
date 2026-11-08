@@ -142,3 +142,11 @@ a_boolean is_integral_or_enum_type(a_type_ptr t) { (void)t; abort(); }
 /* GNU attributes (the cold and hot keys). */
 an_attribute_ptr find_attribute(an_attribute_kind kind, an_attribute_ptr list) {
   (void)kind; (void)list; return NULL; }
+/* The exception specification queries of the routine writer (not used by the
+   C cases). */
+void complete_defaulted_exc_spec(a_routine_ptr r) { (void)r; abort(); }
+void resolve_indeterminate_exception_specification(a_routine_ptr r) {
+  (void)r; abort(); }
+void instantiate_exception_spec_if_needed(a_symbol_ptr s) { (void)s; abort(); }
+a_boolean is_nothrow_spec(an_exception_specification_ptr e) {
+  (void)e; abort(); }

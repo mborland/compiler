@@ -1,5 +1,5 @@
-edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=140000 Test_name.c
-"Test_name.c", line 14: warning: variable "e" was set but never used
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 --g++ --gnu_version=70400 Test_name.c
+"Test_name.c", line 16: warning: variable "e" was set but never used
   void f() { D e = {.x = 1, .y = 2}; (void)e; }
                ^
 

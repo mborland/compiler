@@ -1,0 +1,17 @@
+//allowed_words: ClangIR ecil
+[]
+Diagnostics and options of the new CIR back end configuration
+
+A new configuration of the front end (BACK_END_TYPE_CIR) passes the IL to the
+ClangIR back end.  It is selected when the front end is built and is not part
+of the default configurations.  It adds two diagnostics: cir_error and
+cir_warning, which report problems found by that back end, for example
+--diag_error=cir_warning.  In that configuration, and only in it, there are
+two new options, --ecil_output=file (write the stream of declarations and
+function bodies that is given to the back end to a file, or to standard output
+if the file is "-") and --ecil_keep_regions (do not free the memory for a
+function after it has been handed to the back end), --gen_c_file_name and
+--old_line_commands are accepted as in the C-generating back end, and
+precompiled headers, modules and C++ are not supported.  The new diagnostics
+add two entries to the error tables of every configuration; there is no other
+change to the other configurations.

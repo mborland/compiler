@@ -14,7 +14,7 @@ The CIR column of every table reads:
 * :sup-no:`No`: fails loudly (diagnosed, rejected, or a build error); never miscompiled
 * :sup-ignored:`Ignored`: accepted and silently ignored, or silently wrong output: a safety gap
 
-305 rows: 147 Yes, 13 Partial, 86 Unverified, 49 No, 10 Ignored.
+307 rows: 145 Yes, 15 Partial, 86 Unverified, 49 No, 12 Ignored.
 
 C++ core language
 -----------------
@@ -360,8 +360,8 @@ C++14
    * - Aggregates with default member initializers
      - N3653
      - ``__cpp_aggregate_nsdmi`` (201304L)
-     - :sup-yes:`Yes` · ≤M5.1
-     -
+     - :sup-partial:`Partial` · ≤M5.1
+     - Default member initializers work in constant initializations and when they do not name another member. A default member initializer that uses the implicit this in a non-constant aggregate initialization (a local, a new-expression, a return; designated or positional) is diagnosed ('a reference to a parameter by position') and the function is dropped. Complete in M6.7.
    * - Sized deallocation
      - N3778
      - ``__cpp_sized_deallocation`` (201309L)
@@ -623,8 +623,8 @@ C++20
    * - Designated initializers
      - P0329R4
      - ``__cpp_designated_initializers`` (201707L)
-     - :sup-yes:`Yes` · ≤M5.1
-     -
+     - :sup-partial:`Partial` · ≤M5.1
+     - A member skipped by the designators whose default member initializer uses the implicit this, in a non-constant initialization, is diagnosed and the function is dropped (see cxx14.aggregate_nsdmi). Since main's GH #260 a skipped member gets its default member initializer in GNU C++ before C++20. Complete in M6.7.
    * - Destroying operator delete
      - P0722R3
      - ``__cpp_impl_destroying_delete`` (201806L)
@@ -1287,6 +1287,11 @@ GNU language extensions
      -
      - :sup-no:`No` · Ext
      - A vector type drops the function or variable that uses it (143 of the 528 C++ drop notes in H3).
+   * - GCC loop pragmas (unroll, ivdep, novector)
+     -
+     -
+     - :sup-ignored:`Ignored` · M6.4a
+     - Accepted and dropped: they are hints only, and the generated code is the same as without them. Covers C and C++. M6.4a decides between honoring them (clang lowers them to llvm.loop metadata) and documenting them as ignored by design; either way the row must stop being silent.
 
 GNU and clang attributes
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1490,11 +1495,16 @@ Builtin functions
      -
      - :sup-yes:`Yes` · ≤M5.1
      -
-   * - \_\_builtin_alloca and \_\_builtin_alloca_with_align
+   * - \_\_builtin_alloca
      -
      -
      - :sup-yes:`Yes` · ≤M5.1
      -
+   * - \_\_builtin_alloca_with_align
+     -
+     -
+     - :sup-ignored:`Ignored` · M6.2
+     - Accepted, but the alignment argument is dropped: the writer sends it as plain alloca and the library aligns to 16 whatever was asked. tests/tests/imported/gnu/c/pr78468.sft.c fails at -O2 (gcc and clang pass at -O0 and -O2). Silently wrong output, so the row must stop being silent by M6.4a.
    * - Compile-time builtins (choose_expr, types_compatible_p, offsetof, classify_type)
      -
      -

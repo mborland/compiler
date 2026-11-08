@@ -20,10 +20,10 @@ directly (the user is in the docker group); set EDG_CIR_SG_DOCKER=1 to run it th
   edg-cir-checkpoint                # sync, clean build, the default steps
   edg-cir-checkpoint --quick        # build, smoke, cpp-smoke only
   edg-cir-checkpoint --steps build,ctest --detach
-  edg-cir-checkpoint --lean toolchain --lean-base HEAD --tree m51-int
-  edg-cir-checkpoint --milestone --tree m51-int --detach
+  edg-cir-checkpoint --lean toolchain --lean-base HEAD --tree m6r-int
+  edg-cir-checkpoint --milestone --tree m6r-int --detach
   edg-cir-checkpoint --milestone --check-baselines   # list what it needs
-  edg-cir-checkpoint --tree m51-int --prune 3 --quick
+  edg-cir-checkpoint --tree m6r-int --prune 3 --quick
 
 It does, in this order:
 
@@ -35,7 +35,7 @@ It does, in this order:
      evidence they came from), a tree with a file KEEP, an entry with a file KEEP, an entry younger than 6
      hours or one that a process uses.
   1. rsync --checksum --no-times of the working tree to ~/edg-cir-config/<tree>
-     on the box (default tree m51-int; build/, tests/runs/, .tmp/ and .git/
+     on the box (default tree m6r-int; build/, tests/runs/, .tmp/ and .git/
      are not touched).  --no-times gives changed files the time of the
      transfer: with `rsync -a` a changed source can keep a time older than
      the objects of an earlier build, and ninja then rebuilds nothing.  The
@@ -62,7 +62,7 @@ The default steps are:
 
 that is the C smoke and corpus (statuses against the recorded expectations),
 the C assembly against the M5 baseline (--asm-baseline, default
-~/edg-cir-config/m5-base-asm: every difference is listed with its class and
+~/edg-cir-config/m6r-base-asm: every difference is listed with its class and
 cause; the frame description directives (.cfi_*) are ignored from S1 on,
 when every function gets unwind tables: --no-asm-normalize-cfi shows them;
 personality, lsda and escape directives stay visible), the ASan
@@ -74,7 +74,7 @@ have are gated, against the allowlist tests/.edgy/filters/
 cir-excused-crashes.txt), and the four cir_src presets from clean build
 directories.  About 25 minutes.  Day, stress, rss, perf, modes, cpp-corpus,
 cpp-modes and cpp-asm-diff (the C++ assembly against --cpp-asm-baseline,
-default ~/edg-cir-config/m5-base-cpp-asm, made with the corpus filter
+default ~/edg-cir-config/m6r-base-cpp-asm, made with the corpus filter
 that includes eh/ and rtti/) are left for the gates; name them
 with --steps (they exist in the gate tool).
 
@@ -118,7 +118,7 @@ EXPECTED_HOSTNAME = os.environ.get('EDG_CIR_HOSTNAME', 'clang4')
 SG_DOCKER = os.environ.get('EDG_CIR_SG_DOCKER', '') not in ('', '0')
 # The default tree is wiped and rebuilt by every checkpoint; the trees that
 # hold baselines or the evidence they came from are not (see PROTECTED_TREES).
-DEFAULT_TREE = 'm51-int'
+DEFAULT_TREE = 'm6r-int'
 LOW_DISK_GB = 40
 DEFAULT_STEPS = ('build,identity,smoke,corpus,asm-diff,writer-stress,'
                  'cpp-smoke,cpp-writer-stress,crash-sweep,ctest')
@@ -291,7 +291,7 @@ def headroom_gb(text: str) -> int:
 # the M5a run.
 DAY_BASELINE = '~/edg-cir-config/day-base/baseline-64'
 DAY32_BASELINE = '~/edg-cir-config/day-base/baseline-32'
-PERF_BASELINE = '~/edg-cir-config/m5-base-perf.json'
+PERF_BASELINE = '~/edg-cir-config/m6r-base-perf.json'
 PERF_TARGETS_BASELINE = '~/edg-cir-config/m5a-base-perf.json'
 # The perf step measures the pinned real-world units at -O0 and -O2 whenever
 # it runs: its baseline has those rows, and a run without them would lack
@@ -396,8 +396,8 @@ def main() -> None:
                       help = 'the full milestone gate (edg-cir-gate-evidence '
                              '--milestone: every step, lazy, attr, chunk, '
                              'names, speed and crash-sweep included) against '
-                             'the m5-base-* baselines, with the perf options of '
-                             'milestone_extra and the S1 targets against '
+                             'the m6r-base-* baselines, with the perf options '
+                             'of milestone_extra and the S1 targets against '
                              'm5a-base-perf.json')
   parser.add_argument('--quick', action = 'store_true',
                       help = f"only {QUICK_STEPS}")
@@ -424,9 +424,9 @@ def main() -> None:
   parser.add_argument('--no-sync', action = 'store_true',
                       help = 'do not rsync (the tree is up to date)')
   parser.add_argument('--asm-baseline', default = '~/edg-cir-config/'
-                      'm5-base-asm')
+                      'm6r-base-asm')
   parser.add_argument('--cpp-asm-baseline', default = '~/edg-cir-config/'
-                      'm5-base-cpp-asm')
+                      'm6r-base-cpp-asm')
   parser.add_argument('--asm-normalize-cfi', action = 'store_true',
                       default = True,
                       help = 'asm-diff steps ignore .cfi_* directives '
@@ -435,9 +435,9 @@ def main() -> None:
                       action = 'store_false',
                       help = 'asm-diff steps compare .cfi_* directives too')
   parser.add_argument('--identity-baseline',
-                      default = '~/edg-cir-config/identity-m51b')
+                      default = '~/edg-cir-config/identity-m6r')
   parser.add_argument('--perf-baseline', default = PERF_BASELINE,
-                      help = 'the perf regression baseline (the M5 run)')
+                      help = 'the perf regression baseline (the M6.R gate)')
   parser.add_argument('--perf-targets-baseline',
                       default = PERF_TARGETS_BASELINE,
                       help = 'the baseline of --perf-targets (the M5a run)')

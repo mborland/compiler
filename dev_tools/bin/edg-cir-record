@@ -11,7 +11,7 @@ Run it on the Mac, from the repository root.  The host is $EDG_CIR_HOST
 (default matt@clang4.cpp.al), the ssh key $EDG_CIR_SSH_KEY (default
 ~/.ssh/id_rsa); an SSH master socket is used only if $EDG_CIR_SSH_SOCKET
 names it; docker runs through `sg docker -c` only with EDG_CIR_SG_DOCKER=1.  The
-tree on the box (default ~/edg-cir-config/m51-int) must be built and synced
+tree on the box (default ~/edg-cir-config/m6r-int) must be built and synced
 (edg-cir-checkpoint --steps build does that).  For the selected tests and
 configurations it
 
@@ -102,30 +102,47 @@ print(json.dumps({'deleted': deleted, 'kept': kept, 'dirs': changed_dirs}))
 """
 
 # Patches the expectation logs with the status changes of a run without -W.
+# Under main's expectation inheritance a log holds only the differences from
+# the default configuration's (tests/expectations/edg_x86_64): the changes
+# apply to the effective expectations (overlay_expectations), and the result
+# is written back as the delta (compute_expectation_delta, which also adds
+# the explicit PASS lines).  Runs on the box with PYTHONPATH=dev_tools/pylibs.
 REMOTE_PATCH = r"""
 import re, sys
+from edgtest import expectations, runtest
+config = sys.argv[1]
 changes = [l.rstrip('\n') for l in open(sys.argv[2])
            if re.match(r'^[+-] \S', l)]
-log_dir = 'tests/expectations/' + sys.argv[1]
+log_dir = 'tests/expectations/' + config
+parent_name = runtest.get_parent_config_name(config)
 removed, added = {}, {}
 for line in changes:
   sign, rest = line[0], line[2:]
   path, _, fields = rest.partition(' ')
   suite, _, test = path.partition('/')
   entry = f"{test}:{fields}"
-  key = entry.split(':')[:3]
-  (removed if sign == '-' else added).setdefault(suite, {})[
-    ':'.join(key)] = entry
+  key = expectations.get_expectation_key(entry)
+  (removed if sign == '-' else added).setdefault(suite, {})[key] = entry
+
+
+def read(path):
+  try:
+    return open(path).read().splitlines()
+  except FileNotFoundError:
+    return []
+
+
 for suite in set(removed) | set(added):
   log = f"{log_dir}/{suite}.log"
-  lines = []
-  try:
-    lines = open(log).read().splitlines()
-  except FileNotFoundError:
-    pass
+  parent = read(f"tests/expectations/{parent_name}/{suite}.log") \
+    if parent_name else []
   keys = set(removed.get(suite, {})) | set(added.get(suite, {}))
-  lines = [l for l in lines if ':'.join(l.split(':')[:3]) not in keys]
-  lines += list(added.get(suite, {}).values())
+  effective = [l for l in expectations.overlay_expectations(parent,
+                                                            read(log))
+               if expectations.get_expectation_key(l) not in keys]
+  effective += list(added.get(suite, {}).values())
+  lines = expectations.compute_expectation_delta(parent, effective) \
+    if parent_name else effective
   open(log, 'w').write('\n'.join(sorted(lines)) + '\n')
   print(f"{log}: {len(added.get(suite, {}))} lines set, "
         f"{len(removed.get(suite, {}))} replaced or removed")
@@ -175,7 +192,7 @@ def main() -> None:
     formatter_class = argparse.RawDescriptionHelpFormatter,
     epilog = __doc__.split('\n', 2)[2]
   )
-  parser.add_argument('--tree', default = 'm51-int')
+  parser.add_argument('--tree', default = 'm6r-int')
   parser.add_argument('--jobs', type = int, default = 48,
                       help = 'cap of the build jobs and concurrent tests '
                              '(edg-docker-test --jobs)')

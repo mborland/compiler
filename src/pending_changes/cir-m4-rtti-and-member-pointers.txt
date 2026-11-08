@@ -1,0 +1,16 @@
+[]
+CIR back end: run-time type information and pointers to members
+
+The CIR back end configuration (BACK_END_TYPE_CIR) now compiles typeid and
+dynamic_cast (pointers, references and void *; the static and dynamic forms
+of typeid, with the null check of typeid(*p)), the typeinfo objects of every
+type (fundamental, pointer, pointer to member, function, array and enum types
+as well as classes, with their cv, incomplete and noexcept masks and the
+linkage clang gives them, including the internal typeinfo of an incomplete
+class and of a TU-local type), and pointers to data members and to member
+functions: their types, constants (offsets, virtual functions, this
+adjustments), .* and ->* (data and calls), conversions to and from base
+classes, comparison and conversion to bool.  A type that contains a pointer
+to a data member, whose null value is -1, is no longer written with zero
+bytes: zero-initialization, value-initialization and new T() produce the null
+value.  The other configurations are not affected.

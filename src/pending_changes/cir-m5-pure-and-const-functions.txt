@@ -1,0 +1,16 @@
+//allowed_words: ECIL LLVM's attrs dev fabs isalnum toupper
+[]
+CIR back end: pure and const functions
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: a
+function declared with the GNU pure or const attribute is marked as such in
+the stream (ECIL supp keys 4 and 5), so that the optimizer can treat calls
+of it as reads of memory or as no access to memory, and drop or merge them, as
+clang does.  The same goes for the C library functions that clang's builtin
+table marks pure or const without a condition (the ctype functions isalnum to
+toupper, abs, fabs, floor, ceil, wcslen and so on), for a function of C
+language linkage with that name and signature; sin and the other math functions
+that are const only when errno is not set are not.  The table is generated
+from the pinned LLVM's Builtins.inc by dev_tools/builtins/
+generate-libc-builtins.py into src/builtin_libc_attrs.h.  The other
+configurations are not affected.

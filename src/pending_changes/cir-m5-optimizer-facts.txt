@@ -1,0 +1,26 @@
+//allowed_words: ECIL ecil invoker multiprecision
+[]
+CIR back end: facts for the optimizer (ECIL 1.3)
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+streamed declarations carry more of what the front end knows, so that the
+optimizer sees what clang's does.  Function types name the pointers that are
+never null (a reference result, a reference parameter and the object
+parameter); the GNU used attribute is sent on functions and on variables
+(a used static or inline variable that nothing refers to is now emitted, as
+gcc does); an extern "C" function and the allocation and deallocation calls of
+new and delete expressions (and of __builtin_operator_new and
+__builtin_operator_delete) are marked; and a function declared with the inline
+specifier (or an instance of a template that has it, or a lambda's call
+operator, conversion function or static invoker) is marked as a hint to the
+inliner, which an in-class definition, constexpr and an implicit member are
+not.  The static invoker of a lambda passes a local object of the closure type
+to the call operator instead of a null pointer.  The right operand of an
+assignment that is a class value of a class that is passed indirectly is no
+longer loaded, which boost multiprecision needed.  The inline
+specifier is found by a new bit of the declaration modifiers
+(cir_inline_keyword, set where decl_spec.c scans the keyword and read by
+update_routine_decl_modifiers) and a bit in the IL entry prefix next to
+ecil_id (mem_tables.h); the hook is compiled only where
+DECL_MODIFIERS_IN_USE is, and without it the hint is not sent.  The other
+configurations are not affected.

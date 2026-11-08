@@ -271,6 +271,21 @@
      "refs": [
       "src/ecil_type.c:681"
      ]
+    },
+    {
+     "id": "gnu_lang.pragma_loop_hints",
+     "feature": "GCC loop pragmas (unroll, ivdep, novector)",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.4a",
+     "note": "Accepted and dropped: they are hints only, and the generated code is the same as without them. Covers C and C++. M6.4a decides between honoring them (clang lowers them to llvm.loop metadata) and documenting them as ignored by design; either way the row must stop being silent.",
+     "tests": [],
+     "refs": [
+      "src/il_def.h:6726"
+     ]
     }
    ]
   },

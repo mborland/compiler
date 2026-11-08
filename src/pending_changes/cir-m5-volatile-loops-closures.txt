@@ -1,0 +1,13 @@
+[]
+CIR back end: volatile accesses, loop conditions and linkage of closures
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+C++17 order of evaluation of an assignment (the right operand first) is kept
+when an operand reads a volatile object or a thread_local variable that is
+initialized dynamically, as a memory-mapped register needs; such a read is also
+kept in a loop condition that is a comma expression, which clang does not fold,
+and the expected value of __builtin_expect in a loop condition is dropped only
+when it has no side effects.  A function that has a closure in a default
+argument or an initializer among its parameters or arguments (and a type in an
+unnamed namespace) is again internal, which an optimization of the previous
+change had made external.  The other configurations are not affected.

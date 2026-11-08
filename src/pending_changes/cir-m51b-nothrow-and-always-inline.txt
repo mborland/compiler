@@ -1,0 +1,29 @@
+//allowed_words: dereferenceable kIiE
+[]
+CIR back end: nothrow declarations in C, always_inline in class templates
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+flag NOTHROW of DECL_FUNC is sent also in C and with --no_exceptions, for the
+functions that the front end says do not throw (a nothrow attribute) and the
+library functions that clang's builtin table says do not throw: it was sent
+only when the translation unit has exceptions, so that the code generator did
+not know that, for instance, memcmp cannot throw, as clang does.  A function
+declared with the GNU attribute always_inline but not "inline" (a member
+function of a class template that is defined in the class is not yet marked
+"inline" when the attribute is applied, which is how libstdc++ declares the
+constructors and the destructor of std::allocator and the members of
+__new_allocator for C++17 and earlier, and the same goes for a function
+template) is marked always_inline in the stream although the front end does
+not make it inline, as gcc and clang keep it: the attribute stays and the
+warning that it is ignored on a function that is not inline is not given.
+The library that reads the stream also changed: the dereferenceable size of
+"this" and of references uses the non-virtual size and alignment of a class
+(at least one byte), and a function that is always_inline is inlined at -O0
+and its out-of-line definition is dropped when nothing needs it.  In GNU mode
+the mangled name of an instance of a variable template that has internal
+linkage has no L (_Z1kIiE, as g++ writes it), and in GNU mode 15 and later an
+instance of a const variable template has external linkage (core issue 2387,
+which g++ 15 and clang implement) and not an internal one; as with g++ 15, a
+non-inline explicit specialization "template<> const T k<X> = ...;" in a
+header that two translation units include then has a definition in each and
+fails to link.  The other configurations are not affected.

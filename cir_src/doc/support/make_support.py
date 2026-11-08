@@ -36,6 +36,12 @@ from pathlib import Path
 from types import ModuleType
 from typing import Dict, List, Optional, Set, Tuple
 
+# main's expectation helpers: a configuration other than the default one
+# inherits the default configuration's expectations.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'dev_tools'
+                       / 'pylibs'))
+from edgtest import expectations as expectation_rules  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 
@@ -222,27 +228,35 @@ class Evidence:
     return False
 
   def is_failing(self, suite: str, rel_path: str) -> bool:
-    '''Whether the CIR expectation log of the suite lists the test.'''
+    '''Whether the effective CIR expectations of the suite list the test as
+    not passing (the edg_x86_64 lines under the CIR config's own, an
+    explicit PASS line being a pass).'''
     if suite not in self.failing:
-      listed = set()
-      log = EXPECTATIONS / f"{suite}.log"
-      if log.exists():
-        for line in log.read_text(encoding = 'utf-8').splitlines():
-          listed.add(line.split(':', 1)[0])
-      self.failing[suite] = listed
+      self.failing[suite] = listed_tests(
+        expectation_rules.overlay_expectations(
+          read_log(REFERENCE / f"{suite}.log"),
+          read_log(EXPECTATIONS / f"{suite}.log")))
     return rel_path in self.failing[suite]
 
   def is_reference_failing(self, suite: str, rel_path: str) -> bool:
     '''Whether the reference (edg_x86_64) log of the suite lists the
     test.'''
     if suite not in self.reference:
-      listed = set()
-      log = REFERENCE / f"{suite}.log"
-      if log.exists():
-        for line in log.read_text(encoding = 'utf-8').splitlines():
-          listed.add(line.split(':', 1)[0])
-      self.reference[suite] = listed
+      self.reference[suite] = listed_tests(
+        expectation_rules.overlay_expectations(
+          [], read_log(REFERENCE / f"{suite}.log")))
     return rel_path in self.reference[suite]
+
+
+def read_log(log: Path) -> List[str]:
+  '''The lines of an expectation log ([] if there is none).'''
+  return log.read_text(encoding = 'utf-8').splitlines() \
+    if log.exists() else []
+
+
+def listed_tests(lines: List[str]) -> Set[str]:
+  '''The test paths of effective expectation lines.'''
+  return {line.split(':', 1)[0] for line in lines}
 
 
 def read_directives(path: Path) -> Dict[str, List[str]]:

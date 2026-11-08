@@ -1,3 +1,10 @@
+ccs/gnats23024.sft.cpp:rp:-DTEST_NUMBER=1:PASS:
+cmeerw/gnats-26621-run.sft.cpp:rp:-DTEST_NUMBER=1 --c++20 --no_exceptions --set_flag=no_checking_pragmas:PASS:
 cmeerw/unresolved-name-mangling.sft.cpp:fp:-DTEST_NUMBER=1 --gnu_version 150200:REQUIREMENTS NOT MET:
 cmeerw/unresolved-name-mangling.sft.cpp:fp:-DTEST_NUMBER=2 --clang_version 220000:REQUIREMENTS NOT MET:
+daveed/d00393a/test.mft.cpp:rp:-DTEST_NUMBER=1 --g++:PASS:
+daveed/d00393a/test.mft.cpp:rp:-DTEST_NUMBER=2:PASS:
 daveed/g26766a.sft.cpp:rp:-DTEST_NUMBER=1 --microsoft_bugs:REQUIREMENTS NOT MET:MSVC typeid of const arrays
+rma/bit_alloc11.sft.cpp:rp:-DTEST_NUMBER=2:PASS:
+rma/defarg06.sft.cpp:rp:-DTEST_NUMBER=2:PASS:
+rma/list95.sft.cpp:rp:-DTEST_NUMBER=2:PASS:

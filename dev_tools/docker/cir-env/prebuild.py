@@ -12,7 +12,7 @@ def main() -> None:
   # exec_build_pipeline and build_options are implicitly available (and
   # provided by the calling build-edg-env instance).
   #
-  # The Dockerfile starts FROM edgcpp/dev-env:latest: give the (pinned)
+  # The Dockerfile starts FROM ghcr.io/edgcpp/dev-env:latest: give the (pinned)
   # dev-env image that tag and the CIR provenance tag first.
   print(f"dev-env for the CIR images: {tag_dev_env_for_cir()}")
   if not has_image_tagged('llvm-cir') or build_options.no_cache:

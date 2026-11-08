@@ -1,0 +1,11 @@
+//allowed_words: ecil
+[]
+The CIR back end configuration accepts C++
+
+The CIR back end configuration (BACK_END_TYPE_CIR) now compiles C++ programs
+of the supported subset (classes without virtual functions or virtual bases,
+templates, lambdas, new and delete, static initialization, ...); constructs
+that the back end cannot express are diagnosed per function as before.  The
+command-line error "C++ is not supported yet" and the undocumented option
+--ecil_allow_cxx, which allowed C++ during development, are removed.  The other
+configurations are not affected.

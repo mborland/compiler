@@ -63,8 +63,8 @@ case "$cmd" in
               "$HOST:$TREE/cir_src/" ;;
   run)  job=$1; shift
         # (the remote shell expands $(id -u), $HOME and $$)
-        exec "${SSH[@]}" "$HOST" "$(dock "docker run --rm --user \$(id -u):\$(id -g) -e HOME=/tmp -e EDG_CIR_JOBS=${EDG_CIR_JOBS:-48} --name cir-lib-$job-\$\$ -v \$HOME/$TREE:/edg/workspace -v \$HOME/edg-cir-config/llvm-project/llvm/utils/lit:/lit:ro -w /edg/workspace edgcpp/cir-env:latest nice -n 10 $*")" ;;
-  chown) exec "${SSH[@]}" "$HOST" "$(dock "docker run --rm -v \$HOME/$TREE:/w edgcpp/cir-env:latest chown -R \$(id -u):\$(id -g) /w/build")" ;;
+        exec "${SSH[@]}" "$HOST" "$(dock "docker run --rm --user \$(id -u):\$(id -g) -e HOME=/tmp -e EDG_CIR_JOBS=${EDG_CIR_JOBS:-48} --name cir-lib-$job-\$\$ -v \$HOME/$TREE:/edg/workspace -v \$HOME/edg-cir-config/llvm-project/llvm/utils/lit:/lit:ro -w /edg/workspace ghcr.io/edgcpp/cir-env:latest nice -n 10 $*")" ;;
+  chown) exec "${SSH[@]}" "$HOST" "$(dock "docker run --rm -v \$HOME/$TREE:/w ghcr.io/edgcpp/cir-env:latest chown -R \$(id -u):\$(id -g) /w/build")" ;;
   test) job=$1
         "$0" sync
         "$0" run "$job" bash cir_src/scripts/box_ninja.sh 2>&1 |

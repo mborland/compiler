@@ -1,0 +1,30 @@
+//allowed_words: ZNS dIT srNS svEE svIT vtEE vtEET vtIT vtIiEEE
+[]
+Mangled names of dependent variable templates and of qualified dependent names
+
+The mangled name of a function template whose signature contains an
+expression that depends on a template parameter now has the form that g++
+and clang give in two cases that it did not.
+
+A specialization of a variable template with dependent template arguments,
+as in the condition of "enable_if<vt<T>, T>::type", is written as the name
+followed by its template arguments (X2vtIT_EE).  The front end had written the
+name alone (the L_ZNS_2vtEE of L_ZNS_2vtEET_E), so that vt<T> and vt<T*> had
+the same encoding.
+A specialization of a variable template whose arguments do not depend on a
+template parameter, written in an expression such as "&vt<int> != 0", now has
+its template arguments too (L_ZNS_2vtIiEEE), and so does a static data member
+variable template of a class that does not depend on a template parameter
+(sr2S52svIT_E; the front end had written the name without its arguments,
+L_ZN2S52svEE).  These changes apply to every dialect.
+
+In GNU mode (g++ 4.9 or later), a member of a class that depends on a template
+parameter, as in "enable_if<n::is_d<T>::value, T>::type", now has the scope
+that g++ writes, "sr" followed by the type of the class
+(srNS_4is_dIT_EE5value), and not one level for each enclosing scope
+(sr1n4is_dIT_EE5value).  The mangled names of these functions change; they
+are now those of g++ 4.9 to 16, which agree with each other at every
+-fabi-version.  The mangled names in the clang dialects are not changed.
+
+The new names require ABI_COMPATIBILITY_VERSION >= 701.  With a smaller value
+the names are those of the previous version.

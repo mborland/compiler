@@ -1,0 +1,21 @@
+//allowed_words: ECIL devirtualized
+[]
+CIR back end: polymorphic classes and virtual base classes
+
+The CIR back end configuration (BACK_END_TYPE_CIR) now compiles classes with
+virtual functions and classes with virtual base classes: the vptr is a field
+of the ECIL record and so are the virtual bases, the class's layout facts and
+(at its first need) its vtable facts (slots, overrides, destructors with
+their deleting variants) are streamed, constructors and destructors set the
+vptr, virtual calls are made through the vtable (and devirtualized as clang
+does), a delete through a virtual destructor is virtual, constants of such
+classes are supported, and the vtable, the virtual table table (VTT) and the
+class typeinfo of each class are declared or defined by clang's key function
+rules at the end of the translation unit.  The constructor of a class with
+virtual bases is written twice (complete and base object variants), the
+complete destructor is made from the destructors of the virtual bases and the
+base destructor, casts to a virtual base go through the vtable, and the base
+variants take the VTT.  The zero-initialization of a base subobject writes
+only the base's non-virtual size, a conversion to an indirect base class is a
+chain of casts, and a reference bound to a base subobject of an automatic
+variable is supported.  The other configurations are not affected.

@@ -7,6 +7,8 @@ state, decisions and process are in `project.md`.
 
 ### Host access (x86-64 = clang4; Mac = edit and drive only)
 - `ssh -o BatchMode=yes -i ~/.ssh/id_rsa matt@clang4.cpp.al`; rsync `-e 'ssh -o BatchMode=yes -i ~/.ssh/id_rsa'`
+- `kernel.randomize_va_space=0` (no ASLR): stack-alignment-dependent results are stable per environment but move
+  with its size (project.md §5, `pr78468`).
 - Ubuntu 26.04, 172 cores, 251 GB RAM, ~430 GB free at planning; matt is in `docker`, no sudo; shared host.
 - Never touch `~/cerastes-m4.5d1` or other people's containers. Old box 192.168.1.167: retired for CIR.
 - Trees `~/edg-cir-{config,writer,lib}`; checkpoint trees `~/edg-cir-config/<tree>`; `~/edg-cir-config/llvm-project` at the pin.
@@ -16,7 +18,7 @@ state, decisions and process are in `project.md`.
   runs every container command under `nice -n N` (the gate and record set 10).
 - `docker` works directly for matt; the tools run it without `sg docker` (set `EDG_CIR_SG_DOCKER=1` to bring it back).
 - Upload from the Mac runs at about 1 MB/s (a full tree took 25 min): never upload `build/`, `tests/runs/` or `.tmp/`; seed a new
-  tree on clang4 by copying a built one (`cp -a ~/edg-cir-config/m5-int ~/edg-cir-<agent>`), then rsync deltas (`-z`).
+  tree on clang4 by copying a built one (`cp -a ~/edg-cir-config/m6r-int ~/edg-cir-<agent>`), then rsync deltas (`-z`).
 - `/tmp` on clang4 is tmpfs (RAM): set `TMPDIR` to a directory on disk for image builds and large jobs.
 - `edg-docker-test --jobs N` caps the build and edgy jobs; without it a run uses all 172 CPUs (the gate and `edg-cir-record` pass it); the gate's ctest runs lit with `LIT_OPTS=-jN`.
 - Never record goldens or expectations on the Mac; record on clang4 (same cir-env image).
@@ -28,12 +30,14 @@ state, decisions and process are in `project.md`.
 
 ### Toolchain and images
 - Pin: `cir_src/LLVM_REVISION` = `2d6f180e7dbad81db52f5163a34502c1b8058012`. Bump: change it, rebuild, `ninja check-clang-cir`, rebuild images, run the `toolchain` lean gate (+`library` if cir_src changed).
-- Images on clang4 (built 2026-11-05): `edgcpp/dev-env` is pulled by digest and tagged (`dev-init.py docker` builds no
-  image; it needs PATH and PYTHONPATH set to the tree); `edgcpp/llvm-cir` and `edgcpp/cir-env` are built by `build-edg-env`
+- Image names follow main's namespace `ghcr.io/edgcpp/<name>` (`edgdocker.IMAGE_NAMESPACE`; M6.R). On clang4 the images
+  of 2026-11-05 also carry their old `edgcpp/<name>` tags (same IDs), which older scripts use.
+- Images on clang4 (built 2026-11-05): `dev-env` is pulled by digest and tagged (`dev-init.py docker` builds no
+  image; it needs PATH and PYTHONPATH set to the tree); `llvm-cir` and `cir-env` are built by `build-edg-env`
   (`~/edg-cir-config/build-images.sh`; `EDG_LLVM_CIR_JOBS` caps the LLVM build, 64 jobs took 12 min, cir-env 6 min more).
   `~/edg-cir-config/llvm-work/build` keeps the LLVM build for incremental rebuilds.
 - `dev_tools/bin/edg-build-llvm-cir [--check] [--jobs N] <llvm-project> <build> <prefix>`: run inside the llvm-cir image build, or inside dev-env with bind mounts (keeps it incremental). ~27 min on the old 16-thread box; use `--jobs 64`.
-- Images `edgcpp/llvm-cir` (`dev_tools/docker/llvm-cir`) and `edgcpp/cir-env` (`dev_tools/docker/cir-env`, FROM dev-env, prefix `/edg/llvm-cir`, LLVM bin not on PATH). Tag `:latest` and `:2d6f180e`.
+- Images `ghcr.io/edgcpp/llvm-cir` (`dev_tools/docker/llvm-cir`) and `ghcr.io/edgcpp/cir-env` (`dev_tools/docker/cir-env`, FROM dev-env, prefix `/edg/llvm-cir`, LLVM bin not on PATH). Tag `:latest` and `:2d6f180e`.
 - cir-env EDG base: `bases/docker/cir-env/gcc`. Track the pin as it is; the `release/24.x` move is retired (project.md §2 Retired).
 - Library data after an LLVM bump (diff the NOTHROW set; the generator reports exclusions):
   `python3 dev_tools/builtins/generate-libc-builtins.py --clang-builtins-inc /edg/llvm-cir/include/clang/Basic/Builtins.inc --llvm-sha 2d6f180e --attrs-output src/builtin_libc_attrs.h`
@@ -62,7 +66,7 @@ state, decisions and process are in `project.md`.
 - Per-program timeout is 120 s (edgtest exec default); posture timeout 300 s; the comment at `edg-docker-test:268` still says 60 s (stale).
 - Slice: `edg-cir-checkpoint --tree T --lean AREAS --lean-base REF [--detach] [--jobs 48]` (areas checked against `git diff REF` + untracked before any sync; uncovered or empty set refused; `--allow-empty-change-set`, `--no-area-check` need a stated reason)
 - Quick: `--quick` (build, smoke, cpp-smoke). Default steps: build identity smoke corpus asm-diff writer-stress cpp-smoke cpp-writer-stress crash-sweep ctest.
-- Milestone: `edg-cir-checkpoint --milestone --tree m51-int --jobs 48 --detach` (about 3.5 h on clang4, perf about 90 min; `--stress-timeout` defaults to 3600 s: the 20000-rung else-if ladder takes about 1400 s there): every step, `--perf-realworld pinned --perf-levels 0,2 --perf-targets s1` (`edg-cir-gate-evidence --milestone` applies
+- Milestone: `edg-cir-checkpoint --milestone --tree m6r-int --jobs 48 --detach` (about 3.5 h on clang4, perf about 90 min; `--stress-timeout` defaults to 3600 s: the 20000-rung else-if ladder takes about 1400 s there): every step, `--perf-realworld pinned --perf-levels 0,2 --perf-targets s1` (`edg-cir-gate-evidence --milestone` applies
   these itself; a given option wins), plus the day baselines. The day baseline is the link `day-base/baseline-64`.
 - Re-run one step on the same evidence: `--extra '--only STEP --out <evidence dir>'`; resume with `--out`; `--force` re-runs PASSed steps; `--steps-for AREAS` prints the set.
 - Direct (on clang4 as matt, no sg): `edg-cir-gate-evidence --tree T --lean AREAS | --milestone | --steps ...`; `--with-cpp`, `--with-m4`, `--smoke-all-pass`, `--allow-status-changes`, `--jobs 48`.
@@ -74,22 +78,25 @@ state, decisions and process are in `project.md`.
 - `cir-identity-allowed.txt`: preprocessed-output differences allowed in the `identity` step (an approved ungated change
   that `day` covers); delete the entries when the identity baseline moves past them (M5.1 session 3 deleted the M5.1b
   `lower_name.c` and `macro.c` entries with the move to `identity-m51b`).
-- M5.1 baselines (M6's comparison points, taken from the gate tree `m51-int` after the M5.1 commit; the tool defaults
-  still name `m5-base-*` until M6 switches them): `m51-base-asm`, `m51-base-cpp-asm`, `m51-base-status`,
-  `m51-base-perf.json`, `identity-m51` (equal to `identity-m51b`, and the day-base still describes the commit, when
-  `git diff 4902ad4e5e HEAD -- src ':(exclude)src/pending_changes'` is empty: pending Changes entries are not compiled).
-- Baselines (clang4, `~/edg-cir-config`, taken 2026-11-06 at `991737c19a`, code = M5, except where an entry says
-  otherwise; each has `<name>.images.txt`):
-  `identity-m51b` (`--identity-baseline` default from M5.1 session 3; captured at the M5.1b commit `4902ad4e5e`, source
-  tree `id-m51b-src`, 0 problems against that commit), `identity-m0c` (the M0 capture at `fee14b0c21`, the default
-  before), `day-base/baseline-64` (re-taken in M5.1 session 3 at
-  `4902ad4e5e`, as is baseline-32; the old runs are kept beside them; `edg_x86_64`, `_cp`; the `day` step) and `day-base/baseline-32` (`edg_x86_32`, `_32_cp`; the `day32` step, posture `tests/.edgy/postures/day32.json`, by hand
-  `edg-docker-test --posture @tests/.edgy/postures/day32.json`), `m5-base-asm`
-  (`--asm-baseline`), `m5-base-cpp-asm`, `m5-base-status` (`c_*`, `cpp_*`; `--status-baseline`, `--opt-baseline-status`),
-  `m5-base-perf.json` (`--perf-baseline`, regression), `m5a-base-perf.json` (`--perf-targets-baseline`, S1 targets, built
-  from `77a24448fa`); raw data `m5-base-rss.txt`, `m5-base-chunk-rss.json`, `m5-base-attr-diff/`. Boost headers 1.92.0
-  in `m5-int/.tmp/boost-inc`. Images: dev-env `1c1cf78d322b` (`:cir-1c1cf78d322b`), llvm-cir `e92da938d7cc`, cir-env
+- Baselines (clang4, `~/edg-cir-config`; the tool defaults since M6.R, taken 2026-11-08 from the M6.R gate evidence
+  `m6r-int/.tmp/checkpoint-20261107-222821` on the rebased tree; each has `<name>.images.txt` except the raw data):
+  `m6r-base-asm` (`--asm-baseline`), `m6r-base-cpp-asm`, `m6r-base-status` (`c_*`, `cpp_*`; `--status-baseline`,
+  `--opt-baseline-status`), `m6r-base-perf.json` (`--perf-baseline`, regression), `m5a-base-perf.json`
+  (`--perf-targets-baseline`, S1 targets, built from the M5a code); raw data `m6r-base-rss.txt`,
+  `m6r-base-chunk-rss.json`, `m6r-base-attr-diff/`; `identity-m6r` (`--identity-baseline`; the gate's capture, 0
+  problems, the allow-list empty); `day-base/baseline-64` (`edg_x86_64`, `_cp`; the `day` step) and
+  `day-base/baseline-32` (`edg_x86_32`, `_32_cp`; the `day32` step, posture `tests/.edgy/postures/day32.json`, by
+  hand `edg-docker-test --posture @tests/.edgy/postures/day32.json`), re-taken at the final M6.R tree. The default
+  tree is `m6r-int`. Recipes: `.tmp/m6/s1/mk-m6r-base.sh`, `mk-daybase-m6r.sh`.
+- `main`-side comparison points (M6.R): `identity-main` (a capture of `main` `cc408045d4`) and
+  `day-main/baseline-{64,32}` (runs of main's sources with the CIR tree's test tooling); against them the CIR tree
+  differs only by its approved ungated changes. The M5.1 set (`m51-base-*`, `m51-int`) stays until M6.1a has used it.
+  Older names (`m5-base-*`, `identity-m51b`, `identity-m0c`, `m5-int`) are prune candidates. Boost headers 1.92.0 in
+  `m6r-int/.tmp/boost-inc` (each tree its own `.tmp/boost-inc`). Images: dev-env `1c1cf78d322b` (`:cir-1c1cf78d322b`), llvm-cir `e92da938d7cc`, cir-env
   `cd5c7f63e579`; a comparison against a baseline taken with other images says so (`IMAGES`).
+- RSS ceilings (`RSS_CEILINGS_MB`): the C rows are 1.25 times the M5.1 values, except C release inproc and keep at
+  1.25 times the M6.R values (inproc 320, keep 430, 2p-edg-cir 290): the host changed since the M5.1
+  record (project.md §9).
   asm baseline: `edg-cir-compare-modes @tests/.edgy/filters/cir-c-corpus.txt --types rp,lp -j 12 --save-asm D --in-process-only` (C++: `--cxx @...cir-cpp-corpus.txt`) in a built tree of the baseline commit. Identity: `edg-macro-identity-check configure|capture --binaries|compare` (docstring recipe) at `fee14b0c21`.
   A missing or unusable baseline stops the gate (status 2) unless `--allow-missing-baselines` (refused with
   `--milestone`; otherwise a WARNING banner opens summary.md); `edg-cir-checkpoint --check-baselines` lists what the selected steps need.
@@ -97,7 +104,7 @@ state, decisions and process are in `project.md`.
 - Record C++/CIR expectations: `edg-cir-record --tree T ...` (-W on clang4, 100 KB rule, fetch back; `research/test_plumbing.md` §11.3); then `edg-cir-rto-diff --auto`.
 - Writer goldens: `tests/tests/cir/writer` (`//script:edg-cir-ecil-dump`, `//require:BACK_END_TYPE 3`); cirgen run tests `tests/tests/cir/cirgen`; ctest/lit `cir_src/test/lit.cfg.py`, `capi_tests`.
 - Tools self-test (no box, no Docker): `python3 dev_tools/bin/edg-cir-tools-test [-v]`; on both hosts.
-- Prune: `edg-cir-checkpoint --prune N | --prune-only | --prune-evidence`; it keeps trees with a KEEP file, entries under 6 h, and `PROTECTED_TREES` (`day-base`, `m5-int`); the default tree is `m51-int`. A protected tree (or one with a KEEP file) is refused (exit 2) before any sync or
+- Prune: `edg-cir-checkpoint --prune N | --prune-only | --prune-evidence`; it keeps trees with a KEEP file, entries under 6 h, and `PROTECTED_TREES` (`day-base`, `m5-int`); the default tree is `m6r-int`. A protected tree (or one with a KEEP file) is refused (exit 2) before any sync or
   `build/cir*` wipe: run it as it is with `--no-sync --incremental`, or override with `--allow-protected`
   (`--prune-only` is exempt; `--check-baselines` needs `--no-sync`).
 
@@ -143,7 +150,7 @@ check catches a rebuilt image). Expensive steps (crash-sweep perf rss stress cpp
 - Containers: `docker run --name cir-<agent>-<job>`; record every PID/ID; stop only by exact ID. Never `pkill -f`, `killall`, `docker ps -q | xargs docker stop`, `docker system prune`. Other people's containers share the account.
 - Never touch `~/cerastes-m4.5d1`. Scratch goes under the tree's `build/` or `.tmp/` (or `~/edg-cir-<agent>`), never a shared `/tmp` (agents clobbered each other); `/tmp` inside a container is private to one `run`.
 - Long jobs: `nohup ... & ; echo $? > exitfile`, detached, then one Monitor/until-loop; never block or poll in the conversation.
-- Root-owned files: posture containers leave them in `build/`; remove via a container (`box.sh chown`, or `docker run --rm -v tree:/w edgcpp/cir-env chown -R $(id -u):$(id -g) /w/build`); no sudo.
+- Root-owned files: posture containers leave them in `build/`; remove via a container (`box.sh chown`, or `docker run --rm -v tree:/w ghcr.io/edgcpp/cir-env chown -R $(id -u):$(id -g) /w/build`); no sudo.
 - rsync mtime pitfall: `-a`/`--delete` keeps Mac mtimes, so ninja may see "no work" and test old code. Use `--checksum --no-times` or wipe `build/cir*`, `build/gcc-cir`, `build/gcc-release-cir`; `touch` after a revert. Each checkpoint records and compares a tree fingerprint (src, cir_src, dev_tools/bin, tests/.edgy, cmake).
 - Disk: each checkpoint tree is 10-15 GB (ENOSPC killed a run once); prune `build/` and `tests/runs/`, keep `.tmp` evidence.
 - ASan: quarantine distorts RSS; measure with `linux-gcc-release-cir` or `ASAN_OPTIONS=quarantine_size_mb=0`. LeakSanitizer "Unable to get registers from thread" is ptrace noise; real reports start `ERROR: AddressSanitizer`. Run `linux-cir-asan` ctest for every library change.

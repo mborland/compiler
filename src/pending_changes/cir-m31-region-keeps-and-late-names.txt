@@ -1,0 +1,19 @@
+[]
+CIR back end: region keeps, pack references and late names
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+pack reference of a structured binding pack now records in the file scope
+region whether its variable is static, so that a later instantiation does not
+read the variable in the function's freed memory region (find_binding_for_pack
+in scope_stk.c); the region of a lambda call operator is kept only if the call
+operator is constexpr or its closure has a conversion function, and the region
+of a function declared constexpr that is not constexpr is kept (mem_manage.c);
+the member functions of an unnamed class that is declared inside a class are
+named when they are written (cir_name_may_change), and
+cir_routine_name_may_change treats a function instance whose type or template
+arguments (a type argument, or a non-type argument of a closure type) hold a
+lambda in a default argument that has no parent routine yet as having a name
+that may change; and lower_name.c has
+cir_routine_in_nested_unnamed_class, which gives such member functions the
+Itanium linkage of their enclosing class.  The other configurations are not
+affected.

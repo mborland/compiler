@@ -1,0 +1,16 @@
+[]
+CIR back end: exceptions
+
+The CIR back end configuration (BACK_END_TYPE_CIR) now compiles C++ with
+exceptions: throw expressions and rethrow, try blocks and handlers of every
+parameter kind, function-try-blocks of constructors and destructors,
+exception specifications (noexcept, throw() and dynamic ones), the non-throwing
+marks of functions and calls, and the clean-up on exception paths that the
+front end already described: the members and bases of a constructor that
+throws, the storage of a new expression whose initialization throws (with the
+matching placement operator delete), the elements already built of an array or
+aggregate initialization that throws, and the temporaries of a throw.  A throw
+in a conditional operand gets a full expression of its own.  Arrays of objects
+whose constructor has a default argument, the value-initialization of a new[]
+with a run-time count and if consteval statements are supported too.  The
+other configurations are not affected.

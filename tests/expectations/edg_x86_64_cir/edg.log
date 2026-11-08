@@ -1,6 +1,5 @@
 ccs/aggr-init/paren-single-arg-array.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
 ccs/gnats21591.sft.cpp:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
-ccs/gnats23024.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:
 ccs/gnats23024b.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:
 ccs/inhctor/gnats17687-argmatch5.sft.cpp:rp:-DTEST_NUMBER=4 --microsoft:REQUIREMENTS NOT MET:
 ccs/inhctor/gnats17687-argmatch6.sft.cpp:rp:-DTEST_NUMBER=4 --microsoft:REQUIREMENTS NOT MET:
@@ -39,8 +38,6 @@ daveed/d00242b.sft.cpp:rp:-DTEST_NUMBER=2 --microsoft:REQUIREMENTS NOT MET:Micro
 daveed/d00350c.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:Microsoft for-init scopes
 daveed/d00350c.sft.cpp:rp:-DTEST_NUMBER=2 -DPOS=1 --new_for_init:REQUIREMENTS NOT MET:Microsoft for-init scopes
 daveed/d00350c.sft.cpp:rp:-DTEST_NUMBER=3 --old_for_init:REQUIREMENTS NOT MET:Microsoft for-init scopes
-daveed/d00393a/test.mft.cpp:rp:-DTEST_NUMBER=1 --g++:CATASTROPHE(COMPILE):-D/-U in GNU mode
-daveed/d00393a/test.mft.cpp:rp:-DTEST_NUMBER=2:CATASTROPHE(COMPILE):-D/-U in GNU mode
 daveed/d00447a.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:Effect of __declspec(align(...)) on layout
 daveed/d00454e.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:MSVC++ 7.1 for-init scope emulation
 daveed/d00579_1.sft.cpp:rp:-DTEST_NUMBER=1 --gcc:FAIL(COMPILE):GNU C/C++ complex type support
@@ -53,16 +50,11 @@ daveed/g23210_1.sft.cpp:rp:-DTEST_NUMBER=1 --c++20:FAIL(COMPILE):Parenthesized a
 daveed/g24520c/test.mft.cpp:ln:-DTEST_NUMBER=2 --microsoft_v=1930 --keep_restrict:REQUIREMENTS NOT MET:__restrict and signatures
 daveed/g24520c/test.mft.cpp:lp:-DTEST_NUMBER=1 --microsoft_v=1930:REQUIREMENTS NOT MET:__restrict and signatures
 daveed/g26766a.sft.cpp:rp:-DTEST_NUMBER=1 --microsoft_bugs:REQUIREMENTS NOT MET:MSVC typeid of const arrays
-rma/bit_alloc11.sft.cpp:rp:-DTEST_NUMBER=2:FAIL(COMPILE):
 rma/ctor_init26.sft.cpp:rp:-DTEST_NUMBER=2:FAIL(COMPILE):
 rma/declared_type02.sft.cpp:rp:-DTEST_NUMBER=2:FAIL(COMPILE):
-rma/defarg06.sft.cpp:cn:-DTEST_NUMBER=1 --strict:CATASTROPHE:
-rma/defarg06.sft.cpp:rp:-DTEST_NUMBER=2:CATASTROPHE(COMPILE):
 rma/eh40.sft.cpp:rp:-DTEST_NUMBER=1 --strict:FAIL:
 rma/init33.sft.cpp:rp:-DTEST_NUMBER=2:FAIL(COMPILE):
 rma/lifetime16.sft.cpp:rp:-DTEST_NUMBER=2:FAIL(COMPILE):
-rma/list95.sft.cpp:cn:-DTEST_NUMBER=1 --strict:CATASTROPHE:
-rma/list95.sft.cpp:rp:-DTEST_NUMBER=2:CATASTROPHE(COMPILE):
 rma/ms_anonunion02.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:
 rma/ms_anonunion04.sft.cpp:rp:-DTEST_NUMBER=1:REQUIREMENTS NOT MET:
 rma/ms_friend02.sft.cpp:cn:-DTEST_NUMBER=2:REQUIREMENTS NOT MET:

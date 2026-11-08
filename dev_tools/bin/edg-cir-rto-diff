@@ -130,11 +130,13 @@ class Change:
 
 def reference_status(suite: str, key: Tuple[str, str, str]) -> str:
   '''The recorded status of a case in the reference configuration
-  (tests/expectations/edg_x86_64): "PASS" if the log does not list it.'''
+  (tests/expectations/edg_x86_64, its effective expectations): "PASS" if the
+  log does not list it.'''
   path = Path('tests/expectations/edg_x86_64') / f"{suite}.log"
   if path not in _REFERENCE_LOGS:
-    _REFERENCE_LOGS[path] = parse_log(path.read_text(errors = 'replace')
-                                      if path.exists() else '')
+    summary = load_summary()
+    _REFERENCE_LOGS[path] = parse_log('\n'.join(
+      summary.effective_suite_lines(path.parent, suite)))
   return _REFERENCE_LOGS[path].get(key, 'PASS')
 
 
@@ -256,19 +258,60 @@ def old_feature(summary, rev: str, config: str, test: str,
   return label
 
 
+# A CIR config's directory has this file (its content is the parent
+# configuration) once its logs hold only the differences from the default
+# configuration's (main's expectation inheritance, M6.R).  A revision without
+# it has full lists, even if it already has main's edgtest.expectations (every
+# rebased commit before the conversion does).
+INHERITS_MARKER = 'INHERITS'
+PARENT_CONFIG = 'edg_x86_64'
+
+
+def effective_log(summary, config: str, suite: str, rev: Optional[str]
+                  ) -> str:
+  '''The effective expectation lines of one suite of a CIR config as text:
+  the lines of the default configuration (tests/expectations/edg_x86_64)
+  overlaid with the config's own, at git revision `rev` (None: the working
+  tree), if the config's directory has the INHERITS marker there; the
+  config's own lines (a full list) otherwise.'''
+  def read(path: str) -> str:
+    if rev is None:
+      return Path(path).read_text(errors = 'replace') \
+        if Path(path).exists() else ''
+    return git_show(rev, path) or ''
+  own = read(f"tests/expectations/{config}/{suite}.log")
+  marker = read(f"tests/expectations/{config}/{INHERITS_MARKER}")
+  parent = read(f"tests/expectations/{PARENT_CONFIG}/{suite}.log") \
+    if marker.strip() == PARENT_CONFIG else ''
+  return '\n'.join(summary.effective_expectation_lines(
+    config, parent.splitlines(), own.splitlines()))
+
+
 def status_changes(rev: str) -> Dict[str, List[Change]]:
-  '''The status changes per config, from the logs of tests/expectations.'''
+  '''The status changes per config, from the logs of tests/expectations.
+
+  A case is compared if the config's own log has a line for it in `rev` or
+  now; its status is the effective one (main's rules: the default
+  configuration's line applies where the config has none, an explicit PASS
+  line is a pass).  The cases that only the default configuration lists are
+  not the config's recorded expectations and are not compared.'''
+  summary = load_summary()
   result: Dict[str, List[Change]] = defaultdict(list)
-  paths = [p for p in git('ls-files', 'tests/expectations').splitlines()
-           if CONFIG_REGEX.search(p) and p.endswith('.log')]
-  for path in sorted(paths):
+  paths = set(git('ls-files', 'tests/expectations').splitlines())
+  paths |= {p for p in git('ls-tree', '-r', '--name-only', rev,
+                           'tests/expectations').splitlines()}
+  paths = sorted(p for p in paths
+                 if CONFIG_REGEX.search(p) and p.endswith('.log'))
+  for path in paths:
     config = path.split('/')[2]
     suite = Path(path).stem
-    old = parse_log(git_show(rev, path) or '')
+    own_old = parse_log(git_show(rev, path) or '')
     new_file = Path(path)
-    new = parse_log(new_file.read_text(errors = 'replace')
-                    if new_file.exists() else '')
-    for key in sorted(set(old) | set(new)):
+    own_new = parse_log(new_file.read_text(errors = 'replace')
+                        if new_file.exists() else '')
+    old = parse_log(effective_log(summary, config, suite, rev))
+    new = parse_log(effective_log(summary, config, suite, None))
+    for key in sorted(set(own_old) | set(own_new)):
       if old.get(key) != new.get(key):
         name = f"{suite}/{key[0]} [{key[1]}] {key[2]}"
         change = Change(
@@ -381,6 +424,47 @@ class SelfTest(unittest.TestCase):
     self.assertEqual(parse_log(log), {('a/b.cpp', 'rp', '-DT=1'): 'FAIL',
                                       ('c.cpp', 'rp', '-DT=1 --c++11'):
                                       'PASS'})
+
+  def test_effective_status_under_inheritance(self) -> None:
+    import tempfile
+    from unittest import mock
+    summary = load_summary()
+    parent = 'a.cpp:rp:-DT=1:FAIL:\nb.cpp:rp:-DT=1:CATASTROPHE:\n'
+    own = 'a.cpp:rp:-DT=1:PASS:\nc.cpp:rp:-DT=1:FAIL(COMPILE):\n'
+    files = {'tests/expectations/edg_x86_64/imported.log': parent,
+             'tests/expectations/edg_x86_64_cir/imported.log': own,
+             'tests/expectations/edg_x86_64_cir/' + INHERITS_MARKER:
+             'edg_x86_64\n'}
+    def show(rev: str, path: str) -> Optional[str]:
+      return files.get(path)
+    cwd = os.getcwd()
+    with tempfile.TemporaryDirectory() as tmp:
+      for name, text in files.items():
+        target = Path(tmp) / name
+        target.parent.mkdir(parents = True, exist_ok = True)
+        target.write_text(text)
+      os.chdir(tmp)
+      try:
+        # An explicit PASS overrides the parent's failure; the parent's
+        # line applies where the config has none; the config's own line
+        # is its own.
+        for rev in (None, 'REV'):
+          with mock.patch.object(sys.modules[__name__], 'git_show', show):
+            text = effective_log(summary, 'edg_x86_64_cir', 'imported', rev)
+          self.assertEqual(parse_log(text), {
+            ('b.cpp', 'rp', '-DT=1'): 'CATASTROPHE',
+            ('c.cpp', 'rp', '-DT=1'): 'FAIL(COMPILE)'})
+        # Without the marker the lists are full (the revision may have main's
+        # edgtest.expectations, as every rebased commit before the
+        # conversion does): the config's own lines only.
+        del files['tests/expectations/edg_x86_64_cir/' + INHERITS_MARKER]
+        files['dev_tools/pylibs/edgtest/expectations/__init__.py'] = '#\n'
+        with mock.patch.object(sys.modules[__name__], 'git_show', show):
+          text = effective_log(summary, 'edg_x86_64_cir', 'imported', 'OLD')
+        self.assertEqual(parse_log(text),
+                         {('c.cpp', 'rp', '-DT=1'): 'FAIL(COMPILE)'})
+      finally:
+        os.chdir(cwd)
 
   def test_auto_reference(self) -> None:
     # It compiled badly before, compiles now and fails like the reference.

@@ -1,0 +1,11 @@
+[]
+CIR back end: loop conditions and std::nullptr_t
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+condition of a loop that clang folds to a constant but the front end does not
+(a comma expression with a constant right operand and operands without side
+effects, __builtin_expect of a constant) is sent as that constant, so that the
+loop is not taken for one that must make progress.  Reading a std::nullptr_t
+is sent as the null pointer and not as a read of the object, which may be
+uninitialized: the value of a nullptr_t is always defined.  The other
+configurations are not affected.

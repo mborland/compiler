@@ -30,8 +30,8 @@ against eager emission over both corpora and the pinned units) with the C++,
 ABI, EH, optimization, attribute and chunking steps.
 
 Baselines: the steps compare with baselines in ~/edg-cir-config (the defaults
-of the --*-baseline options: m5-base-asm, m5-base-cpp-asm, m5-base-status,
-m5-base-perf.json, m5a-base-perf.json for --perf-targets, identity-m51b,
+of the --*-baseline options: m6r-base-asm, m6r-base-cpp-asm, m6r-base-status,
+m6r-base-perf.json, m5a-base-perf.json for --perf-targets, identity-m6r,
 day-base).  A missing, empty or unreadable baseline is a failure, never a
 silent skip: before the first step the gate lists the baselines of the
 selected steps and stops (status 2) if one is unusable; --check-baselines only
@@ -137,7 +137,10 @@ eccp, for instance, but not shared-src).  The rules:
   tests/.edgy/config.json, tests/tests/ outside cir/ (the day
       suite runs the primary suites)                     tests, tests-reference
   tests/.edgy/postures/ (the day32 posture)              tests-reference
-  expectations of every configuration but edg_x86_64_cir* tests-reference
+  expectations of edg_x86_64 (the CIR configs inherit them) tests,
+                                                          tests-reference
+  expectations of every other configuration but edg_x86_64_cir*
+                                                          tests-reference
   other tests (the CIR expectations and tests, filters)   tests
   documentation, Changes files and pending_changes/ entries  none
 
@@ -153,7 +156,7 @@ Steps (names for --only/--skip):
   build      build cir_src (build/cir), cpfe-cir (build/gcc-cir) and the
              non-ASan cpfe-cir (build/gcc-release-cir) and the util tools
   identity   cpfe, cpfe-cp, cdisp and util preprocessed output and
-             --dump_configuration identical to the identity-m51b capture
+             --dump_configuration identical to the identity-m6r capture
              (4 presets), except the preprocessed output of the files on the
              allow-list tests/.edgy/filters/cir-identity-allowed.txt
              (approved ungated changes, each with its reason; a stale entry
@@ -173,7 +176,7 @@ Steps (names for --only/--skip):
              and
              no difference from the recorded edg_x86_64_cir expectations
              (unless --allow-status-changes), and no PASS->not PASS case
-             against the statuses of --status-baseline (default the M5 run's)
+             against the statuses of --status-baseline (default the M6.R run's)
              that tests/.edgy/filters/cir-status-triage.txt does not
              list with a reason (a line for a case that did not regress is
              stale and fails); cpp-corpus has the same check
@@ -343,7 +346,7 @@ Steps (names for --only/--skip):
              have no CIR expectations) are not gated
   perf       edg-cir-perf (instruction counts, CPU time and RSS of a big
              generated file and of the whole corpus) and, with --perf-baseline
-             (the JSON of an earlier run, default the M5 run's; a step
+             (the JSON of an earlier run, default the M6.R run's; a step
              without one fails unless --perf-measure-only), the before/after
              table;
              --perf-max-regression PERCENT (default
@@ -518,11 +521,13 @@ AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
   # The edgy configuration and the tests of the primary suites reach the
   # day suite too (the cir suite is a secondary one that the day suite does
   # not run); the expectations of every configuration but the CIR ones are
-  # the reference's.
+  # the reference's, and those of edg_x86_64 are also what the CIR configs
+  # inherit (main's expectation inheritance).
   ('tests/.edgy/config.json', ('tests', 'tests-reference')),
   # The 32-bit day posture (the day32 step).
   ('tests/.edgy/postures/', ('tests-reference',)),
   ('tests/expectations/edg_x86_64_cir', ('tests',)),
+  ('tests/expectations/edg_x86_64/', ('tests', 'tests-reference')),
   ('tests/expectations/', ('tests-reference',)),
   ('tests/tests/cir/', ('tests',)),
   ('tests/tests/', ('tests', 'tests-reference')),
@@ -1925,11 +1930,22 @@ RSS_ROWS = ('inproc', 'keep', '2p-fe', '2p-edg-cir')
 # predicted (138-147 MB for edg-cir alone); both stay under their ceiling of
 # 200 MB.  The other rows are at or below the session-1 values
 # (m5-base-rss.txt), the highest at 77% of its ceiling.
+# M6.R (decision 56): the C rows are 1.25 times the M5.1 values of
+# m51-base-rss.txt (clang4, m51-int: ASan in-process 438, keep 571, 2p-fe 113,
+# 2p-edg-cir 232 MB; release 183, 251, 65, 211), rounded up to a multiple of
+# 10 MB (550, 720, 150, 290; 90), except the release in-process, keep and
+# 2p-edg-cir rows (320, 430 and 290 MB): the M6.R gate measured 253, 344 and
+# 232 MB there.  The M5.1 release front end and library (m51-int) measure the
+# same on that input today (249-250 and 340-341; M5, m5-base-rss.txt: 255, 344
+# and 232) while their own record says 183, 251 and 211: the host, not main's
+# front end (same ECIL stream, same 14 chunks), moved them
+# (.tmp/m6/s1/cir-config-gate.md).  Those three are 1.25 times the gate's
+# values.
 RSS_CEILINGS_MB: Dict[Tuple[str, str, str], int] = {
-  ('c', 'asan', 'inproc'): 860,
-  ('c', 'asan', 'keep'): 1010,
+  ('c', 'asan', 'inproc'): 550,
+  ('c', 'asan', 'keep'): 720,
   ('c', 'asan', '2p-fe'): 150,
-  ('c', 'asan', '2p-edg-cir'): 520,
+  ('c', 'asan', '2p-edg-cir'): 290,
   ('cxx', 'asan', 'inproc'): 380,
   ('cxx', 'asan', 'keep'): 400,
   ('cxx', 'asan', '2p-fe'): 140,
@@ -1938,10 +1954,10 @@ RSS_CEILINGS_MB: Dict[Tuple[str, str, str], int] = {
   ('tmpl', 'asan', 'keep'): 1290,
   ('tmpl', 'asan', '2p-fe'): 630,
   ('tmpl', 'asan', '2p-edg-cir'): 450,
-  ('c', 'release', 'inproc'): 560,
-  ('c', 'release', 'keep'): 650,
+  ('c', 'release', 'inproc'): 320,
+  ('c', 'release', 'keep'): 430,
   ('c', 'release', '2p-fe'): 90,
-  ('c', 'release', '2p-edg-cir'): 520,
+  ('c', 'release', '2p-edg-cir'): 290,
   ('cxx', 'release', 'inproc'): 240,
   ('cxx', 'release', 'keep'): 260,
   ('cxx', 'release', '2p-fe'): 80,
@@ -3659,16 +3675,17 @@ def step_opt_corpus(ctx: Context) -> Tuple[bool, str]:
 # The images the evidence was made with.  A baseline records them in a sidecar
 # file (<baseline>.images.txt, see --record-images); a comparison against a
 # baseline made with other images says so in the step's detail.
-IMAGE_REFS = ('edgcpp/dev-env:latest', 'edgcpp/llvm-cir:latest',
-              'edgcpp/cir-env:latest')
+IMAGE_REFS = ('ghcr.io/edgcpp/dev-env:latest',
+              'ghcr.io/edgcpp/llvm-cir:latest',
+              'ghcr.io/edgcpp/cir-env:latest')
 
 
 def image_inspect_ref(ref: str) -> str:
   '''The reference that `docker image inspect` gets for an IMAGE_REFS entry:
   the dev-env image that the runs use is the pinned one (edgdocker), not
-  whatever edgcpp/dev-env:latest is on this host; the records keep the name
-  of the entry.'''
-  if ref == 'edgcpp/dev-env:latest':
+  whatever ghcr.io/edgcpp/dev-env:latest is on this host; the records keep
+  the name of the entry.'''
+  if ref == 'ghcr.io/edgcpp/dev-env:latest':
     try:
       import edgdocker
       return edgdocker.get_latest_image_tag('dev-env')
@@ -3705,13 +3722,18 @@ def write_image_record(baseline: str) -> Path:
 
 
 def read_image_record(path: Path) -> Dict[str, str]:
-  '''The image IDs of a record file ({} if it does not exist).'''
+  '''The image IDs of a record file ({} if it does not exist).  The records
+  made before the images moved to ghcr.io name them edgcpp/<image>:latest;
+  those names read as the ghcr.io ones.'''
   records: Dict[str, str] = {}
   if path.exists():
     for line in path.read_text().splitlines():
       parts = line.split()
       if len(parts) == 2:
-        records[parts[0]] = parts[1]
+        name = parts[0]
+        if name.startswith('edgcpp/'):
+          name = f"ghcr.io/{name}"
+        records[name] = parts[1]
   return records
 
 
@@ -3941,8 +3963,8 @@ def main() -> None:
                       help = 'write the image IDs next to BASELINE '
                              '(BASELINE.images.txt) and exit')
   parser.add_argument('--identity-baseline',
-                      default = '~/edg-cir-config/identity-m51b',
-                      help = 'identity capture of the M5.1b commit (a '
+                      default = '~/edg-cir-config/identity-m6r',
+                      help = 'identity capture of the M6.R gate tree (a '
                              'edg-macro-identity-check capture tree)')
   parser.add_argument('--identity-allow', default = IDENTITY_ALLOW,
                       help = 'the allow-list of the identity step (a file of '
@@ -3966,14 +3988,14 @@ def main() -> None:
                       help = 'run only these suites in the day step (for '
                              'trying the script; the gate run has none)')
   parser.add_argument('--asm-baseline',
-                      default = '~/edg-cir-config/m5-base-asm',
+                      default = '~/edg-cir-config/m6r-base-asm',
                       help = 'directory of the corpus assembly of the '
                              'baseline commit (step asm-diff)')
   parser.add_argument('--asm-new', default = '',
                       help = 'compare this --save-asm directory instead of '
                              'compiling the corpus (step asm-diff)')
   parser.add_argument('--cpp-asm-baseline',
-                      default = '~/edg-cir-config/m5-base-cpp-asm',
+                      default = '~/edg-cir-config/m6r-base-cpp-asm',
                       help = 'directory of the C++ corpus assembly of the '
                              'baseline commit (step cpp-asm-diff)')
   parser.add_argument('--cpp-asm-new', default = '',
@@ -3990,10 +4012,10 @@ def main() -> None:
                       help = 'asm-diff passes if files differ only in the '
                              'order of their lines')
   parser.add_argument('--perf-baseline',
-                      default = '~/edg-cir-config/m5-base-perf.json',
+                      default = '~/edg-cir-config/m6r-base-perf.json',
                       help = 'perf.json of the baseline commit for the '
-                             'regression check (step perf; default: the M5 '
-                             'run\'s)')
+                             'regression check (step perf; default: the M6.R '
+                             'gate\'s)')
   parser.add_argument('--perf-targets-baseline',
                       default = '~/edg-cir-config/m5a-base-perf.json',
                       help = 'perf.json that --perf-targets compares with '
@@ -4114,7 +4136,7 @@ def main() -> None:
   parser.add_argument('--smoke-filter',
                       default = '@tests/.edgy/filters/cir-c-smoke.txt')
   parser.add_argument('--status-baseline',
-                      default = '~/edg-cir-config/m5-base-status',
+                      default = '~/edg-cir-config/m6r-base-status',
                       help = 'directory with the statuses of the baseline '
                              '(c_edg_x86_64_cir.json, cpp_<config>.json): '
                              'the corpus and cpp-corpus steps fail on a '
@@ -4124,7 +4146,7 @@ def main() -> None:
                              'error, status 2; --allow-missing-baselines '
                              'turns the check off)')
   parser.add_argument('--opt-baseline-status',
-                      default = '~/edg-cir-config/m5-base-status',
+                      default = '~/edg-cir-config/m6r-base-status',
                       help = 'directory with the -O0 statuses of both '
                              'corpora (c_edg_x86_64_cir.json, '
                              'cpp_edg_x86_64_cir.json) for the opt-corpus '

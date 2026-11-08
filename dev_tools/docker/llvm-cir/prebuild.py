@@ -6,7 +6,7 @@
 # This script is executed by build-edg-env before creation of the Docker
 # image.  It populates ./llvm-cir (the install prefix COPYed by the
 # Dockerfile) by running dev_tools/bin/edg-build-llvm-cir inside
-# edgcpp/dev-env with bind mounts.
+# ghcr.io/edgcpp/dev-env with bind mounts.
 #
 # Environment:
 #   EDG_LLVM_CIR_WORKDIR      Persistent work area holding llvm-project/,

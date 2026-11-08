@@ -1,0 +1,11 @@
+//allowed_words: glibc's
+[]
+CIR back end: dropped inline-only functions
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: the
+declaration that the writer sends for a gnu_inline function whose body it
+cannot write (glibc's _FORTIFY_SOURCE wrappers of printf, sprintf and open,
+which use __builtin_va_arg_pack) says that the function is inline-only, as
+the issue before it did, so that the dropped definition is not taken for an
+external one, which was an error even when nothing used it.  The other
+configurations are not affected.

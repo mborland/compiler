@@ -7,8 +7,8 @@
 
 # Build and install the LLVM/Clang/MLIR toolchain (with ClangIR enabled) that
 # the EDG CIR back end (cir_src/) links against.  This script is run inside
-# the llvm-cir Docker image build (or inside edgcpp/dev-env with bind mounts,
-# which keeps the build incremental), using the image's clang and lld.
+# the llvm-cir Docker image build (or inside ghcr.io/edgcpp/dev-env with bind
+# mounts, which keeps the build incremental), using the image's clang and lld.
 #
 # Usage:
 #   edg-build-llvm-cir [--check] [--jobs N] <llvm-project-dir> <build-dir>

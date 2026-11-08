@@ -1,0 +1,4 @@
+cwg1992.sft.cpp:rp:-DTEST_NUMBER=1:PASS:
+cwg2196.sft.cpp:rp:-DTEST_NUMBER=1:PASS:
+cwg2861.sft.cpp:rp:-DTEST_NUMBER=1:PASS:
+cwg3043.sft.cpp:rp:-DTEST_NUMBER=1 --c++26:PASS:

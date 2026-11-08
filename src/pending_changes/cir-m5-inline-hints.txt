@@ -1,0 +1,16 @@
+//allowed_words: ECIL
+[]
+CIR back end: always_inline, cold and hot, and more inline hints
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it: a
+function declared with the GNU attribute always_inline, cold or hot is marked
+as such in the stream (ECIL supp keys 16, 17 and 18).  The inlining hint is
+given to the implicitly declared constructors, destructors and assignment
+operators, as clang does, and not to a function that has the attribute
+always_inline or noinline.  The library functions abort, exit, _Exit and _exit
+are marked as not returning even when a program declares them without the
+attribute, which clang's builtin table says they are.  The C library
+functions that clang's builtin table says do not throw (memcpy, strlen, the
+math functions, sprintf and so on, not the cancellation points fprintf and
+vfprintf) are marked as not throwing in C++, so that a call of one does not
+need cleanups.  The other configurations are not affected.

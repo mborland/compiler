@@ -123,28 +123,31 @@ def tag_dev_env_for_cir() -> str:
   '''Give the dev-env image that the CIR images are built from its CIR tags
   and return the provenance tag.
 
-  The llvm-cir and cir-env builds start FROM edgcpp/dev-env:latest, which an
-  image pulled by its pinned digest does not have, so it gets that tag when
-  the host has none, and edgcpp/dev-env:cir-<first 12 hex digits of its image
-  ID>, which names the base that a CIR image or baseline was made with (the
-  gate evidence records the image IDs).  The image is pulled if it is not on
-  this host.  An existing :latest of another image is never retagged (the
-  daemon is shared): the function exits with a message instead.'''
+  The llvm-cir and cir-env builds start FROM ghcr.io/edgcpp/dev-env:latest,
+  which an image pulled by its pinned digest does not have, so it gets that
+  tag when the host has none, and ghcr.io/edgcpp/dev-env:cir-<first 12 hex
+  digits of its image ID>, which names the base that a CIR image or baseline
+  was made with (the gate evidence records the image IDs).  The image is
+  pulled if it is not on this host.  An existing :latest of another image is
+  never retagged (the daemon is shared): the function exits with a message
+  instead.'''
   reference = get_latest_image_tag('dev-env')
   inspect = ['docker', 'image', 'inspect', '--format', '{{.Id}}']
   process = subprocess.run([*inspect, reference], stdout = subprocess.PIPE,
-                           stderr = subprocess.DEVNULL, text = True)
+                           stderr = subprocess.DEVNULL,
+                           universal_newlines = True)
   if process.returncode != 0:
     ensure_edg_docker_image_present('dev-env')
     process = subprocess.run([*inspect, reference], stdout = subprocess.PIPE,
-                             text = True, check = True)
+                             universal_newlines = True, check = True)
   image_id = process.stdout.strip()
   short = image_id.split(':')[-1][:12]
-  provenance = f"docker.io/edgcpp/dev-env:cir-{short}"
+  provenance = f"{get_image_repository('dev-env')}:cir-{short}"
   subprocess.run(['docker', 'tag', reference, provenance], check = True)
   latest = get_latest_image_tag('dev-env', respect_pins = False)
   existing = subprocess.run([*inspect, latest], stdout = subprocess.PIPE,
-                            stderr = subprocess.DEVNULL, text = True)
+                            stderr = subprocess.DEVNULL,
+                            universal_newlines = True)
   if existing.returncode != 0:
     subprocess.run(['docker', 'tag', reference, latest], check = True)
   elif existing.stdout.strip() != image_id:

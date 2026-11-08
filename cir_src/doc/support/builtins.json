@@ -227,7 +227,7 @@
     },
     {
      "id": "builtins.alloca",
-     "feature": "__builtin_alloca and __builtin_alloca_with_align",
+     "feature": "__builtin_alloca",
      "papers": [],
      "macro": null,
      "macro_value": null,
@@ -246,6 +246,22 @@
       }
      ],
      "refs": []
+    },
+    {
+     "id": "builtins.alloca_with_align",
+     "feature": "__builtin_alloca_with_align",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.2",
+     "note": "Accepted, but the alignment argument is dropped: the writer sends it as plain alloca and the library aligns to 16 whatever was asked. tests/tests/imported/gnu/c/pr78468.sft.c fails at -O2 (gcc and clang pass at -O0 and -O2). Silently wrong output, so the row must stop being silent by M6.4a.",
+     "tests": [],
+     "refs": [
+      "src/ecil_code.c:3525",
+      "cir_src/lib/cirgen/expr.cpp:1848"
+     ]
     },
     {
      "id": "builtins.compile_time",

@@ -28,22 +28,24 @@
 <path fill="#ec835a" d="M1166.6,128.7 H1188.0 Q1192.0,128.7 1192.0,132.7 V145.0 Q1192.0,149.0 1188.0,149.0 H1166.6 Q1166.6,149.0 1166.6,149.0 V128.7 Q1166.6,128.7 1166.6,128.7 Z"><title>C++11: 1 No of 32 (3%)</title></path>
 <text x="1179.3" y="145.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">1</text>
 <text x="8.0" y="174.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">C++14 · 12</text>
-<path fill="#0ca30c" d="M378.0,157.0 H916.7 Q916.7,157.0 916.7,157.0 V177.3 Q916.7,177.3 916.7,177.3 H378.0 Q374.0,177.3 374.0,173.3 V161.0 Q374.0,157.0 378.0,157.0 Z"><title>C++14: 8 Yes of 12 (67%)</title></path>
-<text x="645.3" y="174.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">8</text>
-<path fill="#6B7C86" d="M918.7,157.0 H1122.2 Q1122.2,157.0 1122.2,157.0 V177.3 Q1122.2,177.3 1122.2,177.3 H918.7 Q918.7,177.3 918.7,177.3 V157.0 Q918.7,157.0 918.7,157.0 Z"><title>C++14: 3 Unverified of 12 (25%)</title></path>
-<text x="1020.4" y="174.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">3</text>
-<path fill="#ec835a" d="M1124.2,157.0 H1188.0 Q1192.0,157.0 1192.0,161.0 V173.3 Q1192.0,177.3 1188.0,177.3 H1124.2 Q1124.2,177.3 1124.2,177.3 V157.0 Q1124.2,157.0 1124.2,157.0 Z"><title>C++14: 1 No of 12 (8%)</title></path>
-<text x="1158.1" y="174.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">1</text>
+<path fill="#0ca30c" d="M378.0,157.0 H847.7 Q847.7,157.0 847.7,157.0 V177.3 Q847.7,177.3 847.7,177.3 H378.0 Q374.0,177.3 374.0,173.3 V161.0 Q374.0,157.0 378.0,157.0 Z"><title>C++14: 7 Yes of 12 (58%)</title></path>
+<text x="610.8" y="174.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">7</text>
+<path fill="#fab219" d="M849.7,157.0 H917.3 Q917.3,157.0 917.3,157.0 V177.3 Q917.3,177.3 917.3,177.3 H849.7 Q849.7,177.3 849.7,177.3 V157.0 Q849.7,157.0 849.7,157.0 Z"><title>C++14: 1 Partial of 12 (8%)</title></path>
+<text x="883.5" y="174.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">1</text>
+<path fill="#6B7C86" d="M919.3,157.0 H1122.3 Q1122.3,157.0 1122.3,157.0 V177.3 Q1122.3,177.3 1122.3,177.3 H919.3 Q919.3,177.3 919.3,177.3 V157.0 Q919.3,157.0 919.3,157.0 Z"><title>C++14: 3 Unverified of 12 (25%)</title></path>
+<text x="1020.8" y="174.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">3</text>
+<path fill="#ec835a" d="M1124.3,157.0 H1188.0 Q1192.0,157.0 1192.0,161.0 V173.3 Q1192.0,177.3 1188.0,177.3 H1124.3 Q1124.3,177.3 1124.3,177.3 V157.0 Q1124.3,157.0 1124.3,157.0 Z"><title>C++14: 1 No of 12 (8%)</title></path>
+<text x="1158.2" y="174.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">1</text>
 <text x="8.0" y="202.5" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">C++17 · 29</text>
 <path fill="#0ca30c" d="M378.0,185.3 H739.8 Q739.8,185.3 739.8,185.3 V205.7 Q739.8,205.7 739.8,205.7 H378.0 Q374.0,205.7 374.0,201.7 V189.3 Q374.0,185.3 378.0,185.3 Z"><title>C++17: 13 Yes of 29 (45%)</title></path>
 <text x="556.9" y="202.5" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">13</text>
 <path fill="#6B7C86" d="M741.8,185.3 H1188.0 Q1192.0,185.3 1192.0,189.3 V201.7 Q1192.0,205.7 1188.0,205.7 H741.8 Q741.8,205.7 741.8,205.7 V185.3 Q741.8,185.3 741.8,185.3 Z"><title>C++17: 16 Unverified of 29 (55%)</title></path>
 <text x="966.9" y="202.5" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">16</text>
 <text x="8.0" y="230.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">C++20 · 31</text>
-<path fill="#0ca30c" d="M378.0,213.7 H662.1 Q662.1,213.7 662.1,213.7 V234.0 Q662.1,234.0 662.1,234.0 H378.0 Q374.0,234.0 374.0,230.0 V217.7 Q374.0,213.7 378.0,213.7 Z"><title>C++20: 11 Yes of 31 (35%)</title></path>
-<text x="518.1" y="230.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">11</text>
-<path fill="#fab219" d="M664.1,213.7 H716.5 Q716.5,213.7 716.5,213.7 V234.0 Q716.5,234.0 716.5,234.0 H664.1 Q664.1,234.0 664.1,234.0 V213.7 Q664.1,213.7 664.1,213.7 Z"><title>C++20: 2 Partial of 31 (6%)</title></path>
-<text x="690.3" y="230.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">2</text>
+<path fill="#0ca30c" d="M378.0,213.7 H635.9 Q635.9,213.7 635.9,213.7 V234.0 Q635.9,234.0 635.9,234.0 H378.0 Q374.0,234.0 374.0,230.0 V217.7 Q374.0,213.7 378.0,213.7 Z"><title>C++20: 10 Yes of 31 (32%)</title></path>
+<text x="505.0" y="230.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">10</text>
+<path fill="#fab219" d="M637.9,213.7 H716.5 Q716.5,213.7 716.5,213.7 V234.0 Q716.5,234.0 716.5,234.0 H637.9 Q637.9,234.0 637.9,234.0 V213.7 Q637.9,213.7 637.9,213.7 Z"><title>C++20: 3 Partial of 31 (10%)</title></path>
+<text x="677.2" y="230.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">3</text>
 <path fill="#6B7C86" d="M718.5,213.7 H1085.2 Q1085.2,213.7 1085.2,213.7 V234.0 Q1085.2,234.0 1085.2,234.0 H718.5 Q718.5,234.0 718.5,234.0 V213.7 Q718.5,213.7 718.5,213.7 Z"><title>C++20: 14 Unverified of 31 (45%)</title></path>
 <text x="901.9" y="230.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">14</text>
 <path fill="#ec835a" d="M1087.2,213.7 H1188.0 Q1192.0,213.7 1192.0,217.7 V230.0 Q1192.0,234.0 1188.0,234.0 H1087.2 Q1087.2,234.0 1087.2,234.0 V213.7 Q1087.2,213.7 1087.2,213.7 Z"><title>C++20: 4 No of 31 (13%)</title></path>
@@ -97,15 +99,17 @@
 <path fill="#ec835a" d="M1070.2,440.3 H1188.0 Q1192.0,440.3 1192.0,444.3 V456.7 Q1192.0,460.7 1188.0,460.7 H1070.2 Q1070.2,460.7 1070.2,460.7 V440.3 Q1070.2,440.3 1070.2,440.3 Z"><title>C23: 3 No of 20 (15%)</title></path>
 <text x="1131.1" y="457.5" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">3</text>
 <text x="8.0" y="485.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#A3B1B9" font-weight="bold">GNU extensions</text>
-<text x="8.0" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">GNU language extensions · 12</text>
-<path fill="#0ca30c" d="M378.0,497.0 H712.3 Q712.3,497.0 712.3,497.0 V517.3 Q712.3,517.3 712.3,517.3 H378.0 Q374.0,517.3 374.0,513.3 V501.0 Q374.0,497.0 378.0,497.0 Z"><title>GNU language extensions: 5 Yes of 12 (42%)</title></path>
-<text x="543.2" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">5</text>
-<path fill="#fab219" d="M714.3,497.0 H782.0 Q782.0,497.0 782.0,497.0 V517.3 Q782.0,517.3 782.0,517.3 H714.3 Q714.3,517.3 714.3,517.3 V497.0 Q714.3,497.0 714.3,497.0 Z"><title>GNU language extensions: 1 Partial of 12 (8%)</title></path>
-<text x="748.2" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">1</text>
-<path fill="#6B7C86" d="M784.0,497.0 H919.3 Q919.3,497.0 919.3,497.0 V517.3 Q919.3,517.3 919.3,517.3 H784.0 Q784.0,517.3 784.0,517.3 V497.0 Q784.0,497.0 784.0,497.0 Z"><title>GNU language extensions: 2 Unverified of 12 (17%)</title></path>
-<text x="851.7" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">2</text>
-<path fill="#ec835a" d="M921.3,497.0 H1188.0 Q1192.0,497.0 1192.0,501.0 V513.3 Q1192.0,517.3 1188.0,517.3 H921.3 Q921.3,517.3 921.3,517.3 V497.0 Q921.3,497.0 921.3,497.0 Z"><title>GNU language extensions: 4 No of 12 (33%)</title></path>
-<text x="1056.7" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">4</text>
+<text x="8.0" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">GNU language extensions · 13</text>
+<path fill="#0ca30c" d="M378.0,497.0 H685.5 Q685.5,497.0 685.5,497.0 V517.3 Q685.5,517.3 685.5,517.3 H378.0 Q374.0,517.3 374.0,513.3 V501.0 Q374.0,497.0 378.0,497.0 Z"><title>GNU language extensions: 5 Yes of 13 (38%)</title></path>
+<text x="529.8" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">5</text>
+<path fill="#fab219" d="M687.5,497.0 H749.8 Q749.8,497.0 749.8,497.0 V517.3 Q749.8,517.3 749.8,517.3 H687.5 Q687.5,517.3 687.5,517.3 V497.0 Q687.5,497.0 687.5,497.0 Z"><title>GNU language extensions: 1 Partial of 13 (8%)</title></path>
+<text x="718.7" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">1</text>
+<path fill="#6B7C86" d="M751.8,497.0 H876.5 Q876.5,497.0 876.5,497.0 V517.3 Q876.5,517.3 876.5,517.3 H751.8 Q751.8,517.3 751.8,517.3 V497.0 Q751.8,497.0 751.8,497.0 Z"><title>GNU language extensions: 2 Unverified of 13 (15%)</title></path>
+<text x="814.2" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">2</text>
+<path fill="#ec835a" d="M878.5,497.0 H1127.7 Q1127.7,497.0 1127.7,497.0 V517.3 Q1127.7,517.3 1127.7,517.3 H878.5 Q878.5,517.3 878.5,517.3 V497.0 Q878.5,497.0 878.5,497.0 Z"><title>GNU language extensions: 4 No of 13 (31%)</title></path>
+<text x="1003.1" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">4</text>
+<path fill="#d03b3b" d="M1129.7,497.0 H1188.0 Q1192.0,497.0 1192.0,501.0 V513.3 Q1192.0,517.3 1188.0,517.3 H1129.7 Q1129.7,517.3 1129.7,517.3 V497.0 Q1129.7,497.0 1129.7,497.0 Z"><title>GNU language extensions: 1 Ignored of 13 (8%)</title></path>
+<text x="1160.8" y="514.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">1</text>
 <text x="8.0" y="542.5" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">GNU and clang attributes · 25</text>
 <path fill="#0ca30c" d="M378.0,525.3 H698.0 Q698.0,525.3 698.0,525.3 V545.7 Q698.0,545.7 698.0,545.7 H378.0 Q374.0,545.7 374.0,541.7 V529.3 Q374.0,525.3 378.0,525.3 Z"><title>GNU and clang attributes: 10 Yes of 25 (40%)</title></path>
 <text x="536.0" y="542.5" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">10</text>
@@ -117,17 +121,17 @@
 <text x="979.4" y="542.5" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">5</text>
 <path fill="#d03b3b" d="M1062.4,525.3 H1188.0 Q1192.0,525.3 1192.0,529.3 V541.7 Q1192.0,545.7 1188.0,545.7 H1062.4 Q1062.4,545.7 1062.4,545.7 V525.3 Q1062.4,525.3 1062.4,525.3 Z"><title>GNU and clang attributes: 4 Ignored of 25 (16%)</title></path>
 <text x="1127.2" y="542.5" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">4</text>
-<text x="8.0" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">Builtin functions · 27</text>
-<path fill="#0ca30c" d="M378.0,553.7 H704.0 Q704.0,553.7 704.0,553.7 V574.0 Q704.0,574.0 704.0,574.0 H378.0 Q374.0,574.0 374.0,570.0 V557.7 Q374.0,553.7 378.0,553.7 Z"><title>Builtin functions: 11 Yes of 27 (41%)</title></path>
-<text x="539.0" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">11</text>
-<path fill="#fab219" d="M706.0,553.7 H736.0 Q736.0,553.7 736.0,553.7 V574.0 Q736.0,574.0 736.0,574.0 H706.0 Q706.0,574.0 706.0,574.0 V553.7 Q706.0,553.7 706.0,553.7 Z"><title>Builtin functions: 1 Partial of 27 (4%)</title></path>
-<text x="721.0" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">1</text>
-<path fill="#6B7C86" d="M738.0,553.7 H798.0 Q798.0,553.7 798.0,553.7 V574.0 Q798.0,574.0 798.0,574.0 H738.0 Q738.0,574.0 738.0,574.0 V553.7 Q738.0,553.7 738.0,553.7 Z"><title>Builtin functions: 2 Unverified of 27 (7%)</title></path>
-<text x="768.0" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">2</text>
-<path fill="#ec835a" d="M800.0,553.7 H1130.0 Q1130.0,553.7 1130.0,553.7 V574.0 Q1130.0,574.0 1130.0,574.0 H800.0 Q800.0,574.0 800.0,574.0 V553.7 Q800.0,553.7 800.0,553.7 Z"><title>Builtin functions: 11 No of 27 (41%)</title></path>
-<text x="965.0" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">11</text>
-<path fill="#d03b3b" d="M1132.0,553.7 H1188.0 Q1192.0,553.7 1192.0,557.7 V570.0 Q1192.0,574.0 1188.0,574.0 H1132.0 Q1132.0,574.0 1132.0,574.0 V553.7 Q1132.0,553.7 1132.0,553.7 Z"><title>Builtin functions: 2 Ignored of 27 (7%)</title></path>
-<text x="1162.0" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">2</text>
+<text x="8.0" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">Builtin functions · 28</text>
+<path fill="#0ca30c" d="M378.0,553.7 H692.2 Q692.2,553.7 692.2,553.7 V574.0 Q692.2,574.0 692.2,574.0 H378.0 Q374.0,574.0 374.0,570.0 V557.7 Q374.0,553.7 378.0,553.7 Z"><title>Builtin functions: 11 Yes of 28 (39%)</title></path>
+<text x="533.1" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">11</text>
+<path fill="#fab219" d="M694.2,553.7 H723.1 Q723.1,553.7 723.1,553.7 V574.0 Q723.1,574.0 723.1,574.0 H694.2 Q694.2,574.0 694.2,574.0 V553.7 Q694.2,553.7 694.2,553.7 Z"><title>Builtin functions: 1 Partial of 28 (4%)</title></path>
+<text x="708.7" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">1</text>
+<path fill="#6B7C86" d="M725.1,553.7 H783.0 Q783.0,553.7 783.0,553.7 V574.0 Q783.0,574.0 783.0,574.0 H725.1 Q725.1,574.0 725.1,574.0 V553.7 Q725.1,553.7 725.1,553.7 Z"><title>Builtin functions: 2 Unverified of 28 (7%)</title></path>
+<text x="754.1" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">2</text>
+<path fill="#ec835a" d="M785.0,553.7 H1103.2 Q1103.2,553.7 1103.2,553.7 V574.0 Q1103.2,574.0 1103.2,574.0 H785.0 Q785.0,574.0 785.0,574.0 V553.7 Q785.0,553.7 785.0,553.7 Z"><title>Builtin functions: 11 No of 28 (39%)</title></path>
+<text x="944.1" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#0b0b0b" font-weight="bold">11</text>
+<path fill="#d03b3b" d="M1105.2,553.7 H1188.0 Q1192.0,553.7 1192.0,557.7 V570.0 Q1192.0,574.0 1188.0,574.0 H1105.2 Q1105.2,574.0 1105.2,574.0 V553.7 Q1105.2,553.7 1105.2,553.7 Z"><title>Builtin functions: 3 Ignored of 28 (11%)</title></path>
+<text x="1148.6" y="570.8" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">3</text>
 <text x="8.0" y="599.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start" fill="#E7EFF2" font-weight="normal">Code generation and options · 14</text>
 <path fill="#0ca30c" d="M378.0,582.0 H721.1 Q721.1,582.0 721.1,582.0 V602.3 Q721.1,602.3 721.1,602.3 H378.0 Q374.0,602.3 374.0,598.3 V586.0 Q374.0,582.0 378.0,582.0 Z"><title>Code generation and options: 6 Yes of 14 (43%)</title></path>
 <text x="547.6" y="599.2" font-size="20" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle" fill="#FFFFFF" font-weight="bold">6</text>

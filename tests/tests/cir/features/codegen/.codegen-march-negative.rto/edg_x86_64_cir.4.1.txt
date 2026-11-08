@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=4 --gcc -mavx2 Test_name.c
+eccp: unknown option: -mavx2

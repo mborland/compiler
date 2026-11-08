@@ -1,0 +1,2 @@
+./a.out
+cxx98.nothrow_new ok

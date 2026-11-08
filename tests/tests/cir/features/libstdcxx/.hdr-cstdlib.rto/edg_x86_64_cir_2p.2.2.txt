@@ -1,0 +1,2 @@
+./a.out
+cstdlib: ok

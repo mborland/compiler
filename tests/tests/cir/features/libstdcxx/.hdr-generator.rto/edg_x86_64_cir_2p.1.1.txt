@@ -1,0 +1,5 @@
+fe_only -DTEST_NUMBER=1 --c++23 --set_flag=coroutines --diag_suppress=cir_warning Test_name.c
+Command-line error: CIR back end: coroutines are not supported
+
+1 catastrophic error detected in this compilation.
+Compilation terminated.

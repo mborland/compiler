@@ -632,7 +632,7 @@ results are record prvalues; CallConvLowering applies the SysV ABI.
 | --- | --- |
 | `C_INT(t, int)`, `C_NULL(t)`, `C_ZERO(t)`, `C_PTR(t, int)` | push |
 | `C_FLOAT(t, float)` | push; same encoding as 8.6 |
-| `C_STRING(t, bin)` | Bytes for array type `t`; any tail is zero-padded. |
+| `C_STRING(t, bin)` | Bytes for array type `t`; any tail is zero-padded. The element type of `t` is an 8, 16 or 32-bit integer (the string literal types); any other element type is a format error (M6.1a, `security.md` SEC-1-1). |
 | `C_ADDR(t, g, bytes)` | `&global + bytes` or a function address (`#cir.global_view` / `#cir.global_offset`). |
 | `C_AGG_BEGIN(t) { C_SEL(idx) <one constant> \| C_REPEAT(idx, count) <one constant> }* C_AGG_END` | Pushes one aggregate. Unlisted members and elements are zero; a union has at most one entry. For bit-field members the consumer packs the bits into storage units. |
 

@@ -1,0 +1,8 @@
+fe_only -DTEST_NUMBER=1 --c11 --gnu_version=140000 Test_name.c
+"Test_name.c", line 7: warning: CIR back end: the body of "wide" uses __builtin_alloca_with_align with an alignment above 128 bits (16 bytes), which the CIR back end does not support; the function is dropped
+  void wide(unsigned long n) { use(__builtin_alloca_with_align(n, 256)); }
+                                                                         ^
+
+Error: CIR back end: the definition of 'wide' was dropped: it uses a construct the CIR back end cannot express: __builtin_alloca_with_align with an alignment above 128 bits (16 bytes)
+
+1 error detected in the compilation of "Test_name.c".

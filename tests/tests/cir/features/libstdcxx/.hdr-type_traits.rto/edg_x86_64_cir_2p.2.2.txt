@@ -1,0 +1,2 @@
+./a.out
+type_traits: ok

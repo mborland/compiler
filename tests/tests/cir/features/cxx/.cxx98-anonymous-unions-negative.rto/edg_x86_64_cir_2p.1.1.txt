@@ -1,0 +1,15 @@
+fe_only -DTEST_NUMBER=1 --c++11 Test_name.c
+"Test_name.c", line 19: warning: CIR back end: the body of "Variant" uses the initializer of a member of an anonymous union or struct that has a destructor, which the CIR back end does not support; the function is dropped
+    explicit Variant(int v) : tag(NODE), n(v) {}
+                                               ^
+
+"Test_name.c", line 22: warning: CIR back end: the body of "Variant" uses the initializer of a member of an anonymous union or struct that has a destructor, which the CIR back end does not support; the function is dropped
+  Variant make(int v) { return Variant(v); }
+                               ^
+          detected during implicit generation of "Variant::Variant(const Variant &)" at line 22
+
+edg-cir: warning [1003]: the unused definition of '_ZN7VariantC1ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct that has a destructor
+edg-cir: warning [1003]: the unused definition of '_ZN7VariantC2ERKS_' was dropped and erased: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct that has a destructor
+edg-cir: error [1003]: the definition of '_ZN7VariantC1Ei' was dropped: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct that has a destructor (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZN7VariantC2Ei' was dropped: it uses a construct the CIR back end cannot express: the initializer of a member of an anonymous union or struct that has a destructor (and it is referenced)
+edg-cir: unsupported construct or target

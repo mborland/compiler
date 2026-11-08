@@ -1,0 +1,668 @@
+#!/usr/bin/python3 -I
+
+# Part of the EDG Compiler Project, under the Apache License v2.0 with LLVM
+# Exceptions.
+# See https://edgcpp.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+'''The sandbox of the cir-security (Mythos) auditor on clang4.
+
+Membership in the docker group is root-equivalent, so the auditor does not
+get docker: it gets this wrapper, whose `docker run` flags are fixed (project
+decision 58, cir_src/doc/security.md section 3).  The wrapper is installed
+at /home/matt/cir-sec/bin/edg-cir-sandbox (the directory and the file mode
+0555); the agent calls it as one ssh argument and sends a script on stdin:
+
+  edg-cir-sandbox run AUDIT N [--timeout=S] [--dry-run]   (script on stdin)
+  edg-cir-sandbox ls AUDIT N PATH
+  edg-cir-sandbox cat AUDIT N PATH
+  edg-cir-sandbox status
+
+AUDIT is sec1..sec4 or delta-NAME, N a run number (0..9999) chosen by the
+caller.  The scratch root is ~/cir-sec-scratch:
+
+  AUDIT/snap       the frozen tree, mounted read-only at /edg/workspace
+  AUDIT/work/N     one fresh directory per run (mkdir fails if it exists),
+                   the only writable mount, at /work
+  AUDIT/scripts/N.sh   the copy of the script (outside the mount)
+
+The container runs the pinned cir-env image by its full ID (--pull never) as
+UID 65534 with no capabilities, no network and a read-only root, under the
+default seccomp and AppArmor profiles.  `ls` and `cat` read WORK/N one path
+component at a time with O_NOFOLLOW, regular files and directories only.
+
+Option values use `=` (--timeout=600): the guard hook admits only arguments
+of the characters [A-Za-z0-9._=:/-].  Stdlib only; no environment variable
+changes what is run.
+'''
+
+import errno
+import fcntl
+import os
+import pwd
+import re
+import select
+import shlex
+import signal
+import stat
+import subprocess
+import sys
+import time
+
+from typing import List, Optional, Tuple
+
+# The cir-env image the audit runs in (docker image ls --no-trunc).
+IMAGE = ('sha256:'
+         'cd5c7f63e579bd757e9e2169bd945e3424adf92635bd674515b95729e1a17286')
+DOCKER = '/usr/bin/docker'
+TIMEOUT_BIN = '/usr/bin/timeout'
+# Never inherited from the caller.
+CHILD_PATH = '/usr/bin:/bin'
+
+AUDIT_RE = re.compile(r'sec[1-4]|delta-[a-z0-9-]{1,32}')
+NUMBER_RE = re.compile(r'[0-9]{1,4}')
+PATH_RE = re.compile(r'[A-Za-z0-9._=:/-]{1,512}')
+# The label that `status` selects on.
+LABEL_RE = re.compile(r'cir-sec-(sec[1-4]|delta-[a-z0-9-]{1,32})')
+
+DEFAULT_TIMEOUT = 600
+MAX_TIMEOUT = 3600
+SCRIPT_MAX = 1 << 20      # the script on stdin
+OUTPUT_MAX = 256 * 1024   # the output of a run, kept while draining
+CAT_MAX = 256 * 1024      # the bytes `cat` sends
+LS_MAX = 2000             # the entries `ls` lists
+PATH_DEPTH = 32
+FSIZE = 2 * 1024 ** 3     # --ulimit fsize
+SLOTS = 2                 # concurrent runs
+SLOT_WAIT = 120           # seconds to wait for a slot
+MIN_FREE = 20 * 1024 ** 3  # bytes the scratch file system needs to start
+MIN_FREE_INODES = 0.01     # fraction of inodes it needs to start
+# The disk caps of a running container: its bind mount is on the shared root
+# file system, so fsize (per file) is not enough.  Only the test harness
+# changes these (it assigns the module attributes); no option or environment
+# variable does.
+DISK_KILL_FREE = 10 * 1024 ** 3   # kill when less is free
+DISK_KILL_INODES = 0.01           # kill when a smaller fraction of inodes is
+GROWTH_MAX = 20 * 1024 ** 3       # kill when WORK/N holds more
+TICK = 3.0                        # seconds between the disk checks
+SCAN_BUDGET = 2.0                 # seconds one measurement of WORK/N may take
+FINAL_SCAN_BUDGET = 10.0          # the same, for the setuid report
+SCAN_ENTRIES = 500000             # entries one measurement visits
+
+EXIT_USAGE = 2
+EXIT_BUSY = 75
+EXIT_DISK = 76
+
+
+SIGNALS = {signal.SIGHUP, signal.SIGINT, signal.SIGTERM}
+
+
+class SandboxError(Exception):
+  '''A refusal or a failure; the message goes to stderr.'''
+
+  def __init__(self, message: str, code: int = EXIT_USAGE) -> None:
+    super().__init__(message)
+    self.code = code
+
+
+class Interrupted(BaseException):
+  '''A SIGHUP, SIGINT or SIGTERM: the container is killed on the way out.'''
+
+
+def scratch_root() -> str:
+  '''The scratch root, from the password file (not from $HOME).'''
+  return os.path.join(pwd.getpwuid(os.getuid()).pw_dir, 'cir-sec-scratch')
+
+
+def check_audit(audit: str) -> str:
+  '''AUDIT: sec1..sec4 or delta-NAME.'''
+  if not AUDIT_RE.fullmatch(audit):
+    raise SandboxError(f"bad AUDIT {audit!r}: want sec[1-4] or "
+                       "delta-[a-z0-9-]{1,32}")
+  return audit
+
+
+def check_number(number: str) -> str:
+  '''N: one to four digits.'''
+  if not NUMBER_RE.fullmatch(number):
+    raise SandboxError(f"bad N {number!r}: want [0-9]{{1,4}}")
+  return number
+
+
+def check_timeout(text: str) -> int:
+  '''The value of --timeout=: seconds, 1 to MAX_TIMEOUT.'''
+  if (not re.fullmatch(r'[0-9]{1,5}', text) or
+      not 1 <= int(text) <= MAX_TIMEOUT):
+    raise SandboxError(f"bad timeout {text!r}: want 1..{MAX_TIMEOUT} seconds")
+  return int(text)
+
+
+def check_path(text: str) -> List[str]:
+  '''PATH inside WORK/N: relative, no `..`; "." is the directory itself.'''
+  if text == '.':
+    return []
+  parts = text.split('/')
+  if (not PATH_RE.fullmatch(text) or len(parts) > PATH_DEPTH or
+      any(p in ('', '.', '..') or len(p) > 255 for p in parts)):
+    raise SandboxError(f"bad PATH {text!r}: want a relative path of "
+                       "[A-Za-z0-9._=:-] components, no `..`, no empty one")
+  return parts
+
+
+def container_name(audit: str, number: str) -> str:
+  '''The name of the container, the handle for `docker kill`.'''
+  return f"cir-sec-{audit}-{number}"
+
+
+def work_dir(root: str, audit: str, number: str) -> str:
+  '''WORK/N of an audit.'''
+  return os.path.join(root, audit, 'work', number)
+
+
+def docker_argv(root: str, audit: str, number: str, timeout: int
+                ) -> List[str]:
+  '''The whole command line of a run; nothing in it comes from the caller
+  but AUDIT, N and the timeout, after validation.'''
+  name = container_name(audit, number)
+  snap = os.path.join(root, audit, 'snap')
+  work = work_dir(root, audit, number)
+  return [
+    TIMEOUT_BIN, '-k', '30', str(timeout + 60),
+    DOCKER, 'run', '-i', '--rm', '--pull', 'never', '--init',
+    '--log-driver', 'none', '--network', 'none', '--ipc', 'private',
+    '--pids-limit', '512', '--cap-drop', 'ALL',
+    '--security-opt', 'no-new-privileges',
+    '--user', '65534:65534', '--cpus', '8',
+    '--memory', '16g', '--memory-swap', '16g',
+    '--ulimit', 'core=0', '--ulimit', f"fsize={FSIZE}",
+    '--ulimit', 'nofile=4096', '--read-only',
+    '--tmpfs', '/tmp:rw,exec,nosuid,nodev,size=4g',
+    '-e', 'HOME=/tmp', '-e', 'ASAN_OPTIONS=detect_leaks=0',
+    '-e', 'ASAN_SYMBOLIZER_PATH=/edg/llvm-cir/bin/llvm-symbolizer',
+    '--name', name, '--label', f"edg.job=cir-sec-{audit}",
+    '-v', f"{snap}:/edg/workspace:ro", '-v', f"{work}:/work",
+    '-w', '/work', IMAGE,
+    'nice', '-n', '10', 'timeout', '-k', '10', str(timeout), 'bash', '-s']
+
+
+def child_env() -> dict:
+  '''The environment of the programs the wrapper starts.'''
+  return {'PATH': CHILD_PATH, 'HOME': pwd.getpwuid(os.getuid()).pw_dir}
+
+
+def lstat_dir(path: str, what: str) -> None:
+  '''Fail unless PATH is a real directory (not a symlink to one).'''
+  try:
+    mode = os.lstat(path).st_mode
+  except OSError as err:
+    raise SandboxError(f"{what} {path}: {err.strerror}")
+  if not stat.S_ISDIR(mode):
+    raise SandboxError(f"{what} {path} is not a directory")
+
+
+def make_dir(path: str, mode: int) -> None:
+  '''mkdir that accepts an existing real directory.'''
+  try:
+    os.mkdir(path, mode)
+  except FileExistsError:
+    pass
+  lstat_dir(path, 'scratch')
+
+
+def check_free(root: str) -> None:
+  '''Refuse a run when the scratch file system is short of space or
+  inodes.'''
+  info = os.statvfs(root)
+  free = info.f_bavail * info.f_frsize
+  if free < MIN_FREE:
+    raise SandboxError(f"only {free >> 30} GB free on the scratch file "
+                       f"system (need {MIN_FREE >> 30})", EXIT_BUSY)
+  if info.f_files and info.f_favail < info.f_files * MIN_FREE_INODES:
+    raise SandboxError('the scratch file system is short of inodes',
+                       EXIT_BUSY)
+
+
+def scan_tree(path: str, budget: float, stop_bytes: int = 0
+              ) -> Tuple[int, int, List[str], bool]:
+  '''Walk PATH (symlinks are never followed) and return the bytes in
+  blocks, the entry count, the setuid and setgid regular files (at most 10
+  names) and whether the walk finished: it stops after BUDGET seconds,
+  SCAN_ENTRIES entries, or more than STOP_BYTES bytes (when that is not 0).'''
+  deadline = time.monotonic() + budget
+  size = 0
+  count = 0
+  special = []
+  pending = [path]
+  while pending:
+    current = pending.pop()
+    try:
+      with os.scandir(current) as entries:
+        for entry in entries:
+          count += 1
+          if count > SCAN_ENTRIES or time.monotonic() > deadline:
+            return size, count, special, False
+          try:
+            info = entry.stat(follow_symlinks = False)
+          except OSError:
+            continue
+          size += info.st_blocks * 512
+          if stat.S_ISDIR(info.st_mode):
+            pending.append(entry.path)
+          elif (stat.S_ISREG(info.st_mode) and
+                info.st_mode & (stat.S_ISUID | stat.S_ISGID) and
+                len(special) < 10):
+            special.append(os.path.relpath(entry.path, path))
+          if stop_bytes and size > stop_bytes:
+            return size, count, special, False
+    except OSError:
+      continue
+  return size, count, special, True
+
+
+def disk_problem(root: str, work: str, start_free: int, statvfs = os.statvfs,
+                 scan = scan_tree) -> Optional[str]:
+  '''The reason to kill a run, or None: the scratch file system is nearly
+  out of space or inodes, or WORK/N holds more than GROWTH_MAX.  The free
+  space of the shared file system also falls when other people write, so a
+  fall of more than GROWTH_MAX is confirmed by measuring WORK/N itself.'''
+  info = statvfs(root)
+  free = info.f_bavail * info.f_frsize
+  if free < DISK_KILL_FREE:
+    return f"only {free >> 20} MiB free on the scratch file system"
+  if info.f_files and info.f_favail < info.f_files * DISK_KILL_INODES:
+    return f"only {info.f_favail} inodes free on the scratch file system"
+  if start_free - free > GROWTH_MAX:
+    size = scan(work, SCAN_BUDGET, GROWTH_MAX)[0]
+    if size > GROWTH_MAX:
+      return f"WORK/N holds over {GROWTH_MAX >> 20} MiB"
+  return None
+
+
+def take_slot(root: str) -> int:
+  '''flock one of the SLOTS slot files, waiting up to SLOT_WAIT seconds; the
+  descriptor is kept (and closed with the process) while the run lasts.'''
+  make_dir(root, 0o755)
+  slots = os.path.join(root, '.slots')
+  make_dir(slots, 0o700)
+  deadline = time.monotonic() + SLOT_WAIT
+  while True:
+    for index in range(SLOTS):
+      fd = os.open(os.path.join(slots, f"slot{index}"),
+                   os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+      try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd
+      except OSError as err:
+        os.close(fd)
+        if err.errno not in (errno.EAGAIN, errno.EACCES):
+          raise
+    if time.monotonic() >= deadline:
+      raise SandboxError(f"all {SLOTS} slots are busy; try again later",
+                         EXIT_BUSY)
+    time.sleep(2)
+
+
+def make_work(root: str, audit: str, number: str) -> str:
+  '''A fresh WORK/N (mkdir fails if it exists), mode 0777: the container
+  user is not the owner.  The audit's snap must be a real directory.'''
+  lstat_dir(os.path.join(root, audit), 'audit')
+  lstat_dir(os.path.join(root, audit, 'snap'), 'snapshot')
+  make_dir(os.path.join(root, audit, 'work'), 0o755)
+  path = work_dir(root, audit, number)
+  try:
+    os.mkdir(path, 0o777)
+  except FileExistsError:
+    raise SandboxError(f"{path} exists: pick a new N")
+  os.chmod(path, 0o777)
+  return path
+
+
+def save_script(root: str, audit: str, number: str, data: bytes) -> str:
+  '''Write the copy of the script outside the mount, failing if it exists
+  and never following a symlink.'''
+  directory = os.path.join(root, audit, 'scripts')
+  make_dir(directory, 0o700)
+  path = os.path.join(directory, f"{number}.sh")
+  fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+               0o600)
+  with os.fdopen(fd, 'wb') as out:
+    out.write(data)
+  return path
+
+
+def read_script() -> bytes:
+  '''The script from stdin: not empty, at most SCRIPT_MAX bytes.'''
+  data = sys.stdin.buffer.read(SCRIPT_MAX + 1)
+  if not data:
+    raise SandboxError('run needs the script on stdin')
+  if len(data) > SCRIPT_MAX:
+    raise SandboxError(f"the script is over {SCRIPT_MAX} bytes")
+  return data
+
+
+def docker_kill(name: str) -> None:
+  '''Kill the container by its exact name (it may be gone already).'''
+  subprocess.run([DOCKER, 'kill', name], env = child_env(), check = False,
+                 stdin = subprocess.DEVNULL, stdout = subprocess.DEVNULL,
+                 stderr = subprocess.DEVNULL, timeout = 60)
+
+
+SIGNALLED = []
+
+
+def on_signal(signum: int, frame) -> None:
+  '''Turn the first SIGHUP, SIGINT or SIGTERM into an exit that kills the
+  container; later ones are ignored, so that the cleanup always runs.'''
+  if not SIGNALLED:
+    SIGNALLED.append(signum)
+    raise Interrupted(signum)
+
+
+def drain(pipe_fd: int, check = None, tick: Optional[float] = None
+          ) -> Tuple[bytes, int, Optional[str]]:
+  '''Read the pipe to EOF, keeping the first OUTPUT_MAX bytes; the rest is
+  read (the writer never blocks) and counted.  With CHECK (a function that
+  returns a reason or None) it is called every TICK seconds (TICK if None),
+  also while output keeps coming; the first reason ends the read early.
+  Returns the output, the dropped count and the reason.'''
+  kept = []
+  size = 0
+  dropped = 0
+  reason = None
+  interval = TICK if tick is None else tick
+  next_check = time.monotonic() + interval
+  while reason is None:
+    if check is not None:
+      wait = max(0.0, next_check - time.monotonic())
+      if not select.select([pipe_fd], [], [], wait)[0]:
+        reason = check()
+        next_check = time.monotonic() + interval
+        continue
+    chunk = os.read(pipe_fd, 65536)
+    if not chunk:
+      break
+    room = OUTPUT_MAX - size
+    if room > 0:
+      kept.append(chunk[:room])
+      size += min(room, len(chunk))
+    dropped += max(0, len(chunk) - max(room, 0))
+    if check is not None and time.monotonic() >= next_check:
+      reason = check()
+      next_check = time.monotonic() + interval
+  return b''.join(kept), dropped, reason
+
+
+def run_container(root: str, audit: str, number: str, timeout: int,
+                  script_path: str) -> int:
+  '''Start the container with the script as stdin; kill it by name if the
+  outer timeout fires or the wrapper is interrupted.  Returns the exit
+  status.'''
+  name = container_name(audit, number)
+  argv = docker_argv(root, audit, number, timeout)
+  started = time.monotonic()
+  killed = True    # until the run ends by itself
+  proc = None
+  work = work_dir(root, audit, number)
+  info = os.statvfs(root)
+  start_free = info.f_bavail * info.f_frsize
+  stdin_fd = os.open(script_path, os.O_RDONLY | os.O_NOFOLLOW)
+  reason = None
+  try:
+    proc = subprocess.Popen(argv, env = child_env(), stdin = stdin_fd,
+                            stdout = subprocess.PIPE,
+                            stderr = subprocess.STDOUT)
+    os.close(stdin_fd)
+    stdin_fd = -1
+    output, dropped, reason = drain(
+      proc.stdout.fileno(),
+      lambda: disk_problem(root, work, start_free))
+    if reason is not None:
+      # Kill first, then read what is left (the client exits at once).
+      docker_kill(name)
+      rest, more, _ = drain(proc.stdout.fileno())
+      room = max(0, OUTPUT_MAX - len(output))
+      output += rest[:room]
+      dropped += more + max(0, len(rest) - room)
+    status = proc.wait()
+    killed = status in (124, 137, -9, -15)
+  finally:
+    # A second signal must not skip the kill: hold them until it is done.
+    signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
+    if stdin_fd >= 0:
+      os.close(stdin_fd)
+    if killed:
+      docker_kill(name)
+    if proc is not None and proc.poll() is None:
+      proc.kill()
+      proc.wait()
+  sys.stdout.buffer.write(output)
+  if output and not output.endswith(b'\n'):
+    sys.stdout.buffer.write(b'\n')
+  sys.stdout.buffer.flush()
+  note = f"{dropped} bytes dropped over the cap, " if dropped else ''
+  if reason is not None:
+    note += f"disk cap: {reason}, killed, "
+  print(f"edg-cir-sandbox: {name} exit={status} "
+        f"elapsed={time.monotonic() - started:.1f}s {note}"
+        f"output cap {OUTPUT_MAX}" + (' (timeout)' if status == 124 else ''))
+  report_special(work)
+  if reason is not None:
+    status = EXIT_DISK
+  return status if status >= 0 else 128 - status
+
+
+def report_special(work: str) -> None:
+  '''Report (never chase) setuid and setgid files a run left in WORK/N.'''
+  _, _, special, done = scan_tree(work, FINAL_SCAN_BUDGET)
+  if special:
+    print(f"edg-cir-sandbox: setuid/setgid files left in WORK/N (not "
+          f"touched): {', '.join(ascii(n)[1:-1] for n in special)}")
+  if not done:
+    print('edg-cir-sandbox: the scan of WORK/N for setuid files stopped '
+          'early (budget)')
+
+
+def open_beneath(root: str, parts: List[str], directory: bool) -> int:
+  '''Open ROOT/PARTS one component at a time with openat(O_NOFOLLOW): a
+  symlink anywhere (the last component too) is refused.  The last
+  component must be a directory or, if DIRECTORY is false, a regular file
+  (opened O_NONBLOCK so that a FIFO cannot block the wrapper).  Returns a
+  descriptor.'''
+  flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+  current = os.open(root, flags | os.O_DIRECTORY)
+  try:
+    for index, part in enumerate(parts):
+      last = index == len(parts) - 1
+      kind = os.O_DIRECTORY if (directory or not last) else os.O_NONBLOCK
+      try:
+        following = os.open(part, flags | kind, dir_fd = current)
+      except OSError as err:
+        if err.errno in (errno.ELOOP, errno.ENOTDIR):
+          raise SandboxError(f"{part}: a symlink or not a directory "
+                             "(refused)")
+        raise SandboxError(f"{part}: {err.strerror}")
+      os.close(current)
+      current = following
+    if not directory:
+      if not stat.S_ISREG(os.fstat(current).st_mode):
+        raise SandboxError(f"{'/'.join(parts)}: not a regular file")
+  except BaseException:
+    os.close(current)
+    raise
+  return current
+
+
+def type_char(mode: int) -> str:
+  '''One letter for the file type of a mode.'''
+  for test, char in ((stat.S_ISREG, '-'), (stat.S_ISDIR, 'd'),
+                     (stat.S_ISLNK, 'l'), (stat.S_ISFIFO, 'p'),
+                     (stat.S_ISSOCK, 's'), (stat.S_ISBLK, 'b'),
+                     (stat.S_ISCHR, 'c')):
+    if test(mode):
+      return char
+  return '?'
+
+
+def list_directory(root: str, parts: List[str]) -> List[str]:
+  '''The lines of `ls`: type, size, name; names are escaped, symlinks are
+  listed but never read or followed.'''
+  fd = open_beneath(root, parts, True)
+  try:
+    entries = []
+    more = False
+    with os.scandir(fd) as scan:
+      for entry in scan:
+        if len(entries) >= LS_MAX:
+          more = True
+          break
+        entries.append(entry)
+    lines = []
+    for entry in sorted(entries, key = lambda e: e.name):
+      shown = ascii(entry.name)[1:-1]
+      try:
+        info = entry.stat(follow_symlinks = False)
+        lines.append(f"{type_char(info.st_mode)} {info.st_size} {shown}")
+      except OSError as err:
+        lines.append(f"? 0 {shown} ({err.strerror})")
+    if more:
+      lines.append(f"... more entries (the listing stops at {LS_MAX})")
+  finally:
+    os.close(fd)
+  return lines
+
+
+def read_file(root: str, parts: List[str]) -> Tuple[bytes, int]:
+  '''The first CAT_MAX bytes of a regular file and its size.'''
+  fd = open_beneath(root, parts, False)
+  try:
+    size = os.fstat(fd).st_size
+    data = os.read(fd, CAT_MAX)
+  finally:
+    os.close(fd)
+  return data, size
+
+
+def parse(argv: List[str]) -> Tuple[str, List[str], dict]:
+  '''The verb, its positional arguments and its options; the only options
+  are --timeout=S and --dry-run (run only).'''
+  if not argv or argv[0] not in ('run', 'ls', 'cat', 'status'):
+    raise SandboxError('usage: edg-cir-sandbox run AUDIT N [--timeout=S] '
+                       '[--dry-run] | ls AUDIT N PATH | cat AUDIT N PATH | '
+                       'status')
+  verb = argv[0]
+  positional = []
+  options = {}
+  for arg in argv[1:]:
+    if arg.startswith('-'):
+      if verb != 'run':
+        raise SandboxError(f"{verb} takes no option: {arg!r}")
+      if arg == '--dry-run':
+        options['dry_run'] = True
+      elif arg.startswith('--timeout=') and 'timeout' not in options:
+        options['timeout'] = check_timeout(arg[len('--timeout='):])
+      else:
+        raise SandboxError(f"bad option {arg!r}")
+    else:
+      positional.append(arg)
+  wanted = {'run': 2, 'ls': 3, 'cat': 3, 'status': 0}[verb]
+  if len(positional) != wanted:
+    raise SandboxError(f"{verb} takes {wanted} arguments, got "
+                       f"{len(positional)}")
+  return verb, positional, options
+
+
+def command_run(root: str, audit: str, number: str, options: dict) -> int:
+  '''run: validate, then (unless --dry-run) take a slot and run.'''
+  timeout = options.get('timeout', DEFAULT_TIMEOUT)
+  for path in (os.path.join(root, audit), root):
+    if ':' in path or ',' in path:
+      raise SandboxError(f"the scratch path {path} has a ':' or ','")
+  if options.get('dry_run'):
+    print(f"# script copy: {os.path.join(root, audit, 'scripts', number)}.sh")
+    print(f"# work: {work_dir(root, audit, number)}")
+    print(shlex.join(docker_argv(root, audit, number, timeout)))
+    return 0
+  script = read_script()
+  slot = take_slot(root)
+  try:
+    check_free(root)
+    make_work(root, audit, number)
+    script_path = save_script(root, audit, number, script)
+    return run_container(root, audit, number, timeout, script_path)
+  finally:
+    os.close(slot)
+
+
+def command_ls(root: str, audit: str, number: str, path: str) -> int:
+  '''ls: list a directory of WORK/N.'''
+  parts = [audit, 'work', number] + check_path(path)
+  for line in list_directory(root, parts):
+    print(line)
+  return 0
+
+
+def command_cat(root: str, audit: str, number: str, path: str) -> int:
+  '''cat: send a regular file of WORK/N (at most CAT_MAX bytes).'''
+  parts = [audit, 'work', number] + check_path(path)
+  if len(parts) == 3:
+    raise SandboxError('cat needs a file path')
+  data, size = read_file(root, parts)
+  sys.stdout.buffer.write(data)
+  sys.stdout.buffer.flush()
+  if size > len(data):
+    print(f"\nedg-cir-sandbox: truncated at {len(data)} of {size} bytes",
+          file = sys.stderr)
+  return 0
+
+
+def command_status(root: str) -> int:
+  '''status: the sandbox's own containers (by label), the free space and
+  the slots.'''
+  result = subprocess.run(
+    [DOCKER, 'ps', '--filter', 'label=edg.job', '--filter', 'name=cir-sec-',
+     '--format', '{{.Names}}\t{{.Label "edg.job"}}\t{{.Status}}'],
+    env = child_env(), stdin = subprocess.DEVNULL, stdout = subprocess.PIPE,
+    stderr = subprocess.STDOUT, text = True, timeout = 60, check = False)
+  rows = [line for line in result.stdout.splitlines()
+          if len(line.split('\t')) == 3 and
+          LABEL_RE.fullmatch(line.split('\t')[1])]
+  print(f"containers: {len(rows)}")
+  for row in rows:
+    print(row.replace('\t', '  '))
+  if result.returncode != 0:
+    print(f"docker ps failed: {result.stdout.strip()[:200]}")
+  if os.path.isdir(root):
+    info = os.statvfs(root)
+    print(f"scratch free: {(info.f_bavail * info.f_frsize) >> 30} GB")
+  return 0
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+  '''Entry point; every refusal is a message and a non-zero exit.'''
+  argv = sys.argv[1:] if argv is None else argv
+  for sig in SIGNALS:
+    signal.signal(sig, on_signal)
+  root = scratch_root()
+  try:
+    verb, args, options = parse(argv)
+    if verb == 'status':
+      return command_status(root)
+    check_audit(args[0])
+    check_number(args[1])
+    if verb == 'run':
+      return command_run(root, args[0], args[1], options)
+    check_path(args[2])
+    if verb == 'ls':
+      return command_ls(root, args[0], args[1], args[2])
+    return command_cat(root, args[0], args[1], args[2])
+  except SandboxError as err:
+    print(f"edg-cir-sandbox: {err}", file = sys.stderr)
+    return err.code
+  except Interrupted as err:
+    print(f"edg-cir-sandbox: interrupted (signal {err.args[0]})",
+          file = sys.stderr)
+    return 128 + err.args[0]
+
+
+if __name__ == '__main__':
+  sys.exit(main())

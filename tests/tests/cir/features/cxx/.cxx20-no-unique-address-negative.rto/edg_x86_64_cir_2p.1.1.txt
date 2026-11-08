@@ -1,0 +1,8 @@
+fe_only -DTEST_NUMBER=1 --c++20 Test_name.c
+"Test_name.c", line 16: warning: CIR back end: the body of "S" uses the initialization of a [[no_unique_address]] member by a class value, which the CIR back end does not support; the function is dropped
+    S() : t(make()), after(1) {}
+                               ^
+
+edg-cir: error [1003]: the definition of '_ZN1SC1Ev' was dropped: it uses a construct the CIR back end cannot express: the initialization of a [[no_unique_address]] member by a class value (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZN1SC2Ev' was dropped: it uses a construct the CIR back end cannot express: the initialization of a [[no_unique_address]] member by a class value (and it is referenced)
+edg-cir: unsupported construct or target

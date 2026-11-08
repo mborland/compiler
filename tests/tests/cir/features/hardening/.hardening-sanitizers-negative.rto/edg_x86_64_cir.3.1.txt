@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=3 --gcc -fsanitize=thread Test_name.c
+eccp: unknown option: -fsanitize=thread

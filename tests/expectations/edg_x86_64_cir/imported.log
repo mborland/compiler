@@ -226,6 +226,7 @@ gnu/c/pr67089-5.sft.c:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
 gnu/c/pr67410.sft.c:rp:-DTEST_NUMBER=1 --c11 --strict_gnu:FAIL(COMPILE):
 gnu/c/pr69896.sft.c:rp:-DTEST_NUMBER=1 -w:FAIL(COMPILE):
 gnu/c/pr76783.sft.c:rp:-DTEST_NUMBER=1 -w:FAIL(COMPILE):
+gnu/c/pr78468.sft.c:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
 gnu/c/pr80286.sft.c:rp:-DTEST_NUMBER=1:FAIL(COMPILE):
 gnu/c/pr81979.sft.c:lp:-DTEST_NUMBER=1 -w:FAIL:
 gnu/c/pr83363.sft.c:rp:-DTEST_NUMBER=1:FAIL(COMPILE):

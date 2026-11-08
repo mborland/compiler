@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=1 --gcc -march=native Test_name.c
+eccp: unknown option: -march=native

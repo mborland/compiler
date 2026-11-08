@@ -1,0 +1,46 @@
+eccp -DTEST_NUMBER=1 --c++23 --diag_suppress=cir_warning Test_name.c
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16_E3minEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16_E3maxEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16_E6lowestEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16_E7epsilonEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16_E11round_errorEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16_E8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_huge_valf16
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16_E9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nanf16
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16_E13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nansf16
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16_E10denorm_minEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF32_E8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_huge_valf32
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF32_E9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nanf32
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF32_E13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nansf32
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF64_E8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_huge_valf64
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF64_E9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nanf64
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF64_E13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nansf64
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF128_E3minEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF128_E3maxEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF128_E6lowestEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF128_E7epsilonEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF128_E11round_errorEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF128_E8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_huge_valf128
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF128_E9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nanf128
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF128_E13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nansf128
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF128_E10denorm_minEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16bE3minEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16bE3maxEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16bE6lowestEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16bE7epsilonEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16bE11round_errorEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16bE8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16bE9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16bE13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nansf16b
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIDF16bE10denorm_minEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE3minEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE3maxEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE7epsilonEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE11round_errorEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE8infinityEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE9quiet_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE13signaling_NaNEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_nansq
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE10denorm_minEv' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE10_S_1pm4088Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE11_S_1pm16352Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE9_S_1p4064Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: warning [1003]: the unused definition of '_ZNSt14numeric_limitsIgE10_S_1p16256Ev' was dropped and erased: it uses a construct the CIR back end cannot express: a floating constant of this format

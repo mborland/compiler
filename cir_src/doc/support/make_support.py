@@ -17,10 +17,12 @@ With --out-dir, the three files go to that directory instead.  The alt
 text of the chart and the rows to mention in the slide's presenter notes
 (status no and ignored) are printed on stdout.
 
-With --check, validates the data (schema, ids, the rules of each status,
-that every test and ref path exists, that e2e-run tests are in the CIR
-suite or corpus and not listed as failing), that the three rendered files
-are up to date, and, with --gate, the thresholds due by that gate.  Prints
+With --check, validates the data (schema, ids, the rules of each status
+and of each test kind: README.md "Test kinds"; that every test and ref path
+exists, that e2e-run tests are in the CIR suite or corpus and not listed as
+failing, that negative tests have a CIR diagnosis recorded for both
+configurations), that the three rendered files are up to date, and, with
+--gate, the thresholds due by that gate.  Prints
 the counts per group and status.  The exit status is 1 when there is an
 error.
 '''
@@ -95,13 +97,32 @@ ROW_KEYS = frozenset(('id', 'feature', 'papers', 'macro', 'macro_value',
 # negative test may live.
 CODE_REF_DIRS = ('src/', 'cir_src/lib/', 'cir_src/tools/', 'util/',
                  'dev_tools/', 'cmake/')
-NEGATIVE_DIRS = ('tests/tests/cir/', 'cir_src/test/writer/',
-                 'cir_src/test/lit/')
+NEGATIVE_DIRS = ('tests/tests/cir/', 'cir_src/test/lit/')
+WRITER_GOLDEN_SCRIPT = 'edg-cir-ecil-dump'
+WRITER_DIR = 'cir_src/test/writer/'
+LIB_DIR = 'cir_src/test/'
+# The types of a negative test under tests/tests/cir/, the configurations
+# whose recordings must show the diagnosis, and the texts that do.
+NEGATIVE_TYPES = ('fp', 'fn', 'fc', 'cn')
+CIR_CONFIGS = ('edg_x86_64_cir', 'edg_x86_64_cir_2p')
+NEGATIVE_MARKERS = ('does not support', 'cannot express',
+                    'Command-line error: CIR back end:', 'unknown option:')
+# A lit line that checks output (CHECK, a custom prefix, ...), not a RUN
+# or a feature line.
+LIT_CHECK_LINE = re.compile(r'^\s*(?:#|//|;)\s*([A-Z][A-Z0-9_-]*):(.*)$')
+LIT_NON_CHECK = frozenset(('RUN', 'XFAIL', 'REQUIRES', 'UNSUPPORTED', 'END',
+                           'ALLOW_RETRIES'))
+# A failing test of a no row must fail loudly: the status of an rp test is
+# a compile failure, that of an lp test a failure (from M6.1a).
+LOUD_STATUS = {'rp': 'FAIL(COMPILE)', 'lp': 'FAIL'}
 # The gate's mixed-tu step links and runs these; only their existence is
 # checked.
 MIXED_TU_DIR = 'dev_tools/cir-mixed-tu-cases/'
 DIRECTIVE = re.compile(r'^\s*//([a-z_]+):\s*(.*)\s*$')
-CASE_TYPE = re.compile(r'^(.*);(rp|lp|fp|fn|fc|cp|cn|[a-z]{2})$')
+# edgy's _TEST_TYPE_OVERRIDE_OPTION_REGEX
+# (dev_tools/pylibs/edgtest/runtest/__init__.py): a per-case test type.
+CASE_TYPE = re.compile(
+  r'^(.*);(fp|fn|fc|cp|cn|cc|lp|ln|rp|rn|ra|cppbe|s)$')
 GROUP_MODE = re.compile(r'^(cxx|c)(\d\d)$')
 
 EXPECTATIONS = ROOT / 'tests' / 'expectations' / 'edg_x86_64_cir'
@@ -213,8 +234,8 @@ class Evidence:
       path = FILTERS / name
       if path.exists():
         self.filters.append(parse_filter_file(path))
-    self.failing: Dict[str, Set[str]] = {}
-    self.reference: Dict[str, Set[str]] = {}
+    self.failing: Dict[str, Dict[str, List[Tuple[str, str]]]] = {}
+    self.reference: Dict[str, Dict[str, List[Tuple[str, str]]]] = {}
 
   def in_corpus(self, suite: str, rel_path: str) -> bool:
     '''Whether a test of the suite is in the CIR suite or in a corpus.'''
@@ -238,6 +259,13 @@ class Evidence:
           read_log(EXPECTATIONS / f"{suite}.log")))
     return rel_path in self.failing[suite]
 
+  def failing_lines(self, suite: str, rel_path: str
+                    ) -> List[Tuple[str, str]]:
+    '''The (test type, status) of the effective expectation lines of a
+    test (empty if it is not listed).'''
+    self.is_failing(suite, rel_path)
+    return self.failing[suite].get(rel_path, [])
+
   def is_reference_failing(self, suite: str, rel_path: str) -> bool:
     '''Whether the reference (edg_x86_64) log of the suite lists the
     test.'''
@@ -254,9 +282,16 @@ def read_log(log: Path) -> List[str]:
     if log.exists() else []
 
 
-def listed_tests(lines: List[str]) -> Set[str]:
-  '''The test paths of effective expectation lines.'''
-  return {line.split(':', 1)[0] for line in lines}
+def listed_tests(lines: List[str]) -> Dict[str, List[Tuple[str, str]]]:
+  '''The tests of effective expectation lines, by path, each with the
+  (test type, status) of its lines.'''
+  tests: Dict[str, List[Tuple[str, str]]] = {}
+  for line in lines:
+    fields = line.split(':')
+    status = fields[3] if len(fields) > 3 else ''
+    tests.setdefault(fields[0], []).append(
+      (fields[1] if len(fields) > 1 else '', status))
+  return tests
 
 
 def read_directives(path: Path) -> Dict[str, List[str]]:
@@ -336,21 +371,33 @@ def inherited_flags(path: Path) -> List[str]:
   return options
 
 
-def test_mode(path: Path, directives: Dict[str, List[str]]
-              ) -> Tuple[str, Optional[int]]:
-  '''The language ("c" or "cpp") and the lowest language standard of
-  the cases of a test.'''
-  options = inherited_flags(path)
-  for value in directives.get('options_all', []):
-    options.extend(shlex.split(value))
+def test_cases(directives: Dict[str, List[str]]
+               ) -> List[Tuple[Optional[str], List[str]]]:
+  '''The (per-case type override or None, options) of each case of a
+  test, as edgy splits the //options: lines.'''
   separator = (directives.get('options_sep') or [':'])[0] or ':'
-  cases = []
+  cases: List[Tuple[Optional[str], List[str]]] = []
   for value in directives.get('options', ['']):
     for case in value.split(separator):
       match = CASE_TYPE.match(case)
-      cases.append(shlex.split(match.group(1) if match else case))
+      cases.append((match.group(2) if match else None,
+                    shlex.split(match.group(1) if match else case)))
+  return cases
+
+
+def test_mode(path: Path, directives: Dict[str, List[str]]
+              ) -> Tuple[str, Optional[int]]:
+  '''The language ("c" or "cpp") and the lowest language standard of
+  the rp cases of a test (a case without an override has the test's
+  type).'''
+  options = inherited_flags(path)
+  for value in directives.get('options_all', []):
+    options.extend(shlex.split(value))
+  test_type = (directives.get('type') or [''])[0].strip()
   language = 'c' if path.suffix == '.c' else 'cpp'
-  modes = [option_mode(options + case, language, 0) for case in cases]
+  modes = [option_mode(options + case, language, 0)
+           for override, case in test_cases(directives)
+           if (override or test_type) == 'rp']
   return language, min(modes) if modes else None
 
 
@@ -372,7 +419,7 @@ def ref_path(ref: str) -> Tuple[Optional[Path], Optional[int]]:
   return None, line
 
 
-def check_test(where: str, test: object, evidence: Evidence,
+def check_test(where: str, test: object, evidence: Evidence, gate: str,
                report: Report) -> Optional[Dict]:
   '''Validate one tests entry and return its kind, language and language
   standard (for an e2e-run test) when the kind is valid.'''
@@ -385,7 +432,7 @@ def check_test(where: str, test: object, evidence: Evidence,
     report.error(where, f"kind '{kind}' is not one of {', '.join(KINDS)}")
     return None
   info: Dict = {'kind': kind, 'path': path, 'language': None, 'mode': None,
-                'valid': True}
+                'valid': True, 'failing_lines': []}
   if not is_text(path):
     report.error(where, 'a test needs a path')
     return info
@@ -399,10 +446,19 @@ def check_test(where: str, test: object, evidence: Evidence,
   rel_path = '/'.join(parts[3:]) if in_tests else ''
   log = f"tests/expectations/edg_x86_64_cir/{suite}.log"
   if kind == 'e2e-run' and path.startswith(MIXED_TU_DIR):
-    pass
+    xfail = ROOT / path / 'xfail'
+    if xfail.is_file() and xfail.read_text(encoding = 'utf-8').strip():
+      report.error(where, f"mixed-tu case '{path}' has a non-empty xfail "
+                          'file: it is not an e2e-run test')
   elif kind == 'e2e-run':
     check_e2e_run(where, path, in_tests, suite, rel_path, log, evidence,
-                  report, info)
+                  gate, report, info)
+  elif kind == 'writer':
+    check_writer(where, path, report)
+  elif kind == 'lib':
+    if not path.startswith(LIB_DIR) or path.startswith(WRITER_DIR):
+      report.error(where, f"lib test '{path}' must be under {LIB_DIR} "
+                          f"(not {WRITER_DIR})")
   elif kind == 'failing':
     if not in_tests:
       report.error(where, f"failing test '{path}' must be under "
@@ -414,18 +470,104 @@ def check_test(where: str, test: object, evidence: Evidence,
       report.error(where, f"failing test '{path}' also fails in the "
                           'reference (tests/expectations/edg_x86_64/'
                           f"{suite}.log): a front-end or test problem")
+    else:
+      info['failing_lines'] = evidence.failing_lines(suite, rel_path)
   elif kind == 'negative':
-    if not path.startswith(NEGATIVE_DIRS):
-      report.error(where, f"negative test '{path}' must be under "
-                          f"{' or '.join(NEGATIVE_DIRS)}")
-    elif Path(path).name.startswith('bad-'):
-      report.error(where, f"negative test '{path}' is a bad-* test of "
-                          'malformed ECIL, which does not count')
+    check_negative(where, path, report)
   return info
 
 
+def check_writer(where: str, path: str, report: Report) -> None:
+  '''A writer test is an edg-cir-ecil-dump golden under tests/tests/cir/
+  or a file under cir_src/test/writer/.'''
+  if path.startswith(WRITER_DIR):
+    return
+  if not path.startswith('tests/tests/cir/') or not (ROOT / path).is_file():
+    report.error(where, f"writer test '{path}' must be a golden under "
+                        f"tests/tests/cir/ or a file under {WRITER_DIR}")
+  elif not any(WRITER_GOLDEN_SCRIPT in value.split() for value in
+               read_directives(ROOT / path).get('script', [])):
+    report.error(where, f"writer test '{path}' has no "
+                        f"//script:{WRITER_GOLDEN_SCRIPT} line")
+
+
+def recorded_cases(test_file: Path, config: str) -> Dict[str, str]:
+  '''The text of the recordings of a configuration in the test's
+  .<name>.rto directory, by case: the file <config>.<case>.<command>.txt
+  of every command of a case is one group.'''
+  directory = test_file.parent / f".{test_file.name.split('.')[0]}.rto"
+  cases: Dict[str, str] = {}
+  if directory.is_dir():
+    for entry in sorted(directory.iterdir()):
+      if entry.name.startswith(f"{config}."):
+        case = entry.name[len(config) + 1:].split('.')[0]
+        cases[case] = cases.get(case, '') + '\n' + entry.read_text(
+          encoding = 'utf-8', errors = 'replace')
+  return cases
+
+
+def shows_diagnosis(text: str) -> bool:
+  '''Whether a recording shows a CIR diagnosis (README.md "negative"): a
+  line of eccp's unknown option, or one with a marker that comes from the
+  CIR back end or is an error.  The edg-cir warning [1003] about an unused
+  definition that was dropped and erased does not count: it does not fail
+  the compile, and it is not about the test's construct.'''
+  for line in text.splitlines():
+    if 'unknown option:' in line:
+      return True
+    if (any(marker in line for marker in NEGATIVE_MARKERS)
+        and not re.search(r'warning \[1003\]', line)
+        and (re.search(r'CIR back end|\b[Ee]rror\b', line))):
+      return True
+  return False
+
+
+def lit_expects_error(path: Path) -> bool:
+  '''Whether a CHECK line (of any prefix) of a lit test expects an
+  error.'''
+  for line in path.read_text(encoding = 'utf-8',
+                             errors = 'replace').splitlines():
+    match = LIT_CHECK_LINE.match(line)
+    if (match and match.group(1) not in LIT_NON_CHECK
+        and not match.group(1).endswith('-NOT')
+        and re.search(r'\berror\b', match.group(2))):
+      return True
+  return False
+
+
+def check_negative(where: str, path: str, report: Report) -> None:
+  '''The rules of a negative test (README.md, "Test kinds").'''
+  full = ROOT / path
+  if path.startswith('cir_src/test/lit/'):
+    if full.name.startswith('bad-'):
+      report.error(where, f"negative test '{path}' is a bad-* test of "
+                          'malformed ECIL, which does not count')
+    elif not full.is_file() or not lit_expects_error(full):
+      report.error(where, f"negative test '{path}' has no CHECK line that "
+                          'expects an error')
+  elif not path.startswith('tests/tests/cir/') or not full.is_file():
+    report.error(where, f"negative test '{path}' must be a test under "
+                        f"tests/tests/cir/ or a lit test under "
+                        'cir_src/test/lit/')
+  else:
+    test_type = (read_directives(full).get('type') or [''])[0].strip()
+    if test_type not in NEGATIVE_TYPES:
+      report.error(where, f"negative test '{path}' has //type:{test_type}, "
+                          f"not one of {', '.join(NEGATIVE_TYPES)}")
+    for config in CIR_CONFIGS:
+      cases = recorded_cases(full, config)
+      missing = sorted(case for case, text in cases.items()
+                       if not shows_diagnosis(text))
+      if not cases or missing:
+        what = ('has no recording' if not cases
+                else f"case {', '.join(missing)} does not show")
+        report.error(where, f"negative test '{path}': {what} for {config} "
+                            f"a CIR diagnosis ({'; '.join(NEGATIVE_MARKERS)}"
+                            ' on a line of the CIR back end or an error)')
+
+
 def check_e2e_run(where: str, path: str, in_tests: bool, suite: str,
-                  rel_path: str, log: str, evidence: Evidence,
+                  rel_path: str, log: str, evidence: Evidence, gate: str,
                   report: Report, info: Dict) -> None:
   '''The rules of an e2e-run test; sets info's language and mode.'''
   if not in_tests:
@@ -439,6 +581,16 @@ def check_e2e_run(where: str, path: str, in_tests: bool, suite: str,
                         'not rp (compile, link and run)')
   if 'script' in directives:
     report.error(where, f"e2e-run test '{path}' has a //script: line")
+  others = sorted({override for override, _ in test_cases(directives)
+                   if override not in (None, 'rp')})
+  if others:
+    message = (f"e2e-run test '{path}' has per-case types "
+               f"{', '.join(others)}: every case must be rp (the checker "
+               'warns until M6.1a)')
+    if gate_rank(gate) >= gate_rank('M6.1a'):
+      report.error(where, message)
+    else:
+      report.warn(where, message)
   if not evidence.in_corpus(suite, rel_path):
     report.error(where, f"e2e-run test '{path}' is in neither the CIR "
                         'suite nor a CIR corpus filter')
@@ -457,8 +609,8 @@ def is_code_ref(ref: str) -> bool:
 
 def check_mode(where: str, row: Dict, group_id: str, tests: List[Dict],
                gate: str, report: Report) -> None:
-  '''A yes row of a standard's group needs an e2e-run test in that
-  standard or later, unless mode_independent.'''
+  '''A yes or partial row of a standard's group needs an e2e-run test in
+  that standard or later, unless mode_independent.'''
   match = GROUP_MODE.match(group_id)
   if match is None or row.get('mode_independent'):
     return
@@ -475,6 +627,25 @@ def check_mode(where: str, row: Dict, group_id: str, tests: List[Dict],
     report.error(where, message)
   else:
     report.warn(where, message)
+
+
+def check_loud_failures(where: str, tests: List[Dict], strict: bool,
+                        report: Report) -> None:
+  '''The failing tests of a no row must fail loudly: FAIL(COMPILE) for an
+  rp test, FAIL for an lp test.'''
+  for test in tests:
+    for test_type, status in test['failing_lines']:
+      if LOUD_STATUS.get(test_type) == status:
+        continue
+      wanted = ' or '.join(f"{loud} for {kind}"
+                           for kind, loud in LOUD_STATUS.items())
+      message = (f"failing test '{test['path']}' is listed as {test_type} "
+                 f"{status}: a no row needs {wanted} (a loud failure; the "
+                 'checker warns until M6.1a)')
+      if strict:
+        report.error(where, message)
+      else:
+        report.warn(where, message)
 
 
 def check_status_rules(where: str, row: Dict, group_id: str,
@@ -506,7 +677,7 @@ def check_status_rules(where: str, row: Dict, group_id: str,
   if 'failing' in kinds and status not in ('no', 'partial'):
     report.error(where, f"a failing test cannot support a {status} row "
                         '(only no and partial)')
-  if status == 'yes':
+  if status in ('yes', 'partial'):
     check_mode(where, row, group_id, tests, gate, report)
   if status == 'partial' and not is_text(note):
     report.error(where, 'status partial needs a note naming the residue')
@@ -517,6 +688,8 @@ def check_status_rules(where: str, row: Dict, group_id: str,
       report.error(where, message)
     else:
       report.warn(where, message)
+  if status == 'no':
+    check_loud_failures(where, tests, strict, report)
   if status == 'no' and 'failing' not in kinds:
     if not any(is_code_ref(ref) for ref in row.get('refs') or []):
       report.error(where, 'status no needs a refs entry path:line into '
@@ -592,7 +765,7 @@ def check_row(where: str, row: object, group_id: str, seen: Dict[str, str],
     report.error(where, 'tests must be a list')
   else:
     for test in tests:
-      info = check_test(where, test, evidence, report)
+      info = check_test(where, test, evidence, gate, report)
       if info is not None:
         infos.append(info)
   refs = row.get('refs', [])

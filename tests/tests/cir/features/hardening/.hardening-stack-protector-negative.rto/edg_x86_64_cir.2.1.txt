@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=2 --gcc -fstack-protector-strong Test_name.c
+eccp: unknown option: -fstack-protector-strong

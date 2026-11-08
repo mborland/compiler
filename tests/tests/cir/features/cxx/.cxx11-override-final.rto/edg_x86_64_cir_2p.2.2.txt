@@ -1,0 +1,2 @@
+./a.out
+cxx11.override_final ok

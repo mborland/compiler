@@ -1789,6 +1789,22 @@ Apply the reference rules of one record.
   case eop_c_string:
   case eop_c_ptr:
     ok = need_type(r.ops[0], false, problem);
+    if (ok && r.opcode == eop_c_string && operand_u64(r.ops[0], v)) {
+      const a_gid_entry *at = ids_.find_gid(v);
+      const a_gid_entry *el = at != nullptr && at->kind == gk_array
+                                  ? ids_.find_gid(at->element)
+                                  : nullptr;
+
+      /* The bytes are elements of 8, 16 or 32 bits (char, char8_t,
+         char16_t, wchar_t, char32_t); any other element is a format error,
+         not something the consumer has to size a buffer for. */
+      if (el == nullptr || el->kind != gk_int ||
+          (el->extent != 8 && el->extent != 16 && el->extent != 32)) {
+        problem = "C_STRING type G-id " + number(v) +
+                  " is not an array of 8, 16 or 32-bit integers";
+        ok = false;
+      }
+    }
     if (ok && r.opcode == eop_c_zero && operand_u64(r.ops[0], v)) {
       uint64_t rg = v;
       const a_gid_entry *zt = ids_.find_gid(rg);

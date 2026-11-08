@@ -14,3 +14,4 @@ edg/rma/eh40.sft.cpp | -DTEST_NUMBER=1 --strict | FAIL | documented clang-consis
 imported/gnu/cpp/eh/ref-temp1.sft.cpp | -DTEST_NUMBER=1 --c++11 | FAIL | documented clang-consistent difference (writer.md 9.19, clang 21.1.8 evidence)
 imported/gnu/cpp/eh/ref-temp2.sft.cpp | -DTEST_NUMBER=1 --c++11 | FAIL | documented clang-consistent difference (writer.md 9.19, clang 21.1.8 evidence)
 edg/daveed/g26766a.sft.cpp | -DTEST_NUMBER=1 --microsoft_bugs | REQUIREMENTS NOT MET | needs --microsoft_bugs (Microsoft extensions are off in cpfe-cir): REQUIREMENTS NOT MET like 46 other edg tests; taken out of cir-cpp-smoke.txt
+imported/gnu/c/pr78468.sft.c | -DTEST_NUMBER=1 | FAIL(COMPILE) | diagnosed gap: __builtin_alloca_with_align with an alignment above 128 bits (the test's 256-bit calls) is reported as unsupported and the function dropped (M6.1a); the library cannot align an alloca beyond 16 bytes

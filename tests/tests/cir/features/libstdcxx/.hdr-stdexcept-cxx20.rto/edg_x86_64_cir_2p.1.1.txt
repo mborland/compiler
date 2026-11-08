@@ -1,0 +1,10 @@
+eccp -DTEST_NUMBER=1 --c++20 --diag_suppress=cir_warning Test_name.c
+"Test_name.c", line 13: warning: statement is unreachable
+    return false;
+    ^
+
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIcE4moveEPcPKcm' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIwE4moveEPwPKwm' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIDuE4moveEPDuPKDum' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIDsE4moveEPDsPKDsm' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIDiE4moveEPDiPKDim' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p

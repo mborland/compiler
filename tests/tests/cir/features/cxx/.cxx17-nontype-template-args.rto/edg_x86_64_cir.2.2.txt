@@ -1,0 +1,2 @@
+./a.out
+cxx17.nontype_template_args ok

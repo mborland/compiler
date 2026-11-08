@@ -1,0 +1,3 @@
+./a.out
+float32 1 float64 1
+stdfloat: ok

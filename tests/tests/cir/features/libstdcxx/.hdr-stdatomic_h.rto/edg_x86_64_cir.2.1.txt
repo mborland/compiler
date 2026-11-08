@@ -1,0 +1,10 @@
+fe_only -DTEST_NUMBER=2 --c++23 -O2 --diag_suppress=cir_warning Test_name.c
+Error: CIR back end: the definition of '_ZSt19atomic_thread_fenceSt12memory_order' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_thread_fence (and it is referenced)
+
+Error: CIR back end: the definition of '_ZNSt11atomic_flag12test_and_setESt12memory_order' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_test_and_set (and it is referenced)
+
+Error: CIR back end: the definition of '_ZNSt13__atomic_baseIiE9fetch_addEiSt12memory_order' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_add_4 (and it is referenced)
+
+Error: CIR back end: the definition of '_ZNKSt13__atomic_baseIiE4loadESt12memory_order' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_load_4 (and it is referenced)
+
+4 errors detected in the compilation of "Test_name.c".

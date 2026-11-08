@@ -1,0 +1,2 @@
+./a.out
+cxx20.concepts_202002 ok

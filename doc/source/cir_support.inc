@@ -14,7 +14,7 @@ The CIR column of every table reads:
 * :sup-no:`No`: fails loudly (diagnosed, rejected, or a build error); never miscompiled
 * :sup-ignored:`Ignored`: accepted and silently ignored, or silently wrong output: a safety gap
 
-307 rows: 145 Yes, 15 Partial, 86 Unverified, 49 No, 12 Ignored.
+425 rows: 267 Yes, 45 Partial, 0 Unverified, 96 No, 17 Ignored.
 
 C++ core language
 -----------------
@@ -93,7 +93,7 @@ C++98/03
      -
      -
      - :sup-partial:`Partial` · M3
-     - Order, cleanups and temporaries work. A conditionally lifetime-extended temporary, a lifetime-extended temporary outside an initialization, and an array of objects whose destructor is not known are diagnosed and the function is dropped.
+     - Order, cleanups and temporaries work. A temporary that a mem-initializer binds to a reference member (lifetime-extended outside an initialization) is diagnosed and the function is dropped. The writer also diagnoses a conditionally lifetime-extended temporary and an array of objects whose destructor is not known; no input in the M6.1a probes reached them.
    * - Static storage duration, dynamic initialization, function-local statics
      -
      -
@@ -117,8 +117,8 @@ C++98/03
    * - new (std::nothrow), the allocation function may return null
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Only a writer golden covers it; project.md lists gaps in this form for M6.7.
+     - :sup-yes:`Yes` · M6.1a
+     -
    * - Named return value optimization
      -
      -
@@ -132,8 +132,8 @@ C++98/03
    * - Copying an array of class objects (implicit copy of a class with an array member)
      -
      -
-     - :sup-no:`No` · M6.7
-     - The copy is diagnosed and the function is dropped.
+     - :sup-no:`No` · M6.1b
+     - The copy or move constructor, implicit or defaulted, of a class with an array member (also nested, or in a base or member class) of a class type that has a non-trivial copy constructor is diagnosed ("the copy of an array of class objects in a member initializer"): the constructor is dropped, so a program that uses it fails to compile. An array of trivially copyable elements, and the copy and move assignment operators of such a class, work. The copy of an array by a structured binding or a lambda capture is diagnosed too. Before M6.1a the writer sent the element copy without its source argument and the program crashed or was miscompiled.
    * - Bit-fields in classes
      -
      -
@@ -277,16 +277,16 @@ C++11
      - N2659
      -
      - :sup-no:`No` · M6.7
-     - The definition is dropped with a named reason; the \_ZTW/\_ZTH wrappers are not emitted yet.
+     - The definition is dropped with a named reason; the \_ZTW/\_ZTH wrappers are not emitted yet. An extern thread_local is accessed directly, not through its \_ZTW wrapper, so the dynamic initialization of a variable defined in a g++ object is skipped (pre-existing; planned with the row).
    * - Alias templates
      - N2258
      - ``__cpp_alias_templates`` (200704L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Raw string literals
      - N2442
      - ``__cpp_raw_strings`` (200710L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Attribute syntax [[...]]
      - N2761
@@ -296,22 +296,22 @@ C++11
    * - Trailing return types
      - N2541
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Unrestricted unions
      - N2544
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Extern templates
      - N1987
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - override and final
      - N2928
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
 
 C++14
@@ -370,17 +370,17 @@ C++14
    * - Binary literals
      - N3472
      - ``__cpp_binary_literals`` (201304L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Digit separators
      - N3781
      - ``__cpp_digit_separators`` (201309L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - [[deprecated]]
      - N3760
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Arrays of runtime bound (the ATS, GNU variable length arrays)
      -
@@ -469,82 +469,82 @@ C++17
    * - constexpr lambdas
      - P0170R1
      - ``__cpp_constexpr`` (201603L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Class template argument deduction
      - P0091R3, P0512R0, P0620R0
      - ``__cpp_deduction_guides`` (201703L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Attributes for enumerators
      - N4266
      - ``__cpp_enumerator_attributes`` (201411L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Attributes for namespaces
      - N4266
      - ``__cpp_namespace_attributes`` (201411L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Nested namespace definitions
      - N4230
      - ``__cpp_nested_namespace_definitions`` (201411L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Constant evaluation for all non-type template arguments
      - N4268
      - ``__cpp_nontype_template_args`` (201411L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Declaring non-type template parameters with auto
      - P0127R2
      - ``__cpp_nontype_template_parameter_auto`` (201606L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Matching of template template arguments
      - P0522R0
      - ``__cpp_template_template_args`` (201611L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Pack expansions in using-declarations
      - P0195R2
      - ``__cpp_variadic_using`` (201611L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Hexadecimal floating-point literals
      - P0245R1
      - ``__cpp_hex_float`` (201603L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - static_assert without a message
      - N3928
      - ``__cpp_static_assert`` (201411L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Range-based for with different begin and end types
      - P0184R0
      - ``__cpp_range_based_for`` (201603L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - u8 character literals
      - N4267
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - [[nodiscard]]
      - P0189R1
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - [[maybe_unused]]
      - P0212R1
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - [[fallthrough]]
      - P0188R1
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
 
 C++20
@@ -588,7 +588,7 @@ C++20
    * - Concepts: conditionally trivial special member functions
      - P0848R3, P2493R0
      - ``__cpp_concepts`` (202002L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      - The front end claims this value.
    * - consteval functions
      - P1073R3
@@ -598,22 +598,22 @@ C++20
    * - constexpr in C++20 (virtual functions, try blocks, changing the active union member)
      - P1064R0, P1002R1, P1327R1, P1331R2, P1668R1
      - ``__cpp_constexpr`` (201907L)
-     - :sup-unverified:`Unverified` · M6.1a
-     - The corpus tests for these forms compile only.
+     - :sup-yes:`Yes` · M6.1a
+     -
    * - constexpr: changing the active member of a union, dropped restrictions
      - P1330R0, P2493R0
      - ``__cpp_constexpr`` (202002L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      - The front end defines 202110L and 202211L in later modes.
    * - Constexpr evaluation needed by decltype
      - P0859R0
      - ``__cpp_constexpr_in_decltype`` (201711L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - constexpr dynamic allocation (new and delete in constant evaluation)
      - P0784R7
      - ``__cpp_constexpr_dynamic_alloc`` (201907L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - constinit
      - P1143R2
@@ -633,18 +633,18 @@ C++20
    * - Template parameter lists on generic lambdas
      - P0428R2
      - ``__cpp_generic_lambdas`` (201707L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Pack expansion in lambda init-captures
      - P0780R2
      - ``__cpp_init_captures`` (201803L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Lambdas in unevaluated operands, default-constructible captureless lambdas
      - P0315R4, P0624R2
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The corpus test for it only links.
+     - :sup-yes:`Yes` · M6.1a
+     -
    * - Class types and floating-point types as non-type template parameters
      - P1907R1
      - ``__cpp_nontype_template_args`` (201911L)
@@ -653,22 +653,22 @@ C++20
    * - Class template argument deduction for aggregates and alias templates
      - P1814R0, P1816R0
      - ``__cpp_deduction_guides`` (201907L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - explicit(bool)
      - P0892R2
      - ``__cpp_conditional_explicit`` (201806L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - using enum
      - P1099R5
      - ``__cpp_using_enum`` (201907L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - char8_t
      - P0482R6
      - ``__cpp_char8_t`` (201811L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      - The front end claims 202207L only.
    * - std::is_constant_evaluated
      - P0595R2
@@ -684,16 +684,16 @@ C++20
      - P0840R2
      -
      - :sup-partial:`Partial` · ≤M5.1
-     - Layout and tail-padding reuse work. Initializing such a member with a class value, or constant-initializing it, is diagnosed and the function is dropped. Complete in M6.7.
+     - Layout and tail-padding reuse work. Initializing such a member of a class with tail padding with a class value is diagnosed and the function is dropped; so is a constant initialization. Complete in M6.7.
    * - [[likely]] and [[unlikely]]
      - P0479R5
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The attributes are accepted by the front end. The corpus tests for them compile only.
+     - :sup-yes:`Yes` · M6.1a
+     -
    * - [[nodiscard("reason")]] and [[nodiscard]] on constructors
      - P1301R4, P1771R1
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - std::bit_cast (\_\_builtin_bit_cast)
      - P0476R2
@@ -704,17 +704,17 @@ C++20
      - P1208R6
      -
      - :sup-no:`No` · M6.7
-     - The address constant of the source_location object is diagnosed as the address of a non-string constant and the function is dropped.
+     - A call that takes std::source_location::current() as a default argument passes the address of a source_location object: it is diagnosed ("the address of a non-string constant") and the calling function is dropped.
    * - Coroutines
      - P0912R5, LWG3393
      - ``__cpp_impl_coroutine`` (201902L)
      - :sup-no:`No` · after M7
-     - The cpfe-cir configuration sets COROUTINE_ENABLING_POSSIBLE to 0, but --set_flag=coroutines (cmd_line.c:2533, honored at :3148) bypasses it; the writer then reaches only its catch-all for statements. M6.1a rejects the flag under CIR.
+     - The cpfe-cir configuration sets COROUTINE_ENABLING_POSSIBLE to 0, and --set_flag=coroutines is rejected under CIR with the command-line error "CIR back end: coroutines are not supported" (M6.1a); --clear_flag stays allowed.
    * - Modules
      - P1103R3, P1811R0
      - ``__cpp_modules`` (201907L)
      - :sup-no:`No` · after M7
-     - The option --modules is rejected with the command-line error "modules are not supported".
+     - The option --modules is rejected with the command-line error "CIR back end: modules are not supported".
 
 C++23
 ~~~~~
@@ -752,72 +752,72 @@ C++23
    * - static operator[]
      - P2589R1
      - ``__cpp_multidimensional_subscript`` (202211L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      - The front end claims this value.
    * - Range-based for temporary lifetime extension
      - P2644R1, P2718R0, CWG2659
      - ``__cpp_range_based_for`` (202211L)
-     - :sup-unverified:`Unverified` · M6.1a
-     - The corpus tests range-for3, 4, 7 and 8 fail in every configuration (front end), and the passing ones run in --c++11 mode.
+     - :sup-yes:`Yes` · M6.1a
+     -
    * - Extended floating-point types (std::float32_t, float64_t, float16_t, bfloat16_t and others)
      - P1467R9
      -
      - :sup-partial:`Partial` · ≤M5.1
-     - \_Float32 and \_Float64 compile and run (corpus variants 8 and 9). Every value use of \_Float16 or bfloat16, not only a constant, is diagnosed as an opaque scalar and the function is dropped. Complete in M6.7.
+     - \_Float16, \_Float32 and \_Float64 arithmetic on run-time values works (probe; corpus variants 8 and 9). A \_Float16 or bfloat16 constant is diagnosed ("a floating constant of this format") and the function is dropped; other bfloat16 uses were not probed. Complete in M6.7.
    * - [[assume]]
      - P1774R8
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The corpus run tests cpp23/attr-assume1, 3, 5 and 6 fail in every configuration (front end), so they say nothing about CIR.
+     - :sup-yes:`Yes` · M6.1a
+     -
    * - char8_t compatibility and portability
      - P2513R4
      - ``__cpp_char8_t`` (202207L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      - The front end claims this value.
    * - consteval needs to propagate up
      - P2564R3
      - ``__cpp_consteval`` (202211L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      - The front end claims this value.
    * - constexpr functions with non-literal variables and gotos
      - P2242R3
      - ``__cpp_constexpr`` (202110L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - constexpr: relaxing some constexpr restrictions
      - P2448R2
      - ``__cpp_constexpr`` (202207L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      - The front end defines 202211L in the same mode.
    * - static and thread_local variables in constexpr functions
      - P2647R1
      - ``__cpp_constexpr`` (202211L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - auto(x) and auto{x}
      - P0849R8
      - ``__cpp_auto_cast`` (202110L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Simpler implicit move
      - P2266R3
      - ``__cpp_implicit_move`` (202207L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Named universal character escapes
      - P2071R2
      - ``__cpp_named_character_escapes`` (202207L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Literal suffix for size_t and its signed counterpart
      - P0330R8
      - ``__cpp_size_t_suffix`` (202011L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Optional () in lambdas with attributes or specifiers
      - P1102R2
      -
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
 
 C++26
@@ -838,31 +838,21 @@ C++26
      - ``__cpp_pack_indexing`` (202311L)
      - :sup-yes:`Yes` · ≤M5.1
      -
-   * - Attributes for structured bindings
-     - P0609R3
-     - ``__cpp_structured_bindings`` (202403L)
-     - :sup-unverified:`Unverified` · M6.1a
-     - The front end defines 202411L when packs are enabled.
-   * - Structured binding declaration as a condition
-     - P0963R3
-     - ``__cpp_structured_bindings`` (202406L)
-     - :sup-unverified:`Unverified` · M6.1a
-     - The front end does not claim this value. The corpus tests cpp26/decomp3 to 8 fail in every configuration (front end); writer.md §9.12 lists the form as unsupported, but no diagnose site was found.
    * - Structured binding packs
      - P1061R10
      - ``__cpp_structured_bindings`` (202411L)
-     - :sup-unverified:`Unverified` · M6.1a
-     - The front end claims this value when packs are enabled.
+     - :sup-ignored:`Ignored` · M6.1b
+     - By-value packs work (the probe). A pack bound by reference (``auto &[...r]``, ``const auto &[...r]``) gives wrong values in every configuration, the reference cpfe included: a front-end defect, registered as High finding P-7 (security.md §5); M6.1b triages it.
    * - #embed
      - P1967R14
      - ``__cpp_pp_embed`` (202502L)
-     - :sup-unverified:`Unverified` · M6.1a
+     - :sup-yes:`Yes` · M6.1a
      -
    * - Reflection
      - P2996R13, P3096R12, P3293R3, P3394R4, P3795R2
      - ``__cpp_impl_reflection`` (202506L)
-     - :sup-unverified:`Unverified` · M6.1a
-     - The front end claims 202603L.
+     - :sup-partial:`Partial` · M6.1a
+     - Splices of types, members and values, and reflections as template arguments, work (--set_flag=reflection). A variable of a reflection type (std::meta::info) is diagnosed as an unsupported constant and the function is dropped. The std::meta queries (<meta>) were not probed. Complete in M6.7.
 
 C language
 ----------
@@ -907,6 +897,11 @@ C89/C90
      -
      - :sup-yes:`Yes` · ≤M5.1
      -
+   * - Volatile initialization
+     -
+     -
+     - :sup-ignored:`Ignored` · M6.1b
+     - The initialization store of a volatile object (a mem-initializer, ``volatile int v = 5;``) is emitted as a plain store, so -O2 can drop it; assignments to volatile objects are correct. Registered as High finding P-4 (security.md §5).
    * - Variable argument lists (<stdarg.h>)
      -
      -
@@ -920,8 +915,8 @@ C89/C90
    * - K&R (old-style) function definitions
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The front end turns them into prototyped functions; no CIR test runs one.
+     - :sup-yes:`Yes` · ≤M5.1
+     - The probe runs in GNU C89 mode (--c89 --gcc) because the harness directive lines are // comments.
 
 C99
 ~~~
@@ -951,6 +946,11 @@ C99
      -
      - :sup-partial:`Partial` · ≤M5.1
      - A static initializer of the flexible array member is diagnosed; the member itself and sizeof work (C23-mode test). Complete in M6.6b.
+   * - Address constants cast to an integer
+     -
+     -
+     - :sup-partial:`Partial` · ≤M5.1
+     - An address cast to an integer works in a return value, an assignment, an argument, a comparison and a difference of two addresses. The initializer of a block-scope integer variable (``uintptr_t x = (uintptr_t)&g;``) is diagnosed and the function dropped. Complete in M6.6b.
    * - Variable length and variably modified types
      - N683, N2778
      -
@@ -1004,8 +1004,8 @@ C99
    * - Variadic macros and \_Pragma
      - N707, N634
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Handled by the front end before the writer sees the code; no corpus test that runs under CIR exercises them.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
    * - <math.h> functions and classification macros
      -
      -
@@ -1014,8 +1014,8 @@ C99
    * - Floating-point environment (<fenv.h>, FENV_ACCESS)
      - N631, N696
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The writer sends no strict-floating-point information (no handling of the pragma in src/ecil\_\*); code that changes the rounding mode may be folded or reordered. Probe to decide between ignored and no.
+     - :sup-ignored:`Ignored` · M6.1b
+     - #pragma STDC FENV_ACCESS ON is accepted and ignored: the writer sends no strict floating-point information, so at -O2 a division is reused across fesetround and an unused division that raises FE_DIVBYZERO is deleted (the M6.1a probe exits 13 at -O2 and 0 at -O0). gcc ignores the pragma the same way; clang honors it. Silently wrong output. Registered as High finding P-1 (security.md §5); M6.1b makes it loud.
 
 C11
 ~~~
@@ -1068,13 +1068,13 @@ C11
    * - \_Thread_local
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The writer sends TLS variables (GNU \_\_thread passes a corpus test); no C11-spelling test runs.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
    * - <threads.h>
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Library functions only (glibc); no CIR test.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
 
 C17
 ~~~
@@ -1092,8 +1092,8 @@ C17
    * - C17: defect reports only (\_\_STDC_VERSION\_\_ is 201710L)
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - C17 adds no language feature; the C11 rows apply. No corpus test that runs under CIR is in --c17 mode.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
 
 C23
 ~~~
@@ -1126,8 +1126,8 @@ C23
    * - typeof_unqual
      - N2930
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - No test runs it.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
    * - Empty initializers (= {})
      - N2900
      -
@@ -1158,56 +1158,46 @@ C23
      -
      - :sup-yes:`Yes` · ≤M5.1
      -
-   * - constexpr objects
-     - N3018
-     -
-     - :sup-unverified:`Unverified` · M6.1a
-     - No corpus test that runs under CIR; c23-constexpr-1 is dropped (it uses \_Complex and \_Atomic).
    * - Type inference in object definitions (auto)
      - N3007
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - c23-auto-2 fails under CIR because it uses a variable length array.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
    * - Standard attributes ([[deprecated]], [[nodiscard]], [[maybe_unused]], [[fallthrough]], [[noreturn]])
      - N2335, N2554, N2764, N2408, N2270, N2267, N2334
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Front-end only; no run test.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
    * - Enumerations with fixed underlying types
      - N3029, N3030
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - c23-enum-6 fails under CIR because it uses \_Atomic.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
    * - Digit separators
      - N2626
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The corpus test also fails on the native x86-64 configuration (a front-end or test issue), so it is no evidence.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
    * - #elifdef, #elifndef, #warning, \_\_has_include, \_\_VA_OPT\_\_
      - N2645, N2686, N2799, N3033
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Front-end only; no run test.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
    * - #embed
      - N3017
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Front-end only; no run test, support in the front end not checked.
+     - :sup-yes:`Yes` · ≤M5.1
+     -
    * - Bit-precise integer types (\_BitInt)
      - N2763, N2775
      -
      - :sup-no:`No` · M6.6b
      - Operations, parameters and bit-fields of \_BitInt types are diagnosed (opaque type). The bitint-\* corpus tests also fail on the native configuration, so they are no evidence.
-   * - Decimal floating-point types (\_Decimal32, \_Decimal64, \_Decimal128)
-     - N2341
-     -
-     - :sup-no:`No` · after M7
-     - Float formats other than the binary ones are diagnosed.
    * - IEEE 754 interchange and extended types (\_Float16, \_Float128, ...)
      - N2601
      -
-     - :sup-no:`No` · M6.7
-     - Reach the library as opaque types and are diagnosed.
+     - :sup-partial:`Partial` · ≤M5.1
+     - Arithmetic and conversions of \_Float16, \_Float32, \_Float64, \_Float128, \_Float32x and \_Float64x values work. A floating constant of a format other than float, double and long double is diagnosed and the function or variable that uses it is dropped (including an int constant converted to such a type, as in half \* 4). Complete in M6.7.
 
 GNU extensions
 --------------
@@ -1240,8 +1230,8 @@ GNU language extensions
    * - Conditional with omitted middle operand (a ?: b)
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The front end rewrites it; no CIR test runs it.
+     - :sup-no:`No` · Ext
+     - Every use of a ?: b is diagnosed and the function dropped (the front end keeps the two-operand form; the writer has no translation).
    * - \_\_int128 and unsigned \_\_int128
      -
      -
@@ -1250,8 +1240,8 @@ GNU language extensions
    * - \_\_thread
      -
      -
-     - :sup-yes:`Yes` · ≤M5.1
-     - A thread-local variable with dynamic initialization or destruction at namespace scope is diagnosed (M6.7).
+     - :sup-yes:`Yes` · M6.1a
+     - \_\_thread gives the variable thread storage duration (TLS) for definitions, statics, members, block-scope statics and extern declarations, in C and C++. A thread-local variable with dynamic initialization or destruction at namespace scope is diagnosed (M6.7); the front end rejects \_\_thread with a dynamic initializer.
    * - #pragma pack and ms_struct layout
      -
      -
@@ -1260,8 +1250,8 @@ GNU language extensions
    * - Asm labels on declarations (int f(void) \_\_asm\_\_("name"))
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The symbol name is used (ecil_type.c ~2900); glibc redirects rely on it; only writer goldens cover it.
+     - :sup-yes:`Yes` · ≤M5.1
+     - A label on a function, a variable and a static function names the symbol; a second declaration with the same label reaches the same object.
    * - Range designators in initializers ([0 ... 3] = x)
      -
      -
@@ -1354,18 +1344,18 @@ GNU and clang attributes
    * - used
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Sent as supp key 11 since M5 (library test only); no run test.
+     - :sup-yes:`Yes` · M5
+     - The probe reads its own symbol table: unreferenced static variables and functions with the attribute stay in the object file.
    * - weak
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Weak linkage is written (elk_weak, extern_weak declarations); the corpus weak directory is outside the filter.
+     - :sup-yes:`Yes` · ≤M5.1
+     - Weak definitions have weak binding; a weak undefined function or variable has the address 0 at -O0 and -O2.
    * - Hint attributes (unused, deprecated, format, malloc, warn_unused_result, nonnull, ...)
      -
      -
-     - :sup-partial:`Partial` · ≤M5.1
-     - Accepted. GNU nonnull does not reach the nonnull mask and malloc is not sent: attr-diff rows (project.md §4.4). The run tests carry glibc declarations that use these attributes. Complete in M6.5.
+     - :sup-yes:`Yes` · ≤M5.1
+     - Accepted. GNU nonnull does not reach the nonnull mask and malloc is not sent (M6.5): the code can be slower, never wrong. The run tests carry glibc declarations that use these attributes.
    * - noipa, noclone, flatten, optimize
      -
      -
@@ -1394,18 +1384,18 @@ GNU and clang attributes
    * - regparm, stdcall, fastcall, thiscall
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - gcc and clang also ignore these on x86-64 (with a warning), so this is no gap if CIR behaves the same; no test shows it.
+     - :sup-yes:`Yes` · ≤M5.1
+     - The front end warns (regparm, thiscall: unknown attribute; stdcall, fastcall: supported only in 32-bit configurations) and the functions use the System V convention, as with gcc and clang.
    * - trivial_abi ([[clang::trivial_abi]])
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - The writer sends the NONTRIVIAL_ABI record flag from the front end's answer; golden and library tests cover the flag, no run test.
+     - :sup-ignored:`Ignored` · M6.4a
+     - The front end does not know the attribute: it warns "unknown attribute" and the class keeps the non-trivial ABI (passed and returned in memory), where clang passes a trivial_abi class in registers. A program compiled by CIR alone is correct; an object compiled by clang that relies on the attribute disagrees on the calling convention. gcc ignores it too.
    * - scalar_storage_order
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - No CIR code reads it; field-merge-1 passes but checks only self-consistent reads, not the byte order.
+     - :sup-ignored:`Ignored` · M6.4a
+     - The front end warns "unknown attribute scalar_storage_order" and the attribute is dropped: the scalars of a big-endian structure are stored in the target byte order (the M6.1a probe reads the wrong bytes at -O0 and -O2, exit status 3). gcc supports the attribute. Silently wrong data, apart from the generic warning.
    * - constructor and destructor
      -
      -
@@ -1430,7 +1420,7 @@ GNU and clang attributes
      -
      -
      - :sup-no:`No` · Ext
-     - Dropped with a named reason (64 of the 528 C++ drop notes in H3).
+     - Dropped with a named reason when a function has several target versions (C++; C rejects the redefinition in the front end); target_clones is an unknown attribute that the front end warns about and ignores. 64 of the 528 C++ drop notes in H3.
 
 Builtin functions
 -----------------
@@ -1478,8 +1468,8 @@ Builtin functions
    * - \_\_builtin_clz, ctz, clrsb, clzg and ctzg
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Mapped by the writer; no corpus test that runs under CIR uses them. clzg and ctzg with a non-constant second argument are diagnosed.
+     - :sup-yes:`Yes` · ≤M5.1
+     - clzg and ctzg with a non-constant second argument are diagnosed.
    * - Overflow arithmetic (\_\_builtin_add_overflow, \_sub\_, \_mul\_, and the \_p forms)
      -
      -
@@ -1503,8 +1493,8 @@ Builtin functions
    * - \_\_builtin_alloca_with_align
      -
      -
-     - :sup-ignored:`Ignored` · M6.2
-     - Accepted, but the alignment argument is dropped: the writer sends it as plain alloca and the library aligns to 16 whatever was asked. tests/tests/imported/gnu/c/pr78468.sft.c fails at -O2 (gcc and clang pass at -O0 and -O2). Silently wrong output, so the row must stop being silent by M6.4a.
+     - :sup-partial:`Partial` · M6.1a
+     - Alignments up to 128 bits (16 bytes) work: the library aligns the block to 16 bytes. An alignment above 128 bits, or one that is not a constant, is diagnosed: the function is dropped (a reference to it is a library error). Honoring larger alignments needs the writer to send the alignment and the library to use it (M6.2). tests/tests/imported/gnu/c/pr78468.sft.c now fails to compile (loud). Complete in M6.2.
    * - Compile-time builtins (choose_expr, types_compatible_p, offsetof, classify_type)
      -
      -
@@ -1513,8 +1503,8 @@ Builtin functions
    * - \_\_builtin_constant_p
      -
      -
-     - :sup-no:`No` · M6.2
-     - Diagnosed and the function dropped; it blocks libstdc++ algorithms, Boost algorithm and range, and the codequality sort kernel. Becomes llvm.is.constant.
+     - :sup-partial:`Partial` · ≤M5.1
+     - Outside constexpr functions the front end folds the call: 1 for a constant expression, 0 for anything else (GCC at -O2 also answers 1 for values that inlining makes constant; llvm.is.constant comes in M6.2). In a C++ constexpr function the call reaches the writer, is diagnosed, and the function dropped; it blocks libstdc++ algorithms, Boost algorithm and range, and the codequality sort kernel. Complete in M6.2.
    * - \_\_builtin_object_size and \_\_builtin_dynamic_object_size
      -
      -
@@ -1583,8 +1573,8 @@ Builtin functions
    * - \_\_builtin_return_address and \_\_builtin_frame_address
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Not in the writer's name table, so a call is diagnosed unless the front end handles it itself; no run test.
+     - :sup-no:`No` · Ext
+     - Not in the writer's name table: a call is diagnosed and the function dropped.
    * - \_\_builtin_apply, \_\_builtin_apply_args and \_\_builtin_return
      -
      -
@@ -1637,8 +1627,8 @@ Code generation and options
    * - RTTI off (--no_rtti)
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - typeid and dynamic_cast are diagnosed when RTTI is disabled; no run test uses the option.
+     - :sup-yes:`Yes` · ≤M5.1
+     - Virtual dispatch, thunks, covariant returns, virtual bases and exceptions work; typeid and dynamic_cast are diagnosed when RTTI is disabled.
    * - Two-process mode (cpfe-cir --ecil_output, then edg-cir)
      -
      -
@@ -1657,8 +1647,8 @@ Code generation and options
    * - Chunked lowering of large units
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Gated by edg-cir-chunk-identity and chunk-rss on real units (not tests under tests/); only library tests run it. M6.1a adds a run test with a forced chunk threshold.
+     - :sup-yes:`Yes` · M5
+     - The run test expands to 2000 functions (about 1.67 MB of stream, above the 1,250,000-byte threshold) and calls them across the chunks; edg-cir-chunk-identity and chunk-rss gate real units.
    * - -p and -pg (profiling)
      -
      -
@@ -1751,13 +1741,13 @@ Security hardening
    * - Non-executable stack (.note.GNU-stack)
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - LLVM emits the note in the assembly it prints for Linux; no test inspects the linked program's stack flags.
+     - :sup-yes:`Yes` · ≤M5.1
+     - The probe reads its own PT_GNU_STACK header and the [stack] mapping: not executable.
    * - RELRO and BIND_NOW (linker)
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - Linking is done by the gcc driver, so its defaults apply; no test checks them. eccp rejects -Wl, options.
+     - :sup-partial:`Partial` · ≤M5.1
+     - RELRO works: the program has a PT_GNU_RELRO header and the mapping that holds a relocated pointer is read-only. BIND_NOW is only what the gcc driver defaults to (the cir-env gcc links lazily), and eccp rejects -Wl, options, so it cannot be asked for. Complete in M6.4b.
    * - -fsanitize=address, undefined, thread, memory
      -
      -
@@ -1815,8 +1805,8 @@ Targets, ABIs and runtimes
    * - libstdc++ as the C++ library
      -
      -
-     - :sup-unverified:`Unverified` · M6.1a
-     - 6 of 15 real-world units compile (compile only, not run); \_\_builtin_constant_p, \_\_atomic\_\* and the add-with-carry builtins block the rest. The per-header rows come from the M6.1a sweep.
+     - :sup-partial:`Partial` · M6.1a
+     - libstdc++ 15.3.1 header sweep (120 headers, C++23 at -O0 and -O2, self-checking): 47 yes, 24 partial (C++20 works, C++23 is blocked by the half and quad constants of <numbers>), 48 no (builtin constant_p M6.2, atomics M6.3, \_Complex M6.6a, extended float and no_unique_address M6.7, coroutines after M7), 1 ignored (csetjmp). Per-header rows: libstdcxx.json. Complete in M6.7.
    * - macOS (Mach-O, arm64 and x86-64)
      -
      -
@@ -1841,9 +1831,618 @@ Targets, ABIs and runtimes
 libstdc++ headers
 -----------------
 
-One row per standard header, filled by the M6.1a header sweep (self-checking usage tests at -O0 and -O2). Until then the table is empty rather than guessed.
+One row per header that the g++ 15.3.1 libstdc++ of the cir-env image ships (the C++ headers, the <c...> wrappers, the deprecated headers and the C-compatibility headers). The header sweep (M6.1a) builds one self-checking usage test per header with C++23 (C++26 for the headers that only exist there) at -O0 and -O2. A header that fails is diagnosed by a negative test; where the header works in C++20 the row is partial and a C++20 test proves it. In C++23 most headers include <numbers> through the ranges support, and the back end cannot yet express its \_Float16, bfloat16 and \_Float128 constants (M6.7).
 
 libstdc++ headers
 ~~~~~~~~~~~~~~~~~
 
-Not surveyed yet.
+.. list-table::
+   :header-rows: 1
+   :class: cir-support
+   :widths: 26 12 22 14 26
+
+   * - Feature
+     - Paper(s)
+     - Macro (value)
+     - CIR
+     - Notes
+   * - <algorithm>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <any>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <array>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <atomic>
+     -
+     -
+     - :sup-no:`No` · M6.3
+     - In C++23 it needs the \_\_atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <barrier>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and the \_\_atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <bit>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <bitset>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <cassert>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <ccomplex>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a \_Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <cctype>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cerrno>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cfenv>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     - The environment calls work; arithmetic under a changed rounding mode is not covered because FENV_ACCESS is not honored (see c99.fenv_access).
+   * - <cfloat>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <charconv>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <chrono>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a delegating constructor without a constructor call (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <cinttypes>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <ciso646>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <climits>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <clocale>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cmath>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <codecvt>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-codecvt-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <compare>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <complex>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a \_Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <complex.h>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a \_Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <concepts>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-concepts-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <condition_variable>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and the \_\_atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <coroutine>
+     -
+     -
+     - :sup-no:`No` · after M7
+     - The cpfe-cir configuration disables coroutines, so the header stops with its own #error; --set_flag=coroutines is a command-line error from the CIR back end.
+   * - <csetjmp>
+     -
+     -
+     - :sup-ignored:`Ignored` · M6.4a
+     - setjmp and longjmp work in the usage test (the value is kept in a volatile object), but no returns_twice is set, so an optimizing build may miscompile other callers (see builtins.setjmp_family). Silently unsafe until M6.4a.
+   * - <csignal>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cstdalign>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cstdarg>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cstdbool>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cstddef>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cstdint>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cstdio>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cstdlib>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cstring>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <ctgmath>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a \_Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <ctime>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cuchar>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cwchar>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cwctype>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <cxxabi.h>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <deque>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <exception>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <execution>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), \_\_builtin_constant_p (M6.2) and the \_\_atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <expected>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <fenv.h>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     - The environment calls work; arithmetic under a changed rounding mode is not covered because FENV_ACCESS is not honored (see c99.fenv_access).
+   * - <filesystem>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and the \_\_atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails. In C++20 at -O0 it also fails to link: the defaulted copy constructor of std::\_\_shared_ptr is referenced but not emitted.
+   * - <flat_map>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <flat_set>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <format>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), \_\_builtin_constant_p (M6.2), a [[no_unique_address]] member initialization (M6.7) and an anonymous-union member with a destructor (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <forward_list>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-forward_list-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <fstream>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-fstream-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <functional>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-functional-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <future>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), \_\_builtin_constant_p (M6.2) and the \_\_atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <generator>
+     -
+     -
+     - :sup-no:`No` · after M7
+     - The cpfe-cir configuration disables coroutines, so the header stops with its own #error (std::generator is not declared); --set_flag=coroutines is a command-line error from the CIR back end.
+   * - <initializer_list>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <iomanip>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <ios>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-ios-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <iosfwd>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <iostream>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-iostream-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <istream>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-istream-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <iterator>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <latch>
+     -
+     -
+     - :sup-no:`No` · M6.3
+     - In C++23 it needs the \_\_atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <limits>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <list>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-list-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <locale>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), \_\_builtin_constant_p (M6.2) and the \_\_atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <map>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a class conditional that does not initialize a variable (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <math.h>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <memory>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <memory_resource>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-memory_resource-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <mutex>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-mutex-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <new>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <numbers>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-numbers-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <numeric>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-numeric-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <optional>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <ostream>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <print>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), \_\_builtin_constant_p (M6.2), a [[no_unique_address]] member initialization (M6.7) and an anonymous-union member with a destructor (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <queue>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <random>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <ranges>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a [[no_unique_address]] member initialization (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <ratio>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <regex>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), \_\_builtin_constant_p (M6.2), the \_\_atomic builtins (M6.3), a class conditional that does not initialize a variable (unscheduled) and an assignment to a class with reusable tail padding (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <scoped_allocator>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-scoped_allocator-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <semaphore>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), the \_\_atomic builtins (M6.3) and \_\_builtin_ia32_pause (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <set>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a class conditional that does not initialize a variable (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <shared_mutex>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-shared_mutex-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <source_location>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the source_location address constant (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <span>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a [[no_unique_address]] member initialization (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <spanstream>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a [[no_unique_address]] member initialization (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <sstream>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <stack>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <stacktrace>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <stdatomic.h>
+     -
+     -
+     - :sup-no:`No` · M6.3
+     - In C++23 it needs the \_\_atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <stdbit.h>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     - Tested with C++26.
+   * - <stdckdint.h>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     - Tested with C++26.
+   * - <stdexcept>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-stdexcept-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <stdfloat>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - std::float32_t and std::float64_t work. A std::float128_t constant (and the half-precision types) is diagnosed and the function is dropped. Complete in M6.7.
+   * - <stdlib.h>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <stop_token>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), the \_\_atomic builtins (M6.3) and \_\_builtin_ia32_pause (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <streambuf>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-streambuf-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <string>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <string_view>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-string_view-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <syncstream>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <system_error>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <text_encoding>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++26 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <tgmath.h>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a \_Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <thread>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7), the \_\_atomic builtins (M6.3) and \_\_builtin_ia32_pause (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <tuple>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-tuple-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <type_traits>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <typeindex>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <typeinfo>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <unordered_map>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-unordered_map-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <unordered_set>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-unordered_set-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <utility>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-utility-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <valarray>
+     -
+     -
+     - :sup-partial:`Partial` · M6.1a
+     - Works in C++20 and earlier (hdr-valarray-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails. Complete in M6.7.
+   * - <variant>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     -
+   * - <vector>
+     -
+     -
+     - :sup-no:`No` · M6.7
+     - In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and \_\_builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.
+   * - <version>
+     -
+     -
+     - :sup-yes:`Yes` · M6.1a
+     - The macros that need coroutines (\_\_cpp_lib_generator) are not defined.

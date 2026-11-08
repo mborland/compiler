@@ -1,0 +1,58 @@
+fe_only -DTEST_NUMBER=1 --c++23 --diag_suppress=cir_warning Test_name.c
+Error: CIR back end: the definition of '_ZNSt6ranges24__fold_left_with_iter_fn7_S_implISt16counted_iteratorINS_14transform_viewINS_9iota_viewIiSt22unreachable_sentinel_tEEZ4mainEUliE0_E9_IteratorILb0EEEESB_NS_9take_viewIS8_E9_SentinelILb0EEEiSt4plusIvEEEDaT0_T1_T2_T3_' was dropped: it uses a construct the CIR back end cannot express: an initialization of a [[no_unique_address]] member other than by a constructor (and it is referenced)
+
+Error: CIR back end: the definition of '_ZNKSt6ranges11__minmax_fnclIRA3_iSt8identityNS_4lessEEENS_14min_max_resultINSt8__detail18__iter_traits_implINSt12remove_cvrefIDTclsr6ranges8__accessE7__beginclsr3stdE7declvalIRT_EEEEE4typeESt26indirectly_readable_traitsISE_EE4type10value_typeEEEOSA_T1_T0_' was dropped: it uses a construct the CIR back end cannot express: an initialization of a [[no_unique_address]] member other than by a constructor (and it is referenced)
+
+Error: CIR back end: the definition of '_ZNSt7numbers3e_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers7log2e_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers8log10e_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers4pi_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers8inv_pi_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers12inv_sqrtpi_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers5ln2_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers6ln10_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers7sqrt2_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers7sqrt3_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers11inv_sqrt3_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers8egamma_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers5phi_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers3e_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers7log2e_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers8log10e_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers4pi_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers8inv_pi_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers12inv_sqrtpi_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers5ln2_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers6ln10_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers7sqrt2_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers7sqrt3_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers11inv_sqrt3_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers8egamma_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+Error: CIR back end: the definition of '_ZNSt7numbers5phi_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+
+28 errors detected in the compilation of "Test_name.c".

@@ -1,0 +1,2 @@
+./a.out
+cxx17.enumerator_attributes ok

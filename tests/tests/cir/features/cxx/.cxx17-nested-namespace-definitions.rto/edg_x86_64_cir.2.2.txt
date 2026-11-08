@@ -1,0 +1,2 @@
+./a.out
+cxx17.nested_namespace_definitions ok

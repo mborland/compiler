@@ -1,0 +1,4 @@
+fe_only -DTEST_NUMBER=2 --c++23 -O2 --diag_suppress=cir_warning Test_name.c
+Error: CIR back end: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the address of a non-string constant
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,2 @@
+./a.out
+cxx23.lambda_no_parens ok

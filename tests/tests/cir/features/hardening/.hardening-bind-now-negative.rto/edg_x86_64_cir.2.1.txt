@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=2 --gcc -Wl,-z,relro Test_name.c
+eccp: unknown option: -Wl,-z,relro

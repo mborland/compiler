@@ -25,6 +25,16 @@ state, decisions and process are in `project.md`.
 - Mac-only loops: `macos-arm-clang-debug-cir` (writer, aarch64 triple, not authoritative), `cir-format-only` (no LLVM).
 - Sync a tree: `rsync -a --checksum --no-times` (what `edg-cir-checkpoint` does); see §7 for why.
 - `cir_src/scripts/box.sh ssh|sync|run JOB CMD|chown|test JOB` (`EDG_CIR_HOST`, `EDG_CIR_SSH_KEY`, optional `EDG_CIR_SSH_SOCKET`, `EDG_CIR_JOBS` (default 48; ninja and lit), `EDG_CIR_SG_DOCKER`, `EDG_BOX_TREE`; run names `cir-lib-JOB-pid`)
+- cir-security sandbox (M6.1a; `security.md` §3, project.md decision 58): `dev_tools/bin/edg-cir-sandbox` is installed at
+  `/home/matt/cir-sec/bin/` (mode 0555; to reinstall, `chmod 755` the directory, copy, `chmod 555`, record the sha256) and is
+  the only way the auditor runs anything on clang4. Scratch is `~/cir-sec-scratch/AUDIT/{snap,work,scripts}`; usage in the
+  audit snapshot's `overlay/SANDBOX.md`. Seed a snapshot: `git archive` the audited commit, stream it gzipped, compare the
+  sha256 on clang4, extract into `AUDIT/snap`, build at `/edg/workspace` in a cir-env container with `--network none`,
+  `chmod -R a+rX`. Files a run creates are owned by UID 65534: remove them through a container.
+- The Mac-side guard: `~/.claude/hooks/cir-security-guard.py` (fixtures `test_cir_security_guard.py`, log
+  `cir-security-guard.log`), run by the cir-security PreToolUse entry of `~/.claude/settings.json` and the agent's
+  frontmatter. The clang4 sandbox is open only while `~/.claude/hooks/cir-security-sandbox.enabled` exists: create it after
+  the wrapper is reviewed and installed, delete it when the audit ends. Prove the guard with the canaries before each audit.
 - `cir_src/test/writer/tools/box.sh ssh|sync|run LOG SCRIPT|wait LOG [N]|fetch REMOTE DIR` (same variables plus `BOX_TREE`; detached via nohup + `~/LOG.exit`; `run` sets `TMPDIR=$HOME/tmp` and `nice -n 10`)
 - `cmp_run.sh`, `rt_run.sh`, `cmp_box.sh`, `rt_box.sh` read `BOX_TREE` (default edg-cir-writer)
 
@@ -90,7 +100,7 @@ state, decisions and process are in `project.md`.
   tree is `m6r-int`. Recipes: `.tmp/m6/s1/mk-m6r-base.sh`, `mk-daybase-m6r.sh`.
 - `main`-side comparison points (M6.R): `identity-main` (a capture of `main` `cc408045d4`) and
   `day-main/baseline-{64,32}` (runs of main's sources with the CIR tree's test tooling); against them the CIR tree
-  differs only by its approved ungated changes. The M5.1 set (`m51-base-*`, `m51-int`) stays until M6.1a has used it.
+  differs only by its approved ungated changes. The M5.1 set (`m51-base-*`, `m51-int`), `identity-main` and `day-main` are prune candidates since M6.1a (`.tmp/m6/s2/prune-clang4.sh`).
   Older names (`m5-base-*`, `identity-m51b`, `identity-m0c`, `m5-int`) are prune candidates. Boost headers 1.92.0 in
   `m6r-int/.tmp/boost-inc` (each tree its own `.tmp/boost-inc`). Images: dev-env `1c1cf78d322b` (`:cir-1c1cf78d322b`), llvm-cir `e92da938d7cc`, cir-env
   `cd5c7f63e579`; a comparison against a baseline taken with other images says so (`IMAGES`).
@@ -104,6 +114,11 @@ state, decisions and process are in `project.md`.
 - Record C++/CIR expectations: `edg-cir-record --tree T ...` (-W on clang4, 100 KB rule, fetch back; `research/test_plumbing.md` §11.3); then `edg-cir-rto-diff --auto`.
 - Writer goldens: `tests/tests/cir/writer` (`//script:edg-cir-ecil-dump`, `//require:BACK_END_TYPE 3`); cirgen run tests `tests/tests/cir/cirgen`; ctest/lit `cir_src/test/lit.cfg.py`, `capi_tests`.
 - Tools self-test (no box, no Docker): `python3 dev_tools/bin/edg-cir-tools-test [-v]`; on both hosts.
+- Feature probes (M6.1a): `tests/tests/cir/features/<section>/` (part of the `cir` suite; one subdirectory per support JSON,
+  owned as project.md §7.1); each probe has an -O0 and an -O2 case. The gate step `support-sweep` (area `support`) runs every
+  test the rows name and then `make_support.py --check --gate SUPPORT_GATE` (`edg-cir-gate-evidence`; bump `SUPPORT_GATE` at
+  each gate). Render and check by hand: `python3 cir_src/doc/support/make_support.py` then
+  `PYTHONPATH=dev_tools/pylibs python3 cir_src/doc/support/make_support.py --check --gate M6.x`.
 - Prune: `edg-cir-checkpoint --prune N | --prune-only | --prune-evidence`; it keeps trees with a KEEP file, entries under 6 h, and `PROTECTED_TREES` (`day-base`, `m5-int`); the default tree is `m6r-int`. A protected tree (or one with a KEEP file) is refused (exit 2) before any sync or
   `build/cir*` wipe: run it as it is with `--no-sync --incremental`, or override with `--allow-protected`
   (`--prune-only` is exempt; `--check-baselines` needs `--no-sync`).

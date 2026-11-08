@@ -24,6 +24,17 @@ cir.func and cir.call.
 
 namespace edg_cir {
 
+static bool param_is_nonnull(uint64_t mask, size_t i)
+/*
+Whether bit i+1 of the nonnull_ptrs mask (bit 0 is the result) marks
+parameter i.  A parameter at index 63 or above has no bit in a 64-bit mask: an
+over-wide shift would wrap (undefined; bit 0 on x86-64) and mark it as the
+reference result, so such parameters are never marked.
+*/
+{
+  return i + 1 < 64 && ((mask >> (i + 1)) & 1) != 0;
+}  /* param_is_nonnull */
+
 mlir::DictionaryAttr a_emitter::noundef_attributes(mlir::Type type)
 /*
 {llvm.noundef} for a scalar (an integer, bool, floating-point or pointer
@@ -186,7 +197,7 @@ the callee (the callee's body is known only now).
     for (size_t i = 0; i < t->params.size(); ++i) {
       size_t position = i + (e.has_vtt && i >= 1 ? 1 : 0);
 
-      if (((t->nonnull_mask >> (i + 1)) & 1) != 0 && position < args.size())
+      if (param_is_nonnull(t->nonnull_mask, i) && position < args.size())
         args[position] = pointer_attributes(t->params[i], true);
     }
     for (mlir::Attribute a : args)
@@ -323,7 +334,7 @@ result of a direct call gets them at finish, when the callee's body is known.
   for (size_t i = 0; i < call_type.params.size(); ++i) {
     size_t position = i + (with_vtt && i >= 1 ? 1 : 0);
 
-    if (((call_type.nonnull_mask >> (i + 1)) & 1) != 0 &&
+    if (param_is_nonnull(call_type.nonnull_mask, i) &&
         position < args.size())
       args[position] = pointer_attributes(call_type.params[i], true);
   }

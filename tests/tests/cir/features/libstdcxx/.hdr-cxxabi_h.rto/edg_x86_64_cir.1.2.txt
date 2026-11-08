@@ -1,0 +1,2 @@
+./a.out
+cxxabi.h: ok

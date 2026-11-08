@@ -1,0 +1,4 @@
+fe_only -DTEST_NUMBER=1 --c++20 Test_name.c
+Error: CIR back end: the definition of '_ZSt8bit_castIjfET_RKT0_' was dropped: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_bit_cast" (and it is referenced)
+
+1 error detected in the compilation of "Test_name.c".

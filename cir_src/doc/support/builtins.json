@@ -55,6 +55,10 @@
       {
        "path": "tests/tests/imported/gnu/c/pr104389.sft.c",
        "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-fp-classify-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
@@ -138,11 +142,16 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "Mapped by the writer; no corpus test that runs under CIR uses them. clzg and ctzg with a non-constant second argument are diagnosed.",
-     "tests": [],
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "clzg and ctzg with a non-constant second argument are diagnosed.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-clz-ctz.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
      "refs": [
       "src/ecil_code.c:1690",
       "src/ecil_type.c:2500"
@@ -253,13 +262,28 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "ignored",
-     "since": null,
+     "status": "partial",
+     "since": "M6.1a",
      "planned": "M6.2",
-     "note": "Accepted, but the alignment argument is dropped: the writer sends it as plain alloca and the library aligns to 16 whatever was asked. tests/tests/imported/gnu/c/pr78468.sft.c fails at -O2 (gcc and clang pass at -O0 and -O2). Silently wrong output, so the row must stop being silent by M6.4a.",
-     "tests": [],
+     "note": "Alignments up to 128 bits (16 bytes) work: the library aligns the block to 16 bytes. An alignment above 128 bits, or one that is not a constant, is diagnosed: the function is dropped (a reference to it is a library error). Honoring larger alignments needs the writer to send the alignment and the library to use it (M6.2). tests/tests/imported/gnu/c/pr78468.sft.c now fails to compile (loud).",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-alloca-with-align.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/writer/writer-alloca-align-negative.sft.c",
+       "kind": "negative"
+      },
+      {
+       "path": "tests/tests/cir/writer/writer-alloca-align-warn.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
-      "src/ecil_code.c:3525",
+      "src/ecil_code.c:1719",
+      "src/ecil_code.c:1727",
+      "src/ecil_code.c:3325",
       "cir_src/lib/cirgen/expr.cpp:1848"
      ]
     },
@@ -291,14 +315,22 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "no",
-     "since": null,
+     "status": "partial",
+     "since": "≤M5.1",
      "planned": "M6.2",
-     "note": "Diagnosed and the function dropped; it blocks libstdc++ algorithms, Boost algorithm and range, and the codequality sort kernel. Becomes llvm.is.constant.",
-     "tests": [],
+     "note": "Outside constexpr functions the front end folds the call: 1 for a constant expression, 0 for anything else (GCC at -O2 also answers 1 for values that inlining makes constant; llvm.is.constant comes in M6.2). In a C++ constexpr function the call reaches the writer, is diagnosed, and the function dropped; it blocks libstdc++ algorithms, Boost algorithm and range, and the codequality sort kernel.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-constant-p.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-constant-p-negative.sft.cpp",
+       "kind": "negative"
+      }
+     ],
      "refs": [
-      "src/ecil_code.c:3265",
-      "src/ecil_code.c:1143",
+      "src/ecil_code.c:3295",
       "doc/project.md §4.4"
      ]
     },
@@ -314,7 +346,7 @@
      "note": "Always folds to the unknown answer ((size_t)-1, or 0 for the minimum kinds), so no bound is ever checked. Becomes llvm.objectsize.",
      "tests": [],
      "refs": [
-      "src/ecil_code.c:3222",
+      "src/ecil_code.c:3251",
       "doc/project.md §4.3"
      ]
     },
@@ -383,7 +415,7 @@
       }
      ],
      "refs": [
-      "src/ecil_code.c:3242"
+      "src/ecil_code.c:3271"
      ]
     },
     {
@@ -404,10 +436,14 @@
       {
        "path": "tests/tests/imported/gnu/c/atomic-fence.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-atomic-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
-      "src/ecil_code.c:1143"
+      "src/ecil_code.c:3295"
      ]
     },
     {
@@ -428,10 +464,14 @@
       {
        "path": "tests/tests/imported/gnu/c/ia64-sync-1.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-sync-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
-      "src/ecil_code.c:1143"
+      "src/ecil_code.c:3295"
      ]
     },
     {
@@ -444,9 +484,14 @@
      "since": null,
      "planned": "M6.3",
      "note": "<atomic> needs it for compare-exchange on padded types.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-clear-padding-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
-      "src/ecil_code.c:1143"
+      "src/ecil_code.c:3295"
      ]
     },
     {
@@ -459,9 +504,14 @@
      "since": null,
      "planned": "M6.3",
      "note": "Needed by Boost multiprecision.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-ia32-addcarry-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
-      "src/ecil_code.c:1143",
+      "src/ecil_code.c:3295",
       "doc/project.md §4.4"
      ]
     },
@@ -475,9 +525,14 @@
      "since": null,
      "planned": "Ext",
      "note": "No mapping, and they need vector types, which are diagnosed.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-ia32-intrinsics-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
-      "src/ecil_code.c:1143"
+      "src/ecil_code.c:3295"
      ]
     },
     {
@@ -490,9 +545,14 @@
      "since": null,
      "planned": "Ext",
      "note": "Vector types are diagnosed (22 of the 528 C++ drop notes in H3).",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-vector-ops-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
-      "src/ecil_code.c:1143",
+      "src/ecil_code.c:3295",
       "src/ecil_type.c:681"
      ]
     },
@@ -508,7 +568,7 @@
      "note": "No returns_twice is set anywhere, and the calls are not diagnosed: an optimizing build may miscompile a function that calls them.",
      "tests": [],
      "refs": [
-      "src/ecil_code.c:1143",
+      "src/ecil_code.c:3295",
       "doc/project.md §4.1"
      ]
     },
@@ -530,10 +590,14 @@
       {
        "path": "tests/tests/imported/gnu/c/setjmp-4.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-builtin-setjmp-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
-      "src/ecil_code.c:1143"
+      "src/ecil_code.c:3295"
      ]
     },
     {
@@ -550,10 +614,14 @@
       {
        "path": "tests/tests/imported/gnu/c/builtin-prefetch-1.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-prefetch-hints-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
-      "src/ecil_code.c:1143"
+      "src/ecil_code.c:3295"
      ]
     },
     {
@@ -562,13 +630,18 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
+     "status": "no",
      "since": null,
-     "planned": "M6.1a",
-     "note": "Not in the writer's name table, so a call is diagnosed unless the front end handles it itself; no run test.",
-     "tests": [],
+     "planned": "Ext",
+     "note": "Not in the writer's name table: a call is diagnosed and the function dropped.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-frame-return-address-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
-      "src/ecil_code.c:1143"
+      "src/ecil_code.c:3295"
      ]
     },
     {
@@ -589,10 +662,14 @@
       {
        "path": "tests/tests/imported/gnu/c/builtin-return-1.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/builtins/builtins-apply-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
-      "src/ecil_code.c:1143"
+      "src/ecil_code.c:3295"
      ]
     }
    ]

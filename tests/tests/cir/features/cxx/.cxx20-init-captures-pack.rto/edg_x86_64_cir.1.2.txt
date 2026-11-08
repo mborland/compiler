@@ -1,0 +1,2 @@
+./a.out
+cxx20.init_captures_pack ok

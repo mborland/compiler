@@ -1,0 +1,2 @@
+eccp -DTEST_NUMBER=2 --c++23 -O2 --diag_suppress=cir_warning Test_name.c
+edg-cir: warning [1003]: the unused definition of '_ZSt3absDF128_' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_fabsf128

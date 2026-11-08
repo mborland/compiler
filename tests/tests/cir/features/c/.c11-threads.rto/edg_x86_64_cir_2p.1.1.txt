@@ -1,0 +1,1 @@
+eccp -DTEST_NUMBER=1 --c11 Test_name.c

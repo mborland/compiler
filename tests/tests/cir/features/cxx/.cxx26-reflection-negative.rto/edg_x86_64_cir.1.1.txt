@@ -1,0 +1,8 @@
+fe_only -DTEST_NUMBER=1 --c++26 --set_flag=reflection Test_name.c
+"Test_name.c", line 12: warning: CIR back end: the body of "use" uses the constant "reflection constant", which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of '_Z3usev' was dropped: it uses a construct the CIR back end cannot express: the constant "reflection constant"
+
+1 error detected in the compilation of "Test_name.c".

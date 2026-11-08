@@ -1,0 +1,2 @@
+./a.out
+cxx11.extern_templates ok

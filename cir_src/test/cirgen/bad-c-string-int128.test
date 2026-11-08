@@ -1,0 +1,20 @@
+; SEC-1-1 (M6.1a): C_STRING of an array of 128-bit integers.  The emitter read
+; each element into a uint64_t with a memcpy of width/8 = 16 bytes: a stack
+; buffer overflow (ASan) and silent corruption in release.  The element of a
+; C_STRING is an 8, 16 or 32-bit integer (char, char8_t, char16_t, wchar_t,
+; char32_t); anything else is a format error found by the validator.
+; RUN: cat %S/Inputs/header.txt %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %not %edg-cir --emit=cir %t.ecil 2>&1 | %FileCheck %s
+; RUN: sh -c '%edg-cir --emit=cir %t.ecil > /dev/null 2>&1; test $? -eq 2'
+; CHECK: error [{{[0-9]+}}]: {{.*}}C_STRING type G-id 42 is not an array of 8, 16 or 32-bit integers
+
+frame DECLS
+  TY_INT 41 128 true 16 16
+  TY_ARRAY 42 41 4 0
+  STR 10 "v"
+  DECL_VAR 43 42 0 1 16 10
+  C_STRING 42 "AAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDD"
+  VAR_INIT 43
+frame END
+  END auto 0

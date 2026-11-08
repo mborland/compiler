@@ -1,0 +1,5 @@
+eccp -DTEST_NUMBER=2 --c++23 -O2 Test_name.c
+"Test_name.c", line 32: warning: template parameter "T" is not used in declaring the parameter types of function template "lambda []() mutable->auto::operator auto (*)()"
+    auto tpl = []<typename T> mutable { return sizeof(T); };
+                           ^
+

@@ -1,0 +1,1 @@
+eccp -DTEST_NUMBER=2 --c++11 -O2 Test_name.c

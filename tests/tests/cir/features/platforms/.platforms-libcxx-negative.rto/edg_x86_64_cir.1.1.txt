@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=1 --g++ --c++17 -stdlib=libc++ Test_name.c
+eccp: unknown option: -stdlib=libc++

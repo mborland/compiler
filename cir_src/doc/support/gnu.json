@@ -62,12 +62,19 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
+     "status": "no",
      "since": null,
-     "planned": "M6.1a",
-     "note": "The front end rewrites it; no CIR test runs it.",
-     "tests": [],
-     "refs": []
+     "planned": "Ext",
+     "note": "Every use of a ?: b is diagnosed and the function dropped (the front end keeps the two-operand form; the writer has no translation).",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-lang-cond-elision-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:4524"
+     ]
     },
     {
      "id": "gnu_lang.int128",
@@ -106,20 +113,27 @@
      "macro": null,
      "macro_value": null,
      "status": "yes",
-     "since": "≤M5.1",
+     "since": "M6.1a",
      "planned": null,
-     "note": "A thread-local variable with dynamic initialization or destruction at namespace scope is diagnosed (M6.7).",
+     "note": "__thread gives the variable thread storage duration (TLS) for definitions, statics, members, block-scope statics and extern declarations, in C and C++. A thread-local variable with dynamic initialization or destruction at namespace scope is diagnosed (M6.7); the front end rejects __thread with a dynamic initializer.",
      "tests": [
       {
-       "path": "tests/tests/imported/gnu/c/pr114052-1.sft.c",
+       "path": "tests/tests/cir/writer/writer-gnu-thread-keyword.sft.cpp",
        "kind": "e2e-run"
       },
       {
-       "path": "tests/tests/cir/cirgen/cxx-s6-thread-local.sft.cpp",
+       "path": "tests/tests/cir/writer/writer-gnu-thread-keyword-c.sft.c",
        "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/writer/writer-gnu-thread-extern.sft.cpp",
+       "kind": "writer"
       }
      ],
-     "refs": []
+     "refs": [
+      "src/ecil_write.h:76",
+      "src/ecil_const.c:1653"
+     ]
     },
     {
      "id": "gnu_lang.pragma_pack",
@@ -149,11 +163,15 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "The symbol name is used (ecil_type.c ~2900); glibc redirects rely on it; only writer goldens cover it.",
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "A label on a function, a variable and a static function names the symbol; a second declaration with the same label reaches the same object.",
      "tests": [
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-lang-asm-labels.sft.c",
+       "kind": "e2e-run"
+      },
       {
        "path": "tests/tests/cir/writer/writer-cxx-asm-label-two-definitions-negative.sft.cpp",
        "kind": "writer"
@@ -181,6 +199,10 @@
       {
        "path": "tests/tests/imported/gnu/c/gnu99-init-1.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-lang-range-designators-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
@@ -201,11 +223,15 @@
       {
        "path": "tests/tests/imported/gnu/c/20030612-1.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-lang-statement-expr-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
-      "src/ecil_code.c:7232",
-      "src/ecil_code.c:10165"
+      "src/ecil_code.c:7264",
+      "src/ecil_code.c:10229"
      ]
     },
     {
@@ -222,10 +248,14 @@
       {
        "path": "tests/tests/imported/gnu/c/pr63186.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-lang-computed-goto-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
-      "src/ecil_code.c:10162"
+      "src/ecil_code.c:10226"
      ]
     },
     {
@@ -246,10 +276,14 @@
       {
        "path": "tests/tests/cir/writer/writer-cxx-unsupported.sft.cpp",
        "kind": "writer"
+      },
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-lang-inline-asm-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
-      "src/ecil_code.c:10159"
+      "src/ecil_code.c:10223"
      ]
     },
     {
@@ -266,6 +300,10 @@
       {
        "path": "tests/tests/imported/gnu/c/pr29091.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-lang-vector-types-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
@@ -483,11 +521,15 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "Sent as supp key 11 since M5 (library test only); no run test.",
+     "status": "yes",
+     "since": "M5",
+     "planned": null,
+     "note": "The probe reads its own symbol table: unreferenced static variables and functions with the attribute stay in the object file.",
      "tests": [
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-attr-used.sft.c",
+       "kind": "e2e-run"
+      },
       {
        "path": "cir_src/test/cirgen/s2-used.test",
        "kind": "lib"
@@ -503,11 +545,15 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "Weak linkage is written (elk_weak, extern_weak declarations); the corpus weak directory is outside the filter.",
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Weak definitions have weak binding; a weak undefined function or variable has the address 0 at -O0 and -O2.",
      "tests": [
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-attr-weak.sft.c",
+       "kind": "e2e-run"
+      },
       {
        "path": "cir_src/test/cirgen/unsupported-discardable-weak.test",
        "kind": "lib"
@@ -523,10 +569,10 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "partial",
+     "status": "yes",
      "since": "≤M5.1",
-     "planned": "M6.5",
-     "note": "Accepted. GNU nonnull does not reach the nonnull mask and malloc is not sent: attr-diff rows (project.md §4.4). The run tests carry glibc declarations that use these attributes.",
+     "planned": null,
+     "note": "Accepted. GNU nonnull does not reach the nonnull mask and malloc is not sent (M6.5): the code can be slower, never wrong. The run tests carry glibc declarations that use these attributes.",
      "tests": [
       {
        "path": "tests/tests/imported/gnu/c/20030711-1.sft.c",
@@ -627,11 +673,16 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "gcc and clang also ignore these on x86-64 (with a warning), so this is no gap if CIR behaves the same; no test shows it.",
-     "tests": [],
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "The front end warns (regparm, thiscall: unknown attribute; stdcall, fastcall: supported only in 32-bit configurations) and the functions use the System V convention, as with gcc and clang.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-attr-x86-conv.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
      "refs": []
     },
     {
@@ -640,10 +691,10 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
+     "status": "ignored",
      "since": null,
-     "planned": "M6.1a",
-     "note": "The writer sends the NONTRIVIAL_ABI record flag from the front end's answer; golden and library tests cover the flag, no run test.",
+     "planned": "M6.4a",
+     "note": "The front end does not know the attribute: it warns \"unknown attribute\" and the class keeps the non-trivial ABI (passed and returned in memory), where clang passes a trivial_abi class in registers. A program compiled by CIR alone is correct; an object compiled by clang that relies on the attribute disagrees on the calling convention. gcc ignores it too.",
      "tests": [
       {
        "path": "tests/tests/cir/writer/writer-cxx-empty-assign-nontrivial-abi.sft.cpp",
@@ -664,16 +715,11 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
+     "status": "ignored",
      "since": null,
-     "planned": "M6.1a",
-     "note": "No CIR code reads it; field-merge-1 passes but checks only self-consistent reads, not the byte order.",
-     "tests": [
-      {
-       "path": "tests/tests/imported/gnu/c/field-merge-1.sft.c",
-       "kind": "e2e-run"
-      }
-     ],
+     "planned": "M6.4a",
+     "note": "The front end warns \"unknown attribute scalar_storage_order\" and the attribute is dropped: the scalars of a big-endian structure are stored in the target byte order (the M6.1a probe reads the wrong bytes at -O0 and -O2, exit status 3). gcc supports the attribute. Silently wrong data, apart from the generic warning.",
+     "tests": [],
      "refs": []
     },
     {
@@ -714,6 +760,10 @@
       {
        "path": "tests/tests/imported/gnu/c/initpri1.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/writer/writer-cxx-init-priority-negative.sft.cpp",
+       "kind": "negative"
       }
      ],
      "refs": [
@@ -738,6 +788,10 @@
       {
        "path": "tests/tests/imported/gnu/c/attr-ifunc-3.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-attr-alias-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
@@ -759,6 +813,10 @@
       {
        "path": "tests/tests/imported/gnu/c/cleanup-2.sft.c",
        "kind": "failing"
+      },
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-attr-cleanup-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
@@ -774,8 +832,13 @@
      "status": "no",
      "since": null,
      "planned": "Ext",
-     "note": "Dropped with a named reason (64 of the 528 C++ drop notes in H3).",
-     "tests": [],
+     "note": "Dropped with a named reason when a function has several target versions (C++; C rejects the redefinition in the front end); target_clones is an unknown attribute that the front end warns about and ignores. 64 of the 528 C++ drop notes in H3.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/gnu/gnu-attr-multiversioning-negative.sft.cpp",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "src/ecil_type.c:3048"
      ]

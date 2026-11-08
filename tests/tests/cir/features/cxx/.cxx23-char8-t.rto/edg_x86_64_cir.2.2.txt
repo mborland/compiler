@@ -1,0 +1,2 @@
+./a.out
+cxx23.char8_t ok

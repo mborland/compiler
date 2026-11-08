@@ -1,0 +1,5 @@
+eccp -DTEST_NUMBER=1 --c23 Test_name.c
+"Test_name.c", line 36: warning: #warning directive: "this #warning is taken: C23 standardizes it"
+  #warning "this #warning is taken: C23 standardizes it"
+   ^
+

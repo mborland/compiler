@@ -1,0 +1,5 @@
+eccp -DTEST_NUMBER=1 --c++23 --diag_suppress=cir_warning Test_name.c
+"Test_name.c", line 41: warning: call to is_constant_evaluated appearing in a non-constexpr function always produces "false"
+    CHECK(std::is_constant_evaluated() == false);
+    ^
+

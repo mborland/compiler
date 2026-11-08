@@ -6048,7 +6048,7 @@ its first reference.
         ecil_gid_info(gid)->entity = var;
         ecil_set_gid(var, gid);
         if (is_const_qualified_type(var->type)) flags |= ECIL_DECL_VAR_CONST;
-        if (is_effective_thread_local(var)) flags |= ECIL_DECL_VAR_TLS;
+        if (ecil_var_is_thread_local(var)) flags |= ECIL_DECL_VAR_TLS;
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
         if (!C_mode()) {
           unsigned int  cxx_flags = 0;

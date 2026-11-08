@@ -13,7 +13,8 @@ They cover the excused-crash heuristic (edg-cir-summary's crash_excuse, used
 by edg-cir-gate-evidence), the C++ feature buckets of edg-cir-summary, the
 .cfi_* normalization and the classes of the assembly comparison
 (edg-cir-gate-evidence), the generated C++ template TU of edg-cir-rss and the
-pruning and disk headroom helpers of edg-cir-checkpoint.
+pruning and disk headroom helpers of edg-cir-checkpoint, and the test-kind
+rules of cir_src/doc/support/make_support.py.
 '''
 
 import contextlib
@@ -23,11 +24,15 @@ import importlib.util
 import json
 import os
 import shutil
+import shlex
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
+import unittest.mock
 
 from pathlib import Path, PurePosixPath
 from typing import List
@@ -56,6 +61,19 @@ chunk_identity = load_tool('edg-cir-chunk-identity')
 chunk_rss = load_tool('edg-cir-chunk-rss')
 chunk_ir = load_tool('edg-cir-chunk-ir')
 names_check = load_tool('edg-cir-names-check')
+sandbox = load_tool('edg-cir-sandbox')
+
+
+def load_support():
+  '''Import cir_src/doc/support/make_support.py by path.'''
+  path = BIN.parents[1] / 'cir_src' / 'doc' / 'support' / 'make_support.py'
+  spec = importlib.util.spec_from_file_location('make_support', path)
+  module = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(module)
+  return module
+
+
+support = load_support()
 
 # The compile output of the M3 gate's one excused crash
 # (imported/gnu/cpp/DRs/dr2867-2.sft.cpp, --c++11): the front end aborts in
@@ -1345,7 +1363,7 @@ class LeanSteps(unittest.TestCase):
       'build', 'ctest', 'smoke', 'cpp-smoke', 'cir-suite', 'corpus',
       'cpp-corpus', 'opt-corpus', 'asm-diff', 'cpp-asm-diff', 'mixed-tu',
       'symbols', 'eh-probes', 'm4-stress', 'cpp-stress', 'crash-sweep',
-      'perf', 'rss', 'stress', 'release-smoke'})
+      'perf', 'rss', 'stress', 'release-smoke', 'support-sweep'})
     self.assertIn('compare-modes', reasons['modes'])
     self.assertIn('compare-modes', reasons['cpp-modes'])
     self.assertIn('ASan preset', reasons['cpp-stress-asan'])
@@ -1394,10 +1412,18 @@ class LeanAreas(unittest.TestCase):
       'bases/docker/cir-env/gcc/edg_eccp_config': ('eccp',),
       'dev_tools/cir-mixed-tu-cases/s3-x/a.cpp': ('linkage',),
       'dev_tools/bin/edg-cir-gate-evidence': ('tooling',),
+      'tests/tests/cir/features/cxx/cxx20-x.sft.cpp': ('tests', 'support'),
+      'tests/tests/cir/features/cxx/.cxx20-x.rto/edg_x86_64_cir.1.1.txt':
+        ('tests', 'support'),
+      'cir_src/doc/support/cxx.json': ('support', 'tooling'),
+      'cir_src/doc/support/make_support.py': ('support', 'tooling'),
+      'cir_src/doc/support/support.md': ('support', 'tooling'),
+      'cir_src/doc/project.md': (),
       'dev_tools/pylibs/edgdocker/__init__.py': ('tooling', 'pylibs'),
       'dev_tools/bin/cpfe-cir-2p': ('tooling', 'eccp', 'twop'),
       'dev_tools/bin/edg-cir-ecil-dump': ('tooling', 'goldens'),
       'dev_tools/bin/edg-cir-summary': ('tooling', 'summary'),
+      'dev_tools/bin/edg-cir-sandbox': ('tooling',),
       'tests/expectations/edg_x86_32/edg.log': ('tests-reference',),
       'tests/expectations/edg_x86_32_cp/edg.log': ('tests-reference',),
       'tests/.edgy/config.json': ('tests', 'tests-reference'),
@@ -1473,17 +1499,19 @@ class LeanAreas(unittest.TestCase):
     # fe-options runs release-smoke only: too narrow for an eccp change.
     self.assertTrue(gate.uncovered_areas(['util/eccp.sh'], ['fe-options']))
     self.assertGreaterEqual(set(gate.AREA_STEPS['eccp']), {
-      'cir-suite', 'corpus', 'cpp-corpus', 'opt-corpus', 'mixed-tu'})
+      'cir-suite', 'corpus', 'cpp-corpus', 'opt-corpus', 'mixed-tu',
+      'support-sweep'})
     self.assertEqual(gate.uncovered_areas(['util/eccp.sh'], ['eccp']), [])
 
   def test_the_step_sets_of_the_slice_areas(self):
     self.assertEqual(set(gate.AREA_STEPS['library']), {
       'ctest', 'cir-suite', 'corpus', 'cpp-corpus', 'asm-diff',
-      'cpp-asm-diff', 'opt-corpus', 'modes', 'cpp-modes'})
+      'cpp-asm-diff', 'opt-corpus', 'modes', 'cpp-modes',
+      'support-sweep'})
     self.assertEqual(set(gate.AREA_STEPS['writer']), {
       'cir-suite', 'corpus', 'cpp-corpus', 'asm-diff', 'cpp-asm-diff',
       'modes', 'cpp-modes', 'poison', 'opt-corpus', 'writer-stress',
-      'cpp-writer-stress', 'symbols', 'mixed-tu'})
+      'cpp-writer-stress', 'symbols', 'mixed-tu', 'support-sweep'})
     expensive = {'crash-sweep', 'perf', 'rss', 'stress', 'cpp-stress',
                  'm4-stress'}
     for area in ('library', 'writer', 'eccp', 'tests', 'linkage',
@@ -3578,13 +3606,17 @@ class PerfTargetsBaseline(unittest.TestCase):
 
 
 class MilestonePreparation(unittest.TestCase):
-  def test_the_status_triage_is_empty_against_the_m5_baseline(self):
+  def test_the_status_triage_holds_the_accepted_regressions_only(self):
     # pr101373 failed in the M5p baseline, not in the M5 one (it fails in
-    # both); a triage line for a case that did not regress is stale.
+    # both); a triage line for a case that did not regress is stale.  M6.1a:
+    # pr78468 passed at -O0 in the M6.R baseline and is a diagnosed gap now
+    # (__builtin_alloca_with_align above 16 bytes).
     triage, problems = gate.read_status_triage(
       BIN.parent.parent / gate.STATUS_TRIAGE)
     self.assertEqual(problems, [])
-    self.assertEqual(list(triage), [])
+    self.assertEqual(list(triage), [
+      ('imported/gnu/c/pr78468.sft.c', '-DTEST_NUMBER=1',
+       'edg_x86_64_cir')])
 
   def test_slow_below_threshold_runs_with_two_jobs(self):
     import inspect
@@ -4600,6 +4632,848 @@ class ExpectationInheritance(unittest.TestCase):
           fields = line.split(':')
           if fields[3] == 'PASS':
             self.assertIn(fields[1], ('rp', 'lp'), line)
+
+class SupportChecker(unittest.TestCase):
+  '''The test-kind rules of make_support.py (README.md "Test kinds"), run
+  on a scratch tree: the checker's paths are redirected to it.'''
+
+  def setUp(self):
+    self.tmp = tempfile.TemporaryDirectory()
+    self.addCleanup(self.tmp.cleanup)
+    self.root = Path(self.tmp.name)
+    for name, value in (
+        ('ROOT', self.root), ('TESTS', self.root / 'tests' / 'tests'),
+        ('FILTERS', self.root / 'tests' / '.edgy' / 'filters'),
+        ('EXPECTATIONS', self.root / 'tests' / 'expectations' / 'cir'),
+        ('REFERENCE', self.root / 'tests' / 'expectations' / 'ref')):
+      patcher = unittest.mock.patch.object(support, name, value)
+      patcher.start()
+      self.addCleanup(patcher.stop)
+
+  def put(self, rel, text = ''):
+    path = self.root / rel
+    path.parent.mkdir(parents = True, exist_ok = True)
+    path.write_text(text)
+    return rel
+
+  def record(self, rel, text = 'Error: CIR back end: does not support x',
+             configs = None, case = 1):
+    '''The .rto recordings of a test file, for each configuration.'''
+    path = self.root / rel
+    directory = path.parent / ('.' + path.name.split('.')[0] + '.rto')
+    directory.mkdir(parents = True, exist_ok = True)
+    for config in configs or support.CIR_CONFIGS:
+      (directory / f"{config}.{case}.1.txt").write_text(text)
+
+  def check(self, status, tests, gate, group = 'cxx20', **fields):
+    '''The (errors, warnings) of one row, without the rules unrelated to
+    the test kinds.'''
+    row = {'id': f"{group}.x", 'feature': 'F', 'papers': [], 'macro': None,
+           'status': status, 'since': 'M3' if status in ('yes', 'partial')
+           else None, 'planned': None if status in ('yes', 'partial')
+           else 'M6.2', 'note': 'n', 'tests': tests, 'refs': []}
+    row.update(fields)
+    section = {'schema': 1, 'section': 'cxx', 'title': 'T', 'intro': '',
+               'groups': [{'id': group, 'title': 'G', 'rows': [row]}]}
+    report = support.Report()
+    support.check_data([section], gate, report)
+    skip = ('needs a negative test', 'needs a refs entry', 'needs a refs')
+    return ([e for e in report.errors if not any(k in e for k in skip)],
+            [w for w in report.warnings if not any(k in w for k in skip)])
+
+  def e2e(self, rel, options = None, test_type = 'rp'):
+    lines = [f"//type:{test_type}"]
+    if options is not None:
+      lines.append(f"//options:{options}")
+    self.put(rel, '\n'.join(lines) + '\nint main() { return 0; }\n')
+    return {'path': rel, 'kind': 'e2e-run'}
+
+  def test_per_case_types_must_be_rp(self):
+    # (a) from M6.1a an override other than rp is an error (a warning
+    # before), and the mode comes from the rp cases.
+    test = self.e2e('tests/tests/cir/a.sft.cpp',
+                    '--c++11;fn:--c++20;rp:--c++23')
+    errors, warnings = self.check('yes', [test], 'M6.1a')
+    self.assertEqual(len(errors), 1, errors)
+    self.assertIn('every case must be rp', errors[0])
+    errors, warnings = self.check('yes', [test], 'M6.0')
+    self.assertEqual(errors, [])
+    self.assertTrue(any('every case must be rp' in w for w in warnings))
+    # The fn case's C++11 does not lower the mode: C++20 satisfies cxx20.
+    self.assertFalse(any('needs an e2e-run test in' in e
+                         for e in self.check('yes', [test], 'M6.1a')[0]))
+    mode = support.test_mode(self.root / test['path'],
+                             support.read_directives(self.root / test['path']))
+    self.assertEqual(mode, ('cpp', 2020))
+    ok = self.e2e('tests/tests/cir/b.sft.cpp', '--c++20;rp:--c++23 -O2')
+    self.assertEqual(self.check('yes', [ok], 'M6.1a'), ([], []))
+    # The override list is edgy's: "x" after a semicolon is no override.
+    other = self.e2e('tests/tests/cir/c.sft.cpp', '--c++20 -DX=a;b')
+    self.assertEqual(self.check('yes', [other], 'M6.1a'), ([], []))
+
+  def test_a_mixed_tu_case_with_xfail_is_not_e2e_run(self):
+    # (b)
+    self.put('dev_tools/cir-mixed-tu-cases/ok/a.cpp')
+    self.put('dev_tools/cir-mixed-tu-cases/ok/xfail', '\n')
+    self.put('dev_tools/cir-mixed-tu-cases/bad/a.cpp')
+    self.put('dev_tools/cir-mixed-tu-cases/bad/xfail', 'ref+ours\n')
+    ok = {'path': 'dev_tools/cir-mixed-tu-cases/ok', 'kind': 'e2e-run'}
+    bad = {'path': 'dev_tools/cir-mixed-tu-cases/bad', 'kind': 'e2e-run'}
+    self.assertEqual(self.check('yes', [ok], 'M6.1a',
+                                mode_independent = True), ([], []))
+    errors, _ = self.check('yes', [bad], 'M6.1a', mode_independent = True)
+    self.assertEqual(len(errors), 1, errors)
+    self.assertIn('non-empty xfail', errors[0])
+
+  def test_negative_tests(self):
+    # (c) type fp/fn/fc/cn and a CIR diagnosis in both recordings.
+    def negative(rel, test_type = 'fn', **record):
+      self.put(rel, f"//type:{test_type}\nint x;\n")
+      self.record(rel, **record)
+      return {'path': rel, 'kind': 'negative'}
+    base = 'tests/tests/cir/n'
+    for index, (test_type, text) in enumerate(
+        (('fn', 'Error: CIR back end: x does not support y'),
+         ('fp', 'warning: CIR back end: it cannot express z'),
+         ('fc', 'Command-line error: CIR back end: no'),
+         ('cn', 'unknown option: --q'))):
+      test = negative(f"{base}{index}.sft.c", test_type, text = text)
+      self.assertEqual(self.check('no', [test], 'M6.1a'), ([], []), text)
+    # The wrong type, no CIR diagnosis, and a missing second configuration.
+    wrong = negative(f"{base}5.sft.c", 'rp')
+    self.assertIn('//type:rp', self.check('no', [wrong], 'M6.1a')[0][0])
+    plain = negative(f"{base}6.sft.c", text = 'error: something else')
+    errors, _ = self.check('no', [plain], 'M6.1a')
+    self.assertEqual(len(errors), 2, errors)
+    one = negative(f"{base}7.sft.c", configs = ['edg_x86_64_cir'])
+    errors, _ = self.check('no', [one], 'M6.1a')
+    self.assertEqual(len(errors), 1, errors)
+    self.assertIn('edg_x86_64_cir_2p', errors[0])
+    # Not under tests/tests/cir/.
+    outside = negative('tests/tests/imported/o.sft.c')
+    self.assertIn('must be a test under', self.check(
+      'no', [outside], 'M6.1a')[0][0])
+    # Lit negatives: a CHECK line that expects an error; not bad-*.
+    self.put('cir_src/test/lit/errors.test',
+             '# RUN: x\n# NOFILE: cannot read\n# TRIPLE: error{{.*}}no\n')
+    self.put('cir_src/test/lit/dump.test', '# RUN: error out\n# CHECK: ok\n')
+    self.put('cir_src/test/lit/bad-x.test', '# CHECK: error: bad\n')
+    good = {'path': 'cir_src/test/lit/errors.test', 'kind': 'negative'}
+    self.assertEqual(self.check('no', [good], 'M6.1a'), ([], []))
+    for name in ('dump', 'bad-x'):
+      test = {'path': f"cir_src/test/lit/{name}.test", 'kind': 'negative'}
+      self.assertEqual(len(self.check('no', [test], 'M6.1a')[0]), 1, name)
+
+  def test_every_case_of_a_negative_test_shows_the_diagnosis(self):
+    rel = 'tests/tests/cir/m.sft.c'
+    self.put(rel, '//type:fn\n')
+    test = {'path': rel, 'kind': 'negative'}
+    self.record(rel, case = 1)
+    self.record(rel, 'Error: CIR back end: x does not support y', case = 2)
+    self.assertEqual(self.check('no', [test], 'M6.1a'), ([], []))
+    # The -O2 case lost the diagnosis: one error for each configuration.
+    self.record(rel, 'no diagnostics at all\n', case = 2)
+    errors, _ = self.check('no', [test], 'M6.1a')
+    self.assertEqual(len(errors), 2, errors)
+    self.assertIn('case 2', errors[0])
+
+  def test_only_a_diagnosis_line_counts(self):
+    warning = ("edg-cir: warning [1003]: the unused definition of '_Z1fv' "
+               'was dropped and erased: it uses a construct the CIR back '
+               'end cannot express: the builtin function x')
+    self.assertFalse(support.shows_diagnosis(warning))
+    self.assertTrue(support.shows_diagnosis(
+      warning + '\nError: CIR back end: the definition of f was dropped: '
+      'it uses a construct the CIR back end cannot express: x'))
+    # A marker outside the CIR back end's lines and the errors.
+    self.assertFalse(support.shows_diagnosis('note: it does not support x'))
+    self.assertTrue(support.shows_diagnosis('error: x does not support y'))
+    self.assertTrue(support.shows_diagnosis(
+      'eccp: unknown option: --nope'))
+    rel = 'tests/tests/cir/w.sft.cpp'
+    self.put(rel, '//type:fp\n')
+    self.record(rel, warning)
+    errors, _ = self.check(
+      'no', [{'path': rel, 'kind': 'negative'}], 'M6.1a')
+    self.assertEqual(len(errors), 2, errors)
+
+  def test_a_lit_not_check_is_no_error_expectation(self):
+    self.put('cir_src/test/lit/n.test',
+             '# RUN: x\n# CHECK-NOT: error\n# TRIPLE-NOT: error{{.*}}\n')
+    self.put('cir_src/test/lit/y.test',
+             '# RUN: x\n# CHECK-NOT: error\n# CHECK: error: bad\n')
+    no = {'path': 'cir_src/test/lit/n.test', 'kind': 'negative'}
+    yes = {'path': 'cir_src/test/lit/y.test', 'kind': 'negative'}
+    self.assertEqual(len(self.check('no', [no], 'M6.1a')[0]), 1)
+    self.assertEqual(self.check('no', [yes], 'M6.1a'), ([], []))
+
+  def failing(self, rows):
+    self.put('tests/expectations/cir/imported.log', rows)
+    self.put('tests/tests/imported/f.sft.c', '//type:rp\n')
+    return {'path': 'tests/tests/imported/f.sft.c', 'kind': 'failing'}
+
+  def test_failing_tests_of_a_no_row_fail_loudly(self):
+    # (d) FAIL(COMPILE) for an rp test, FAIL for an lp test.
+    loud = self.failing('f.sft.c:rp:-DTEST_NUMBER=1:FAIL(COMPILE):\n')
+    self.assertEqual(self.check('no', [loud], 'M6.1a'), ([], []))
+    quiet = self.failing('f.sft.c:rp:-DTEST_NUMBER=1:FAIL:\n')
+    errors, _ = self.check('no', [quiet], 'M6.1a')
+    self.assertEqual(len(errors), 1, errors)
+    self.assertIn('FAIL(COMPILE) for rp', errors[0])
+    errors, warnings = self.check('no', [quiet], 'M6.0')
+    self.assertEqual(errors, [])
+    self.assertEqual(len(warnings), 1, warnings)
+    # An lp test that fails in the link, and an output mismatch.
+    link = self.failing('f.sft.c:lp:-DTEST_NUMBER=1:FAIL:\n')
+    self.assertEqual(self.check('no', [link], 'M6.1a'), ([], []))
+    mismatch = self.failing(
+      'f.sft.c:rp:-DTEST_NUMBER=1:FAIL(COMPILE)--OUTPUT MISMATCH:\n')
+    self.assertEqual(len(self.check('no', [mismatch], 'M6.1a')[0]), 1)
+    # A partial row keeps any failing status.
+    errors, _ = self.check('partial', [quiet, self.e2e(
+      'tests/tests/cir/p.sft.cpp', '--c++20')], 'M6.1a')
+    self.assertEqual(errors, [])
+
+  def test_the_mode_rule_applies_to_partial_rows(self):
+    # (e)
+    old = self.e2e('tests/tests/cir/old.sft.cpp', '--c++11')
+    errors, _ = self.check('partial', [old], 'M6.1a')
+    self.assertEqual(len(errors), 1, errors)
+    self.assertIn('needs an e2e-run test in C++ mode 2020', errors[0])
+    errors, warnings = self.check('partial', [old], 'M6.0')
+    self.assertEqual(errors, [])
+    self.assertEqual(len(warnings), 1, warnings)
+    self.assertEqual(self.check('partial', [old], 'M6.1a',
+                                mode_independent = True), ([], []))
+
+  def test_writer_and_lib_directories(self):
+    # The writer and lib kinds have directory rules.
+    self.put('tests/tests/cir/w.sft.c',
+             '//type:fp\n//script:edg-cir-ecil-dump\n')
+    self.put('tests/tests/cir/nw.sft.c', '//type:fp\n')
+    self.put('cir_src/test/writer/x.test')
+    self.put('cir_src/test/cirgen/y.test')
+    self.put('tests/tests/imported/z.sft.c', '//script:edg-cir-ecil-dump\n')
+    def kind(rel, name):
+      return self.check('yes', [{'path': rel, 'kind': name},
+                                self.e2e('tests/tests/cir/e.sft.cpp',
+                                         '--c++20')], 'M6.1a')[0]
+    self.assertEqual(kind('tests/tests/cir/w.sft.c', 'writer'), [])
+    self.assertEqual(kind('cir_src/test/writer/x.test', 'writer'), [])
+    self.assertEqual(len(kind('tests/tests/cir/nw.sft.c', 'writer')), 1)
+    self.assertEqual(len(kind('tests/tests/imported/z.sft.c', 'writer')), 1)
+    self.assertEqual(len(kind('cir_src/test/cirgen/y.test', 'writer')), 1)
+    self.assertEqual(kind('cir_src/test/cirgen/y.test', 'lib'), [])
+    self.assertEqual(len(kind('cir_src/test/writer/x.test', 'lib')), 1)
+    self.assertEqual(len(kind('tests/tests/cir/w.sft.c', 'lib')), 1)
+
+
+class SupportSweep(unittest.TestCase):
+  '''The support-sweep step: where it is wired in, what it selects and
+  how it judges an edgy run.'''
+
+  def test_the_step_is_wired_in(self):
+    self.assertIn('support-sweep', gate.STEPS)
+    self.assertIn('support-sweep', gate.STEP_FUNCTIONS)
+    self.assertIn('support-sweep', gate.M4_STEPS)
+    self.assertIn('support-sweep', gate.default_steps(True, True))
+    self.assertNotIn('support-sweep', gate.default_steps(False, False))
+    # It uses the results of ctest and mixed-tu of the same evidence.
+    for earlier in ('ctest', 'mixed-tu'):
+      self.assertLess(gate.STEPS.index(earlier),
+                      gate.STEPS.index('support-sweep'))
+    for area in ('writer', 'library', 'eccp', 'toolchain', 'support'):
+      self.assertIn('support-sweep', gate.AREA_STEPS[area], area)
+    self.assertIn(gate.SUPPORT_GATE, support.GATES)
+
+  def test_the_areas_of_the_support_files(self):
+    self.assertEqual(
+      gate.areas_of('tests/tests/cir/features/libstdcxx/a.sft.cpp'),
+      ('tests', 'support'))
+    self.assertEqual(gate.areas_of('cir_src/doc/support/c.json'),
+                     ('support', 'tooling'))
+    # The rest of the CIR documentation still needs no step.
+    self.assertEqual(gate.areas_of('cir_src/doc/design.md'), ())
+    self.assertEqual(gate.areas_of('tests/tests/cir/config/a.sft.c'),
+                     ('tests',))
+    steps, _ = gate.lean_steps(['support', 'tooling'])
+    self.assertEqual(steps, ['build', 'tools-test', 'support-sweep'])
+
+  def test_the_selection(self):
+    sections = [{'groups': [{'rows': [
+      {'tests': [{'path': 'tests/tests/cir/a.sft.c', 'kind': 'e2e-run'},
+                 {'path': 'tests/tests/imported/gnu/c/b.sft.c',
+                  'kind': 'failing'},
+                 {'path': 'cir_src/test/lit/errors.test',
+                  'kind': 'negative'},
+                 {'path': 'dev_tools/cir-mixed-tu-cases/s1-x',
+                  'kind': 'e2e-run'}]},
+      {'tests': [{'path': 'tests/tests/cir/features/c/f.sft.c',
+                  'kind': 'negative'}]},
+      {'tests': []}]}]}]
+    selection = gate.support_selection(
+      sections, ['cir/features/c/f.sft.c', 'cir/features/c/g.sft.c'])
+    self.assertEqual(selection, {
+      'edgy': ['cir/a.sft.c', 'cir/features/c/f.sft.c',
+               'cir/features/c/g.sft.c'],
+      'failing': ['imported/gnu/c/b.sft.c'],
+      'lit': ['cir_src/test/lit/errors.test'], 'mixed': ['s1-x']})
+
+  def test_the_feature_tests_are_the_test_files(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      base = Path(tmp) / 'tests' / 'tests' / 'cir' / 'features'
+      for name in ('cxx/a.sft.cpp', 'cxx/.a.rto/edg_x86_64_cir.1.1.txt',
+                   'c/b.sft.c', 'c/.hidden.sft.c', 'c/notes.txt'):
+        (base / name).parent.mkdir(parents = True, exist_ok = True)
+        (base / name).write_text('')
+      self.assertEqual(
+        gate.feature_tests(Path(tmp)),
+        ['cir/features/c/b.sft.c', 'cir/features/cxx/a.sft.cpp'])
+      self.assertEqual(gate.feature_tests(Path(tmp) / 'none'), [])
+
+  def test_an_edgy_run_is_judged(self):
+    selection = {'edgy': ['cir/a.sft.c', 'imported/b.sft.c'],
+                 'failing': ['imported/f.sft.c'], 'lit': [], 'mixed': []}
+
+    def result(path, bucket = 'PASS', status = 'PASS'):
+      return {'path': path, 'bucket': bucket, 'status': status,
+              'variant': '-D'}
+    first, second = gate.SUPPORT_CONFIGS
+    good = [result('cir/a.sft.c'), result('imported/b.sft.c'),
+            result('imported/f.sft.c', 'FE_FAIL', 'FAIL(COMPILE)')]
+    problems, note = gate.judge_support_run(first, selection, good, '')
+    self.assertEqual(problems, [])
+    self.assertIn('3 tests', note)
+    # The second configuration runs the cir suite only.
+    problems, _ = gate.judge_support_run(second, selection, good[:1], '')
+    self.assertEqual(problems, [])
+    # A vacuous run, a test that did not run, a case that does not pass and
+    # a difference from the recorded expectations are problems.
+    self.assertEqual(len(gate.judge_support_run(first, selection, [],
+                                                '')[0]), 1)
+    self.assertIn('did not run', gate.judge_support_run(
+      first, selection, good[:1], '')[0][0])
+    bad = [result('cir/a.sft.c', 'FAIL', 'FAIL'), *good[1:]]
+    self.assertIn('do not pass', gate.judge_support_run(
+      first, selection, bad, '')[0][0])
+    problems, _ = gate.judge_support_run(
+      first, selection, good, '- imported/f.sft.c rp:-D:FAIL(COMPILE):\nok\n')
+    self.assertEqual(len(problems), 1)
+    self.assertIn('differ from the recorded', problems[0])
+    # A failing test is not required to pass.
+    self.assertEqual(gate.judge_support_run(first, selection, good,
+                                            '')[0], [])
+
+
+class SandboxWrapper(unittest.TestCase):
+  '''The cir-security sandbox wrapper (edg-cir-sandbox): the docker command
+  line it builds, what it refuses, and the symlink-proof readers (no box,
+  no Docker).'''
+
+  TOOL = BIN / 'edg-cir-sandbox'
+  FULL_ID = ('sha256:cd5c7f63e579bd757e9e2169bd945e3424adf92635bd6'
+             '74515b95729e1a17286')
+
+  def expected_argv(self, root, audit, number, timeout):
+    return [
+      '/usr/bin/timeout', '-k', '30', str(timeout + 60),
+      '/usr/bin/docker', 'run', '-i', '--rm', '--pull', 'never', '--init',
+      '--log-driver', 'none', '--network', 'none', '--ipc', 'private',
+      '--pids-limit', '512', '--cap-drop', 'ALL',
+      '--security-opt', 'no-new-privileges', '--user', '65534:65534',
+      '--cpus', '8', '--memory', '16g', '--memory-swap', '16g',
+      '--ulimit', 'core=0', '--ulimit', 'fsize=2147483648',
+      '--ulimit', 'nofile=4096', '--read-only',
+      '--tmpfs', '/tmp:rw,exec,nosuid,nodev,size=4g',
+      '-e', 'HOME=/tmp', '-e', 'ASAN_OPTIONS=detect_leaks=0',
+      '-e', 'ASAN_SYMBOLIZER_PATH=/edg/llvm-cir/bin/llvm-symbolizer',
+      '--name', f"cir-sec-{audit}-{number}",
+      '--label', f"edg.job=cir-sec-{audit}",
+      '-v', f"{root}/{audit}/snap:/edg/workspace:ro",
+      '-v', f"{root}/{audit}/work/{number}:/work", '-w', '/work',
+      self.FULL_ID, 'nice', '-n', '10', 'timeout', '-k', '10', str(timeout),
+      'bash', '-s']
+
+  def run_tool(self, *args, stdin = ''):
+    return subprocess.run([sys.executable, '-I', str(self.TOOL), *args],
+                          input = stdin, capture_output = True, text = True)
+
+  def test_the_shebang_runs_python_isolated(self):
+    first = self.TOOL.read_text().splitlines()[0]
+    self.assertEqual(first, '#!/usr/bin/python3 -I')
+    self.assertTrue(os.access(self.TOOL, os.X_OK))
+
+  def test_the_argv_is_pinned_flag_by_flag(self):
+    argv = sandbox.docker_argv('/s', 'sec1', '7', 600)
+    self.assertEqual(argv, self.expected_argv('/s', 'sec1', '7', 600))
+    # The security flags, one by one (a regression names the flag).
+    pairs = {'--network': 'none', '--ipc': 'private', '--pids-limit': '512',
+             '--cap-drop': 'ALL', '--security-opt': 'no-new-privileges',
+             '--user': '65534:65534', '--cpus': '8', '--memory': '16g',
+             '--memory-swap': '16g', '--pull': 'never', '--log-driver': 'none',
+             '--tmpfs': '/tmp:rw,exec,nosuid,nodev,size=4g'}
+    for flag, value in pairs.items():
+      self.assertEqual(argv[argv.index(flag) + 1], value, flag)
+    for flag in ('--rm', '--init', '--read-only', '-i'):
+      self.assertEqual(argv.count(flag), 1, flag)
+    for bad in ('--privileged', '--pid', '--userns', '--cap-add',
+                '--device', '--net', '--volumes-from', '--add-host'):
+      self.assertNotIn(bad, argv)
+    ulimits = [argv[i + 1] for i, a in enumerate(argv) if a == '--ulimit']
+    self.assertEqual(ulimits, ['core=0', 'fsize=2147483648', 'nofile=4096'])
+    # The image is the full ID, and every -v is the snapshot (read-only) or
+    # the one work directory.
+    self.assertEqual(argv[argv.index('-w') + 2], self.FULL_ID)
+    mounts = [argv[i + 1] for i, a in enumerate(argv) if a == '-v']
+    self.assertEqual(mounts, ['/s/sec1/snap:/edg/workspace:ro',
+                              '/s/sec1/work/7:/work'])
+    self.assertNotIn('docker.sock', ' '.join(argv))
+    # nice and the in-container timeout come after the image.
+    tail = argv[argv.index(self.FULL_ID) + 1:]
+    self.assertEqual(tail, ['nice', '-n', '10', 'timeout', '-k', '10', '600',
+                            'bash', '-s'])
+    # The outer timeout is the inner one plus 60 s.
+    self.assertEqual(argv[:4], ['/usr/bin/timeout', '-k', '30', '660'])
+
+  def test_the_dry_run_prints_the_argv(self):
+    result = self.run_tool('run', 'delta-abc-1', '12', '--timeout=90',
+                           '--dry-run')
+    self.assertEqual(result.returncode, 0, result.stderr)
+    lines = [l for l in result.stdout.splitlines() if not l.startswith('#')]
+    self.assertEqual(len(lines), 1)
+    argv = shlex.split(lines[0])
+    root = sandbox.scratch_root()
+    self.assertEqual(argv, self.expected_argv(root, 'delta-abc-1', '12', 90))
+    # The default timeout, and the option order does not matter.
+    result = self.run_tool('run', '--dry-run', 'sec4', '0')
+    line = [l for l in result.stdout.splitlines()
+            if not l.startswith('#')][0]
+    self.assertEqual(shlex.split(line),
+                     self.expected_argv(root, 'sec4', '0', 600))
+
+  def test_bad_audits_are_refused(self):
+    for bad in ('sec0', 'sec5', 'SEC1', 'sec1 ', 'sec1\n', 'sec1/x',
+                '../sec1', 'delta-', 'delta-A', 'delta-' + 'a' * 33,
+                'delta_x', 'delta-a/b', '', 'sec', 'x'):
+      with self.assertRaises(sandbox.SandboxError, msg = repr(bad)):
+        sandbox.check_audit(bad)
+    for good in ('sec1', 'sec4', 'delta-m6-1', 'delta-' + 'a' * 32):
+      self.assertEqual(sandbox.check_audit(good), good)
+
+  def test_bad_run_numbers_are_refused(self):
+    for bad in ('', 'a', '-1', '12345', '1 ', '1\n', '1.0', '+1', '0x1',
+                '../1'):
+      with self.assertRaises(sandbox.SandboxError, msg = repr(bad)):
+        sandbox.check_number(bad)
+    for good in ('0', '7', '0007', '9999'):
+      self.assertEqual(sandbox.check_number(good), good)
+
+  def test_bad_paths_are_refused(self):
+    bad = ['/etc/passwd', '..', '../x', 'a/../b', 'a//b', 'a/', './a', 'a/.',
+           'a b', 'a\nb', 'a;b', 'a$b', 'a*b', '~', 'a`b`', '', 'a\\b',
+           'a' * 256, 'a' * 513, '/'.join(['a'] * 33), '-x/..']
+    for text in bad:
+      with self.assertRaises(sandbox.SandboxError, msg = repr(text)):
+        sandbox.check_path(text)
+    self.assertEqual(sandbox.check_path('.'), [])
+    self.assertEqual(sandbox.check_path('a/b.c/d-e=f:g_h'),
+                     ['a', 'b.c', 'd-e=f:g_h'])
+    self.assertEqual(len(sandbox.check_path('/'.join(['a'] * 32))), 32)
+
+  def test_bad_timeouts_are_refused(self):
+    for bad in ('', '0', '00', '3601', '99999', '100000', '-1', '1e3', 'abc',
+                '1.5', ' 5', '5\n'):
+      with self.assertRaises(sandbox.SandboxError, msg = repr(bad)):
+        sandbox.check_timeout(bad)
+    self.assertEqual(sandbox.check_timeout('1'), 1)
+    self.assertEqual(sandbox.check_timeout('3600'), 3600)
+
+  def test_the_command_line_takes_no_docker_options(self):
+    for args in (['run', 'sec1', '1', '--privileged'],
+                 ['run', 'sec1', '1', '--network=host'],
+                 ['run', 'sec1', '1', '-v', '/:/x'],
+                 ['run', 'sec1', '1', '--timeout', '60'],
+                 ['run', 'sec1', '1', '--timeout=60', '--timeout=70'],
+                 ['run', 'sec1', '1', '--timeout='],
+                 ['run', 'sec1', '1', '--image=x'],
+                 ['run', 'sec1'],
+                 ['run', 'sec1', '1', '2'],
+                 ['ls', 'sec1', '1'],
+                 ['ls', 'sec1', '1', '.', '--dry-run'],
+                 ['cat', 'sec1', '1', 'a', 'b'],
+                 ['cat', 'sec1', '1', '--x'],
+                 ['status', 'sec1'],
+                 ['status', '--dry-run'],
+                 ['exec', 'sec1', '1'], ['rm', 'sec1', '1', 'a'], []):
+      with self.assertRaises(sandbox.SandboxError, msg = args):
+        sandbox.parse(args)
+    verb, positional, options = sandbox.parse(
+      ['run', 'sec1', '3', '--dry-run', '--timeout=5'])
+    self.assertEqual((verb, positional, options),
+                     ('run', ['sec1', '3'],
+                      {'dry_run': True, 'timeout': 5}))
+
+  def test_the_refusals_exit_with_2_through_the_tool(self):
+    for args in (['run', 'sec5', '1', '--dry-run'],
+                 ['run', 'sec1', 'x', '--dry-run'],
+                 ['run', 'sec1', '1', '--timeout=0', '--dry-run'],
+                 ['run', 'sec1', '1', '--privileged', '--dry-run'],
+                 ['ls', 'sec1', '1', '../x'], ['cat', 'sec1', '1', '/etc/x'],
+                 ['cat', 'sec1', '1', '.'], ['frob']):
+      result = self.run_tool(*args)
+      self.assertEqual(result.returncode, 2, (args, result.stderr))
+      self.assertEqual(result.stdout, '')
+
+  def make_root(self, tmp):
+    root = os.path.join(tmp, 'scratch')
+    os.makedirs(os.path.join(root, 'sec1', 'snap'))
+    return root
+
+  def test_a_run_number_is_used_once_and_the_directory_is_open(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = self.make_root(tmp)
+      old = os.umask(0o077)
+      try:
+        path = sandbox.make_work(root, 'sec1', '3')
+      finally:
+        os.umask(old)
+      self.assertEqual(path, os.path.join(root, 'sec1', 'work', '3'))
+      self.assertEqual(os.stat(path).st_mode & 0o777, 0o777)
+      with self.assertRaisesRegex(sandbox.SandboxError, 'exists'):
+        sandbox.make_work(root, 'sec1', '3')
+      sandbox.make_work(root, 'sec1', '4')
+      # No snapshot, no run; a symlink as the snapshot does not count.
+      with self.assertRaises(sandbox.SandboxError):
+        sandbox.make_work(root, 'sec2', '1')
+      os.mkdir(os.path.join(root, 'sec3'))
+      os.symlink('/etc', os.path.join(root, 'sec3', 'snap'))
+      with self.assertRaises(sandbox.SandboxError):
+        sandbox.make_work(root, 'sec3', '1')
+
+  def test_the_script_copy_is_exclusive_and_not_followed(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = self.make_root(tmp)
+      path = sandbox.save_script(root, 'sec1', '1', b'echo hi\n')
+      self.assertEqual(path, os.path.join(root, 'sec1', 'scripts', '1.sh'))
+      self.assertEqual(Path(path).read_bytes(), b'echo hi\n')
+      self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+      with self.assertRaises(FileExistsError):
+        sandbox.save_script(root, 'sec1', '1', b'x')
+      victim = Path(tmp) / 'victim'
+      victim.write_text('keep')
+      os.symlink(victim, os.path.join(root, 'sec1', 'scripts', '2.sh'))
+      with self.assertRaises(FileExistsError):
+        sandbox.save_script(root, 'sec1', '2', b'overwrite')
+      self.assertEqual(victim.read_text(), 'keep')
+
+  def plant(self, tmp):
+    root = self.make_root(tmp)
+    work = Path(sandbox.make_work(root, 'sec1', '1'))
+    (work / 'f.txt').write_text('hello\n')
+    (work / 'sub').mkdir()
+    (work / 'sub' / 'g.txt').write_text('deep\n')
+    os.symlink('/etc/passwd', work / 'link')
+    os.symlink('sub', work / 'dirlink')
+    os.symlink('..', work / 'sub' / 'up')
+    os.mkfifo(work / 'fifo')
+    (work / 'a\nb').write_text('x')
+    return root, work
+
+  def test_cat_reads_regular_files_and_refuses_symlinks(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root, work = self.plant(tmp)
+      base = ['sec1', 'work', '1']
+      self.assertEqual(sandbox.read_file(root, base + ['f.txt']),
+                       (b'hello\n', 6))
+      self.assertEqual(sandbox.read_file(root, base + ['sub', 'g.txt'])[0],
+                       b'deep\n')
+      # A symlink as the last component, as a middle one, to a file, to a
+      # directory, and one that climbs out.
+      for parts in (['link'], ['dirlink', 'g.txt'], ['sub', 'up', 'f.txt'],
+                    ['sub', 'up']):
+        with self.assertRaises(sandbox.SandboxError, msg = parts):
+          sandbox.read_file(root, base + parts)
+      # A FIFO (opened non-blocking and then refused), a directory, nothing.
+      for parts in (['fifo'], ['sub'], ['nothing'], ['f.txt', 'x']):
+        with self.assertRaises(sandbox.SandboxError, msg = parts):
+          sandbox.read_file(root, base + parts)
+
+  def test_the_work_directory_itself_may_not_be_a_symlink(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root, work = self.plant(tmp)
+      other = Path(tmp) / 'elsewhere'
+      other.mkdir()
+      (other / 'f.txt').write_text('secret')
+      os.symlink(other, os.path.join(root, 'sec1', 'work', '2'))
+      with self.assertRaises(sandbox.SandboxError):
+        sandbox.read_file(root, ['sec1', 'work', '2', 'f.txt'])
+      with self.assertRaises(sandbox.SandboxError):
+        sandbox.list_directory(root, ['sec1', 'work', '2'])
+      # The same for a symlinked audit directory.
+      os.symlink(os.path.join(root, 'sec1'), os.path.join(root, 'sec2'))
+      with self.assertRaises(sandbox.SandboxError):
+        sandbox.list_directory(root, ['sec2', 'work', '1'])
+
+  def test_ls_lists_without_following(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root, work = self.plant(tmp)
+      lines = sandbox.list_directory(root, ['sec1', 'work', '1'])
+      kinds = {line.split(' ', 2)[2]: line[0] for line in lines}
+      self.assertEqual(kinds, {'a\\nb': '-', 'dirlink': 'l', 'f.txt': '-',
+                               'fifo': 'p', 'link': 'l', 'sub': 'd'})
+      # The listing never names a symlink's target.
+      self.assertFalse([l for l in lines if 'passwd' in l])
+      self.assertEqual(
+        sorted(l.split(' ', 2)[2] for l in sandbox.list_directory(
+          root, ['sec1', 'work', '1', 'sub'])), ['g.txt', 'up'])
+      for parts in (['dirlink'], ['f.txt'], ['nothing'], ['sub', 'up']):
+        with self.assertRaises(sandbox.SandboxError, msg = parts):
+          sandbox.list_directory(root, ['sec1', 'work', '1'] + parts)
+
+  def test_cat_caps_the_size_and_ls_caps_the_entries(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = self.make_root(tmp)
+      work = Path(sandbox.make_work(root, 'sec1', '1'))
+      (work / 'big').write_bytes(b'x' * (sandbox.CAT_MAX + 5000))
+      data, size = sandbox.read_file(root, ['sec1', 'work', '1', 'big'])
+      self.assertEqual((len(data), size),
+                       (sandbox.CAT_MAX, sandbox.CAT_MAX + 5000))
+      saved = sandbox.LS_MAX
+      sandbox.LS_MAX = 3
+      try:
+        for i in range(5):
+          (work / f"e{i}").write_text('')
+        lines = sandbox.list_directory(root, ['sec1', 'work', '1'])
+      finally:
+        sandbox.LS_MAX = saved
+      self.assertEqual(len(lines), 4)
+      self.assertEqual(lines[-1],
+                       '... more entries (the listing stops at 3)')
+
+  def test_the_output_is_capped_while_it_is_drained(self):
+    read_end, write_end = os.pipe()
+    total = sandbox.OUTPUT_MAX * 4 + 123
+
+    def writer():
+      block = b'y' * 65536
+      sent = 0
+      while sent < total:
+        piece = block[:min(len(block), total - sent)]
+        os.write(write_end, piece)
+        sent += len(piece)
+      os.close(write_end)
+
+    thread = threading.Thread(target = writer)
+    thread.start()
+    kept, dropped, reason = sandbox.drain(read_end)
+    thread.join()
+    os.close(read_end)
+    self.assertEqual(len(kept), sandbox.OUTPUT_MAX)
+    self.assertEqual(dropped, total - sandbox.OUTPUT_MAX)
+    self.assertIsNone(reason)
+
+  def test_the_drain_checks_on_a_tick_while_idle_and_while_flooded(self):
+    # Idle: the writer says nothing, the check fires on the tick.
+    read_end, write_end = os.pipe()
+    calls = []
+
+    def idle_check():
+      calls.append(time.monotonic())
+      return 'enough' if len(calls) == 3 else None
+
+    start = time.monotonic()
+    kept, dropped, reason = sandbox.drain(read_end, idle_check, 0.05)
+    self.assertEqual((kept, dropped, reason), (b'', 0, 'enough'))
+    self.assertEqual(len(calls), 3)
+    self.assertGreaterEqual(time.monotonic() - start, 0.1)
+    os.close(read_end)
+    os.close(write_end)
+    # Flooded: the pipe is never empty, the check still fires.
+    read_end, write_end = os.pipe()
+    stop = threading.Event()
+
+    def flood():
+      block = b'z' * 65536
+      while not stop.is_set():
+        try:
+          os.write(write_end, block)
+        except OSError:
+          break
+
+    thread = threading.Thread(target = flood)
+    thread.start()
+    seen = []
+
+    def flood_check():
+      seen.append(1)
+      return 'flooded' if len(seen) == 2 else None
+
+    kept, dropped, reason = sandbox.drain(read_end, flood_check, 0.05)
+    stop.set()
+    os.close(read_end)
+    thread.join()
+    os.close(write_end)
+    self.assertEqual(reason, 'flooded')
+    self.assertEqual(len(kept), sandbox.OUTPUT_MAX)
+    self.assertGreater(dropped, 0)
+
+  class FakeVfs:
+    def __init__(self, free, files = 1000000, favail = 1000000,
+                 frsize = 4096):
+      self.f_frsize = frsize
+      self.f_bavail = free // frsize
+      self.f_files = files
+      self.f_favail = favail
+
+  def test_the_disk_checks_kill_on_space_inodes_and_growth(self):
+    gib = 1 << 30
+    start = 200 * gib
+    problem = lambda free, scan_size = 0, **kw: sandbox.disk_problem(
+      '/r', '/w', start, lambda _: self.FakeVfs(free, **kw),
+      lambda *_: (scan_size, 0, [], True))
+    self.assertIsNone(problem(199 * gib))
+    # Free space under the kill floor (10 GiB).
+    self.assertIn('MiB free', problem(9 * gib))
+    # Inodes under 1 %.
+    self.assertIn('inodes', problem(150 * gib, favail = 9000))
+    self.assertIsNone(problem(150 * gib, favail = 10001))
+    # The shared file system fell by over 20 GiB: WORK/N itself decides.
+    self.assertIsNone(problem(170 * gib, 1 * gib))
+    self.assertIn('WORK/N holds over', problem(170 * gib, 25 * gib))
+    # A fall within the cap is not measured at all.
+    def no_scan(*_):
+      raise AssertionError('scanned')
+    self.assertIsNone(sandbox.disk_problem(
+      '/r', '/w', start, lambda _: self.FakeVfs(190 * gib), no_scan))
+
+  def test_the_start_check_matches_the_kill_thresholds(self):
+    self.assertEqual(sandbox.MIN_FREE, 20 * (1 << 30))
+    self.assertEqual(sandbox.DISK_KILL_FREE, 10 * (1 << 30))
+    self.assertEqual(sandbox.GROWTH_MAX, 20 * (1 << 30))
+    self.assertGreater(sandbox.MIN_FREE, sandbox.DISK_KILL_FREE)
+    with tempfile.TemporaryDirectory() as tmp:
+      saved = sandbox.MIN_FREE_INODES
+      sandbox.MIN_FREE_INODES = 2.0
+      try:
+        with self.assertRaises(sandbox.SandboxError) as caught:
+          sandbox.check_free(tmp)
+      finally:
+        sandbox.MIN_FREE_INODES = saved
+      self.assertEqual(caught.exception.code, sandbox.EXIT_BUSY)
+
+  def test_scan_tree_counts_without_following_and_reports_setuid(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      work = Path(tmp) / 'w'
+      (work / 'a' / 'b').mkdir(parents = True)
+      (work / 'a' / 'b' / 'data').write_bytes(b'x' * 100000)
+      suid = work / 'a' / 'suid'
+      suid.write_text('x')
+      os.chmod(suid, 0o4755)
+      sgid = work / 'sgid'
+      sgid.write_text('x')
+      os.chmod(sgid, 0o2755)
+      os.symlink('..', work / 'a' / 'loop')
+      os.symlink(tmp, work / 'out')
+      size, count, special, done = sandbox.scan_tree(str(work), 5)
+      self.assertTrue(done)
+      self.assertEqual(sorted(special), ['a/suid', 'sgid'])
+      self.assertGreaterEqual(size, 100000)
+      self.assertEqual(count, 7)
+      # The stop conditions: bytes, entries.
+      self.assertFalse(sandbox.scan_tree(str(work), 5, 50000)[3])
+      saved = sandbox.SCAN_ENTRIES
+      sandbox.SCAN_ENTRIES = 2
+      try:
+        self.assertFalse(sandbox.scan_tree(str(work), 5)[3])
+      finally:
+        sandbox.SCAN_ENTRIES = saved
+      self.assertEqual(
+        sandbox.scan_tree(str(work / 'missing'), 1)[2:], ([], True))
+
+  def test_only_the_first_signal_interrupts(self):
+    saved = list(sandbox.SIGNALLED)
+    del sandbox.SIGNALLED[:]
+    try:
+      with self.assertRaises(sandbox.Interrupted):
+        sandbox.on_signal(signal.SIGTERM, None)
+      # The second and third signals do nothing: the cleanup (docker kill)
+      # cannot be interrupted again.
+      self.assertIsNone(sandbox.on_signal(signal.SIGHUP, None))
+      self.assertIsNone(sandbox.on_signal(signal.SIGINT, None))
+    finally:
+      sandbox.SIGNALLED[:] = saved
+
+  def test_a_run_is_killed_unless_it_ended_by_itself(self):
+    text = self.TOOL.read_text()
+    self.assertIn('killed = True    # until the run ends by itself', text)
+    self.assertIn('killed = status in (124, 137, -9, -15)', text)
+
+  def test_cleanup_blocks_further_signals(self):
+    text = self.TOOL.read_text()
+    body = text.split('  finally:\n    # A second signal')[1].split(
+      'sys.stdout.buffer.write(output)')[0]
+    self.assertIn('signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)', body)
+    self.assertLess(body.index('pthread_sigmask'), body.index('docker_kill'))
+    self.assertEqual(sandbox.SIGNALS, {signal.SIGHUP, signal.SIGINT,
+                                       signal.SIGTERM})
+
+  def test_the_slots_are_exclusive_and_a_full_house_is_busy(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = os.path.join(tmp, 'scratch')
+      saved = sandbox.SLOT_WAIT
+      sandbox.SLOT_WAIT = 0
+      held = []
+      try:
+        for _ in range(sandbox.SLOTS):
+          held.append(sandbox.take_slot(root))
+        with self.assertRaises(sandbox.SandboxError) as caught:
+          sandbox.take_slot(root)
+        self.assertEqual(caught.exception.code, sandbox.EXIT_BUSY)
+        os.close(held.pop())
+        held.append(sandbox.take_slot(root))
+      finally:
+        sandbox.SLOT_WAIT = saved
+        for fd in held:
+          os.close(fd)
+
+  def test_a_short_disk_is_busy(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      saved = sandbox.MIN_FREE
+      sandbox.MIN_FREE = 1 << 62
+      try:
+        with self.assertRaises(sandbox.SandboxError) as caught:
+          sandbox.check_free(tmp)
+      finally:
+        sandbox.MIN_FREE = saved
+      self.assertEqual(caught.exception.code, sandbox.EXIT_BUSY)
+      sandbox.MIN_FREE = 0
+      try:
+        sandbox.check_free(tmp)
+      finally:
+        sandbox.MIN_FREE = saved
+
+  def test_the_status_filter_is_the_sandbox_label(self):
+    self.assertTrue(sandbox.LABEL_RE.fullmatch('cir-sec-sec1'))
+    self.assertTrue(sandbox.LABEL_RE.fullmatch('cir-sec-delta-x'))
+    for other in ('cir-lib-x', 'cir-sec-', 'cir-sec-sec9', 'xcir-sec-sec1',
+                  'cir-sec-sec1 extra'):
+      self.assertFalse(sandbox.LABEL_RE.fullmatch(other), other)
+
+  def test_the_script_size_is_limited(self):
+    saved = sys.stdin
+    try:
+      sys.stdin = io.TextIOWrapper(io.BytesIO(b''))
+      with self.assertRaises(sandbox.SandboxError):
+        sandbox.read_script()
+      sys.stdin = io.TextIOWrapper(
+        io.BytesIO(b'x' * (sandbox.SCRIPT_MAX + 1)))
+      with self.assertRaises(sandbox.SandboxError):
+        sandbox.read_script()
+      sys.stdin = io.TextIOWrapper(io.BytesIO(b'x' * sandbox.SCRIPT_MAX))
+      self.assertEqual(len(sandbox.read_script()), sandbox.SCRIPT_MAX)
+    finally:
+      sys.stdin = saved
+
 
 if __name__ == '__main__':
   unittest.main()

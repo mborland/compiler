@@ -1,0 +1,5 @@
+fe_only -DTEST_NUMBER=1 --c++17 --create_pch=hello.pch Test_name.c
+Command-line error: CIR back end: precompiled headers are not supported
+
+1 catastrophic error detected in this compilation.
+Compilation terminated.

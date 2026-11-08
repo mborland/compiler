@@ -1,0 +1,3 @@
+./a.out
+cstdio puts
+cstdio: ok

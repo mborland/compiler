@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=3 --gcc -msse4.2 Test_name.c
+eccp: unknown option: -msse4.2

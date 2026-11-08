@@ -1,0 +1,26 @@
+//allowed_words: ECIL dereferenceable
+[]
+CIR back end: M6.1a diagnostics, __thread, designated bases and library fixes
+
+In the CIR back end configuration (BACK_END_TYPE_CIR), and only in it:
+__builtin_alloca_with_align with an alignment above 128 bits (16 bytes), or
+with one that is not a constant, is now reported as unsupported (the function
+is dropped with a reason) instead of being translated as an alloca that is
+aligned to 16 bytes; --set_flag=coroutines is rejected with a command-line
+error ("CIR back end: coroutines are not supported"), where it used to
+enable coroutines that the back end cannot express (--clear_flag=coroutines
+is still accepted); the copy of an array of class objects in an implicit,
+defaulted or move constructor is now reported as unsupported (the function is
+dropped with a reason) instead of being emitted without its source; GNU
+__thread variables are now thread-local (they were emitted as ordinary
+globals); and the base class entries that the front end lists after the
+designated members of an initializer (for example "{ .p = 1 }" in C++17 with
+g++ 7 and earlier) are sent as those of the bases also when the next
+data member has the type of a base, where one was taken for that member and
+the member's value went to the base.  In the CIR library, an ECIL string
+constant (C_STRING) is now accepted only for arrays of 8, 16 or 32-bit
+integers; any other element type, such as a 128-bit integer, is a format
+error instead of a stack buffer overflow in the library.  A function with 64
+or more parameters and a reference result no longer marks parameter 63
+nonnull, dereferenceable and aligned; -O2 used to delete the null check of
+that pointer parameter.  The other configurations are not affected.

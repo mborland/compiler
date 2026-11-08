@@ -1,9 +1,2465 @@
 {
-  "schema": 1,
-  "section": "libstdcxx",
-  "title": "libstdc++ headers",
-  "intro": "One row per standard header, filled by the M6.1a header sweep (self-checking usage tests at -O0 and -O2). Until then the table is empty rather than guessed.",
-  "groups": [
-    {"id": "headers", "title": "libstdc++ headers", "rows": []}
-  ]
+ "schema": 1,
+ "section": "libstdcxx",
+ "title": "libstdc++ headers",
+ "intro": "One row per header that the g++ 15.3.1 libstdc++ of the cir-env image ships (the C++ headers, the <c...> wrappers, the deprecated headers and the C-compatibility headers). The header sweep (M6.1a) builds one self-checking usage test per header with C++23 (C++26 for the headers that only exist there) at -O0 and -O2. A header that fails is diagnosed by a negative test; where the header works in C++20 the row is partial and a C++20 test proves it. In C++23 most headers include <numbers> through the ranges support, and the back end cannot yet express its _Float16, bfloat16 and _Float128 constants (M6.7).",
+ "groups": [
+  {
+   "id": "libstdcxx",
+   "title": "libstdc++ headers",
+   "rows": [
+    {
+     "id": "libstdcxx.algorithm",
+     "feature": "<algorithm>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-algorithm.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.any",
+     "feature": "<any>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-any.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.array",
+     "feature": "<array>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-array.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.atomic",
+     "feature": "<atomic>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.3",
+     "note": "In C++23 it needs the __atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-atomic.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.barrier",
+     "feature": "<barrier>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and the __atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-barrier.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.bit",
+     "feature": "<bit>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-bit.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.bitset",
+     "feature": "<bitset>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-bitset.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.cassert",
+     "feature": "<cassert>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cassert.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.ccomplex",
+     "feature": "<ccomplex>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a _Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-ccomplex.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_const.c:1218"
+     ]
+    },
+    {
+     "id": "libstdcxx.cctype",
+     "feature": "<cctype>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cctype.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cerrno",
+     "feature": "<cerrno>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cerrno.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cfenv",
+     "feature": "<cfenv>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "The environment calls work; arithmetic under a changed rounding mode is not covered because FENV_ACCESS is not honored (see c99.fenv_access).",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cfenv.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cfloat",
+     "feature": "<cfloat>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cfloat.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.charconv",
+     "feature": "<charconv>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-charconv.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.chrono",
+     "feature": "<chrono>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a delegating constructor without a constructor call (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-chrono.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:8645"
+     ]
+    },
+    {
+     "id": "libstdcxx.cinttypes",
+     "feature": "<cinttypes>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cinttypes.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.ciso646",
+     "feature": "<ciso646>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-ciso646.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.climits",
+     "feature": "<climits>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-climits.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.clocale",
+     "feature": "<clocale>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-clocale.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cmath",
+     "feature": "<cmath>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cmath.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.codecvt",
+     "feature": "<codecvt>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-codecvt-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-codecvt-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-codecvt.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.compare",
+     "feature": "<compare>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-compare.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.complex",
+     "feature": "<complex>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a _Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-complex.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_const.c:1218"
+     ]
+    },
+    {
+     "id": "libstdcxx.complex_h",
+     "feature": "<complex.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a _Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-complex_h.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_const.c:1218"
+     ]
+    },
+    {
+     "id": "libstdcxx.concepts",
+     "feature": "<concepts>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-concepts-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-concepts-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-concepts.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.condition_variable",
+     "feature": "<condition_variable>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and the __atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-condition_variable.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.coroutine",
+     "feature": "<coroutine>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "after M7",
+     "note": "The cpfe-cir configuration disables coroutines, so the header stops with its own #error; --set_flag=coroutines is a command-line error from the CIR back end.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-coroutine.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/cmd_line.c:11916",
+      "src/host_envir.h:3913"
+     ]
+    },
+    {
+     "id": "libstdcxx.csetjmp",
+     "feature": "<csetjmp>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "ignored",
+     "since": null,
+     "planned": "M6.4a",
+     "note": "setjmp and longjmp work in the usage test (the value is kept in a volatile object), but no returns_twice is set, so an optimizing build may miscompile other callers (see builtins.setjmp_family). Silently unsafe until M6.4a.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-csetjmp.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.csignal",
+     "feature": "<csignal>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-csignal.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cstdalign",
+     "feature": "<cstdalign>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cstdalign.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cstdarg",
+     "feature": "<cstdarg>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cstdarg.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cstdbool",
+     "feature": "<cstdbool>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cstdbool.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cstddef",
+     "feature": "<cstddef>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cstddef.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cstdint",
+     "feature": "<cstdint>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cstdint.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cstdio",
+     "feature": "<cstdio>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cstdio.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cstdlib",
+     "feature": "<cstdlib>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cstdlib.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cstring",
+     "feature": "<cstring>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cstring.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.ctgmath",
+     "feature": "<ctgmath>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a _Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-ctgmath.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_const.c:1218"
+     ]
+    },
+    {
+     "id": "libstdcxx.ctime",
+     "feature": "<ctime>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-ctime.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cuchar",
+     "feature": "<cuchar>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cuchar.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cwchar",
+     "feature": "<cwchar>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cwchar.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cwctype",
+     "feature": "<cwctype>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cwctype.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.cxxabi_h",
+     "feature": "<cxxabi.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-cxxabi_h.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.deque",
+     "feature": "<deque>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-deque.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.exception",
+     "feature": "<exception>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-exception.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.execution",
+     "feature": "<execution>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), __builtin_constant_p (M6.2) and the __atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-execution.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.expected",
+     "feature": "<expected>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-expected.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.fenv_h",
+     "feature": "<fenv.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "The environment calls work; arithmetic under a changed rounding mode is not covered because FENV_ACCESS is not honored (see c99.fenv_access).",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-fenv_h.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.filesystem",
+     "feature": "<filesystem>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and the __atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails. In C++20 at -O0 it also fails to link: the defaulted copy constructor of std::__shared_ptr is referenced but not emitted.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-filesystem.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.flat_map",
+     "feature": "<flat_map>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-flat_map.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.flat_set",
+     "feature": "<flat_set>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-flat_set.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.format",
+     "feature": "<format>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), __builtin_constant_p (M6.2), a [[no_unique_address]] member initialization (M6.7) and an anonymous-union member with a destructor (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-format.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137",
+      "src/ecil_code.c:8203",
+      "src/ecil_code.c:1370"
+     ]
+    },
+    {
+     "id": "libstdcxx.forward_list",
+     "feature": "<forward_list>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-forward_list-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-forward_list-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-forward_list.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.fstream",
+     "feature": "<fstream>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-fstream-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-fstream-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-fstream.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.functional",
+     "feature": "<functional>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-functional-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-functional-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-functional.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.future",
+     "feature": "<future>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), __builtin_constant_p (M6.2) and the __atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-future.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.generator",
+     "feature": "<generator>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "after M7",
+     "note": "The cpfe-cir configuration disables coroutines, so the header stops with its own #error (std::generator is not declared); --set_flag=coroutines is a command-line error from the CIR back end.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-generator.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/cmd_line.c:11916",
+      "src/host_envir.h:3913"
+     ]
+    },
+    {
+     "id": "libstdcxx.initializer_list",
+     "feature": "<initializer_list>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-initializer_list.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.iomanip",
+     "feature": "<iomanip>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-iomanip.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.ios",
+     "feature": "<ios>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-ios-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-ios-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-ios.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.iosfwd",
+     "feature": "<iosfwd>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-iosfwd.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.iostream",
+     "feature": "<iostream>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-iostream-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-iostream-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-iostream.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.istream",
+     "feature": "<istream>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-istream-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-istream-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-istream.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.iterator",
+     "feature": "<iterator>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-iterator.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.latch",
+     "feature": "<latch>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.3",
+     "note": "In C++23 it needs the __atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-latch.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.limits",
+     "feature": "<limits>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-limits.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.list",
+     "feature": "<list>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-list-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-list-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-list.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.locale",
+     "feature": "<locale>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), __builtin_constant_p (M6.2) and the __atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-locale.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.map",
+     "feature": "<map>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a class conditional that does not initialize a variable (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-map.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:7066"
+     ]
+    },
+    {
+     "id": "libstdcxx.math_h",
+     "feature": "<math.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-math_h.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.memory",
+     "feature": "<memory>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-memory.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.memory_resource",
+     "feature": "<memory_resource>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-memory_resource-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-memory_resource-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-memory_resource.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.mutex",
+     "feature": "<mutex>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-mutex-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-mutex-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-mutex.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.new",
+     "feature": "<new>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-new.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.numbers",
+     "feature": "<numbers>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-numbers-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-numbers-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-numbers.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.numeric",
+     "feature": "<numeric>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-numeric-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-numeric-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-numeric.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.optional",
+     "feature": "<optional>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-optional.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.ostream",
+     "feature": "<ostream>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-ostream.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.print",
+     "feature": "<print>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), __builtin_constant_p (M6.2), a [[no_unique_address]] member initialization (M6.7) and an anonymous-union member with a destructor (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-print.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137",
+      "src/ecil_code.c:8203",
+      "src/ecil_code.c:1370"
+     ]
+    },
+    {
+     "id": "libstdcxx.queue",
+     "feature": "<queue>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-queue.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.random",
+     "feature": "<random>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-random.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.ranges",
+     "feature": "<ranges>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a [[no_unique_address]] member initialization (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-ranges.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:8203"
+     ]
+    },
+    {
+     "id": "libstdcxx.ratio",
+     "feature": "<ratio>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-ratio.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.regex",
+     "feature": "<regex>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), __builtin_constant_p (M6.2), the __atomic builtins (M6.3), a class conditional that does not initialize a variable (unscheduled) and an assignment to a class with reusable tail padding (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-regex.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137",
+      "src/ecil_code.c:7066",
+      "src/ecil_code.c:5269"
+     ]
+    },
+    {
+     "id": "libstdcxx.scoped_allocator",
+     "feature": "<scoped_allocator>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-scoped_allocator-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-scoped_allocator-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-scoped_allocator.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.semaphore",
+     "feature": "<semaphore>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), the __atomic builtins (M6.3) and __builtin_ia32_pause (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-semaphore.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.set",
+     "feature": "<set>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a class conditional that does not initialize a variable (unscheduled), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-set.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:7066"
+     ]
+    },
+    {
+     "id": "libstdcxx.shared_mutex",
+     "feature": "<shared_mutex>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-shared_mutex-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-shared_mutex-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-shared_mutex.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.source_location",
+     "feature": "<source_location>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the source_location address constant (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-source_location.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:971"
+     ]
+    },
+    {
+     "id": "libstdcxx.span",
+     "feature": "<span>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a [[no_unique_address]] member initialization (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-span.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:8203"
+     ]
+    },
+    {
+     "id": "libstdcxx.spanstream",
+     "feature": "<spanstream>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a [[no_unique_address]] member initialization (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-spanstream.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:8203"
+     ]
+    },
+    {
+     "id": "libstdcxx.sstream",
+     "feature": "<sstream>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-sstream.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.stack",
+     "feature": "<stack>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stack.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.stacktrace",
+     "feature": "<stacktrace>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stacktrace.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.stdatomic_h",
+     "feature": "<stdatomic.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.3",
+     "note": "In C++23 it needs the __atomic builtins (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stdatomic_h.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.stdbit_h",
+     "feature": "<stdbit.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "Tested with C++26.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stdbit_h.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.stdckdint_h",
+     "feature": "<stdckdint.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "Tested with C++26.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stdckdint_h.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.stdexcept",
+     "feature": "<stdexcept>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-stdexcept-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stdexcept-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stdexcept.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.stdfloat",
+     "feature": "<stdfloat>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "std::float32_t and std::float64_t work. A std::float128_t constant (and the half-precision types) is diagnosed and the function is dropped.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stdfloat.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stdfloat-float16-negative.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.stdlib_h",
+     "feature": "<stdlib.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stdlib_h.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.stop_token",
+     "feature": "<stop_token>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), the __atomic builtins (M6.3) and __builtin_ia32_pause (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-stop_token.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.streambuf",
+     "feature": "<streambuf>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-streambuf-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-streambuf-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-streambuf.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.string",
+     "feature": "<string>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-string.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.string_view",
+     "feature": "<string_view>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-string_view-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-string_view-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-string_view.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.syncstream",
+     "feature": "<syncstream>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-syncstream.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.system_error",
+     "feature": "<system_error>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-system_error.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.text_encoding",
+     "feature": "<text_encoding>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++26 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-text_encoding.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.tgmath_h",
+     "feature": "<tgmath.h>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and a _Complex constant (M6.6a), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-tgmath_h.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_const.c:1218"
+     ]
+    },
+    {
+     "id": "libstdcxx.thread",
+     "feature": "<thread>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7), the __atomic builtins (M6.3) and __builtin_ia32_pause (M6.3), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-thread.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.tuple",
+     "feature": "<tuple>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-tuple-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-tuple-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-tuple.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.type_traits",
+     "feature": "<type_traits>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-type_traits.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.typeindex",
+     "feature": "<typeindex>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-typeindex.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.typeinfo",
+     "feature": "<typeinfo>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-typeinfo.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.unordered_map",
+     "feature": "<unordered_map>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-unordered_map-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-unordered_map-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-unordered_map.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.unordered_set",
+     "feature": "<unordered_set>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-unordered_set-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-unordered_set-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-unordered_set.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.utility",
+     "feature": "<utility>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-utility-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-utility-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-utility.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.valarray",
+     "feature": "<valarray>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "Works in C++20 and earlier (hdr-valarray-cxx20). In C++23 it needs the half and quad floating constants of <numbers> (M6.7), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-valarray-cxx20.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-valarray.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866"
+     ]
+    },
+    {
+     "id": "libstdcxx.variant",
+     "feature": "<variant>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-variant.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    },
+    {
+     "id": "libstdcxx.vector",
+     "feature": "<vector>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "no",
+     "since": null,
+     "planned": "M6.7",
+     "note": "In C++23 it needs the half and quad floating constants of <numbers> (M6.7) and __builtin_constant_p (M6.2), which the CIR back end cannot express: the definitions are dropped and the build fails.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-vector.sft.cpp",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "src/ecil_const.c:866",
+      "src/ecil_code.c:1137"
+     ]
+    },
+    {
+     "id": "libstdcxx.version",
+     "feature": "<version>",
+     "papers": [],
+     "macro": null,
+     "macro_value": null,
+     "status": "yes",
+     "since": "M6.1a",
+     "planned": null,
+     "note": "The macros that need coroutines (__cpp_lib_generator) are not defined.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-version.sft.cpp",
+       "kind": "e2e-run"
+      }
+     ],
+     "refs": []
+    }
+   ]
+  }
+ ]
 }

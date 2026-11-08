@@ -1,0 +1,106 @@
+; SEC-1-2 (M6.1a): the nonnull_ptrs mask has no bit for parameter 63 or above
+; (bit 0 is the result, bit i+1 parameter i).  The attribute code used to shift
+; the mask by i + 1 without a bound, so on x86-64 the shift for parameter 63
+; wrapped to bit 0 and marked it like the reference result (nonnull,
+; dereferenceable, align), which deleted the null check of a pointer parameter
+; (C++ `int &f(int p0 ... int p62, int *p63)`).  @f64 has 64 parameters and
+; only the reference result marked (mask 1): no parameter may be nonnull, on
+; the declaration, the definition or the call.  @f63 has 63 parameters with
+; parameter 62 marked (mask 2^63 + 1): it still is (bit 63 is the last bit).
+; RUN: sed 's/features=0x00000000/features=0x00000002/' %S/Inputs/header12_cxx_eh.txt > %t.h
+; RUN: cat %t.h %s > %t.txt
+; RUN: %ecil-asm %t.txt -o %t.ecil
+; RUN: %edg-cir --no-llvm-passes --emit=llvm %t.ecil | %FileCheck %s
+
+; CHECK-LABEL: declare noundef nonnull align 4 dereferenceable(4) ptr @f64(
+; CHECK-NOT: nonnull
+; CHECK-LABEL: declare noundef nonnull align 4 dereferenceable(4) ptr @f63(
+; CHECK-SAME: ptr noundef nonnull)
+; CHECK-LABEL: define {{.*}}i32 @main(
+; CHECK: call noundef nonnull align 4 dereferenceable(4) ptr @f64(
+; CHECK-NOT: nonnull
+; CHECK: ret i32
+
+frame DECLS supp
+  STR 100 "f64"
+  STR 101 "f63"
+  STR 102 "main"
+  TY_FUNC 40 14 0 [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12] supp{15: 1}
+  TY_FUNC 41 14 0 [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12] supp{15: 9223372036854775809}
+  TY_FUNC 42 1 0 []
+  DECL_FUNC 50 40 0 1 100
+  DECL_FUNC 51 41 0 1 101
+  DECL_FUNC 52 42 0 9 102
+frame REGION
+  FUNC_BEGIN 52 0
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CONST_NULL 12
+  CALL 50 40 64 0
+  DROP
+  CONST_INT 1 0
+  RETURN_STMT true
+  FUNC_END 0
+frame END
+  END auto 0

@@ -1,0 +1,26 @@
+eccp -DTEST_NUMBER=2 --c++17 -O2 Test_name.c
+"Test_name.c", line 29: warning: constant "Mode::On" was declared deprecated
+    CHECK(Mode::Off == Mode(0) && (int)Mode::On == 5 && (int)Mode::Auto == 9);
+    ^
+"Test_name.c", line 18: note: because of a "deprecated" attribute
+    On [[deprecated]] = 5,
+         ^
+
+"Test_name.c", line 33: warning: constant "Red" was declared deprecated
+    Color all[] = {Red, Green, Blue, Alpha};
+                   ^
+"Test_name.c", line 11: note: because of a "deprecated" attribute
+    Red [[deprecated]] = 1,
+          ^
+
+"Test_name.c", line 33: warning: constant "Green" was declared deprecated ("green")
+    Color all[] = {Red, Green, Blue, Alpha};
+                        ^
+"Test_name.c", line 12: note: because of a "deprecated" attribute
+    Green [[deprecated("green")]] = 2,
+            ^
+
+"Test_name.c", line 30: warning: variable "m" was set but never used
+    Mode m = Mode::Auto;
+         ^
+

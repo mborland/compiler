@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=2 --gcc -fno-math-errno Test_name.c
+eccp: unknown option: -fno-math-errno

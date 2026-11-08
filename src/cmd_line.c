@@ -11910,6 +11910,12 @@ enable_microsoft_mode:
         break;
       case optk_set_flag:
         /* Set the value of a specified flag name. */
+#if BACK_END_TYPE == BACK_END_TYPE_CIR
+        if (opt_value && strcmp(opt_arg, "coroutines") == 0) {
+          str_command_line_error(ec_cir_error,
+                                 "coroutines are not supported");
+        }  /* if */
+#endif /* BACK_END_TYPE == BACK_END_TYPE_CIR */
         set_flag_value(opt_arg, opt_value);
         break;
 #if UPC_EXTENSIONS_ALLOWED

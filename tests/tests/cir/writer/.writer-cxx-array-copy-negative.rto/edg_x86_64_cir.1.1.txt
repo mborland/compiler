@@ -1,0 +1,11 @@
+fe_only -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 18: warning: CIR back end: the body of "Holder" uses the copy of an array of class objects in a member initializer, which the CIR back end does not support; the function is dropped
+    Holder c(h);
+             ^
+          detected during implicit generation of "Holder::Holder(const Holder &)" at line 18
+
+Error: CIR back end: the definition of '_ZN6HolderC1ERKS_' was dropped: it uses a construct the CIR back end cannot express: the copy of an array of class objects in a member initializer (and it is referenced)
+
+Error: CIR back end: the definition of '_ZN6HolderC2ERKS_' was dropped: it uses a construct the CIR back end cannot express: the copy of an array of class objects in a member initializer (and it is referenced)
+
+2 errors detected in the compilation of "Test_name.c".

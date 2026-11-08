@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=1 --gcc -Wl,-z,now Test_name.c
+eccp: unknown option: -Wl,-z,now

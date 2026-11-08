@@ -66,6 +66,10 @@
       {
        "path": "tests/tests/cir/config/opt-level-macros-eccp-os.sft.c",
        "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/codegen/codegen-fast-math-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
@@ -141,11 +145,15 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "typeid and dynamic_cast are diagnosed when RTTI is disabled; no run test uses the option.",
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "Virtual dispatch, thunks, covariant returns, virtual bases and exceptions work; typeid and dynamic_cast are diagnosed when RTTI is disabled.",
      "tests": [
+      {
+       "path": "tests/tests/cir/features/codegen/codegen-rtti-off.sft.cpp",
+       "kind": "e2e-run"
+      },
       {
        "path": "tests/tests/cir/writer/writer-cxx-exc-no-rtti.sft.cpp",
        "kind": "writer"
@@ -153,7 +161,7 @@
      ],
      "refs": [
       "src/ecil_code.c:4114",
-      "src/ecil_code.c:4280"
+      "src/ecil_code.c:4312"
      ]
     },
     {
@@ -230,11 +238,15 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "Gated by edg-cir-chunk-identity and chunk-rss on real units (not tests under tests/); only library tests run it. M6.1a adds a run test with a forced chunk threshold.",
+     "status": "yes",
+     "since": "M5",
+     "planned": null,
+     "note": "The run test expands to 2000 functions (about 1.67 MB of stream, above the 1,250,000-byte threshold) and calls them across the chunks; edg-cir-chunk-identity and chunk-rss gate real units.",
      "tests": [
+      {
+       "path": "tests/tests/cir/features/codegen/codegen-chunked-lowering.sft.c",
+       "kind": "e2e-run"
+      },
       {
        "path": "cir_src/test/cirgen/chunk-lowering.test",
        "kind": "lib"
@@ -271,7 +283,12 @@
      "since": null,
      "planned": "after M7",
      "note": "eccp rejects them as unknown options; no fast-math flags are carried in the stream.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/codegen/codegen-fast-math-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341"
      ]
@@ -286,7 +303,12 @@
      "since": null,
      "planned": "after M7",
      "note": "eccp rejects them; the target machine is the generic x86-64 CPU.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/codegen/codegen-march-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341",
       "cir_src/lib/driver/cir_module.cpp:109"
@@ -302,7 +324,12 @@
      "since": null,
      "planned": "after M7",
      "note": "Rejected with a front-end error: the IL is streamed and freed as it goes.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/codegen/codegen-pch-negative.sft.cpp",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "src/cmd_line.c:11171"
      ]

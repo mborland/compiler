@@ -1,0 +1,8 @@
+fe_only -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 16: warning: CIR back end: the body of "copy_it" uses the copy of an array of objects, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+Error: CIR back end: the definition of '_Z7copy_itv' was dropped: it uses a construct the CIR back end cannot express: the copy of an array of objects
+
+1 error detected in the compilation of "Test_name.c".

@@ -1,0 +1,8 @@
+fe_only -DTEST_NUMBER=1 --c++20 Test_name.c
+"Test_name.c", line 14: warning: CIR back end: the body of "caller" uses the address of a non-string constant, which the CIR back end does not support; the function is dropped
+  const char *caller() { return where(); }
+                                         ^
+
+Error: CIR back end: the definition of '_Z6callerv' was dropped: it uses a construct the CIR back end cannot express: the address of a non-string constant
+
+1 error detected in the compilation of "Test_name.c".

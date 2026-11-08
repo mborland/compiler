@@ -1,0 +1,2 @@
+./a.out
+cxx20.constexpr_in_decltype ok

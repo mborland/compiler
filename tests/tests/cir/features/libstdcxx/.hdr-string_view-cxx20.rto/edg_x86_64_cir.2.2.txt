@@ -1,0 +1,2 @@
+./a.out
+string_view: ok

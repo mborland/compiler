@@ -113,6 +113,7 @@ Position the streaming cursor at the start of one aggregate constant.
   level->cur = 0;
   level->lead = 0;
   level->vptr_shift = 0;
+  level->bases_listed = 0;
   if (!level->is_array) {
     a_field_ptr  first = t->variant.class_struct_union.field_list;
 
@@ -157,6 +158,7 @@ Designators are consumed.  Return FALSE when the list is exhausted.
 
   while (!found && !level->done && level->next_const != NULL) {
     a_constant_ptr  c = level->next_const;
+    a_boolean       base_entry = FALSE;
 
     level->next_const = c->next;
     if (c->kind == (a_constant_repr_kind)ck_designator) {
@@ -174,24 +176,32 @@ Designators are consumed.  Return FALSE when the list is exhausted.
       *value = c;
       found = TRUE;
       if (!level->is_array && !level->is_union && level->lead != 0 &&
-          level->cur >= level->lead && level->cur_field == NULL &&
+          level->cur >= level->lead &&
           c->kind == (a_constant_repr_kind)ck_aggregate &&
           !C_mode() && class_type_supp(level->type) != NULL) {
-        /* A base class initializer after the data members (the front end
-           lists the base last in C++17 for "{ .x = 1 }"): it is the entry
-           of that base. */
+        /* A base class initializer after a data member or after the data
+           members: for g++ 7 and earlier in C++17 the front end lists the
+           (implicit) base entries, in order, after the designated members,
+           e.g. for "{ .x = 1 }", and then the remaining members.  The
+           cursor stays where it is.  If the next data member has the type
+           of the base too, only an implicit entry that is the next base
+           in order is taken for the base. */
+        a_boolean         same = (level->cur_field != NULL &&
+                                  skip_typerefs(level->cur_field->type) ==
+                                  skip_typerefs(c->type));
         a_base_class_ptr  base;
         uint64_t          n = 0;
 
         for (base = class_type_supp(level->type)->direct_base_classes;
-             base != NULL; base = base->next) {
+             base != NULL && !base_entry; base = base->next) {
           if (base->direct) {
             if (n < level->lead &&
-                skip_typerefs(base->type) == skip_typerefs(c->type)) {
+                skip_typerefs(base->type) == skip_typerefs(c->type) &&
+                (!same || (c->implicit_aggr_element &&
+                           n == level->bases_listed))) {
               *index = n;
-              level->cur = n;
-              level->cur_field = NULL;
-              break;
+              base_entry = TRUE;
+              level->bases_listed++;
             }  /* if */
             n++;
           }  /* if */
@@ -209,12 +219,18 @@ Designators are consumed.  Return FALSE when the list is exhausted.
       } else {
         *count = 1;
       }  /* if */
-      level->cur += *count;
-      if (!level->is_array && level->cur_field != NULL) {
-        level->cur_field = level->cur_field->next;
-      } else if (!level->is_array && level->cur == level->lead) {
-        /* The last base class entry: the data members follow. */
-        level->cur_field = level->type->variant.class_struct_union.field_list;
+      if (!base_entry) {
+        if (!level->is_array && level->cur < level->lead) {
+          level->bases_listed += *count;
+        }  /* if */
+        level->cur += *count;
+        if (!level->is_array && level->cur_field != NULL) {
+          level->cur_field = level->cur_field->next;
+        } else if (!level->is_array && level->cur == level->lead) {
+          /* The last base class entry: the data members follow. */
+          level->cur_field =
+                       level->type->variant.class_struct_union.field_list;
+        }  /* if */
       }  /* if */
       if (level->is_union) level->done = TRUE;
     }  /* if */
@@ -1634,7 +1650,7 @@ GUARDED if it is a static local or has vague linkage (spec 11.7).
       !(needs_static_init && !C_mode()) && !has_mutable_member(var->type)) {
     flags |= ECIL_DECL_VAR_CONST;
   }  /* if */
-  if (is_effective_thread_local(var)) flags |= ECIL_DECL_VAR_TLS;
+  if (ecil_var_is_thread_local(var)) flags |= ECIL_DECL_VAR_TLS;
 #if BACK_END_TYPE == BACK_END_TYPE_CIR
   if (!C_mode()) {
     unsigned int  cxx_flags = 0;
@@ -1830,7 +1846,7 @@ finish_variable_definition.
                init->dynamic != NULL &&
                init->dynamic->kind ==
                               (a_dynamic_init_kind)dik_nonconstant_aggregate &&
-               !is_effective_thread_local(var) &&
+               !ecil_var_is_thread_local(var) &&
                (var->source_corresp.is_local_to_function ?
                   !ecil_local_static_may_have_multiple_copies(var) :
                   (!var->is_inline &&
@@ -1876,7 +1892,7 @@ finish_variable_definition.
   if (type != 0 && (ecil_gid_info(type)->flags & ECIL_GF_FAILED)) {
     ecil_note_unsupported_type(type, "a record type that is not supported");
   }  /* if */
-  if (needs_static_init && is_effective_thread_local(var) &&
+  if (needs_static_init && ecil_var_is_thread_local(var) &&
       !var->source_corresp.is_local_to_function) {
     ecil_note_unsupported("a thread_local variable that is initialized or "
                           "destroyed dynamically");

@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=3 --gcc -fno-pic Test_name.c
+eccp: unknown option: -fno-pic

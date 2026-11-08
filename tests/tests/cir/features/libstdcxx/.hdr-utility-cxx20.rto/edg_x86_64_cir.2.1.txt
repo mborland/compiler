@@ -1,0 +1,5 @@
+eccp -DTEST_NUMBER=2 --c++20 -O2 --diag_suppress=cir_warning Test_name.c
+"Test_name.c", line 26: warning: variable "seq" was set but never used
+    auto seq = std::make_index_sequence<4>{};
+         ^
+

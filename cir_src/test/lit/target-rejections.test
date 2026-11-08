@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# Targets that the CIR back end does not support are rejected before any code
+# is generated: the library handles x86_64 Linux only (support table rows
+# platforms.x86_32, platforms.windows, platforms.macos and platforms.aarch64;
+# cir_module.cpp).  The exit status of an unsupported target is 4.
+# RUN: %ecil-asm %S/Inputs/empty.txt -o %t.ecil
+# RUN: %not %edg-cir --triple=i686-unknown-linux-gnu --emit=asm %t.ecil 2>&1 | %FileCheck %s --check-prefix=I686
+# RUN: %not %edg-cir --triple=i386-unknown-linux-gnu --emit=asm %t.ecil 2>&1 | %FileCheck %s --check-prefix=I386
+# RUN: %not %edg-cir --triple=x86_64-pc-windows-msvc --emit=asm %t.ecil 2>&1 | %FileCheck %s --check-prefix=MSVC
+# RUN: %not %edg-cir --triple=x86_64-w64-windows-gnu --emit=asm %t.ecil 2>&1 | %FileCheck %s --check-prefix=MINGW
+# RUN: %not %edg-cir --triple=x86_64-apple-darwin --emit=asm %t.ecil 2>&1 | %FileCheck %s --check-prefix=DARWIN
+# RUN: %not %edg-cir --triple=arm64-apple-macosx --emit=asm %t.ecil 2>&1 | %FileCheck %s --check-prefix=MACOS
+# RUN: sh -c '%edg-cir --triple=i686-unknown-linux-gnu --emit=asm %t.ecil 2> /dev/null; test $? -eq 4'
+# RUN: sh -c '%edg-cir --triple=x86_64-pc-windows-msvc --emit=asm %t.ecil 2> /dev/null; test $? -eq 4'
+
+# I686: error{{.*}}i686-unknown-linux-gnu{{.*}}not supported
+# I386: error{{.*}}i386-unknown-linux-gnu{{.*}}not supported
+# MSVC: error{{.*}}x86_64-pc-windows-msvc{{.*}}not supported
+# MINGW: error{{.*}}x86_64-w64-windows-gnu{{.*}}not supported
+# DARWIN: error{{.*}}x86_64-apple-darwin{{.*}}not supported
+# MACOS: error{{.*}}arm64-apple-macosx{{.*}}not supported

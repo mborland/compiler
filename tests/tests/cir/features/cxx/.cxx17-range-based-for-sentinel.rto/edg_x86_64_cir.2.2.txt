@@ -1,0 +1,2 @@
+./a.out
+cxx17.range_based_for_sentinel ok

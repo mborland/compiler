@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=4 --gcc -fno-pie Test_name.c
+eccp: unknown option: -fno-pie

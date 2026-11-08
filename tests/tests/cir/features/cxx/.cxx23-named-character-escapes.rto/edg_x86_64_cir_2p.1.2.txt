@@ -1,0 +1,2 @@
+./a.out
+cxx23.named_character_escapes ok

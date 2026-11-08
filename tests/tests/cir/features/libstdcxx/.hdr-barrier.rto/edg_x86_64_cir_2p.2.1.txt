@@ -1,0 +1,59 @@
+fe_only -DTEST_NUMBER=2 --c++23 -O2 --diag_suppress=cir_warning Test_name.c
+edg-cir: warning [1003]: the unused definition of '_ZNSt8__detail14__thread_relaxEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_ia32_pause
+edg-cir: warning [1003]: the unused definition of '_ZNKSt8__detail18__waiter_pool_base10_M_waitingEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_load
+edg-cir: warning [1003]: the unused definition of '_ZSt19atomic_thread_fenceSt12memory_order' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_thread_fence
+edg-cir: warning [1003]: the unused definition of '_ZSt19atomic_signal_fenceSt12memory_order' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_signal_fence
+edg-cir: warning [1003]: the unused definition of '_ZNSt11atomic_flag12test_and_setESt12memory_order' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_test_and_set
+edg-cir: warning [1003]: the unused definition of '_ZNVSt11atomic_flag12test_and_setESt12memory_order' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_test_and_set
+edg-cir: warning [1003]: the unused definition of '_ZNKSt11atomic_flag4testESt12memory_order' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_load
+edg-cir: warning [1003]: the unused definition of '_ZNVKSt11atomic_flag4testESt12memory_order' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_load
+edg-cir: warning [1003]: the unused definition of '_ZZNKSt11atomic_flag4waitEbSt12memory_orderENKUlvE_clEv' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_load_1
+edg-cir: warning [1003]: the unused definition of '_ZNSt11atomic_flag5clearESt12memory_order' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_clear
+edg-cir: warning [1003]: the unused definition of '_ZNVSt11atomic_flag5clearESt12memory_order' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_clear
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIcE4moveEPcPKcm' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIwE4moveEPwPKwm' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIDuE4moveEPDuPKDum' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIDsE4moveEPDsPKDsm' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx11char_traitsIDiE4moveEPDiPKDim' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_constant_p
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx18__exchange_and_addEPVii' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_add_4
+edg-cir: warning [1003]: the unused definition of '_ZN9__gnu_cxx12__atomic_addEPVii' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_add_4
+edg-cir: warning [1003]: the unused definition of '_ZSt3absDF128_' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __builtin_fabsf128
+edg-cir: warning [1003]: the unused definition of '_ZNSt8__detail13__waiter_baseINS_13__waiter_poolEE12_S_do_spin_vIbZNKSt11atomic_flag4waitEbSt12memory_orderEUlvE_NS_21__default_spin_policyEEEbPiRKT_T0_RiT1_' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin function __atomic_load
+edg-cir: error [1003]: the definition of '_ZNSt8__detail18__waiter_pool_base13_M_enter_waitEv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_add_4 (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt8__detail18__waiter_pool_base13_M_leave_waitEv' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_sub_4 (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt8__detail18__waiter_pool_base9_M_notifyEPibb' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_add_4 (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt13__atomic_impl4loadISt17__barrier_phase_tEENSt15remove_volatileIT_E4typeEPKS3_St12memory_order' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_load (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt13__atomic_impl18__compare_exchangeILb1ESt17__barrier_phase_tEEbRT0_RNSt15remove_volatileIS2_E4typeES7_bSt12memory_orderS8_' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_compare_exchange (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNKSt13__atomic_baseIlE4loadESt12memory_order' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_load_8 (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt13__atomic_baseIlE5storeElSt12memory_order' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_store_8 (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt13__atomic_impl5storeISt17__barrier_phase_tEEvPT_NSt15remove_volatileIS2_E4typeESt12memory_order' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_store (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt8__detail13__waiter_baseINS_13__waiter_poolEE10_S_do_spinIZNKSt14__tree_barrierIZ4mainEUlvE_E4waitEOSt17__barrier_phase_tEUlvE_NS_21__default_spin_policyEEEbPKiT_RiT0_' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_load (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt8__detail13__waiter_baseINS_13__waiter_poolEE10_S_do_spinIZNKSt14__tree_barrierISt18__empty_completionE4waitEOSt17__barrier_phase_tEUlvE_NS_21__default_spin_policyEEEbPKiT_RiT0_' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_load (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt13__atomic_baseIlE9fetch_subElSt12memory_order' was dropped: it uses a construct the CIR back end cannot express: the builtin function __atomic_fetch_sub_8 (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZNSt7numbers3e_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers7log2e_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers8log10e_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers4pi_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers8inv_pi_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers12inv_sqrtpi_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers5ln2_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers6ln10_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers7sqrt2_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers7sqrt3_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers11inv_sqrt3_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers8egamma_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers5phi_vIDF16_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers3e_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers7log2e_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers8log10e_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers4pi_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers8inv_pi_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers12inv_sqrtpi_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers5ln2_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers6ln10_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers7sqrt2_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers7sqrt3_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers11inv_sqrt3_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers8egamma_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: error [1003]: the definition of '_ZNSt7numbers5phi_vIDF128_EE' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: unsupported construct or target

@@ -1,0 +1,2 @@
+fe_only -DTEST_NUMBER=2 --gcc -mtune=generic Test_name.c
+eccp: unknown option: -mtune=generic

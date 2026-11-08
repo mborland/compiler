@@ -1,0 +1,92 @@
+eccp -DTEST_NUMBER=1 --c++14 Test_name.c
+"Test_name.c", line 34: warning: function "old_fn" was declared deprecated
+    CHECK(old_fn(1) == 2);
+    ^
+"Test_name.c", line 10: note: because of a "deprecated" attribute
+  [[deprecated]] static int old_fn(int x) { return x + 1; }
+    ^
+
+"Test_name.c", line 35: warning: function "old_msg" was declared deprecated ("use new_fn")
+    CHECK(old_msg(4) == 8);
+    ^
+"Test_name.c", line 11: note: because of a "deprecated" attribute
+  [[deprecated("use new_fn")]] static int old_msg(int x) { return x * 2; }
+    ^
+
+"Test_name.c", line 36: warning: class "OldClass" was declared deprecated
+    OldClass oc = {5};
+             ^
+"Test_name.c", line 13: note: because of a "deprecated" attribute
+  struct [[deprecated]] OldClass {
+           ^
+
+"Test_name.c", line 38: warning: class "OldClass2" was declared deprecated ("class")
+    OldClass2 o2;
+              ^
+"Test_name.c", line 17: note: because of a "deprecated" attribute
+  class [[deprecated("class")]] OldClass2 {
+          ^
+
+"Test_name.c", line 41: warning: variable "old_var" was declared deprecated
+    CHECK(old_var == 40);
+    ^
+"Test_name.c", line 21: note: because of a "deprecated" attribute
+  [[deprecated]] static int old_var = 40;
+    ^
+
+"Test_name.c", line 42: warning: variable "old_var" was declared deprecated
+    old_var = 41;
+    ^
+"Test_name.c", line 21: note: because of a "deprecated" attribute
+  [[deprecated]] static int old_var = 40;
+    ^
+
+"Test_name.c", line 43: warning: variable "old_var" was declared deprecated
+    CHECK(old_var == 41);
+    ^
+"Test_name.c", line 21: note: because of a "deprecated" attribute
+  [[deprecated]] static int old_var = 40;
+    ^
+
+"Test_name.c", line 44: warning: type "OldInt" was declared deprecated
+    OldInt oi = 7;
+           ^
+"Test_name.c", line 22: note: because of a "deprecated" attribute
+  typedef int OldInt [[deprecated]];
+                       ^
+
+"Test_name.c", line 45: warning: type "OldAlias" was declared deprecated ("alias")
+    OldAlias oa = 1L << 40;
+             ^
+"Test_name.c", line 23: note: because of a "deprecated" attribute
+  using OldAlias [[deprecated("alias")]] = long;
+                   ^
+
+"Test_name.c", line 47: warning: enum "OldEnum" was declared deprecated
+    OldEnum oe = OE_A;
+            ^
+"Test_name.c", line 24: note: because of a "deprecated" attribute
+  enum [[deprecated]] OldEnum { OE_A = 3 };
+         ^
+
+"Test_name.c", line 51: warning: function "old_tmpl(T) [with T=double]" was declared deprecated
+    CHECK(old_tmpl(2.5) == 3.5);
+    ^
+"Test_name.c", line 26: note: because of a "deprecated" attribute
+  template <typename T> [[deprecated]] T old_tmpl(T v) { return v + 1; }
+                          ^
+
+"Test_name.c", line 53: warning: function "Mem::method" was declared deprecated
+    CHECK(m.method() == 11 && m.field == 11);
+    ^
+"Test_name.c", line 29: note: because of a "deprecated" attribute
+    [[deprecated]] int method() const { return field; }
+      ^
+
+"Test_name.c", line 53: warning: member "Mem::field" was declared deprecated
+    CHECK(m.method() == 11 && m.field == 11);
+    ^
+"Test_name.c", line 28: note: because of a "deprecated" attribute
+    [[deprecated]] int field;
+      ^
+

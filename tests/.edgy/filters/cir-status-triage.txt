@@ -15,3 +15,8 @@
 #
 # torture/pr100382 (the S2 checkpoint's second runtime regression, a pure
 # function that can throw) is fixed, not listed.
+#
+# M6.1a: pr78468 passed at -O0 (by the stack pointer modulo 32) and is now a
+# diagnosed gap: the writer reports __builtin_alloca_with_align above 128
+# bits as unsupported, so the two functions that use it are dropped.
+imported/gnu/c/pr78468.sft.c | -DTEST_NUMBER=1 | edg_x86_64_cir | __builtin_alloca_with_align above 16 bytes is diagnosed and the function dropped (FAIL(COMPILE) at -O0 and -O2), where it was silently aligned to 16 bytes

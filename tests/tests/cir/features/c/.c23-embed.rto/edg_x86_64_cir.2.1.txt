@@ -1,0 +1,1 @@
+eccp -DTEST_NUMBER=2 --c23 -O2 Test_name.c

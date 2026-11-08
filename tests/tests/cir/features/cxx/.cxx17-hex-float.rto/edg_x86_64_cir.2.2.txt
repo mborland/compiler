@@ -1,0 +1,2 @@
+./a.out
+cxx17.hex_float ok

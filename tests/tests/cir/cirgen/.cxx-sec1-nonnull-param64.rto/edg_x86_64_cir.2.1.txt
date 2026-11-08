@@ -1,0 +1,1 @@
+eccp -DTEST_NUMBER=2 --c++17 --g++ --gnu_version=140000 -O2 Test_name.c

@@ -976,11 +976,13 @@ not materialized (the trailing_zeros form), an all-zero array is #cir.zero.
     llvm::SmallVector<mlir::Attribute> elements;
 
     for (uint64_t k = 0; k < have; ++k) {
-      uint64_t v = 0;
-      std::memcpy(&v, data + k * step, step);
-      elements.push_back(cir::IntAttr::get(element,
-                                           llvm::APInt(width, v)));
-      if (v != 0)
+      /* The element is built in a buffer of whole words, so that no width
+         overruns it (width is a multiple of 8: the caller checks). */
+      llvm::SmallVector<uint64_t, 2> words((width + 63) / 64, 0);
+      std::memcpy(words.data(), data + k * step, step);
+      llvm::APInt v(width, words);
+      elements.push_back(cir::IntAttr::get(element, v));
+      if (!v.isZero())
         last = k + 1;
     }
     elements.resize(last, mlir::Attribute());
@@ -1526,6 +1528,14 @@ C_AGG_BEGIN records, once their type is known.
         !mlir::isa<cir::IntType>(mlir::cast<cir::ArrayType>(t->cir)
                                      .getElementType())) {
       ok = format_error("C_STRING needs an integer array type");
+      break;
+    }
+    unsigned width = mlir::cast<cir::IntType>(
+        mlir::cast<cir::ArrayType>(t->cir).getElementType()).getWidth();
+
+    if (width == 0 || width % 8 != 0) {
+      ok = format_error("C_STRING needs an array of integers of a whole "
+                        "number of bytes");
       break;
     }
     mlir::Attribute attr = string_attribute(r.ops[1].data, r.ops[1].length,

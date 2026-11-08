@@ -1,0 +1,2 @@
+eccp -DTEST_NUMBER=2 --c++23 -O2 --diag_suppress=cir_warning Test_name.c
+edg-cir: warning [1003]: the unused definition of '_ZNSt9__compare13_Strong_order10_S_fp_bitsIdEEDaT_' was dropped and erased: it uses a construct the CIR back end cannot express: the builtin operation "__builtin_bit_cast"

@@ -1702,6 +1702,35 @@ value is stored when it has been computed) because it is used twice.
 }  /* setup_clzg_call */
 
 
+/* __builtin_alloca_with_align. */
+
+static void setup_alloca_align_call(an_expr_node_ptr callee)
+/*
+Check the alignment operand (in bits).  The library aligns the block to 16
+bytes whatever was asked, so an alignment above 128 bits, or one that is not
+a constant (gcc and clang reject it), is not translated.
+*/
+{
+  an_expr_node_ptr  arg = (callee->next != NULL) ? callee->next->next : NULL;
+
+  if (arg != NULL) arg = skip_parens(arg);
+  if (arg == NULL || arg->kind != (an_expr_node_kind)enk_constant ||
+      node_constant(arg)->kind != (a_constant_repr_kind)ck_integer) {
+    ecil_note_unsupported("__builtin_alloca_with_align with a non-constant "
+                          "alignment");
+  } else {
+    a_boolean             ovflo = FALSE;
+    a_host_large_integer  bits =
+                  value_of_integer_constant(node_constant(arg), &ovflo);
+
+    if (ovflo || bits < 0 || bits > 128) {
+      ecil_note_unsupported("__builtin_alloca_with_align with an alignment "
+                            "above 128 bits (16 bytes)");
+    }  /* if */
+  }  /* if */
+}  /* setup_alloca_align_call */
+
+
 static void emit_count_builtin(an_ecil_frame *frame, unsigned int id,
                                uint32_t rt)
 /*
@@ -2026,7 +2055,7 @@ The walk uses an explicit stack that is kept between the calls.
            the existence of one, can be observed. */
         pure = FALSE;
       } else if (current->kind == (an_expr_node_kind)enk_variable &&
-                 is_effective_thread_local(node_variable(current)) &&
+                 ecil_var_is_thread_local(node_variable(current)) &&
                  (node_variable(current)->init_kind ==
                                               (an_init_kind)initk_dynamic ||
                   node_variable(current)->storage_class ==
@@ -3291,6 +3320,9 @@ as their first argument: its address (for x.f) is the object pointer.
       } else if (ecil_unsupported_reason == NULL &&
                  (it->b == ECIL_SPECIAL_CLZG || it->b == ECIL_SPECIAL_CTZG)) {
         setup_clzg_call(frame, it, callee);
+      } else if (ecil_unsupported_reason == NULL &&
+                 it->b == ECIL_SPECIAL_ALLOCA_ALIGN) {
+        setup_alloca_align_call(callee);
       }  /* if */
     } else {
       it->cursor = callee->next;
@@ -7505,6 +7537,20 @@ storage), then CALL.  b counts the operands, the object's address included.
 }  /* do_ctor_call */
 
 
+static a_boolean repeated_ctor_copies_source(a_dynamic_init_ptr cdi)
+/*
+Return TRUE if the repeated constructor call of an array initialization copies
+an element of a source array, implied from the object being copied (the copy
+or move constructor of a class with an array member of class objects).  The
+loops below call the constructor with the destination element only, so the
+copy is not supported (M6.1b).  The copy of an array by a structured binding
+(is_array_copy) is diagnosed by setup_ctor_call.
+*/
+{
+  return cdi->variant.constructor.is_copy_constructor_with_implied_source;
+}  /* repeated_ctor_copies_source */
+
+
 static a_boolean emit_ctor_loop(an_ecil_frame *frame, a_dynamic_init_ptr cdi,
                                 uint32_t elem_gid, unsigned int flags,
                                 a_type_ptr elem_type, a_routine_ptr dtor,
@@ -7523,6 +7569,10 @@ pushed (the caller emits no end).
   uint32_t       gid = ecil_function_id(frame, cdi->variant.constructor.ptr);
   a_boolean      pushed = FALSE;
 
+  if (repeated_ctor_copies_source(cdi)) {
+    ecil_note_unsupported("the copy of an array of class objects in a "
+                          "member initializer");
+  }  /* if */
   ecil_rec2(frame, eop_array_ctor_begin, elem_gid, flags);
   emit_array_partial_dtor(frame, elem_type, dtor);
   if (cdi->variant.constructor.args == NULL) {
@@ -8181,6 +8231,10 @@ cursor-stack depth at which this aggregate started.
         uint32_t            gid = ecil_function_id(frame,
                                      rdi->variant.constructor.ptr);
 
+        if (repeated_ctor_copies_source(rdi)) {
+          ecil_note_unsupported("the copy of an array of class objects in "
+                                "a member initializer");
+        }  /* if */
         for (i = 0; i < count && ecil_unsupported_reason == NULL; i++) {
           ecil_rec1(frame, eop_agg_sel, index + i + level->vptr_shift);
           ecil_rec0(frame, eop_addr);
@@ -9107,9 +9161,19 @@ that initializes it (and destroys it with its block).
 */
 {
   if (cond->dynamic_init != NULL && cond->dynamic_init->variable != NULL) {
-    declare_variable(frame, cond->dynamic_init->variable);
-    if (ecil_unsupported_reason == NULL) {
-      (void)push_item(cik_var_init, cond->dynamic_init, 0);
+    if (cond->dynamic_init->variable->is_struct_binding_container) {
+      /* P0963 (a structured binding declaration as a condition): the front
+         end rejects it in every mode (ec_struct_binding_in_condition), so
+         this is unreachable until it implements the paper.  The bindings
+         would be the names of the container's members, and nothing here
+         declares them. */
+      ecil_note_unsupported("a structured binding declaration in a "
+                            "condition");
+    } else {
+      declare_variable(frame, cond->dynamic_init->variable);
+      if (ecil_unsupported_reason == NULL) {
+        (void)push_item(cik_var_init, cond->dynamic_init, 0);
+      }  /* if */
     }  /* if */
   }  /* if */
 }  /* push_condition_init */

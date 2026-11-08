@@ -1,0 +1,424 @@
+edg-cir-ecil-dump -DTEST_NUMBER=1 --c++17 Test_name.c
+"Test_name.c", line 28: warning: CIR back end: the body of "Implicit" uses the copy of an array of class objects in a member initializer, which the CIR back end does not support; the function is dropped
+  Implicit copy_implicit(const Implicit &b) { return b; }
+                                                     ^
+          detected during implicit generation of "Implicit::Implicit(const Implicit &)" at line 28
+
+"Test_name.c", line 29: warning: CIR back end: the body of "Implicit" uses the copy of an array of class objects in a member initializer, which the CIR back end does not support; the function is dropped
+  Implicit move_implicit(Implicit &b) { return static_cast<Implicit &&>(b); }
+                                               ^
+          detected during implicit generation of "Implicit::Implicit(Implicit &&)" at line 29
+
+"Test_name.c", line 30: warning: CIR back end: the body of "Defaulted" uses the copy of an array of class objects in a member initializer, which the CIR back end does not support; the function is dropped
+  Defaulted copy_defaulted(const Defaulted &b) { return b; }
+                                                        ^
+
+"Test_name.c", line 31: warning: CIR back end: the body of "Nested" uses the copy of an array of class objects in a member initializer, which the CIR back end does not support; the function is dropped
+  Nested copy_nested(const Nested &b) { return b; }
+                                               ^
+          detected during implicit generation of "Nested::Nested(const Nested &)" at line 31
+
+ecil 1.3 features=0x0000001a
+frame HEADER
+  STR 1 "x86_64-unknown-linux-gnu"
+  STR 2 ""
+  STR 3 "EDG C/C++ front end 7.0 (ECIL writer)"
+  STR 4 "Test_name.c"
+  TY_INT 1 32 true 4 4
+  TY_INT 2 64 false 8 8
+  TY_INT 3 64 true 8 8
+  HDR_TARGET 1 2 nil 64 64 6
+  HDR_LANG 1 201703 14
+  HDR_PRODUCER 3 4
+  HDR_TYPE_ROLE 3 1
+  HDR_TYPE_ROLE 1 2
+  HDR_TYPE_ROLE 2 3
+frame REGION supp
+  TY_VOID 4
+  STR 5 "E"
+  TY_RECORD_DECL 5 0 5
+  TY_PTR 6 5
+  TY_FUNC 7 4 0 [6] supp{15: 2}
+  STR 6 "v"
+  TY_RECORD_BODY 5 4 4 4 4 1
+  REC_FIELD 1 0 nil nil 6 0
+  STR 7 "_ZN1EC1Ev"
+  DECL_FUNC 8 7 0 2 7
+  STR 8 "_ZN1EC2Ev"
+  DECL_FUNC 9 7 0 2 8
+  STRUCTOR 8 9 0
+  DECL_FUNC 8 7 3 67 7
+  DECL_FUNC 9 7 3 67 8
+  STR 9 "this"
+  FUNC_BEGIN 9 0
+  PARAM 1 6 6 9 1
+  MEMINIT_BEGIN 2 0 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  C_INT 1 0
+  INIT_CONST
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_FUNC 10 4 0 [6, 6] supp{15: 6}
+  STR 10 "_ZN1EC1ERKS_"
+  DECL_FUNC 11 10 0 2 10
+  STR 11 "_ZN1EC2ERKS_"
+  DECL_FUNC 12 10 0 2 11
+  STRUCTOR 11 12 0
+  DECL_FUNC 11 10 3 67 10
+  DECL_FUNC 12 10 3 67 11
+  STR 12 "o"
+  FUNC_BEGIN 12 0
+  PARAM 1 6 6 9 1
+  PARAM 2 6 6 12 0
+  MEMINIT_BEGIN 2 0 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  LREF 2
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  LOAD 0
+  CONST_INT 1 1
+  ADD 1
+  STORE 0 0
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 13 "_ZN1EC1EOS_"
+  DECL_FUNC 13 10 0 2 13
+  STR 14 "_ZN1EC2EOS_"
+  DECL_FUNC 14 10 0 2 14
+  STRUCTOR 13 14 0
+  DECL_FUNC 13 10 3 67 13
+  DECL_FUNC 14 10 3 67 14
+  FUNC_BEGIN 14 0
+  PARAM 1 6 6 9 1
+  PARAM 2 6 6 12 0
+  MEMINIT_BEGIN 2 0 0
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  LREF 2
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  LOAD 0
+  CONST_INT 1 10
+  ADD 1
+  STORE 0 0
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_FUNC 15 6 0 [6, 6] supp{15: 7}
+  STR 15 "_ZN1EaSERKS_"
+  DECL_FUNC 16 15 0 2 15
+  DECL_FUNC 16 15 3 67 15
+  FUNC_BEGIN 16 0
+  PARAM 1 6 6 9 1
+  PARAM 2 6 6 12 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  LREF 2
+  LOAD 0
+  DEREF
+  FIELD 5 0
+  LOAD 0
+  CONST_INT 1 100
+  ADD 1
+  STORE 0 0
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 16 "Defaulted"
+  TY_RECORD_DECL 17 0 16
+  TY_PTR 18 17
+  TY_FUNC 19 4 0 [18] supp{15: 2}
+  TY_ARRAY 20 5 2 0
+  STR 17 "items"
+  TY_RECORD_BODY 17 8 8 4 4 1
+  REC_FIELD 20 0 nil nil 17 0
+  STR 18 "_ZN9DefaultedC1Ev"
+  DECL_FUNC 21 19 0 2 18
+  STR 19 "_ZN9DefaultedC2Ev"
+  DECL_FUNC 22 19 0 2 19
+  STRUCTOR 21 22 0
+  DECL_FUNC 21 19 3 67 18
+  DECL_FUNC 22 19 3 67 19
+  FUNC_BEGIN 22 0
+  PARAM 1 18 18 9 1
+  MEMINIT_BEGIN 2 0 1
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 17 0
+  ARRAY_CTOR_BEGIN 5 1
+  CALL 8 7 1 0
+  ARRAY_CTOR_END
+  MEMINIT_END
+  BLOCK_BEGIN
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 20 "Implicit"
+  TY_RECORD_DECL 23 0 20
+  TY_PTR 24 23
+  TY_FUNC 25 4 0 [24, 24] supp{15: 6}
+  TY_RECORD_BODY 23 8 8 4 4 1
+  REC_FIELD 20 0 nil nil 17 0
+  STR 21 "_ZN8ImplicitC1ERKS_"
+  DECL_FUNC 26 25 0 514 21
+  STR 22 "_ZN8ImplicitC2ERKS_"
+  DECL_FUNC 27 25 0 514 22
+  STRUCTOR 26 27 0
+  DECL_FUNC 26 25 3 579 21
+  DECL_FUNC 27 25 3 579 22
+  DECL_FUNC 26 25 0 546 21 supp{13: "the copy of an array of class objects in a member initializer"}
+  DECL_FUNC 27 25 0 546 22 supp{13: "the copy of an array of class objects in a member initializer"}
+frame REGION supp
+  TY_FUNC 28 23 0 [24] supp{15: 2}
+  STR 23 "_Z13copy_implicitRK8Implicit"
+  DECL_FUNC 29 28 0 0 23
+  DECL_FUNC 29 28 0 1 23
+  STR 24 "b"
+  FUNC_BEGIN 29 0
+  PARAM 1 24 24 24 0
+  BLOCK_BEGIN
+  RETURN_SLOT
+  ADDR
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  CALL 26 25 2 0
+  RETURN_FROM_SLOT
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 25 "_ZN8ImplicitC1EOS_"
+  DECL_FUNC 30 25 0 514 25
+  STR 26 "_ZN8ImplicitC2EOS_"
+  DECL_FUNC 31 25 0 514 26
+  STRUCTOR 30 31 0
+  DECL_FUNC 30 25 3 579 25
+  DECL_FUNC 31 25 3 579 26
+  DECL_FUNC 30 25 0 546 25 supp{13: "the copy of an array of class objects in a member initializer"}
+  DECL_FUNC 31 25 0 546 26 supp{13: "the copy of an array of class objects in a member initializer"}
+frame REGION
+  STR 27 "_Z13move_implicitR8Implicit"
+  DECL_FUNC 32 28 0 0 27
+  DECL_FUNC 32 28 0 1 27
+  FUNC_BEGIN 32 0
+  PARAM 1 24 24 24 0
+  BLOCK_BEGIN
+  RETURN_SLOT
+  ADDR
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  CALL 30 25 2 0
+  RETURN_FROM_SLOT
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_FUNC 33 4 0 [18, 18] supp{15: 6}
+  STR 28 "_ZN9DefaultedC1ERKS_"
+  DECL_FUNC 34 33 0 2 28
+  STR 29 "_ZN9DefaultedC2ERKS_"
+  DECL_FUNC 35 33 0 2 29
+  STRUCTOR 34 35 0
+  DECL_FUNC 34 33 3 67 28
+  DECL_FUNC 35 33 3 67 29
+  DECL_FUNC 34 33 0 34 28 supp{13: "the copy of an array of class objects in a member initializer"}
+  DECL_FUNC 35 33 0 34 29 supp{13: "the copy of an array of class objects in a member initializer"}
+frame REGION supp
+  TY_FUNC 36 17 0 [18] supp{15: 2}
+  STR 30 "_Z14copy_defaultedRK9Defaulted"
+  DECL_FUNC 37 36 0 0 30
+  DECL_FUNC 37 36 0 1 30
+  FUNC_BEGIN 37 0
+  PARAM 1 18 18 24 0
+  BLOCK_BEGIN
+  RETURN_SLOT
+  ADDR
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  CALL 34 33 2 0
+  RETURN_FROM_SLOT
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 31 "Nested"
+  TY_RECORD_DECL 38 0 31
+  TY_PTR 39 38
+  TY_FUNC 40 4 0 [39, 39] supp{15: 6}
+  TY_ARRAY 41 20 2 0
+  STR 32 "n"
+  TY_RECORD_BODY 38 20 20 4 4 2
+  REC_FIELD 1 0 nil nil 32 0
+  REC_FIELD 41 4 nil nil 17 0
+  STR 33 "_ZN6NestedC1ERKS_"
+  DECL_FUNC 42 40 0 514 33
+  STR 34 "_ZN6NestedC2ERKS_"
+  DECL_FUNC 43 40 0 514 34
+  STRUCTOR 42 43 0
+  DECL_FUNC 42 40 3 579 33
+  DECL_FUNC 43 40 3 579 34
+  DECL_FUNC 42 40 0 546 33 supp{13: "the copy of an array of class objects in a member initializer"}
+  DECL_FUNC 43 40 0 546 34 supp{13: "the copy of an array of class objects in a member initializer"}
+frame REGION supp
+  TY_FUNC 44 38 0 [39] supp{15: 2}
+  STR 35 "_Z11copy_nestedRK6Nested"
+  DECL_FUNC 45 44 0 0 35
+  DECL_FUNC 45 44 0 1 35
+  FUNC_BEGIN 45 0
+  PARAM 1 39 39 24 0
+  BLOCK_BEGIN
+  RETURN_SLOT
+  ADDR
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  CALL 42 40 2 0
+  RETURN_FROM_SLOT
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  STR 36 "Plain"
+  TY_RECORD_DECL 46 0 36
+  TY_PTR 47 46
+  TY_FUNC 48 46 0 [47] supp{15: 2}
+  STR 37 "P"
+  TY_RECORD_DECL 49 0 37
+  STR 38 "x"
+  STR 39 "y"
+  TY_RECORD_BODY 49 8 8 4 0 2
+  REC_FIELD 1 0 nil nil 38 0
+  REC_FIELD 1 4 nil nil 39 0
+  TY_ARRAY 50 49 3 0
+  TY_ARRAY 51 1 4 0
+  STR 40 "ps"
+  TY_RECORD_BODY 46 40 40 4 0 2
+  REC_FIELD 50 0 nil nil 40 0
+  REC_FIELD 51 24 nil nil 32 0
+  STR 41 "_Z10copy_plainRK5Plain"
+  DECL_FUNC 52 48 0 0 41
+  DECL_FUNC 52 48 0 1 41
+  FUNC_BEGIN 52 0
+  PARAM 1 47 47 24 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  LOAD 0
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION supp
+  TY_FUNC 53 24 0 [24, 24] supp{15: 7}
+  STR 42 "_ZN8ImplicitaSERKS_"
+  DECL_FUNC 54 53 0 514 42
+  DECL_FUNC 54 53 3 579 42
+  TY_BOOL 55 1 1
+  FUNC_BEGIN 54 0
+  PARAM 1 24 24 9 1
+  PARAM 2 24 24 nil 0
+  BLOCK_BEGIN
+  LOCAL 3 2 nil 0 0
+  LREF 3
+  CONST_INT 2 0
+  STORE 0 0
+  DO_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  FIELD 23 0
+  ADDR
+  CAST 12 6
+  LREF 3
+  LOAD 0
+  PTR_STRIDE 2
+  DEREF
+  ADDR
+  LREF 2
+  LOAD 0
+  DEREF
+  FIELD 23 0
+  ADDR
+  CAST 12 6
+  LREF 3
+  LOAD 0
+  PTR_STRIDE 2
+  DEREF
+  ADDR
+  CALL 16 15 2 0
+  DEREF
+  DROP
+  DO_COND
+  LREF 3
+  INC_DEC 0 0
+  CONST_INT 2 2
+  CMP 0
+  DO_END
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  RETURN_STMT true
+  BLOCK_END
+  FUNC_END 0
+frame REGION
+  STR 43 "_Z15assign_implicitR8ImplicitRKS_"
+  DECL_FUNC 56 25 0 0 43
+  DECL_FUNC 56 25 0 1 43
+  STR 44 "a"
+  FUNC_BEGIN 56 0
+  PARAM 1 24 24 44 0
+  PARAM 2 24 24 24 0
+  BLOCK_BEGIN
+  LREF 1
+  LOAD 0
+  DEREF
+  ADDR
+  LREF 2
+  LOAD 0
+  DEREF
+  ADDR
+  CALL 54 53 2 0
+  DEREF
+  DROP
+  RETURN_STMT false
+  BLOCK_END
+  FUNC_END 0
+frame GLOBALS
+frame NAMES
+frame END
+  END 19 0

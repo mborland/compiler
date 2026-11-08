@@ -1,0 +1,13 @@
+eccp -DTEST_NUMBER=2 --c23 -O2 Test_name.c
+"Test_name.c", line 33: warning: pointless comparison of unsigned integer with zero
+    if (u - 8 < 0)
+              ^
+
+"Test_name.c", line 12: warning: variable "d" was set but never used
+    auto d = 2.5;
+         ^
+
+"Test_name.c", line 13: warning: variable "c" was set but never used
+    auto c = 'a';
+         ^
+

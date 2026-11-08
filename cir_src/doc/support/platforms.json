@@ -118,7 +118,12 @@
      "since": null,
      "planned": "M7",
      "note": "cir-env tests only libstdc++; eccp rejects -stdlib= as an unknown option.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/platforms/platforms-libcxx-negative.sft.cpp",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341"
      ]
@@ -151,11 +156,28 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "6 of 15 real-world units compile (compile only, not run); __builtin_constant_p, __atomic_* and the add-with-carry builtins block the rest. The per-header rows come from the M6.1a sweep.",
-     "tests": [],
+     "status": "partial",
+     "since": "M6.1a",
+     "planned": "M6.7",
+     "note": "libstdc++ 15.3.1 header sweep (120 headers, C++23 at -O0 and -O2, self-checking): 47 yes, 24 partial (C++20 works, C++23 is blocked by the half and quad constants of <numbers>), 48 no (builtin constant_p M6.2, atomics M6.3, _Complex M6.6a, extended float and no_unique_address M6.7, coroutines after M7), 1 ignored (csetjmp). Per-header rows: libstdcxx.json.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-array.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-optional.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-variant.sft.cpp",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/libstdcxx/hdr-iostream.sft.cpp",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "dev_tools/cir-realworld/libstdcxx",
       "doc/project.md §4.4"
@@ -174,6 +196,10 @@
      "tests": [
       {
        "path": "cir_src/test/lit/errors.test",
+       "kind": "negative"
+      },
+      {
+       "path": "cir_src/test/lit/target-rejections.test",
        "kind": "negative"
       }
      ],
@@ -195,6 +221,10 @@
       {
        "path": "cir_src/test/lit/errors.test",
        "kind": "negative"
+      },
+      {
+       "path": "cir_src/test/lit/target-rejections.test",
+       "kind": "negative"
       }
      ],
      "refs": [
@@ -211,7 +241,12 @@
      "since": null,
      "planned": "after M7",
      "note": "The writer sends an i386 triple; the library rejects it.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "cir_src/test/lit/target-rejections.test",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "cir_src/lib/driver/cir_module.cpp:71"
      ]
@@ -226,7 +261,12 @@
      "since": null,
      "planned": "M7",
      "note": "Microsoft extensions are off in the cpfe-cir build, so a test that needs --microsoft_bugs reports REQUIREMENTS NOT MET; native Windows edgy is unsupported.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "cir_src/test/lit/target-rejections.test",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "cmake/macro-conf/default/cpfe-cir.cmakedef:39",
       "cir_src/lib/driver/cir_module.cpp:71"

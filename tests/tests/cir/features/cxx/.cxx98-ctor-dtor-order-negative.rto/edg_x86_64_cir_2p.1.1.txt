@@ -1,0 +1,8 @@
+fe_only -DTEST_NUMBER=1 --c++11 Test_name.c
+"Test_name.c", line 14: warning: CIR back end: the body of "R" uses a lifetime-extended temporary outside an initialization, which the CIR back end does not support; the function is dropped
+    R(int x) : t(T(x)) {}
+                        ^
+
+edg-cir: error [1003]: the definition of '_ZN1RC1Ei' was dropped: it uses a construct the CIR back end cannot express: a lifetime-extended temporary outside an initialization (and it is referenced)
+edg-cir: error [1003]: the definition of '_ZN1RC2Ei' was dropped: it uses a construct the CIR back end cannot express: a lifetime-extended temporary outside an initialization (and it is referenced)
+edg-cir: unsupported construct or target

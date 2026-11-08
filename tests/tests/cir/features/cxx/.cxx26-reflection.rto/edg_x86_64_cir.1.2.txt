@@ -1,0 +1,2 @@
+./a.out
+cxx26.reflection ok

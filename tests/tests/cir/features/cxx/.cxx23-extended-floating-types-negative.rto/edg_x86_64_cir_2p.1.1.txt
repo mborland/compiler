@@ -1,0 +1,7 @@
+fe_only -DTEST_NUMBER=1 --c++23 Test_name.c
+"Test_name.c", line 12: warning: CIR back end: the body of "half_value" uses a floating constant of this format, which the CIR back end does not support; the function is dropped
+  }
+  ^
+
+edg-cir: error [1003]: the definition of '_Z10half_valuev' was dropped: it uses a construct the CIR back end cannot express: a floating constant of this format
+edg-cir: unsupported construct or target

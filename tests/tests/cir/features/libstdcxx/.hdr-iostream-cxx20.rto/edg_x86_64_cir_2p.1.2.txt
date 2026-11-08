@@ -1,0 +1,7 @@
+./a.out
+cout line 42 1.5
+true
+printf after cout
+cout after printf
+ff 255
+iostream: ok

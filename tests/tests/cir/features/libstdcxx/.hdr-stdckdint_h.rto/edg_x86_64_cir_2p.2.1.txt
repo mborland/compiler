@@ -1,0 +1,1 @@
+eccp -DTEST_NUMBER=2 --c++26 -O2 --diag_suppress=cir_warning Test_name.c

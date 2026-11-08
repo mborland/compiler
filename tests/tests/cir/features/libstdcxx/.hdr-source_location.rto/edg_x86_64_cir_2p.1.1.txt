@@ -1,0 +1,3 @@
+fe_only -DTEST_NUMBER=1 --c++23 --diag_suppress=cir_warning Test_name.c
+edg-cir: error [1003]: the definition of 'main' was dropped: it uses a construct the CIR back end cannot express: the address of a non-string constant
+edg-cir: unsupported construct or target

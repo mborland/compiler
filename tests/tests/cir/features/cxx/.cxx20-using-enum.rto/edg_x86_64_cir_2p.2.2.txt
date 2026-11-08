@@ -1,0 +1,2 @@
+./a.out
+cxx20.using_enum ok

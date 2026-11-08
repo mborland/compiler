@@ -45,13 +45,37 @@ on the Mythos model; the user supplies the model id). Its scope:
   containers.
 - **Before SEC-1 (M6.1a), the sandbox becomes a wrapper on clang4.**
   Membership in the docker group is root-equivalent on that shared host, so
-  instructions alone are not enough. cir-config owns the wrapper, and the
-  agent may call only it.
+  instructions alone are not enough. cir-config owns the wrapper
+  (`dev_tools/bin/edg-cir-sandbox`), and the agent may call only it.
+  - Enforcement (user, 2026-11-08; project.md decision 58): a PreToolUse
+    guard (`~/.claude/hooks/cir-security-guard.py`, the orchestrator's; it
+    runs as a user-level settings hook scoped to `agent_type` cir-security
+    and as the agent's frontmatter hook, and either one blocks) allows
+    only Read, Grep and Glob inside the repository, plus a restricted local
+    `grep`, since this harness has no Grep or Glob tools (paths checked as
+    Claude Code expands them: no `~`, no `..`, no surrounding white space,
+    known input keys only), a few read-only commands, and exactly one ssh
+    form that calls the wrapper, and only while the orchestrator's flag
+    file `cir-security-sandbox.enabled` exists. It logs every call. Its
+    fixtures are `~/.claude/hooks/test_cir_security_guard.py`; canaries
+    prove it before each audit. clang4's `authorized_keys` is unchanged.
+  - Limits of the guard. It fails closed on its own errors and has its
+    own 10 s time limit, but a hook *timeout* lets the call through, and a
+    call whose hook input carries no `agent_type` is not checked (both are
+    Claude Code behavior). An allowed call still goes through the normal
+    permission checks. The audit log is the cross-check.
+  - The wrapper takes no docker options from its caller. A PoC script
+    arrives on stdin; each run gets a fresh directory, and the wrapper
+    reads results back without following symlinks. The container has two
+    mounts: the built snapshot (read-only) and the run's own work
+    directory. A run is killed when the scratch filesystem's free space or
+    inodes run low or the run's growth passes its cap.
   - Flags: `--rm --network none --pids-limit --cap-drop ALL --security-opt
     no-new-privileges --user --init`, CPU and memory caps, and a `timeout`
     inside the container, so a killed client cannot orphan it.
-  - Mounts: no docker.sock. The only host mount is the scratch directory;
-    the pinned toolchain is mounted read-only.
+  - Mounts: no docker.sock. Two host mounts: the built snapshot
+    (read-only) and the run's work directory; the toolchain is the
+    image's own.
   - It documents how the snapshot reaches clang4.
 - It reports each finding confirmed, with its reproducer.
 
@@ -114,6 +138,28 @@ cir-review). They are input for SEC-1, not findings.
 
 ## 5. Findings register
 
+SEC-1 ran on Mythos (`claude-mythos-5-1`) on 2026-11-08 against the M6.R
+tree (`70b1a2e326`); its report and reproducers are in `.tmp/m6/s2/`
+(`sec-1.md`); its line numbers are those of the audited tree. `P-n` are
+findings of the M6.1a feature probes. "Proposed"
+dispositions are triaged in M6.1b (§3); a medium finding needs the user's
+disposition.
+
 | Id | Severity | CWE | Area | Summary | Status | Fixed in | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| (none yet) | | | | | | | |
+| SEC-1-1 | Critical | CWE-121 | Library, ECIL bytes | `string_attribute` writes 16 bytes into a `uint64_t` for a `C_STRING` with 128-bit elements (`globals.cpp:978`); the validator accepts the stream; a release build exits 0 | Fixed (user, 2026-11-08) | M6.1a | `cir_src/test/cirgen/bad-c-string-int128.test`, `cir_src/test/format/fixtures/bad_c_string_int128.txt` |
+| SEC-1-2 | Critical | CWE-758, CWE-476 | Library, trusted facts | The nonnull mask is shifted by 64 or more for a function with 64 or more parameters, so parameter 63 of a function that returns a reference gets `nonnull`; -O2 deletes its null check; reachable from C++ source (`signature.cpp:189`, `:326`) | Fixed (user, 2026-11-08) | M6.1a | `cir_src/test/cirgen/sec1-nonnull-param64.test`, `tests/tests/cir/cirgen/cxx-sec1-nonnull-param64.sft.cpp` |
+| SEC-1-3 | High | CWE-770 | Library, ECIL bytes | `C_REPEAT` expands to the array count with no bound (`globals.cpp:1123`, `:1174`): a 134-byte stream requests 8 TiB | Open; proposed M6.1b | | |
+| SEC-1-4 | High | CWE-20 | Validator | Unchecked layout numbers (alignments, bit-field widths, record alignment, locals of function type, zero initializers) reach LLVM assertions; a release `cir_src` build compiles out the header-inlined ones (`llvm::Align`, `APInt`), so there they are undefined behavior (raised from Medium by review R2) | Open; proposed M6.1b | | |
+| SEC-1-5 | High | CWE-407 | Validator | No bracket-depth limit: a 200 KB stream of 100,000 nested blocks runs for more than 300 s (§2: unbounded resource use from a small input; raised from Medium by review R2) | Open; proposed M6.1b | | |
+| SEC-1-6 | Medium | CWE-250 | Gate tooling | edgdocker runs the test containers `--privileged` as root with the tree mounted (`edgdocker/__init__.py:451`; main's shared tooling) | Open; M6.1b triage (user, 2026-11-08); needs the user's acceptance | | |
+| SEC-1-7 | Low | — | Validator, emitter | A name id 0 is "no name" to the validator but not to the emitter: a misleading internal error | Open | | |
+| SEC-1-8 | Low | CWE-829 | Supply chain | `fedora:43` is not pinned in five Dockerfiles under `dev_tools/docker/` (§4) | Open | | |
+| SEC-1-9 | Low | — | Crash recovery | A poisoned session still destroys its reader (`session.cpp:320-349`) | Open | | |
+| P-1 | High | — | Generated code | `#pragma STDC FENV_ACCESS ON` is ignored without a diagnostic (row `c99.fenv_access`, `ignored`) | Open; proposed M6.1b | | |
+| P-2 | Medium | — | Generated code | `scalar_storage_order` is ignored with only the FE's "unknown attribute" warning | Open; proposed M6.4a (its row); needs the user's acceptance | | |
+| P-3 | Medium | — | Generated code | `trivial_abi` is ignored with only the FE's "unknown attribute" warning; the ABI differs from clang objects | Open; proposed M6.4a (its row); needs the user's acceptance | | |
+| P-4 | High | — | Generated code | The initialization store of a volatile object is emitted non-volatile, so -O2 can drop it (row `c89.volatile_init`, `ignored`) | Open; proposed M6.1b | | |
+| P-5 | High | — | Generated code | The implicit copy constructor of a class with an array of class objects calls the element copy constructor without its source (`struct S { std::string a[2]; }` copies crash) | Diagnosed in M6.1a (user, 2026-11-08); fix proposed M6.1b | M6.1a (diagnosis) | `tests/tests/cir/writer/writer-cxx-array-copy-negative.sft.cpp` |
+| P-6 | High | — | Generated code | Every GNU `__thread` variable was emitted without TLS (the FE records the keyword only as a declaration modifier), so a definition was one global shared by all threads; the support row's evidence did not use `__thread` | Fixed | M6.1a | `tests/tests/cir/writer/writer-gnu-thread-keyword.sft.cpp`, `writer-gnu-thread-keyword-c.sft.c` |
+| P-7 | High | — | Front end (every configuration) | A structured binding pack bound by reference (`auto &[...r]`, C++26 P1061) gives wrong values in every configuration, the reference cpfe included (row `cxx26.structured_binding_packs`, `ignored`) | Open; proposed M6.1b triage (an FE defect; may belong to `main`) | | |

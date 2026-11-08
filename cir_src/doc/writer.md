@@ -700,8 +700,17 @@ cleanup of an unconstructed object);
 a local aggregate with a pointer to a member function that needs a `this`
 adjustment (9.18); an address constant that names a local variable;
 a constant `new[]` count of 2^32 or more; a constant initialization of a
-`[[no_unique_address]]` member; structured bindings in conditions; variable
-length arrays.
+`[[no_unique_address]]` member; variable length arrays; an alignment above
+128 bits, or a non-constant one, in `__builtin_alloca_with_align` (the library
+aligns the block to 16 bytes; `writer-cxx-alloca-align-*`).
+
+A structured binding declaration as a condition (P0963, C++26) is not on this
+list: the front end rejects it in every mode (`decls.c`,
+`ec_struct_binding_in_condition`), so the writer never sees it. `push_condition_init`
+holds a defensive diagnosis for a condition variable that is a structured
+binding container, unreachable until the front end implements the paper. The
+support table has no row for it (features the front end does not implement
+are not listed).
 
 **Expected differences from the gcc-built reference** (documented, not bugs):
 falling off the end of a non-void C++ function is `trap` + `unreachable` as clang

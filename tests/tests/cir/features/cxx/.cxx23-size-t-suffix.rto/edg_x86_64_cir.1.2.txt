@@ -1,0 +1,2 @@
+./a.out
+cxx23.size_t_suffix ok

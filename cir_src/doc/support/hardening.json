@@ -38,7 +38,12 @@
      "since": null,
      "planned": "M6.4b",
      "note": "Rejected by eccp as unknown options; the choice is fixed to PIC.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-pic-options-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341"
      ]
@@ -55,7 +60,7 @@
      "note": "The macro is accepted and glibc picks its __*_chk wrappers, but __builtin_object_size is always unknown, so no overflow aborts.",
      "tests": [],
      "refs": [
-      "src/ecil_code.c:3222",
+      "src/ecil_code.c:3251",
       "src/builtin_libc.h"
      ]
     },
@@ -69,7 +74,12 @@
      "since": null,
      "planned": "M6.4a",
      "note": "No option: eccp rejects it as unknown. Only a CHECKING build of the front end honors the environment variable EDG_CIR_WRAPV. Signed overflow is undefined (nsw), as in gcc without the flag.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-wrapv-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "src/ecil_write.c:2207",
       "util/eccp.sh:2341"
@@ -85,7 +95,12 @@
      "since": null,
      "planned": "M6.4b",
      "note": "Rejected by eccp; no ssp attributes are generated.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-stack-protector-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341"
      ]
@@ -100,7 +115,12 @@
      "since": null,
      "planned": "M6.4b",
      "note": "Rejected by eccp; no probe-stack attribute is generated.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-stack-clash-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341"
      ]
@@ -115,7 +135,12 @@
      "since": null,
      "planned": "M6.4b",
      "note": "Rejected by eccp; no module flags are generated.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-cf-protection-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341"
      ]
@@ -130,7 +155,12 @@
      "since": null,
      "planned": "M6.4b",
      "note": "Rejected by eccp. If it does not fit M6.4b it moves to M7 (project.md §6).",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-auto-var-init-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341"
      ]
@@ -145,7 +175,12 @@
      "since": null,
      "planned": "after M7",
      "note": "Rejected by eccp. The optimizer may delete a null check after a dereference, as gcc does by default.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-no-delete-null-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341"
      ]
@@ -164,6 +199,10 @@
       {
        "path": "tests/tests/imported/gnu/c/pr84503-1.sft.c",
        "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-no-strict-aliasing-negative.sft.c",
+       "kind": "negative"
       }
      ],
      "refs": [
@@ -176,11 +215,16 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "LLVM emits the note in the assembly it prints for Linux; no test inspects the linked program's stack flags.",
-     "tests": [],
+     "status": "yes",
+     "since": "≤M5.1",
+     "planned": null,
+     "note": "The probe reads its own PT_GNU_STACK header and the [stack] mapping: not executable.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-noexecstack.sft.c",
+       "kind": "e2e-run"
+      }
+     ],
      "refs": []
     },
     {
@@ -189,12 +233,23 @@
      "papers": [],
      "macro": null,
      "macro_value": null,
-     "status": "unverified",
-     "since": null,
-     "planned": "M6.1a",
-     "note": "Linking is done by the gcc driver, so its defaults apply; no test checks them. eccp rejects -Wl, options.",
-     "tests": [],
-     "refs": []
+     "status": "partial",
+     "since": "≤M5.1",
+     "planned": "M6.4b",
+     "note": "RELRO works: the program has a PT_GNU_RELRO header and the mapping that holds a relocated pointer is read-only. BIND_NOW is only what the gcc driver defaults to (the cir-env gcc links lazily), and eccp rejects -Wl, options, so it cannot be asked for.",
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-relro.sft.c",
+       "kind": "e2e-run"
+      },
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-bind-now-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
+     "refs": [
+      "util/eccp.sh:2341"
+     ]
     },
     {
      "id": "hardening.sanitizers",
@@ -206,7 +261,12 @@
      "since": null,
      "planned": "after M7",
      "note": "Rejected by eccp. The corpus sanitizer directories are outside the filter.",
-     "tests": [],
+     "tests": [
+      {
+       "path": "tests/tests/cir/features/hardening/hardening-sanitizers-negative.sft.c",
+       "kind": "negative"
+      }
+     ],
      "refs": [
       "util/eccp.sh:2341"
      ]

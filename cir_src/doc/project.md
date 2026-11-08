@@ -23,7 +23,8 @@ Tags: `H1`–`H4` cite the archived handoffs (`archive/handoff.md` …
 | (answers) | `89c82d56e7` | The user's answers to H4 §8 |
 | M5.1-docs, M5.1a, M5.1b, M5.1 | `f975af6b9d` `fed47acbbb` `ac210ca02b` `c9a459a718` | This document set; clang4 and the re-derived baselines; attr-diff facts, the -O0 always_inline inliner, the mangler and `__has_builtin` (ungated), CWG2387 under CIR; the size-based chunk decision, the guard-worker exit fix, the milestone gate |
 | M6.0 | `e06b3419a0` | The M6 plan (§6); the support table `support/` (305 rows); the security model and audit schedule `security.md`; the §8 answers (decisions 51–56) |
-| M6.R | (the commit that adds this row) | The rebase onto `main` `cc408045d4`; main's image namespace and expectation inheritance for CIR; the CIR Changes entries as pending files; the re-derived baselines `m6r-base-*` |
+| M6.R | `70b1a2e326` | The rebase onto `main` `cc408045d4`; main's image namespace and expectation inheritance for CIR; the CIR Changes entries as pending files; the re-derived baselines `m6r-base-*` |
+| M6.1a | (the commit that adds this row) | The clang4 sandbox for the auditor and its guard; SEC-1 on Mythos and the findings register; the feature probes, negative tests and the libstdc++ header sweep (0 `unverified`); the `support-sweep` gate step; diagnoses for `__builtin_alloca_with_align` above 16 bytes, the array-of-class copy and `--set_flag=coroutines`; fixes for `__thread` TLS, designated bases, the parameter-63 nonnull and `C_STRING` element widths |
 
 M6.R rebased every commit above onto `main` and ended each subject with
 ` []` (main's commit policy; user, 2026-11-07), so their hashes changed.
@@ -43,28 +44,31 @@ The old box `192.168.1.167` is retired: its home directory was wiped on
 2026-10-28, with the M5 trees, gate evidence and every baseline. M5.1
 session 1 rebuilt the images and baselines on clang4.
 
-**Numbers at M6.R** (clang4, milestone gate on the rebased tree): C
-corpus 1664/2561 (M5.1: 1663: `pr78468` now passes at -O0, by stack
-layout, not by `main`; §5); C++
-corpus 1472/1823; smoke 40/40 (C) and 98/98 (C++); cir-suite 268/268;
-crash-sweep 0 problems; attr-diff 0 unexplained (34 checked rows); perf
-at most +0.42% against M5.1; S1 met; chunk-rss 51.7%; `asm-diff` (2564)
-and `cpp-asm-diff` (1958) identical to M5.1: `main`'s 82 commits change
-no generated code in the corpus.
+**Numbers at M6.1a** (clang4, lean gate, §9): C corpus 1663/2561 (M6.R:
+1664; `pr78468` is now diagnosed, §4.1); C++ corpus 1472/1823; cir-suite
+798/798 in both configurations; support table 425 rows (267 yes, 45
+partial, 96 no, 17 ignored, 0 unverified); mixed-tu 70/70; identity, day
+and day32 identical to the M6.R baselines. Perf, rss, chunk-rss and
+attr-diff are not in the lean step set and were not re-measured; the
+assembly is identical (2563 C and 1956 C++ files) apart from the three
+attributed status changes (§9).
 
-**Now:** M6.R is the gate on 2026-11-08. It:
+**Now:** M6.1a is the gate on 2026-11-08 (§6, §9). It:
 
-- rebased `cir` onto `main` `cc408045d4` (above; decision 57);
-- moved CIR to main's image namespace `ghcr.io/edgcpp` (same image IDs)
-  and to main's expectation inheritance (§5 "Tests and gates");
-- moved the 24 older CIR Changes entries to `src/pending_changes/cir-*.txt`
-  with open tags (decision 56);
-- re-derived the baselines (`m6r-base-*`, `identity-m6r`, day-base) and
-  made them the tool defaults, and set the C release RSS ceilings at 1.25
-  times the re-derived values (§9).
+- built the clang4 sandbox `edg-cir-sandbox` and the Mac-side guard of
+  the auditor (decision 58; reviews R1, R2), and ran SEC-1 on Mythos:
+  two Critical findings were fixed in this session (user, 2026-11-08), the
+  rest are in the register (`security.md` §5) for M6.1b;
+- proved every support row: 425 rows, 0 `unverified`; a negative test for
+  every `no` and `partial` row; the header sweep of 120 libstdc++ headers;
+  the gate step `support-sweep`;
+- found silent miscompiles with the probes: GNU `__thread` (fixed), the
+  array-of-class copy in implicit constructors (now diagnosed; fix M6.1b),
+  the volatile initialization store and `FENV_ACCESS` (M6.1b).
 
-`main` has not fixed the two §4.8 mangler defects (M6.5). Next is
-**M6.1a**. The baselines live on clang4 (`cookbook.md` §1).
+Next is **M6.1b**: SEC-1 triage first (the open High findings, the
+Mythos delta review of this session's reader and validator changes, the
+medium dispositions of §8), then the housekeeping and fuzzing of §6.
 
 ## 1. Map
 
@@ -314,6 +318,16 @@ decision.
 57. Commit subjects follow main's policy (`edg-check-commit-messages`):
     they end in a tag list, `[]` until the work has a GitHub issue (user,
     2026-11-07; M6.R rewrote the 21 earlier subjects).
+58. The cir-security sandbox (user, 2026-11-08): the agent reaches clang4
+    only through the wrapper `edg-cir-sandbox`, whose `docker run` flags
+    are fixed. A fail-closed PreToolUse guard
+    (`~/.claude/hooks/cir-security-guard.py`) enforces that and confines
+    its reads to the repository. It runs twice, as a user-level settings
+    hook scoped to `agent_type` cir-security (user, 2026-11-08) and as the
+    agent's frontmatter hook (which did not fire in the first tests, only
+    after the definition reloaded); either one blocks. It logs every call
+    with its mode.
+    clang4's `authorized_keys` is unchanged: no forced-command key.
 
 ### 2.1 Retired
 
@@ -367,6 +381,16 @@ cited notes. "M5.1" marks an item the current milestone fixes (§6).
   return; designated or positional): "a reference to a parameter by
   position" (`ecil_code.c` `enk_param_ref` handles only
   `in_field_initializer`; found in M6.R, older than the rebase; M6.7).
+- `__builtin_alloca_with_align` with an alignment above 128 bits or one
+  that is not a constant (M6.1a; it used to be aligned to 16 silently;
+  M6.2 sends the alignment).
+- The copy of an array of class objects in an implicit, defaulted or move
+  constructor (M6.1a; P-5: it used to be emitted without its source, so
+  `struct S { std::string a[2]; }` copies crashed; the fix is M6.1b).
+- C++23 units that include `<numbers>` (about 45 libstdc++ headers,
+  `<iostream>` among them): its `_Float16`, `bfloat16` and `_Float128`
+  constants are reported as errors although unused (header sweep, M6.1a;
+  C++20 works; M6.1b triages why unused ones are errors; P1467 is M6.7).
 
 ### 4.2 Silent (not diagnosed)
 
@@ -391,11 +415,14 @@ cited notes. "M5.1" marks an item the current milestone fixes (§6).
   - eccp rejects other unknown `-f*` options (`-fwrapv`,
     `-fstack-protector*`, `-fcf-protection`, `-fPIE`) with "unknown
     option" (`util/eccp.sh:2341`): diagnosed, not silent.
-- `__builtin_alloca_with_align` drops alignments above 16 bytes (the
-  writer sends `ebi_alloca` without it; the library aligns to 16):
-  `imported/gnu/c/pr78468` (256-bit requests) fails at -O2, also with the
-  M5.1 binary; an `our-ir` line in `cir-opt-triage.txt` (found by the M6.R
-  gate, `.tmp/m6/s1/cir-config-gate.md`; M6.2).
+- Found by the M6.1a probes (`security.md` §5): `#pragma STDC FENV_ACCESS
+  ON` is ignored (P-1, High; M6.1b makes it loud); the initialization
+  store of a volatile object is not volatile (P-4, High; M6.1b); a C++
+  `extern thread_local` is accessed directly, not through its `_ZTW`
+  wrapper, so the dynamic initialization of a variable defined in a g++
+  object is skipped (row `cxx11.thread_local_dynamic`, M6.7);
+  `scalar_storage_order` and `trivial_abi` get only the FE's "unknown
+  attribute" warning (P-2, P-3; §8).
 - `#pragma GCC unroll`, `ivdep` and `novector`: since main's GH #174 the FE
   binds them to the next loop (`pk_gcc_next_statement`) and no longer warns;
   the writer drops them, so only the hints are lost (the stream is
@@ -510,6 +537,15 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
   GNU mode only, clang writes `dn` too); M6.5 fixes them (decision 56).
   A class-type NTTP object mangles as `tlK1S` where g++ writes `tl1S`
   (`A<S{3,4}>`, M6.R; M6.5).
+- Found in M6.1a: the FE does not implement P0963 (structured bindings in
+  conditions), C23 `constexpr` in C, `_Decimal32`, or attributes on
+  structured bindings (their rows were removed); by-reference structured
+  binding packs (`auto &[...r]`) give wrong values in every configuration
+  (P-7, High; M6.1b triage);
+  `__has_include(<stdarg.h>)` is false with the EDG include directory. A
+  referenced defaulted copy constructor of `std::__shared_ptr<_Dir_stack>`
+  is not emitted under CIR, an undefined reference at link time (decision
+  12 wants an error; M6.1b).
 
 ## 5. Needs re-look
 
@@ -537,15 +573,10 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
   compiler (H4 §5).
 
 **Writer**
-- The base-last guard of a designated base initializer (`ecil_const.c`
-  around 181) is reached only with `--gnu_version` below 80000 in C++17
-  since main's GH #260 (`writer-cxx-designated-base-last` runs at 70400).
-- A designated initializer whose base entry the FE lists between data
-  members (`--gnu_version` below 80000, C++17: `D gd{.p = 50}` with a base
-  that has an NSDMI) gives malformed ECIL (`C_SEL` out of range; the
-  library rejects it). Older than the rebase, where every GNU version did
-  it. Fix and golden: `.tmp/m6/s1/ecil_const-base-mid.patch`,
-  `cir-writer-p1` notes; M6.1a.
+- The base-entry rule of a designated initializer (`ecil_const.c`
+  178-207: base entries the FE lists after or between data members) is
+  reached only with `--gnu_version` below 80000 in C++17 since main's GH
+  #260 (`writer-cxx-designated-base-{last,mid}` run at 70400).
 - The sampled name check (the first 2000 functions in full, then 1 in 16;
   `ECIL_CHECK_ALL_NAMES=1` for all) sees a mangler bug that only large TUs
   have late (H4 §5); the full check over the C++ corpus and two
@@ -592,12 +623,12 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
   fails and CIR passes, only for the cases the CIR configs run. Read them
   only through `edgtest.expectations` (`overlay_expectations`), never as
   full lists; a new reader that does reports PASS lines as failures.
-- `imported/gnu/c/pr78468` passes at -O0 only when the stack pointer
-  happens to be 32-byte aligned (§4.2): clang4 runs with
-  `kernel.randomize_va_space=0`, and the environment size moves the
-  stack. Its PASS is in `m6r-base-status` and the corpus expectations; a
-  flip fails corpus and opt-corpus. M6.1a diagnoses the dropped alignment
-  first (decision 54), which makes the status stable.
+- `imported/gnu/c/pr78468` is a stable FAIL(COMPILE) since M6.1a (the
+  alloca diagnosis). A recording copy-back once dropped its line from
+  `edg_x86_64_cir/imported.log`: check expectation diffs after every
+  record.
+- lit is not in the cir-env image; M6.1a's library runs used a copy of
+  `lit.py` (M6.1b).
 - `src/error_msg.txt` is append-only, so `cir_error` and `cir_warning`
   renumber on every rebase (3601 and 3602 since M6.R). Refer to them by tag
   only.
@@ -667,14 +698,14 @@ are decision 55.
 - **Security.** The audits SEC-1 to SEC-4 and their policy are
   `security.md` §3 (decision 53).
 
-Done: M6.0 (2026-11-07) and M6.R (2026-11-08; §0, §9). Next: M6.1a.
+Done: M6.0 (2026-11-07), M6.R and M6.1a (2026-11-08; §0, §9). Next: M6.1b.
 
 | Id | Theme | Items | Exit |
 | --- | --- | --- | --- |
 | M6.0 | Plan, support table, security model | This section; `support/`; `security.md`; the `cir-security` agent | `--check` passes; Sphinx `-W` builds; cir-review approves |
 | M6.R | Rebase onto `main` | Rebase the local branch `cir` (never pushed) onto `main` and resolve the conflicts (the CIR-gated hooks, `cmd_line.c`, the tooling, `src/Changes`). Move the CIR entries of M0 to M5.1b into `src/pending_changes/*.txt` with open tags; `edg-collect-changes --check` passes except for the open tags. Check whether `main` already fixed the two §4.8 mangler defects. Re-derive every baseline on clang4 (base, identity, day-base) and tighten the RSS C rows (decision 56). Prune the listed clang4 trees. If it overflows, split into a/b. | The full milestone gate on the rebased tree; differences from M5.1 are attributed to `main`'s changes |
 | M6.1a | Probes and negative tests; SEC-1 starts | First the clang4 sandbox wrapper for cir-security (`security.md` §3). Then: the mid-list designated base fix from M6.R (§5 Writer; patch ready); a diagnostic for `__builtin_alloca_with_align` above 16 bytes, before the gate (§5, `pr78468`); one probe per `unverified` row in `tests/tests/cir/features/`, including structured bindings in conditions (writer.md §9.12 calls them unsupported, but no diagnose site exists); a negative test for every `no` and `partial` row; a libstdc++ header sweep (self-checking usage tests at -O0 and -O2); a `support-sweep` gate step. Reject `--set_flag=coroutines` under CIR: today it bypasses `COROUTINE_ENABLING_POSSIBLE` (`cmd_line.c:2533`, honored at :3148), and only the writer's catch-all (`ecil_code.c:10180`) stops it. The checker follow-ups of review 2: per-case type overrides, `xfail` mixed-tu cases, the content of negative tests, only FAIL(COMPILE) or a link failure as `failing` on `no` rows, the mode rule on `partial` rows. | `make_support.py --check --gate M6.1a` passes; the sweep is in the gate |
-| M6.1b | Housekeeping, fuzzing; SEC-1 triage | Housekeeping: the M5.1 review follow-ups (`.tmp/m51/s3/review-m51-2.md`: the guard-worker comment, a never-dlclose note or `-z nodelete`, the two gate-evidence comments; from M6.R `.tmp/m6/s1/review-m6r-2.md` items 5 and 6: `FINGERPRINT_DIRS` without `tests/expectations`, `tests/tests`, `dev_tools/pylibs`, `dev_tools/docker`, and an area rule for `dev_tools/pylibs/edgtest/`); the stale `run_unit.sh` and `run_cases.sh`; the inventory of the pin's ops. Fuzzing and hardening: a fuzz harness on the `EDG_CIR_FORMAT_ONLY` build, run with `EDG_CIR_NO_GUARD` (a recovered crash counts as a finding); a UBSan preset; `EDG_CIR_TEE` and `EDG_CIR_NO_VERIFY` gated behind `EDG_CIR_TEST_HOOKS` (the default flips only once M7 defines a release build). Fix the unscheduled SEC-1 critical and high findings. If this overflows, fuzzing moves to M6.1c. | 1 clean fuzz core-hour; the register is triaged |
+| M6.1b | Housekeeping, fuzzing; SEC-1 triage | Housekeeping: the M5.1 review follow-ups (`.tmp/m51/s3/review-m51-2.md`: the guard-worker comment, a never-dlclose note or `-z nodelete`, the two gate-evidence comments; from M6.R `.tmp/m6/s1/review-m6r-2.md` items 5 and 6: `FINGERPRINT_DIRS` without `tests/expectations`, `tests/tests`, `dev_tools/pylibs`, `dev_tools/docker`, and an area rule for `dev_tools/pylibs/edgtest/`); the stale `run_unit.sh` and `run_cases.sh`; the inventory of the pin's ops. Fuzzing and hardening: a fuzz harness on the `EDG_CIR_FORMAT_ONLY` build, run with `EDG_CIR_NO_GUARD` (a recovered crash counts as a finding); a UBSan preset; `EDG_CIR_TEE` and `EDG_CIR_NO_VERIFY` gated behind `EDG_CIR_TEST_HOOKS` (the default flips only once M7 defines a release build). Fix the unscheduled SEC-1 critical and high findings: SEC-1-3, SEC-1-4, SEC-1-5, P-1, P-4 and the real fix of P-5 (SEC-1-1 and SEC-1-2 were fixed in M6.1a); first, the Mythos delta review of M6.1a's reader, validator and emitter changes (`ecil_refs.cpp`, `globals.cpp`, `signature.cpp`; standing trigger). Also: the `std::__shared_ptr` copy constructor that is not emitted (§4.8); why unused `<numbers>` constants are errors (§4.1); lit in cir-env; prune `~/cir-sec-scratch/sec1`. If this overflows, fuzzing moves to M6.1c. | 1 clean fuzz core-hour; the register is triaged |
 | (M6.Pb) | Pin bump, only if needed | Decided by the M6.1b inventory; before M6.2 | Gate against the new baselines |
 | M6.2 | Builtins the optimizer evaluates | ECIL 1.4 opens. `__builtin_constant_p` → `llvm.is.constant`. `__builtin_object_size` and `__builtin_dynamic_object_size` → `llvm.objectsize`. FORTIFY probes (`__builtin___*_chk`, `__builtin_va_arg_pack`, `gnu_inline`). The placement-new form Boost container needs. | The sort kernel builds; the FORTIFY probes abort; the real-world unit count rises (6/15) |
 | M6.3 | Atomics | `__atomic_*`, `__sync_*`, C11 `_Atomic`, memory orders. `__builtin_clear_padding`. The x86 add-with-carry builtins. | `<atomic>`, `<memory>` and `<regex>` pass the sweep; Boost format and multiprecision build |
@@ -683,7 +714,7 @@ Done: M6.0 (2026-11-07) and M6.R (2026-11-08; §0, §9). Next: M6.1a.
 | M6.5 | Code quality, attributes, mangling | `llvm.mem*` intrinsics (revisits decision 35). GNU `nonnull` into the mask. `memcmp` facts. `FINAL`. The 27 `_ZdlPvm`/`_ZdlPv` cases and `_ZdaPvm`. Destructor NOTHROW under `--no_exceptions`. Extern `thread_local` purity. Clang-mode `sr`. The §4.8 mangler defects, fixed for every back end unless `main` already has them (decision 56). | Fewer attr-diff checked rows; codequality 1.00× |
 | M6.6a | `_Complex` | Arithmetic, conversions, the SysV ABI through CallConvLowering | `_Complex` rows green |
 | M6.6b | Other C gaps | VLAs, `_BitInt` parameters and bit-fields, a wide string followed by elements, address constants through casts, the `va_list` role. Optional: the "unsequenced" diagnostic. GNU range designators and flexible-array initializers are `Ext`. | Those rows green |
-| M6.7 | Standard C++ gaps | Namespace-scope `thread_local` with dynamic initialization, `std::source_location`, `__builtin_bit_cast`, structured bindings in conditions. The gaps in `new (std::nothrow)`, array destroying delete and copying arrays of class objects. Constant initialization of a `[[no_unique_address]]` member. P1467 extended floating-point types and the `_Float16`/`_Float128` decision. | Those rows green |
+| M6.7 | Standard C++ gaps | Namespace-scope `thread_local` with dynamic initialization, `std::source_location`, `__builtin_bit_cast`. The writer gaps the header sweep found: a class conditional that does not initialize a variable (`std::map`), a delegating constructor that does not call a constructor (`chrono`), an anonymous-union member with a destructor (`std::format`), an assignment to a class with reusable tail padding (`std::regex`). The gaps in `new (std::nothrow)` and array destroying delete (the array-of-class copy moved to M6.1b, P-5). Constant initialization of a `[[no_unique_address]]` member. P1467 extended floating-point types and the `_Float16`/`_Float128` decision. | Those rows green |
 | M6.8 | Debug info I | Design first (library work; skippable supp keys; chunk identity, decision 13). Then `-g` in the stream header, line tables, one `DICompileUnit` per TU, `-fdebug-prefix-map`. | gdb steps through the smoke tests |
 | M6.9 | Debug info II | Types, variables, scopes; a gdb harness | gdb prints locals and classes |
 | M6.10 | Correctness and robustness | Csmith or YARPGen differential runs against gcc at -O0 and -O2. The C initializer differential fuzz (§5). Operand types in the validator. | No unexplained differences |
@@ -723,15 +754,16 @@ and `cir-review` (read-only Opus reviewer), defined in
 | cir-writer | `src/ecil_*`, `src/cir_be.*`, the CIR-gated FE hooks (`mem_manage.c`, `scope_stk.c`, `fe_wrapup.c`, `error.c`, `class_decl.c`, `decl_spec.c`, `decls.c`, `symbol_tbl.{h,c}`, `mem_tables.h`, the CIR helpers in `lower_name.c`, the triple call in `fe_init.c`); in M5.1 also `attribute.c`, the `lower_name.c` mangler, the `macro.c` `__has_builtin` values (ungated) and the CWG2387 macro in `templates.c`; `dev_tools/builtins/generate-libc-builtins.py` and `src/builtin_libc_attrs.h`; `cir_src/test/writer/**`, `tests/tests/cir/writer/**`, the new mangling test under `tests/tests/edg/`, `cir_src/doc/writer.md` |
 | cir-lib | `cir_src/**` except the orchestrator's files, `cir_src/test/writer/**` and the M6 carve-outs below; `tests/tests/cir/cirgen/**` |
 
-M6 carve-outs (user, 2026-11-07):
+M6 carve-outs (user, 2026-11-07; the `features/` split and the sandbox, 2026-11-08):
 
-- **Orchestrator:** `cir_src/doc/{security.md,support/README.md}` and `cir_src/doc/exsum/**` except `exsum/support.svg`.
+- **Orchestrator:** `cir_src/doc/{security.md,support/README.md}` and `cir_src/doc/exsum/**` except `exsum/support.svg`; outside the repo `~/.claude/hooks/*cir_security*`, `~/.claude/hooks/cir-security-*` and the cir-security PreToolUse entry in `~/.claude/settings.json` (deleting it silently turns the guard off).
 - **cir-config:**
   - `cir_src/doc/support/make_support.py` and its rendered outputs: `support.md`, `doc/source/cir_support.inc` and `exsum/support.svg`.
   - `doc/source/cir_*.rst`, `doc/source/_static/cir_support.css`, and the CIR lines in `doc/source/{conf.py,index.rst}`.
-  - `tests/tests/cir/features/**`, from M6.1a.
-- **cir-writer:** `cir_src/doc/support/cxx.json`.
-- **cir-lib:** the other `cir_src/doc/support/*.json`.
+  - `tests/tests/cir/features/libstdcxx/**` and `cir_src/doc/support/libstdcxx.json` (user, 2026-11-08).
+  - `dev_tools/bin/edg-cir-sandbox` and its install and scratch on clang4 (`~/cir-sec/`, `~/cir-sec-scratch/`).
+- **cir-writer:** `cir_src/doc/support/cxx.json`; `tests/tests/cir/features/cxx/**` (user, 2026-11-08).
+- **cir-lib:** the other `cir_src/doc/support/*.json`; `tests/tests/cir/features/{c,gnu,builtins,codegen,hardening,platforms}/**` (user, 2026-11-08).
 - **cir-security** (read-only, Mythos): nothing.
 
 Changes entries: since M5.1 they follow main's workflow (user,
@@ -789,65 +821,46 @@ entries move into pending files in M6.R; their tags stay open (decision
 
 ## 8. Open questions for the user
 
-None. The answers of 2026-11-07 are decisions 55 and 56.
+From M6.1a (2026-11-08):
+
+1. **Medium findings** need your acceptance (`security.md` §5): SEC-1-6
+   (main's edgdocker runs test containers `--privileged`; scheduled for
+   M6.1b triage, user 2026-11-08), P-2 (`scalar_storage_order`) and P-3
+   (`trivial_abi`), both proposed M6.4a by their rows.
+2. **C++23 headers.** About 45 libstdc++ headers fail under C++23 because
+   of the `<numbers>` extended-float constants (§4.1). Move the
+   `_Float16`/`_Float128` decision (now M6.7) earlier?
+3. **M6.7 has grown** by the four writer gaps of the header sweep; split
+   it, or keep it as one session that may overflow?
 
 ## 9. Latest gate evidence
 
-**M6.R** (milestone, clang4, tree `m6r-int`; evidence
-`m6r-int/.tmp/checkpoint-20261107-222821`, full step table
-`summary-merged.md` there and `.tmp/m6/s1/gate-summary-merged.md`;
-attribution `.tmp/m6/s1/cir-config-gate.md`). `edg-cir-checkpoint
---milestone` on the rebased tree (fingerprint `28c7c97f…`) against
-`m51-base-*`, identity against `identity-main` (a capture of `main`
-`cc408045d4`) and day and day32 against `day-main` (runs of `main`'s
-sources with this tree's test tooling). 33 of 39 steps passed outright: build,
-identity (720 files; 24 differences, all on a three-entry allow-list of
-the approved ungated changes: the M0 `BACK_END_TYPE` line of
-`--dump_configuration`, the `lower_name.c` mangler, the `macro.c`
-`__has_builtin` values), isolation, smoke, cir-suite, modes, stress,
-writer-stress, ctest (4 presets, ASan), asm-diff (2564 identical),
-cpp-asm-diff (1958 identical), perf (+0.42%; S1 met), cpp-smoke,
-cpp-corpus, cpp-modes, cpp-writer-stress, cpp-stress, cpp-stress-asan,
-poison, release-smoke, crash-sweep (0 problems), abi-diff, symbols,
-mixed-tu, eh-probes, m4-stress, lazy-identity, attr-diff (0 unexplained;
-1395 explained by 34 of 34 rows), codequality, chunk-identity, chunk-rss
-(51.7%), slow-below-threshold (+0.0005%), names-check. Attributed:
-- day and day32: exactly two lines per `_cp` config,
-  `cmeerw/unresolved-name-mangling` cases 1 and 2 (REQUIREMENTS NOT MET),
-  the CIR branch's M5.1b test that `main` lacks; `edg_x86_64` and
-  `edg_x86_32` identical (pre-registered).
-- corpus (3 lines): `pr80304` and `pr101173` kept a GCC-pragma warning in
-  their CIR recordings that main's GH #174 removed (main's); `pr78468`
-  now passes at -O0, also with the M5.1 binary and harness, so its CIR
-  FAIL line was stale: not `main`, but stack layout (§5). Re-recorded (`edg-cir-record`; the two CIR
-  `.rto` were deleted as equal to `default`).
-- opt-corpus: `pr78468` at -O2 is the pre-existing
-  `__builtin_alloca_with_align` gap (§4.2), also with the M5.1 binary; an
-  `our-ir` triage line.
-- tools-test: one self-test that the identity allow-list is empty (the
-  three M6.R entries), updated.
-- rss: the C release rows measured 253 and 344 MB against the new 230 and
-  320 ceilings. Not `main`: the M5.1 binaries measure 250 and 340 today
-  on the same input, with the same stream and 14 chunks (M5 recorded 255
-  and 344), so the host changed since the M5.1 record (183, 251); the
-  cause of the old low value was not found
-  (`~/edg-cir-config/m6r-base-rss-m51cmp.txt`). The release rows that
-  moved (inproc, keep, 2p-edg-cir 211→232) are set at 1.25 times the
-  re-derived values, 320, 430 and 290 (decision 56); the other C rows at
-  1.25 times M5.1 hold.
-
-After the expectation conversion and the re-recordings, re-runs on the
-same evidence (the dirs and fingerprints are in its `README`): at
-`028f1ddc…` corpus 1664/2561 (0 lines differ), cpp-corpus, opt-corpus (14
-worse, all triaged), smoke, cpp-smoke, cir-suite 268/268, tools-test; at
-`55393eb2…` rss (24 of 24, highest 86%); at `b5f818c7…` identity against
-the new `identity-m6r`. The evidence has a KEEP file. New baselines from that evidence: `m6r-base-asm`,
-`m6r-base-cpp-asm`, `m6r-base-status`, `m6r-base-perf.json`, raw rss,
-chunk-rss and attr-diff data; `identity-m6r` (0 problems, the allow-list
-emptied); day-base re-taken at the final tree (differs from `day-main` by
-the same two lines). The final tree (docs, help text, the triage note
-and the 2p-edg-cir ceiling after that) was synced with tools-test re-run
-on the evidence (its fingerprint is in the evidence `README`); `make_support.py --check --gate M6.R`
-passes there. Reviews:
-`.tmp/m6/s1/review-m6r-{1,2,3}.md`. M5.1's evidence is in git
-(`c9a459a718`, this section).
+**M6.1a** (lean gate, clang4, tree `m6r-int`; evidence
+`m6r-int/.tmp/checkpoint-20261108-134910`, asm in
+`m6r-int/.tmp/gate-asm/checkpoint-20261108-134910`; report
+`.tmp/m6/s2/cir-config-gate.md`). `edg-cir-checkpoint --lean
+writer,fe-options,shared-src,library,tests,tests-triage,goldens,tooling,support
+--lean-base 70b1a2e326` against `m6r-base-*` (fingerprint `93009c5f…`,
+equal on both hosts; images equal to the baselines'). 20 of 22 steps
+passed outright: build, identity (720 files, 0 problems), isolation,
+cir-suite (798/798 in both configurations), corpus (1663/2561, the one
+change `pr78468`, triaged), modes, writer-stress, day and day32 (45492
+cases per configuration, identical), ctest (4 presets), cpp-corpus
+(1472/1823), cpp-modes, cpp-writer-stress, poison, release-smoke (40/40,
+98/98), symbols, mixed-tu (70/70 with g++ and clang), opt-corpus (no
+unattributed change; the `pr78468` triage line is gone), tools-test (358),
+support-sweep (820 cases of 576 tests in `edg_x86_64_cir`, 593 of 349 in
+`_2p`; ctest, mixed-tu and `make_support.py --check --gate M6.1a` clean).
+Attributed: asm-diff (2563 identical, 0 other differences) and
+cpp-asm-diff (1956 identical) fail only on status changes, which the step
+does not allow: `pr78468` (the alloca diagnosis) and the
+`-DTEST_NUMBER=2` cases of `edg/rma/ctor_init26` and `edg/rma/init33`,
+which already failed and now stop at the array-copy diagnosis (§4.1). No
+corpus test uses `__thread` in a way that changes its assembly. The next
+gate shows the same three changes until the asm baselines move past M6.1a.
+After the gate only data and docs changed (R3's follow-ups:
+the P1061 row to `ignored`, notes, docs); `make_support.py --check --gate
+M6.1a` was re-run on them. The post-R2 fixes are summarized in
+`.tmp/m6/s2/resume.md`. Reviews: `.tmp/m6/s2/review-m61a-{1,2,3}.md`; SEC-1:
+`.tmp/m6/s2/sec-1.md`. M6.R's evidence is in git (`70b1a2e326`, this
+section).

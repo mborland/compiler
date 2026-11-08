@@ -73,6 +73,18 @@ cpfe-cir.cmakedef) for every build type, because the stream depends on them:
 #define ECIL_INLINE_HINTS FALSE
 #endif /* BACK_END_TYPE == BACK_END_TYPE_CIR && DECL_MODIFIERS_IN_USE */
 
+/*
+Whether a variable has thread storage duration: the thread_local specifier
+(is_thread_local), or the GNU __thread specifier, which the front end records
+only as the DM_THREAD declaration modifier (see is_thread_local in il_def.h).
+*/
+#if THREAD_LOCAL_STORAGE_SPECIFIER_ALLOWED && DECL_MODIFIERS_IN_USE
+#define ecil_var_is_thread_local(var)                                    \
+  (is_effective_thread_local(var) || ((var)->decl_modifiers & DM_THREAD) != 0)
+#else /* !(THREAD_LOCAL_STORAGE_SPECIFIER_ALLOWED && DECL_MODIFIERS_IN_USE) */
+#define ecil_var_is_thread_local(var) is_effective_thread_local(var)
+#endif /* THREAD_LOCAL_STORAGE_SPECIFIER_ALLOWED && DECL_MODIFIERS_IN_USE */
+
 #ifndef ECIL_ID_IN_PREFIX
 #define ECIL_ID_IN_PREFIX FALSE
 #endif /* ifndef ECIL_ID_IN_PREFIX */
@@ -989,6 +1001,10 @@ typedef struct an_init_level {
                                      its own (REC_FIELD 0): the REC_FIELD
                                      index of an entry is its index plus
                                      this. */
+  uint64_t      bases_listed;     /* Records: the base class entries seen
+                                     so far (those that come after a data
+                                     member, with g++ 7 and earlier in
+                                     C++17, included). */
   a_field_ptr   cur_field;        /* Records: the member at cur. */
   a_constant_ptr
                 next_const;       /* The next constant of the list. */

@@ -1,0 +1,2 @@
+./a.out
+cxx23.multidimensional_subscript_202211 ok

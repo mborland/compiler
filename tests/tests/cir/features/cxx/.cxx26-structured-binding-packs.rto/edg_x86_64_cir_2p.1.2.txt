@@ -1,0 +1,2 @@
+./a.out
+cxx26.structured_binding_packs ok

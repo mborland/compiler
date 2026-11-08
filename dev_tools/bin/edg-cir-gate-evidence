@@ -27,7 +27,7 @@ to `summary.md`.
 Milestone gates: `--milestone` runs every step (--with-cpp and --with-m4),
 so a full gate, the M5 gate in particular, always runs lazy-identity (lazy
 against eager emission over both corpora and the pinned units) with the C++,
-ABI, EH, optimization, attribute and chunking steps.
+ABI, EH, optimization, attribute, chunking and support-sweep steps.
 
 Baselines: the steps compare with baselines in ~/edg-cir-config (the defaults
 of the --*-baseline options: m6r-base-asm, m6r-base-cpp-asm, m6r-base-status,
@@ -50,17 +50,19 @@ in the table; `--steps-for AREAS` only prints the set and exits.  The mapping
   writer     the ECIL writer, the FE side of the stream: cir-suite (the
              writer goldens), corpus, cpp-corpus, asm-diff, cpp-asm-diff,
              modes, cpp-modes, poison, opt-corpus, writer-stress,
-             cpp-writer-stress, symbols, mixed-tu
+             cpp-writer-stress, symbols, mixed-tu, support-sweep
   library    cir_src (the library): ctest (with lit), cir-suite (the cirgen
              run tests), corpus, cpp-corpus, asm-diff, cpp-asm-diff,
-             opt-corpus, modes, cpp-modes
+             opt-corpus, modes, cpp-modes, support-sweep
   fe-options CIR-gated front end options and macros: release-smoke
   linkage    symbol names, linkage, comdats: symbols, mixed-tu
   eccp       util/eccp.sh and the eccp configuration of the base (how the
              tests compile): cir-suite, corpus, cpp-corpus, opt-corpus,
-             mixed-tu
+             mixed-tu, support-sweep
   tests      the CIR tests and their recorded expectations: cir-suite,
              corpus, cpp-corpus
+  support    the support table and its probes (cir_src/doc/support/,
+             tests/tests/cir/features/; with tests or tooling): support-sweep
   tests-triage     the opt triage file: opt-corpus
   tests-crashes    the excused crashes file: crash-sweep
   tests-smoke      the smoke lists: smoke, cpp-smoke, opt-corpus,
@@ -80,9 +82,10 @@ in the table; `--steps-for AREAS` only prints the set and exits.  The mapping
              cpp-smoke, cir-suite, corpus, cpp-corpus, opt-corpus, asm-diff,
              cpp-asm-diff, mixed-tu, symbols, eh-probes, m4-stress,
              cpp-stress, crash-sweep, perf, rss, stress (deep nesting under
-             256 KB: a new pin can bring recursion back) and release-smoke
+             256 KB: a new pin can bring recursion back), release-smoke
              (the only end-to-end run of release-only behavior, LLVM
-             assertions off); skipped for the reasons of TOOLCHAIN_SKIPS.
+             assertions off) and support-sweep; skipped for the reasons of
+             TOOLCHAIN_SKIPS.
              A pin bump that also changes cir_src files declares
              toolchain,library (the library adds modes and cpp-modes)
   shared-src a change in a src/ file that every back end compiles (not
@@ -116,6 +119,8 @@ eccp, for instance, but not shared-src).  The rules:
   cir_src/LLVM_REVISION, the Docker image files        toolchain
   cir_src/include/edg_cir/ (src/ecil_write.h includes
       those headers)                                   library, writer
+  cir_src/doc/support/ (the support table, its
+      renderer and checker)                            support, tooling
   other cir_src                                        library
   src/ecil_*, src/cir_be*                              writer
   src/cmd_line.*, src/macro.*                          shared-src, writer,
@@ -134,6 +139,8 @@ eccp, for instance, but not shared-src).  The rules:
   tests: the filter files cir-opt-triage.txt,
       cir-excused-crashes.txt and cir-*-smoke.txt         tests-triage,
                                                           -crashes, -smoke
+  tests/tests/cir/features/ (the probes of the support
+      table)                                           tests, support
   tests/.edgy/config.json, tests/tests/ outside cir/ (the day
       suite runs the primary suites)                     tests, tests-reference
   tests/.edgy/postures/ (the day32 posture)              tests-reference
@@ -218,6 +225,21 @@ Steps (names for --only/--skip):
              cases of M4_STRESS_CASES (the sizes of research/m4_stress.md):
              passes iff every run succeeds within its time and memory limit
   tools-test the self-tests of the tools (dev_tools/bin/edg-cir-tools-test)
+  support-sweep  (--with-m4 or --only; milestones) every test that the rows of
+             cir_src/doc/support name (tests/tests paths) and every test of
+             tests/tests/cir/features (their -O0 and -O2 cases) through edgy
+             in edg_x86_64_cir, and the tests under tests/tests/cir/ also in
+             edg_x86_64_cir_2p (the corpora are not run there): a result for
+             every named test, every case of the e2e-run, negative and
+             writer tests passes, and no line differs from the recorded
+             expectations (so a failing test keeps its recorded status).  The
+             lit, lib and writer paths under cir_src/test come from the ctest
+             step of the same evidence (else ctest runs in build/cir) and the
+             mixed-tu cases from its mixed-tu step (else the named cases run
+             with g++ and clang).  Then `make_support.py --check --gate
+             SUPPORT_GATE` (the constant of this file that every gate sets to
+             its own id; M6.1a) must pass: the rows, the test kinds and the
+             rendered files
   attr-diff  (--with-m4 or --only) edg-cir-attr-diff at -O0 and -O2 (ours
              without the LLVM passes) over the C and C++ smoke lists and the
              pinned real-world units, against the known-differences file
@@ -406,13 +428,14 @@ STEPS = ('build', 'identity', 'isolation', 'smoke', 'cir-suite', 'corpus',
          'cpp-asm-diff', 'crash-sweep', 'abi-diff', 'symbols', 'mixed-tu',
          'eh-probes', 'm4-stress', 'opt-corpus', 'tools-test',
          'lazy-identity', 'attr-diff', 'codequality', 'chunk-identity',
-         'chunk-rss', 'slow-below-threshold', 'names-check')
+         'chunk-rss', 'slow-below-threshold', 'names-check',
+         'support-sweep')
 # The steps of gate M4 (the ABI and EH harnesses); they run only with
 # --with-m4 or --only.
 M4_STEPS = ('abi-diff', 'symbols', 'mixed-tu', 'eh-probes', 'm4-stress',
             'opt-corpus', 'lazy-identity', 'attr-diff', 'codequality',
             'chunk-identity', 'chunk-rss', 'slow-below-threshold',
-            'names-check')
+            'names-check', 'support-sweep')
 # The steps of the C++ milestones; they run only with --with-cpp or --only.
 CPP_STEPS = ('cpp-smoke', 'cpp-corpus', 'cpp-modes', 'cpp-writer-stress',
              'cpp-stress', 'cpp-stress-asan', 'poison', 'release-smoke',
@@ -423,13 +446,17 @@ LONG_STEPS: Tuple[str, ...] = ()
 AREA_STEPS = {
   'writer': ('cir-suite', 'corpus', 'cpp-corpus', 'asm-diff',
              'cpp-asm-diff', 'modes', 'cpp-modes', 'poison', 'opt-corpus',
-             'writer-stress', 'cpp-writer-stress', 'symbols', 'mixed-tu'),
+             'writer-stress', 'cpp-writer-stress', 'symbols', 'mixed-tu',
+             'support-sweep'),
   'library': ('ctest', 'cir-suite', 'corpus', 'cpp-corpus', 'asm-diff',
-              'cpp-asm-diff', 'opt-corpus', 'modes', 'cpp-modes'),
+              'cpp-asm-diff', 'opt-corpus', 'modes', 'cpp-modes',
+              'support-sweep'),
   'fe-options': ('release-smoke',),
   'linkage': ('symbols', 'mixed-tu'),
-  'eccp': ('cir-suite', 'corpus', 'cpp-corpus', 'opt-corpus', 'mixed-tu'),
+  'eccp': ('cir-suite', 'corpus', 'cpp-corpus', 'opt-corpus', 'mixed-tu',
+           'support-sweep'),
   'tests': ('cir-suite', 'corpus', 'cpp-corpus'),
+  'support': ('support-sweep',),
   'tests-triage': ('opt-corpus',),
   'tests-crashes': ('crash-sweep',),
   'tests-smoke': ('smoke', 'cpp-smoke', 'opt-corpus', 'release-smoke'),
@@ -443,7 +470,7 @@ AREA_STEPS = {
                 'cpp-corpus', 'opt-corpus', 'asm-diff', 'cpp-asm-diff',
                 'mixed-tu', 'symbols', 'eh-probes', 'm4-stress',
                 'cpp-stress', 'crash-sweep', 'perf', 'rss', 'stress',
-                'release-smoke'),
+                'release-smoke', 'support-sweep'),
   'shared-src': ('identity', 'isolation', 'day', 'day32'),
   # Declared by the slices that need them, not derived from files:
   'lazy': ('lazy-identity',),
@@ -486,6 +513,9 @@ AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
   ('dev_tools/docker/llvm-cir/', ('toolchain',)),
   ('dev_tools/docker/cir-env/', ('toolchain',)),
   ('dev_tools/bin/edg-build-llvm-cir', ('toolchain',)),
+  # The support table: make_support.py is a tool (tools-test covers it), and
+  # the JSON rows are what support-sweep checks.
+  ('cir_src/doc/support/', ('support', 'tooling')),
   ('cir_src/doc/', ()),
   # src/ecil_write.h includes these headers: a change reaches the writer.
   ('cir_src/include/edg_cir/', ('library', 'writer')),
@@ -511,6 +541,8 @@ AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
   ('dev_tools/bin/edg-cir-ecil-dump', ('tooling', 'goldens')),
   # Buckets the results of every edgy step.
   ('dev_tools/bin/edg-cir-summary', ('tooling', 'summary')),
+  # The cir-security sandbox wrapper (clang4); tools-test pins its flags.
+  ('dev_tools/bin/edg-cir-sandbox', ('tooling',)),
   ('dev_tools/', ('tooling',)),
   ('tests/.edgy/filters/cir-opt-triage.txt', ('tests-triage',)),
   ('tests/.edgy/filters/cir-attr-known.txt', ('attr',)),
@@ -529,6 +561,8 @@ AREA_RULES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
   ('tests/expectations/edg_x86_64_cir', ('tests',)),
   ('tests/expectations/edg_x86_64/', ('tests', 'tests-reference')),
   ('tests/expectations/', ('tests-reference',)),
+  # The probes and negative tests that prove the support rows.
+  ('tests/tests/cir/features/', ('tests', 'support')),
   ('tests/tests/cir/', ('tests',)),
   ('tests/tests/', ('tests', 'tests-reference')),
   ('tests/', ('tests',)),
@@ -624,7 +658,8 @@ STEP_TIMEOUTS = {
   'opt-corpus': 10800, 'lazy-identity': 3600, 'attr-diff': 5400,
   'codequality': 3600, 'chunk-identity': 5400, 'chunk-rss': 3600,
   'slow-below-threshold': 3600, 'names-check': 5400,
-  'poison': 3600, 'release-smoke': 3600, 'crash-sweep': 5400
+  'support-sweep': 5400, 'poison': 3600, 'release-smoke': 3600,
+  'crash-sweep': 5400
 }
 
 
@@ -1271,8 +1306,9 @@ def step_tools_test(ctx: Context) -> Tuple[bool, str]:
 
 def default_steps(with_cpp: bool, with_m4: bool) -> List[str]:
   '''The steps of a run without --only: the base ones, the C++ ones with
-  --with-cpp and the M4 ones (ABI, EH, optimization, lazy emission, attribute
-  and chunking steps) with --with-m4; --milestone is both.'''
+  --with-cpp and the M4 ones (ABI, EH, optimization, lazy emission,
+  attribute, chunking and support sweep steps) with --with-m4; --milestone is
+  both.'''
   return [s for s in STEPS if (with_cpp or s not in CPP_STEPS) and
           (with_m4 or s not in M4_STEPS) and s not in LONG_STEPS]
 
@@ -3895,6 +3931,211 @@ def check_baselines(args: argparse.Namespace, steps: List[str]
   return ok, lines
 
 
+# The support table's gate (cir_src/doc/support/make_support.py --gate): the
+# gate whose thresholds support-sweep enforces.  Every gate sets it to its
+# own id (it must be one of make_support.py's GATES).
+SUPPORT_GATE = 'M6.1a'
+SUPPORT_DIR = 'cir_src/doc/support'
+SUPPORT_FEATURES = 'tests/tests/cir/features'
+# The configurations that the sweep runs; the second one only runs the
+# tests of the cir suite (the corpora are not run in it).
+SUPPORT_CONFIGS = ('edg_x86_64_cir', 'edg_x86_64_cir_2p')
+MIXED_TU_CASES = 'dev_tools/cir-mixed-tu-cases'
+
+
+def support_selection(sections: List[dict], features: List[str]
+                      ) -> Dict[str, List[str]]:
+  '''The tests that the rows of the support table name, by how the sweep
+  runs them.  `edgy`: `<suite>/<test>` of tests/tests that must pass (and
+  all of `features`, the tests of tests/tests/cir/features); `failing`:
+  those the rows call failing (they run, but are expected to fail as
+  recorded); `lit`: the paths under cir_src/test (ctest runs them);
+  `mixed`: the case directories of dev_tools/cir-mixed-tu-cases.'''
+  edgy = set(features)
+  failing = set()
+  lit = set()
+  mixed = set()
+  for section in sections:
+    for group in section.get('groups', []):
+      for row in group.get('rows', []):
+        for test in row.get('tests', []):
+          path = str(test.get('path', ''))
+          if path.startswith('tests/tests/'):
+            name = path[len('tests/tests/'):]
+            (failing if test.get('kind') == 'failing' else edgy).add(name)
+          elif path.startswith(MIXED_TU_CASES + '/'):
+            mixed.add(path[len(MIXED_TU_CASES) + 1:].split('/')[0])
+          elif path.startswith('cir_src/test/'):
+            lit.add(path)
+  return {'edgy': sorted(edgy), 'failing': sorted(failing - edgy),
+          'lit': sorted(lit), 'mixed': sorted(mixed)}
+
+
+def feature_tests(tree: Path) -> List[str]:
+  '''`<suite>/<test>` of every test file of tests/tests/cir/features (the
+  recordings of .*.rto directories and hidden files are not tests).'''
+  base = tree / SUPPORT_FEATURES
+  tests_dir = tree / 'tests' / 'tests'
+  if not base.is_dir():
+    return []
+  return sorted(
+    str(path.relative_to(tests_dir)) for path in base.rglob('*')
+    if path.is_file() and '.sft.' in path.name and
+    not any(part.startswith('.') for part in path.relative_to(base).parts))
+
+
+def judge_support_run(config: str, selection: Dict[str, List[str]],
+                      results: List[dict], log_text: str
+                      ) -> Tuple[List[str], str]:
+  '''(problems, a note) of one edgy run of the sweep: a result for every
+  test that the rows name (a vacuous run is a problem); every case of the
+  tests that must pass passes; and no line differs from the recorded
+  expectations (which also holds the failing tests to their statuses).  The
+  second configuration only runs the cir suite.'''
+  problems: List[str] = []
+  wanted = [n for n in [*selection['edgy'], *selection['failing']]
+            if config == SUPPORT_CONFIGS[0] or n.startswith('cir/')]
+  if not results:
+    return [f"{config}: no results"], ''
+  by_path: Dict[str, List[dict]] = {}
+  for result in results:
+    by_path.setdefault(result['path'], []).append(result)
+  missing = [n for n in wanted if n not in by_path]
+  if missing:
+    problems.append(f"{config}: {len(missing)} named test(s) did not run: "
+                    f"{', '.join(missing[:5])}")
+  must_pass = set(selection['edgy'])
+  bad = [f"{n} [{r.get('variant', '')}] {r['status']}"
+         for n in sorted(must_pass & set(by_path))
+         for r in by_path[n] if r['bucket'] != 'PASS']
+  if bad:
+    problems.append(f"{config}: {len(bad)} case(s) do not pass: "
+                    f"{'; '.join(bad[:5])}")
+  changes = [l for l in log_text.splitlines() if re.match(r'^[+-] \S', l)]
+  if changes:
+    problems.append(f"{config}: {len(changes)} line(s) differ from the "
+                    f"recorded expectations: {'; '.join(changes[:3])}")
+  return problems, f"{config} {len(results)} cases of {len(wanted)} tests"
+
+
+def earlier_result(ctx: Context, step: str) -> Optional[str]:
+  '''The status ("PASS" or "FAIL") that `step` recorded in this evidence
+  directory, or None if it has not run.'''
+  path = ctx.out / step / 'result.json'
+  if not path.exists():
+    return None
+  return str(json.loads(path.read_text()).get('status'))
+
+
+def support_external(ctx: Context, selection: Dict[str, List[str]]
+                     ) -> Tuple[List[str], List[str]]:
+  '''(problems, notes) for the paths that the edgy runs do not cover: the
+  lit and lib tests under cir_src/test (the ctest step's result of this
+  evidence, else ctest in build/cir) and the mixed-tu cases (the mixed-tu
+  step's result, else the named cases run with g++ and with clang).'''
+  problems: List[str] = []
+  notes: List[str] = []
+  if selection['lit']:
+    earlier = earlier_result(ctx, 'ctest')
+    if earlier is None:
+      code = in_cir_env(
+        ctx, 'support-sweep',
+        f"ctest --test-dir build/cir --output-on-failure -j{BUILD_JOBS}",
+        extra_env = {'LIT_OPTS': f"-j{BUILD_JOBS}"})
+      earlier = 'PASS' if code == 0 else 'FAIL'
+      notes.append(f"ctest ran in build/cir: {earlier}")
+    else:
+      notes.append(f"ctest of this evidence: {earlier}")
+    if earlier != 'PASS':
+      problems.append(f"{len(selection['lit'])} lit/lib test path(s): "
+                      'ctest does not pass')
+  if selection['mixed']:
+    earlier = earlier_result(ctx, 'mixed-tu')
+    if earlier is None:
+      tool = _load_tool('edg-cir-mixed-tu')
+      cases_dir = ctx.tree / MIXED_TU_CASES
+      expected = {case.name: set(case.xfail) for name in selection['mixed']
+                  for case in tool.expand_case(cases_dir / name)}
+      earlier = 'PASS'
+      for name, ref in (('g++', 'g++'), ('clang',
+                                          '$EDG_LLVM_CIR_PREFIX/bin/clang')):
+        out = rel(ctx, ctx.out / 'support-sweep' / f"mixed-tu-{name}.txt")
+        in_cir_env(ctx, 'support-sweep',
+                   f"python3 dev_tools/bin/edg-cir-mixed-tu --ref {ref} "
+                   f"{' '.join(selection['mixed'])} > {out} 2>&1")
+        passed, detail = judge_mixed_tu(
+          _read_step_output(ctx, 'support-sweep', f"mixed-tu-{name}.txt"),
+          expected)
+        if not passed:
+          earlier = 'FAIL'
+          problems.append(f"mixed-tu with {name}: {detail}")
+      notes.append(f"{len(selection['mixed'])} mixed-tu case(s) ran: "
+                   f"{earlier}")
+    else:
+      notes.append(f"mixed-tu of this evidence: {earlier}")
+      if earlier != 'PASS':
+        problems.append(f"{len(selection['mixed'])} mixed-tu case(s): the "
+                        'mixed-tu step does not pass')
+  return problems, notes
+
+
+def step_support_sweep(ctx: Context) -> Tuple[bool, str]:
+  '''Run every test that the rows of the support table name (and all of
+  tests/tests/cir/features, at -O0 and -O2 through their cases) in
+  edg_x86_64_cir, and the cir ones also in edg_x86_64_cir_2p; take the lit
+  and mixed-tu paths from the ctest and mixed-tu results of this evidence
+  (or run them); then run make_support.py --check --gate SUPPORT_GATE.'''
+  step_dir = ctx.out / 'support-sweep'
+  step_dir.mkdir(parents = True, exist_ok = True)
+  support = ctx.tree / SUPPORT_DIR
+  sections = [json.loads(path.read_text()) for path in
+              sorted(support.glob('*.json'))]
+  selection = support_selection(sections, feature_tests(ctx.tree))
+  names = [*selection['edgy'], *selection['failing']]
+  problems: List[str] = []
+  notes: List[str] = []
+  for config in SUPPORT_CONFIGS:
+    chosen = [n for n in names
+              if config == SUPPORT_CONFIGS[0] or n.startswith('cir/')]
+    filter_file = step_dir / f"tests-{config}.txt"
+    filter_file.write_text('\n'.join(chosen) + '\n')
+    try:
+      filter_name = str(filter_file.relative_to(ctx.tree))
+    except ValueError:
+      filter_name = str(filter_file)
+    log_file = step_dir / 'log.txt'
+    before = log_file.read_text(errors = 'replace') if log_file.exists() \
+      else ''
+    run = edgy_run(ctx, 'support-sweep', config, f"@{filter_name}", '')
+    if run is None:
+      problems.append(f"{config}: no run")
+      continue
+    results, _ = summarize_run(ctx, 'support-sweep', run, config,
+                               f"{config}.json")
+    log_text = log_file.read_text(errors = 'replace')[len(before):]
+    found, note = judge_support_run(config, selection, results, log_text)
+    problems += found
+    notes.append(note)
+  found, more = support_external(ctx, selection)
+  problems += found
+  notes += more
+  code = run_logged(
+    ctx, 'support-sweep',
+    [sys.executable, str(support / 'make_support.py'), '--check', '--gate',
+     SUPPORT_GATE])
+  log_text = (step_dir / 'log.txt').read_text(errors = 'replace')
+  last = re.findall(r'^gate \S+: \d+ errors, \d+ warnings$', log_text, re.M)
+  notes.append(f"make_support.py --check --gate {SUPPORT_GATE}: "
+               f"{last[-1] if last else 'no result line'}")
+  if code != 0 or not last:
+    problems.append(f"make_support.py --check --gate {SUPPORT_GATE} "
+                    f"failed (exit {code})")
+  detail = '; '.join(notes)
+  if problems:
+    detail = f"PROBLEMS: {'; '.join(problems[:6])} | {detail}"
+  return not problems, detail
+
+
 STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'build': step_build, 'identity': step_identity,
   'isolation': step_isolation, 'smoke': step_smoke, 'corpus': step_corpus,
@@ -3910,7 +4151,7 @@ STEP_FUNCTIONS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
   'attr-diff': step_attr_diff, 'codequality': step_codequality,
   'chunk-identity': step_chunk_identity, 'chunk-rss': step_chunk_rss,
   'slow-below-threshold': step_slow_below_threshold,
-  'names-check': step_names_check,
+  'names-check': step_names_check, 'support-sweep': step_support_sweep,
   'crash-sweep': step_crash_sweep, 'abi-diff': step_abi_diff,
   'symbols': step_symbols, 'mixed-tu': step_mixed_tu,
   'eh-probes': step_eh_probes, 'm4-stress': step_m4_stress,

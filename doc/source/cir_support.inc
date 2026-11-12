@@ -14,7 +14,7 @@ The CIR column of every table reads:
 * :sup-no:`No`: fails loudly (diagnosed, rejected, or a build error); never miscompiled
 * :sup-ignored:`Ignored`: accepted and silently ignored, or silently wrong output: a safety gap
 
-425 rows: 267 Yes, 45 Partial, 0 Unverified, 96 No, 17 Ignored.
+425 rows: 268 Yes, 45 Partial, 0 Unverified, 96 No, 16 Ignored.
 
 C++ core language
 -----------------
@@ -841,8 +841,8 @@ C++26
    * - Structured binding packs
      - P1061R10
      - ``__cpp_structured_bindings`` (202411L)
-     - :sup-ignored:`Ignored` · M6.1b
-     - By-value packs work (the probe). A pack bound by reference (``auto &[...r]``, ``const auto &[...r]``) gives wrong values in every configuration, the reference cpfe included: a front-end defect, registered as High finding P-7 (security.md §5); M6.1b triages it.
+     - :sup-yes:`Yes` · M6.1b
+     - Packs bound by reference (``auto &[...r]``, ``const auto &[...r]``) need the front-end fix of GH #525 (finding P-7, security.md §5), cherry-picked onto ``cir`` before M6.1b; the probe covers them.
    * - #embed
      - P1967R14
      - ``__cpp_pp_embed`` (202502L)

@@ -35,6 +35,50 @@ template <typename S> static int arr_first(const S &s)
   return first * 10 + (int)sizeof...(rest);
 }
 
+/* Packs bound by reference (GH #525): the bindings name the argument's
+   members, for reading and for writing. */
+template <typename S> static long ref_total(const S &s)
+{
+  const auto &[...refs] = s;
+  return (0L + ... + (long)refs);
+}
+
+template <typename S> static void ref_fill(S &s, int v)
+{
+  auto &[...r] = s;
+  ((r = v), ...);
+}
+
+template <typename S> static long ref_tail_sum(S &s)
+{
+  auto &[h, ...tl] = s;
+  long r = 0;
+  ((r += tl), ...);
+  h = 9;
+  return r;
+}
+
+template <typename S> static long fwd_total(S &&s)
+{
+  auto &&[...r] = s;
+  return (0L + ... + (long)r);
+}
+
+static void run_by_reference()
+{
+  T3 t = {1, 2, 3};
+  CHECK(ref_total(t) == 6);
+  CHECK(fwd_total(t) == 6);
+  CHECK(ref_tail_sum(t) == 5 && t.a == 9);
+  ref_fill(t, 7);
+  CHECK(t.a == 7 && t.b == 7 && t.c == 7);
+  int arr[4] = {10, 20, 30, 40};
+  CHECK(ref_total(arr) == 100);
+  CHECK(ref_tail_sum(arr) == 90 && arr[0] == 9);
+  ref_fill(arr, 2);
+  CHECK(ref_total(arr) == 8 && arr[3] == 2);
+}
+
 static void run()
 {
   T3 t = {1, 2, 3};
@@ -50,6 +94,7 @@ static void run()
 int main()
 {
   run();
+  run_by_reference();
   if (failures == 0) puts("cxx26.structured_binding_packs ok");
   return failures != 0;
 }

@@ -1149,8 +1149,8 @@
        "refs": []},
       {"id": "cxx26.structured_binding_packs", "feature": "Structured binding packs",
        "papers": ["P1061R10"], "macro": "__cpp_structured_bindings", "macro_value": "202411L",
-       "status": "ignored", "since": null, "planned": "M6.1b",
-       "note": "By-value packs work (the probe). A pack bound by reference (`auto &[...r]`, `const auto &[...r]`) gives wrong values in every configuration, the reference cpfe included: a front-end defect, registered as High finding P-7 (security.md §5); M6.1b triages it.",
+       "status": "yes", "since": "M6.1b", "planned": null,
+       "note": "Packs bound by reference (`auto &[...r]`, `const auto &[...r]`) need the front-end fix of GH #525 (finding P-7, security.md §5), cherry-picked onto `cir` before M6.1b; the probe covers them.",
        "tests": [
          {"path": "tests/tests/cir/features/cxx/cxx26-structured-binding-packs.sft.cpp", "kind": "e2e-run"}],
        "refs": []},

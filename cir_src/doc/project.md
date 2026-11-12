@@ -75,7 +75,8 @@ attributed status changes (§9).
 
 Next is **M6.1b**. Its plan is `plans/M6.1b-sec1-triage-housekeeping-fuzzing.md`
 (written 2026-11-12 and checked against the code; where it differs from
-§6, the plan wins). Before it, the user fixes P-7 on `main` (decision 59).
+§6, the plan wins). P-7 is fixed: GH #525 was cherry-picked onto `cir`
+as `b1c6c60d7c` on 2026-11-12 (decision 59; plan Phase 0 step 2).
 
 ## 1. Map
 
@@ -354,7 +355,10 @@ decision.
       user hears about it at the gate.
     - **P-7** is a front-end defect of every configuration. The user fixes
       it on `main` (report: `reports/`); the fix reaches `cir` by a
-      cherry-pick or the next rebase. CIR sessions do not fix it.
+      cherry-pick or the next rebase. CIR sessions do not fix it. Done
+      2026-11-12: GH #525 (PR head `341b1c2757`, not yet merged) is on
+      `cir` as `b1c6c60d7c`; the next rebase drops it if `main` gets the
+      same patch.
     - **Plans and scratch.** Each session's plan is a tracked file in
       `plans/`, written by a planning session that also tidies the docs
       and deletes the scratch of the finished sessions. Nothing a later
@@ -574,8 +578,9 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
   conditions), C23 `constexpr` in C, `_Decimal32`, or attributes on
   structured bindings (their rows were removed); in `--c++26` mode a
   reference bound to a reference parameter (found as by-reference
-  structured binding packs, `auto &[...r]`) gives wrong values in every
-  configuration (P-7, High; the user fixes it on `main`, decision 59;
+  structured binding packs, `auto &[...r]`) gave wrong values in every
+  configuration (P-7, High; fixed by GH #525, on `cir` as `b1c6c60d7c`
+  since 2026-11-12, decision 59;
   `reports/P-7-structured-binding-pack-by-reference.md`);
   `__has_include(<stdarg.h>)` is false with the EDG include directory. A
   referenced defaulted copy constructor of `std::__shared_ptr<_Dir_stack>`

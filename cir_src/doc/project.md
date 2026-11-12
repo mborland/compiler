@@ -12,7 +12,14 @@ Tags: `H1`–`H4` cite the archived handoffs (`archive/handoff.md` …
 
 ## 0. State
 
-**Branch** `cir`, local only, never pushed.
+**Branch** `cir`, local only, never pushed. On 2026-11-12 it is checked
+out in the git worktree
+`/Users/mattborland/Documents/compiler/.tmp/agent-fix252`, and the main
+checkout is on `main`, which is 23 commits past the rebase point
+`cc408045d4`. That worktree is also used for other branches (it was
+switched away and back during the planning session, which discarded
+uncommitted edits): run `git worktree list` first, and do not leave work
+uncommitted or unstaged longer than needed.
 
 | Gate | Commit | What it added |
 | --- | --- | --- |
@@ -66,9 +73,9 @@ attributed status changes (§9).
   array-of-class copy in implicit constructors (now diagnosed; fix M6.1b),
   the volatile initialization store and `FENV_ACCESS` (M6.1b).
 
-Next is **M6.1b**: SEC-1 triage first (the open High findings, the
-Mythos delta review of this session's reader and validator changes, the
-medium dispositions of §8), then the housekeeping and fuzzing of §6.
+Next is **M6.1b**. Its plan is `plans/M6.1b-sec1-triage-housekeeping-fuzzing.md`
+(written 2026-11-12 and checked against the code; where it differs from
+§6, the plan wins). Before it, the user fixes P-7 on `main` (decision 59).
 
 ## 1. Map
 
@@ -86,6 +93,14 @@ medium dispositions of §8), then the housekeeping and fuzzing of §6.
 | Executive summary deck (update only when the user asks; user, 2026-11-07) | `exsum/` (`exsum/README.md`) |
 | What the back end supports (cppreference-style; the single source for docs and deck) | `support/` (`support/README.md`; rendered `support/support.md`, `doc/source/cir_support.inc` (included by `doc/source/cir_be.rst`), `exsum/support.svg`) |
 | Threat model, security audits, findings register | `security.md` |
+| Session plans (one per sub-milestone, from M6.1b) | `plans/` |
+| Defect reports written for `main` | `reports/` |
+
+The scratch notes of M5.1 and of M6.0 to M6.1a (`.tmp/m51/`, `.tmp/m6/s0`
+to `s2`) and the plans of those sessions were deleted on 2026-11-12
+(decision 59). A citation of them anywhere in the tree or in the archive
+is historical; what later sessions need is in this file, the cookbook or
+the current plan.
 
 ## 2. Decisions
 
@@ -133,10 +148,9 @@ decision.
     diagnosed error; design (b) is rejected (user; H4 §2.4).
 14. The default chunk decision is a size rule (M5.1): chunk when the
     emitted-body bytes (the reader offset minus the bodies lazy emission
-    dropped) reach 1,250,000, which bounds the unchunked peak
-    (`.tmp/m51/s1/cir-lib-la.md`). Explicit values keep their body-count
-    meaning: N bodies, 1 forces, `UINT32_MAX` never (user; H4 §2.5, M5.1
-    plan).
+    dropped) reach 1,250,000, which bounds the unchunked peak. Explicit
+    values keep their body-count meaning: N bodies, 1 forces,
+    `UINT32_MAX` never (user; H4 §2.5, M5.1 plan).
 
 **Robustness**
 15. Decoding on the caller's thread; a 256 MiB worker with an alternate
@@ -290,11 +304,11 @@ decision.
     - **RSS ceilings.** Tighten the C rows of the `rss` step to 1.25 times
       the M5.1 values. If the rebase's re-derived baselines move them, use
       those and report it.
-    - **clang4 clean-up.** The user allows the `rm -rf` of the listed trees
-      (`.tmp/m51/s3/prune-candidates.md`). The orchestrator runs them; the
-      agents' permission settings stay as they are.
-    - **Mythos.** The model id is `claude-mythos-5-1`
-      (`~/.claude/agents/cir-security.md`).
+    - **clang4 clean-up.** Remote `rm -rf` is denied to the agents and to
+      the orchestrator: write a prune script and ask the user to run it.
+    - **Mythos.** The model id is `claude-mythos-5-2` since 2026-11-12
+      (`~/.claude/agents/cir-security.md`); SEC-1 ran on
+      `claude-mythos-5-1`.
     - **Mangler defects** (§4.8: the lost qualifier of
       `C<T>::template tf<T>(x)`; `dn` where g++ writes `co`). Fix them
       for every back end, ungated as the M5.1 fix was, unless `main`
@@ -303,7 +317,9 @@ decision.
 **Process** (details in §7)
 45. An Opus orchestrator, three Sonnet implementers with exclusive file
     ownership, and a read-only Opus reviewer (user; H1 §2.9). From M6,
-    the Mythos auditor `cir-security` joins them (decision 53).
+    the Mythos auditor `cir-security` joins them (decision 53). From
+    M6.1b the orchestrator also has a Fable advisor (the `advisor` tool;
+    user, 2026-11-12); each plan names the points where it is called.
 46. Only the orchestrator commits, once per reviewer-approved gate, on
     local `cir`; never push (user, confirmed each session; M5.1 plan).
 47. Lean gates: per change the targeted checks; per gate the steps the
@@ -328,6 +344,21 @@ decision.
     after the definition reloaded); either one blocks. It logs every call
     with its mode.
     clang4's `authorized_keys` is unchanged: no forced-command key.
+59. The answers of 2026-11-12 (user):
+    - **Medium findings.** The proposed dispositions are accepted: SEC-1-6
+      is triaged in M6.1b; P-2 and P-3 go to M6.4a with their rows.
+    - **Extended floating types.** `_Float16`, `_Float128` and `bfloat16`
+      move from M6.7 to M6.1c, right after M6.1b (the orchestrator's
+      recommendation, as the user asked).
+    - **Splits.** A session that grows may be split without asking; the
+      user hears about it at the gate.
+    - **P-7** is a front-end defect of every configuration. The user fixes
+      it on `main` (report: `reports/`); the fix reaches `cir` by a
+      cherry-pick or the next rebase. CIR sessions do not fix it.
+    - **Plans and scratch.** Each session's plan is a tracked file in
+      `plans/`, written by a planning session that also tidies the docs
+      and deletes the scratch of the finished sessions. Nothing a later
+      session needs may live only in scratch.
 
 ### 2.1 Retired
 
@@ -390,15 +421,17 @@ cited notes. "M5.1" marks an item the current milestone fixes (§6).
 - C++23 units that include `<numbers>` (about 45 libstdc++ headers,
   `<iostream>` among them): its `_Float16`, `bfloat16` and `_Float128`
   constants are reported as errors although unused (header sweep, M6.1a;
-  C++20 works; M6.1b triages why unused ones are errors; P1467 is M6.7).
+  C++20 works). The writer cannot encode constants of those formats
+  (`arg_float_value`, `ecil_const.c`), and the library reports every
+  dropped unreferenced variable as an error, because its initializer may
+  have had effects (`globals.cpp`; decision 16). M6.1c encodes them.
 
 ### 4.2 Silent (not diagnosed)
 
 - `section`, `transparent_union` and `ms_abi` are ignored on supported
   entities (H1–H3 §4; verified 2026-11-05). The fix is a declaration fact
   in a 1.x minor. (`used` was closed in M5: supp key 11.)
-- Found in M6.0 (cir-lib, `.tmp/m6/s0/cir-lib-support.md`; M6.4a unless
-  noted):
+- Found in M6.0 (M6.4a unless noted):
   - The visibility attribute is ignored. The supp keys `esk_section` and
     `esk_visibility` exist (`ecil_format.h:732`), but the writer never
     sends them.
@@ -426,8 +459,8 @@ cited notes. "M5.1" marks an item the current milestone fixes (§6).
 - `#pragma GCC unroll`, `ivdep` and `novector`: since main's GH #174 the FE
   binds them to the next loop (`pk_gcc_next_statement`) and no longer warns;
   the writer drops them, so only the hints are lost (the stream is
-  byte-identical to the pragma-free source; M6.R,
-  `.tmp/m6/s1/cir-writer-w3-w5.md`; `gnu_lang.pragma_loop_hints`, M6.4a).
+  byte-identical to the pragma-free source; M6.R;
+  `gnu_lang.pragma_loop_hints`, M6.4a).
 
 ### 4.3 Approximations
 
@@ -438,8 +471,8 @@ cited notes. "M5.1" marks an item the current milestone fixes (§6).
   (`ecil_write.c:249-258`) (H1 §4).
 - No debug info; with chunking it will need one `DICompileUnit` per TU
   (`chunk.cpp` `copy_attributes`) (H1 §4, H4 §4.2; M6).
-- `_Float16` and `_Float128` reach the library as half and quad; support
-  or diagnose is undecided (H1 §4–5).
+- `_Float16` and `_Float128` reach the library as half and quad; their
+  constants are not encoded (§4.1). M6.1c (decision 59).
 - `gnu_inline` in GNU C++ is always inline-only: the IL cannot say whether
   the definition is `extern` (H2 §4).
 - The writer streams every header inline function, referenced or not; lazy
@@ -529,19 +562,21 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
   reference template argument that g++ and clang accept; an internal
   error at `folding.c:6477` (`binary_operation`) on `(&vtg<T> != nullptr)`.
   It also folds `vt<int>` to `Lb1E` inside dependent conditions and adds a
-  spurious `ad` on `CT<T>::template cv<T>` (`.tmp/m51/s1/cir-writer-wb.md`).
+  spurious `ad` on `CT<T>::template cv<T>`.
   Also, in every mode: `C<T>::template tf<T>(x)` loses its qualifier in
   the mangled name, and a pseudo-destructor is `dn` where g++ writes `co`
-  (M5.1b, `.tmp/m51/s2/cir-writer-c1/w3-table.txt`). `main` has not fixed
+  (M5.1b). `main` has not fixed
   either (checked in M6.R: `lower_name.c` unchanged; `dn` is a defect in
   GNU mode only, clang writes `dn` too); M6.5 fixes them (decision 56).
   A class-type NTTP object mangles as `tlK1S` where g++ writes `tl1S`
   (`A<S{3,4}>`, M6.R; M6.5).
 - Found in M6.1a: the FE does not implement P0963 (structured bindings in
   conditions), C23 `constexpr` in C, `_Decimal32`, or attributes on
-  structured bindings (their rows were removed); by-reference structured
-  binding packs (`auto &[...r]`) give wrong values in every configuration
-  (P-7, High; M6.1b triage);
+  structured bindings (their rows were removed); in `--c++26` mode a
+  reference bound to a reference parameter (found as by-reference
+  structured binding packs, `auto &[...r]`) gives wrong values in every
+  configuration (P-7, High; the user fixes it on `main`, decision 59;
+  `reports/P-7-structured-binding-pack-by-reference.md`);
   `__has_include(<stdarg.h>)` is false with the EDG include directory. A
   referenced defaulted copy constructor of `std::__shared_ptr<_Dir_stack>`
   is not emitted under CIR, an undefined reference at link time (decision
@@ -627,8 +662,10 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
   alloca diagnosis). A recording copy-back once dropped its line from
   `edg_x86_64_cir/imported.log`: check expectation diffs after every
   record.
-- lit is not in the cir-env image; M6.1a's library runs used a copy of
-  `lit.py` (M6.1b).
+- lit is not in the cir-env image, and the gate's `ctest` step does not
+  run lit: the test is registered only with `-DEDG_CIR_LIT`, which only
+  the `cir_src/scripts/box_*.sh` scripts pass (found 2026-11-12). Until
+  M6.1b (item A3) fixes the step, lit runs by hand (`box_lit.sh`).
 - `src/error_msg.txt` is append-only, so `cir_error` and `cir_warning`
   renumber on every rebase (3601 and 3602 since M6.R). Refer to them by tag
   only.
@@ -642,7 +679,7 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
   about 68K instructions) was the detached guard worker's thread exit
   racing process exit under valgrind; fixed in M5.1 (the worker is never
   woken or destroyed at exit, `pipeline.cpp`). Any new detached thread
-  needs the same care (`.tmp/m51/s3/cir-lib-slow.md`).
+  needs the same care.
 - LeakSanitizer noise: "Unable to get registers from thread" under
   `linux-cir-asan` in containers is ptrace noise (H4 §5).
 - Keep these gate-tool properties: `rto-diff --documented` attributes only
@@ -655,9 +692,7 @@ that need -O0 folding fail on the reference too (H2 §4, H3 §5).
 
 ### M5.1: done (2026-11-06)
 
-Three sessions, plan `~/.claude/plans/using-the-cir-planning-lexical-panda.md`
-(sessions 1–2) and `~/.claude/plans/using-plan-md-and-the-sunny-puffin.md`
-(session 3). Session 1: this document set, clang4, the re-derived baselines.
+Three sessions. Session 1: this document set, clang4, the re-derived baselines.
 Session 2 (M5.1b): attr-diff facts (L1, L2, B2, W1, W2), the ungated mangler
 and `__has_builtin` (W3, W4), CWG2387 under CIR. Session 3 (M5.1): the
 size-based default chunk decision (L3, decision 14); the test hook
@@ -665,21 +700,22 @@ size-based default chunk decision (L3, decision 14); the test hook
 difference (C: 14 files L2; C++: 57 tests = 43 L2 + 14 W3/CWG2387, the
 changed names equal g++ 15's); the guard-worker exit fix (§5); identity
 moved to `identity-m51b`, the allow-list emptied; day-base re-taken at
-`4902ad4e5e` (pre-rebase; now `ac210ca02b`); the R2/R3 tooling follow-ups; S1 met (§0). Reviews:
-`.tmp/m51/s3/review-m51-{1,2}.md`; evidence §9.
+`4902ad4e5e` (pre-rebase; now `ac210ca02b`); the R2/R3 tooling follow-ups; S1 met (§0).
 
 ### M6: remaining gaps and documentation
 
 M6 is every gap that does not fit an earlier milestone, plus the user and
 developer documentation (user, H2 §6). It was planned on 2026-11-07 in
-the meta session M6.0; the plan is
-`~/.claude/plans/this-will-be-a-robust-comet.md`. The scope and order
-are decision 55.
+the meta session M6.0. The scope and order are decision 55.
 
 **Rules for the sub-milestones**
 
 - **One session each**, about 16 to 20 sessions in all. A session that
-  overflows splits into a/b, and the user hears about it at its gate.
+  overflows or grows splits into a/b without asking, and the user hears
+  about it at its gate (decision 59).
+- **Plans.** Each session runs from `plans/<id>-<name>.md`. Where a plan
+  and the table below differ, the plan wins, and the gate updates the
+  table.
 - **Evidence.** Each gate updates the `support/` rows it changes
   (decision 51).
 - **ECIL 1.4.**
@@ -705,7 +741,8 @@ Done: M6.0 (2026-11-07), M6.R and M6.1a (2026-11-08; §0, §9). Next: M6.1b.
 | M6.0 | Plan, support table, security model | This section; `support/`; `security.md`; the `cir-security` agent | `--check` passes; Sphinx `-W` builds; cir-review approves |
 | M6.R | Rebase onto `main` | Rebase the local branch `cir` (never pushed) onto `main` and resolve the conflicts (the CIR-gated hooks, `cmd_line.c`, the tooling, `src/Changes`). Move the CIR entries of M0 to M5.1b into `src/pending_changes/*.txt` with open tags; `edg-collect-changes --check` passes except for the open tags. Check whether `main` already fixed the two §4.8 mangler defects. Re-derive every baseline on clang4 (base, identity, day-base) and tighten the RSS C rows (decision 56). Prune the listed clang4 trees. If it overflows, split into a/b. | The full milestone gate on the rebased tree; differences from M5.1 are attributed to `main`'s changes |
 | M6.1a | Probes and negative tests; SEC-1 starts | First the clang4 sandbox wrapper for cir-security (`security.md` §3). Then: the mid-list designated base fix from M6.R (§5 Writer; patch ready); a diagnostic for `__builtin_alloca_with_align` above 16 bytes, before the gate (§5, `pr78468`); one probe per `unverified` row in `tests/tests/cir/features/`, including structured bindings in conditions (writer.md §9.12 calls them unsupported, but no diagnose site exists); a negative test for every `no` and `partial` row; a libstdc++ header sweep (self-checking usage tests at -O0 and -O2); a `support-sweep` gate step. Reject `--set_flag=coroutines` under CIR: today it bypasses `COROUTINE_ENABLING_POSSIBLE` (`cmd_line.c:2533`, honored at :3148), and only the writer's catch-all (`ecil_code.c:10180`) stops it. The checker follow-ups of review 2: per-case type overrides, `xfail` mixed-tu cases, the content of negative tests, only FAIL(COMPILE) or a link failure as `failing` on `no` rows, the mode rule on `partial` rows. | `make_support.py --check --gate M6.1a` passes; the sweep is in the gate |
-| M6.1b | Housekeeping, fuzzing; SEC-1 triage | Housekeeping: the M5.1 review follow-ups (`.tmp/m51/s3/review-m51-2.md`: the guard-worker comment, a never-dlclose note or `-z nodelete`, the two gate-evidence comments; from M6.R `.tmp/m6/s1/review-m6r-2.md` items 5 and 6: `FINGERPRINT_DIRS` without `tests/expectations`, `tests/tests`, `dev_tools/pylibs`, `dev_tools/docker`, and an area rule for `dev_tools/pylibs/edgtest/`); the stale `run_unit.sh` and `run_cases.sh`; the inventory of the pin's ops. Fuzzing and hardening: a fuzz harness on the `EDG_CIR_FORMAT_ONLY` build, run with `EDG_CIR_NO_GUARD` (a recovered crash counts as a finding); a UBSan preset; `EDG_CIR_TEE` and `EDG_CIR_NO_VERIFY` gated behind `EDG_CIR_TEST_HOOKS` (the default flips only once M7 defines a release build). Fix the unscheduled SEC-1 critical and high findings: SEC-1-3, SEC-1-4, SEC-1-5, P-1, P-4 and the real fix of P-5 (SEC-1-1 and SEC-1-2 were fixed in M6.1a); first, the Mythos delta review of M6.1a's reader, validator and emitter changes (`ecil_refs.cpp`, `globals.cpp`, `signature.cpp`; standing trigger). Also: the `std::__shared_ptr` copy constructor that is not emitted (§4.8); why unused `<numbers>` constants are errors (§4.1); lit in cir-env; prune `~/cir-sec-scratch/sec1`. If this overflows, fuzzing moves to M6.1c. | 1 clean fuzz core-hour; the register is triaged |
+| M6.1b | SEC-1 triage, housekeeping, fuzzing | The items are in `plans/M6.1b-sec1-triage-housekeeping-fuzzing.md` (L1 to L7, W1 to W7, A0 to A9), with its corrections to the earlier text of this row. In short: the Mythos delta review of M6.1a's reader, validator and emitter changes (standing trigger); fixes for SEC-1-3, SEC-1-4, SEC-1-5, P-1 and P-4, and the real fix of P-5, all inside ECIL 1.3 (what needs a format change moves to M6.2); `EDG_CIR_TEE` and `EDG_CIR_NO_VERIFY` behind `EDG_CIR_TEST_HOOKS`; `-z nodelete`; lit in the gate's `ctest` step; a UBSan preset and the fuzz harness (two targets); the review follow-ups; the `std::__shared_ptr` copy constructor that is not emitted (§4.8); the inventory of the pin's ops; the scope of M6.1c; the SEC-1-6 triage. If it overflows, UBSan and fuzzing move to M6.1c. | 1 clean fuzz core-hour; the register is triaged |
+| M6.1c | Extended floating types | `_Float16`, `_Float128` and `bfloat16` (decision 59): encode their constants, map the types to LLVM's half, bfloat and fp128, and diagnose what the pin cannot lower; scoped by M6.1b (W5). The float kinds are already in ECIL 1.3; if it needs a format addition after all, it becomes M6.2b. Also whatever M6.1b cut. | The C++23 header sweep no longer fails on `<numbers>` |
 | (M6.Pb) | Pin bump, only if needed | Decided by the M6.1b inventory; before M6.2 | Gate against the new baselines |
 | M6.2 | Builtins the optimizer evaluates | ECIL 1.4 opens. `__builtin_constant_p` → `llvm.is.constant`. `__builtin_object_size` and `__builtin_dynamic_object_size` → `llvm.objectsize`. FORTIFY probes (`__builtin___*_chk`, `__builtin_va_arg_pack`, `gnu_inline`). The placement-new form Boost container needs. | The sort kernel builds; the FORTIFY probes abort; the real-world unit count rises (6/15) |
 | M6.3 | Atomics | `__atomic_*`, `__sync_*`, C11 `_Atomic`, memory orders. `__builtin_clear_padding`. The x86 add-with-carry builtins. | `<atomic>`, `<memory>` and `<regex>` pass the sweep; Boost format and multiprecision build |
@@ -714,7 +751,7 @@ Done: M6.0 (2026-11-07), M6.R and M6.1a (2026-11-08; §0, §9). Next: M6.1b.
 | M6.5 | Code quality, attributes, mangling | `llvm.mem*` intrinsics (revisits decision 35). GNU `nonnull` into the mask. `memcmp` facts. `FINAL`. The 27 `_ZdlPvm`/`_ZdlPv` cases and `_ZdaPvm`. Destructor NOTHROW under `--no_exceptions`. Extern `thread_local` purity. Clang-mode `sr`. The §4.8 mangler defects, fixed for every back end unless `main` already has them (decision 56). | Fewer attr-diff checked rows; codequality 1.00× |
 | M6.6a | `_Complex` | Arithmetic, conversions, the SysV ABI through CallConvLowering | `_Complex` rows green |
 | M6.6b | Other C gaps | VLAs, `_BitInt` parameters and bit-fields, a wide string followed by elements, address constants through casts, the `va_list` role. Optional: the "unsequenced" diagnostic. GNU range designators and flexible-array initializers are `Ext`. | Those rows green |
-| M6.7 | Standard C++ gaps | Namespace-scope `thread_local` with dynamic initialization, `std::source_location`, `__builtin_bit_cast`. The writer gaps the header sweep found: a class conditional that does not initialize a variable (`std::map`), a delegating constructor that does not call a constructor (`chrono`), an anonymous-union member with a destructor (`std::format`), an assignment to a class with reusable tail padding (`std::regex`). The gaps in `new (std::nothrow)` and array destroying delete (the array-of-class copy moved to M6.1b, P-5). Constant initialization of a `[[no_unique_address]]` member. P1467 extended floating-point types and the `_Float16`/`_Float128` decision. | Those rows green |
+| M6.7 | Standard C++ gaps | Namespace-scope `thread_local` with dynamic initialization, `std::source_location`, `__builtin_bit_cast`. The writer gaps the header sweep found: a class conditional that does not initialize a variable (`std::map`), a delegating constructor that does not call a constructor (`chrono`), an anonymous-union member with a destructor (`std::format`), an assignment to a class with reusable tail padding (`std::regex`). The gaps in `new (std::nothrow)` and array destroying delete (the array-of-class copy moved to M6.1b, P-5). Constant initialization of a `[[no_unique_address]]` member. (The extended floating types moved to M6.1c.) | Those rows green |
 | M6.8 | Debug info I | Design first (library work; skippable supp keys; chunk identity, decision 13). Then `-g` in the stream header, line tables, one `DICompileUnit` per TU, `-fdebug-prefix-map`. | gdb steps through the smoke tests |
 | M6.9 | Debug info II | Types, variables, scopes; a gdb harness | gdb prints locals and classes |
 | M6.10 | Correctness and robustness | Csmith or YARPGen differential runs against gcc at -O0 and -O2. The C initializer differential fuzz (§5). Operand types in the validator. | No unexplained differences |
@@ -743,9 +780,12 @@ needs its own format addition and review (H1 §6, H2 §6).
 
 ### 7.1 Team and ownership
 
-Agent types: `cir-config`, `cir-writer`, `cir-lib` (Sonnet implementers)
-and `cir-review` (read-only Opus reviewer), defined in
-`~/.claude/agents/cir-*.md`. Continue an agent with `SendMessage`.
+Agent types: `cir-config`, `cir-writer`, `cir-lib` (Sonnet implementers),
+`cir-review` (read-only Opus reviewer) and `cir-security` (read-only Mythos
+auditor), defined in `~/.claude/agents/cir-*.md`. Continue an agent with
+`SendMessage`. The definitions do not name the checkout: every brief gives
+its absolute path (§0). The orchestrator's Fable advisor is the `advisor`
+tool; it takes no parameters and reads the orchestrator's transcript.
 
 | Owner | Files (exclusive write) |
 | --- | --- |
@@ -756,7 +796,7 @@ and `cir-review` (read-only Opus reviewer), defined in
 
 M6 carve-outs (user, 2026-11-07; the `features/` split and the sandbox, 2026-11-08):
 
-- **Orchestrator:** `cir_src/doc/{security.md,support/README.md}` and `cir_src/doc/exsum/**` except `exsum/support.svg`; outside the repo `~/.claude/hooks/*cir_security*`, `~/.claude/hooks/cir-security-*` and the cir-security PreToolUse entry in `~/.claude/settings.json` (deleting it silently turns the guard off).
+- **Orchestrator:** `cir_src/doc/{security.md,support/README.md}`, `cir_src/doc/{plans,reports}/**` (user, 2026-11-12) and `cir_src/doc/exsum/**` except `exsum/support.svg`; outside the repo `~/.claude/hooks/*cir_security*`, `~/.claude/hooks/cir-security-*` and the cir-security PreToolUse entry in `~/.claude/settings.json` (deleting it silently turns the guard off).
 - **cir-config:**
   - `cir_src/doc/support/make_support.py` and its rendered outputs: `support.md`, `doc/source/cir_support.inc` and `exsum/support.svg`.
   - `doc/source/cir_*.rst`, `doc/source/_static/cir_support.css`, and the CIR lines in `doc/source/{conf.py,index.rst}`.
@@ -814,31 +854,25 @@ entries move into pending files in M6.R; their tags stay open (decision
   never by polling in the conversation.
 - Per session: one gate commit (session 1 of M5.1: two), at most three
   reviews by cir-review plus at most one by cir-security (decision 53),
-  at most two fix rounds per assignment before asking the user.
-- From M6, scratch notes go to `.tmp/m6/s<N>/` (M6.0 is `s0`).
+  at most two fix rounds per assignment before asking the user. The
+  advisor is called at the points the plan names, with the deciding facts
+  stated in the conversation first.
+- From M6, scratch notes go to `.tmp/m6/s<N>/` in the `cir` checkout
+  (M6.1b is `s3`). They are deleted when the next session is planned
+  (decision 59): what must survive goes into a tracked doc at the gate.
 - When context runs low: write `.tmp/<milestone>/s<N>/resume.md` (state, running
   jobs, next steps) and an "in progress" line in §0 first.
 
 ## 8. Open questions for the user
 
-From M6.1a (2026-11-08):
-
-1. **Medium findings** need your acceptance (`security.md` §5): SEC-1-6
-   (main's edgdocker runs test containers `--privileged`; scheduled for
-   M6.1b triage, user 2026-11-08), P-2 (`scalar_storage_order`) and P-3
-   (`trivial_abi`), both proposed M6.4a by their rows.
-2. **C++23 headers.** About 45 libstdc++ headers fail under C++23 because
-   of the `<numbers>` extended-float constants (§4.1). Move the
-   `_Float16`/`_Float128` decision (now M6.7) earlier?
-3. **M6.7 has grown** by the four writer gaps of the header sweep; split
-   it, or keep it as one session that may overflow?
+None. The M6.1a questions were answered on 2026-11-12 (decision 59).
 
 ## 9. Latest gate evidence
 
 **M6.1a** (lean gate, clang4, tree `m6r-int`; evidence
 `m6r-int/.tmp/checkpoint-20261108-134910`, asm in
-`m6r-int/.tmp/gate-asm/checkpoint-20261108-134910`; report
-`.tmp/m6/s2/cir-config-gate.md`). `edg-cir-checkpoint --lean
+`m6r-int/.tmp/gate-asm/checkpoint-20261108-134910` and
+`gate-cpp-asm/checkpoint-20261108-134910`). `edg-cir-checkpoint --lean
 writer,fe-options,shared-src,library,tests,tests-triage,goldens,tooling,support
 --lean-base 70b1a2e326` against `m6r-base-*` (fingerprint `93009c5f…`,
 equal on both hosts; images equal to the baselines'). 20 of 22 steps
@@ -860,7 +894,8 @@ corpus test uses `__thread` in a way that changes its assembly. The next
 gate shows the same three changes until the asm baselines move past M6.1a.
 After the gate only data and docs changed (R3's follow-ups:
 the P1061 row to `ignored`, notes, docs); `make_support.py --check --gate
-M6.1a` was re-run on them. The post-R2 fixes are summarized in
-`.tmp/m6/s2/resume.md`. Reviews: `.tmp/m6/s2/review-m61a-{1,2,3}.md`; SEC-1:
-`.tmp/m6/s2/sec-1.md`. M6.R's evidence is in git (`70b1a2e326`, this
-section).
+M6.1a` was re-run on them. The session's scratch (the gate report, the
+three reviews, the resume note) was deleted on 2026-11-12; the evidence
+directories on clang4 remain, and the SEC-1 report is
+`.tmp/m6/s3/inputs/sec-1.md` in the `cir` checkout. M6.R's evidence is in
+git (`70b1a2e326`, this section).

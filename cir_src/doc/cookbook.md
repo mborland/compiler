@@ -97,11 +97,24 @@ state, decisions and process are in `project.md`.
   problems, the allow-list empty); `day-base/baseline-64` (`edg_x86_64`, `_cp`; the `day` step) and
   `day-base/baseline-32` (`edg_x86_32`, `_32_cp`; the `day32` step, posture `tests/.edgy/postures/day32.json`, by
   hand `edg-docker-test --posture @tests/.edgy/postures/day32.json`), re-taken at the final M6.R tree. The default
-  tree is `m6r-int`. Recipes: `.tmp/m6/s1/mk-m6r-base.sh`, `mk-daybase-m6r.sh`.
+  tree is `m6r-int`.
+- Cut a baseline set `<p>-base-*` from a gate's evidence (on clang4, in `~/edg-cir-config`, `T=$PWD`, `M=$T/<tree>`,
+  `EV=$M/.tmp/<checkpoint>`; refuse to overwrite an existing name): `cp -r $M/.tmp/gate-asm/<checkpoint> $T/<p>-base-asm`;
+  the same for `gate-cpp-asm` to `<p>-base-cpp-asm`; `<p>-base-status/` gets `$EV/corpus/edg_x86_64_cir.json` as
+  `c_edg_x86_64_cir.json` and each `$EV/cpp-corpus/edg_x86_64_cir*.json` as `cpp_<name>`; `$EV/perf/perf.json`,
+  `$EV/rss/log.txt`, `$EV/chunk-rss/curve.json` and `$EV/attr-diff/` become `<p>-base-perf.json`, `-rss.txt`,
+  `-chunk-rss.json` and `-attr-diff/` (milestone gates only: lean gates do not run those steps). Then
+  `edg-cir-gate-evidence --record-images $T/<name>` for the status, asm, cpp-asm and perf baselines, and change the tool
+  defaults. Copy the asm directories before the next checkpoint on the same tree.
+- Re-take `day-base` (milestones and rebases; about 4 h): in the gate tree run `edg-docker-test --non-interactive --jobs 48`
+  and then the same with `--posture @tests/.edgy/postures/day32.json` (each under `nice -n 10 timeout 14400`, with its own
+  `EDG_DOCKER_NAME_PREFIX`); check that each of the four configurations executed about 45492 cases and has 9
+  `suite-*.elog` files; copy the two new `tests/runs/<run>` directories into `day-base/tests/runs/`, repoint the links
+  `day-base/baseline-64` and `baseline-32`, and run `--record-images` on both.
 - `main`-side comparison points (M6.R): `identity-main` (a capture of `main` `cc408045d4`) and
   `day-main/baseline-{64,32}` (runs of main's sources with the CIR tree's test tooling); against them the CIR tree
-  differs only by its approved ungated changes. The M5.1 set (`m51-base-*`, `m51-int`), `identity-main` and `day-main` are prune candidates since M6.1a (`.tmp/m6/s2/prune-clang4.sh`).
-  Older names (`m5-base-*`, `identity-m51b`, `identity-m0c`, `m5-int`) are prune candidates. Boost headers 1.92.0 in
+  differs only by its approved ungated changes. Both, and the M5.1 set (`m51-base-*`, `m51-int`), were pruned after M6.1a
+  (gone on 2026-11-12); re-derive them from `main` if a comparison is needed again. Boost headers 1.92.0 in
   `m6r-int/.tmp/boost-inc` (each tree its own `.tmp/boost-inc`). Images: dev-env `1c1cf78d322b` (`:cir-1c1cf78d322b`), llvm-cir `e92da938d7cc`, cir-env
   `cd5c7f63e579`; a comparison against a baseline taken with other images says so (`IMAGES`).
 - RSS ceilings (`RSS_CEILINGS_MB`): the C rows are 1.25 times the M5.1 values, except C release inproc and keep at

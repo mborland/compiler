@@ -139,11 +139,15 @@ cir-review). They are input for SEC-1, not findings.
 ## 5. Findings register
 
 SEC-1 ran on Mythos (`claude-mythos-5-1`) on 2026-11-08 against the M6.R
-tree (`70b1a2e326`); its report and reproducers are in `.tmp/m6/s2/`
-(`sec-1.md`); its line numbers are those of the audited tree. `P-n` are
-findings of the M6.1a feature probes. "Proposed"
-dispositions are triaged in M6.1b (§3); a medium finding needs the user's
-disposition.
+tree (`70b1a2e326`); its line numbers are those of the audited tree. Its
+report is `.tmp/m6/s3/inputs/sec-1.md` in the `cir` checkout, beside the
+probe reproducers for P-1, P-2 and P-4; its proof-of-concept runs are on
+clang4 in `~/cir-sec-scratch/sec1/{work,scripts}` (runs 1 to 4) until
+M6.1b has turned them into tests. `P-n` are findings of the M6.1a feature
+probes. "Proposed" dispositions are triaged in M6.1b
+(`plans/M6.1b-sec1-triage-housekeeping-fuzzing.md`). The user accepted the
+medium dispositions on 2026-11-12 (project.md decision 59). From M6.1b the
+auditor runs on `claude-mythos-5-2`.
 
 | Id | Severity | CWE | Area | Summary | Status | Fixed in | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -152,14 +156,14 @@ disposition.
 | SEC-1-3 | High | CWE-770 | Library, ECIL bytes | `C_REPEAT` expands to the array count with no bound (`globals.cpp:1123`, `:1174`): a 134-byte stream requests 8 TiB | Open; proposed M6.1b | | |
 | SEC-1-4 | High | CWE-20 | Validator | Unchecked layout numbers (alignments, bit-field widths, record alignment, locals of function type, zero initializers) reach LLVM assertions; a release `cir_src` build compiles out the header-inlined ones (`llvm::Align`, `APInt`), so there they are undefined behavior (raised from Medium by review R2) | Open; proposed M6.1b | | |
 | SEC-1-5 | High | CWE-407 | Validator | No bracket-depth limit: a 200 KB stream of 100,000 nested blocks runs for more than 300 s (§2: unbounded resource use from a small input; raised from Medium by review R2) | Open; proposed M6.1b | | |
-| SEC-1-6 | Medium | CWE-250 | Gate tooling | edgdocker runs the test containers `--privileged` as root with the tree mounted (`edgdocker/__init__.py:451`; main's shared tooling) | Open; M6.1b triage (user, 2026-11-08); needs the user's acceptance | | |
+| SEC-1-6 | Medium | CWE-250 | Gate tooling | edgdocker runs the test containers `--privileged` as root with the tree mounted (`edgdocker/__init__.py:451`; main's shared tooling) | Open; M6.1b triage, accepted (user, 2026-11-12) | | |
 | SEC-1-7 | Low | — | Validator, emitter | A name id 0 is "no name" to the validator but not to the emitter: a misleading internal error | Open | | |
 | SEC-1-8 | Low | CWE-829 | Supply chain | `fedora:43` is not pinned in five Dockerfiles under `dev_tools/docker/` (§4) | Open | | |
 | SEC-1-9 | Low | — | Crash recovery | A poisoned session still destroys its reader (`session.cpp:320-349`) | Open | | |
 | P-1 | High | — | Generated code | `#pragma STDC FENV_ACCESS ON` is ignored without a diagnostic (row `c99.fenv_access`, `ignored`) | Open; proposed M6.1b | | |
-| P-2 | Medium | — | Generated code | `scalar_storage_order` is ignored with only the FE's "unknown attribute" warning | Open; proposed M6.4a (its row); needs the user's acceptance | | |
-| P-3 | Medium | — | Generated code | `trivial_abi` is ignored with only the FE's "unknown attribute" warning; the ABI differs from clang objects | Open; proposed M6.4a (its row); needs the user's acceptance | | |
+| P-2 | Medium | — | Generated code | `scalar_storage_order` is ignored with only the FE's "unknown attribute" warning | Open; M6.4a (its row), accepted (user, 2026-11-12) | | |
+| P-3 | Medium | — | Generated code | `trivial_abi` is ignored with only the FE's "unknown attribute" warning; the ABI differs from clang objects | Open; M6.4a (its row), accepted (user, 2026-11-12) | | |
 | P-4 | High | — | Generated code | The initialization store of a volatile object is emitted non-volatile, so -O2 can drop it (row `c89.volatile_init`, `ignored`) | Open; proposed M6.1b | | |
 | P-5 | High | — | Generated code | The implicit copy constructor of a class with an array of class objects calls the element copy constructor without its source (`struct S { std::string a[2]; }` copies crash) | Diagnosed in M6.1a (user, 2026-11-08); fix proposed M6.1b | M6.1a (diagnosis) | `tests/tests/cir/writer/writer-cxx-array-copy-negative.sft.cpp` |
 | P-6 | High | — | Generated code | Every GNU `__thread` variable was emitted without TLS (the FE records the keyword only as a declaration modifier), so a definition was one global shared by all threads; the support row's evidence did not use `__thread` | Fixed | M6.1a | `tests/tests/cir/writer/writer-gnu-thread-keyword.sft.cpp`, `writer-gnu-thread-keyword-c.sft.c` |
-| P-7 | High | — | Front end (every configuration) | A structured binding pack bound by reference (`auto &[...r]`, C++26 P1061) gives wrong values in every configuration, the reference cpfe included (row `cxx26.structured_binding_packs`, `ignored`) | Open; proposed M6.1b triage (an FE defect; may belong to `main`) | | |
+| P-7 | High | — | Front end (every configuration) | In `--c++26` mode a reference bound to a reference parameter gets the address of the parameter, not of its referent, in every configuration, the reference cpfe included. Found as a structured binding pack bound by reference (`auto &[...r]`, P1061; row `cxx26.structured_binding_packs`, `ignored`); the 2026-11-12 re-run showed that `const T3 &r = s;` is enough (`reports/P-7-structured-binding-pack-by-reference.md`) | Open; the user fixes it on `main`, and the fix reaches `cir` by a cherry-pick or the next rebase (user, 2026-11-12); M6.4a at the latest (0 `ignored`) | | |
